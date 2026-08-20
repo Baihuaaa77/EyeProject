@@ -1,0 +1,19 @@
+<resources>
+    <string name="app_name">眼健康助手</string>
+    <string name="screen_title">智能用眼监测</string>
+
+    <string name="overlay_permission_required">需要“显示在其他应用上层”权限才能启用全局色温。</string>
+    <string name="exact_alarm_permission_required">需要“闹钟和提醒”权限才能准时提醒。</string>
+    <string name="notification_permission_required">需要通知权限才能显示护眼提醒。</string>
+
+    <string name="color_temperature_channel_name">全局护眼色温</string>
+    <string name="color_temperature_channel_description">保持护眼色温滤镜在其他应用上层运行</string>
+    <string name="color_temperature_notification_title">护眼色温正在运行</string>
+    <string name="color_temperature_notification_text">当前模式：%1$s</string>
+    <string name="action_disable_filter">关闭滤镜</string>
+
+    <string name="reminder_channel_name">定时护眼提醒</string>
+    <string name="reminder_channel_description">按设定间隔发出声音、振动和护眼通知</string>
+    <string name="reminder_notification_title">该休息一下眼睛了</string>
+    <string name="reminder_notification_text">请放下屏幕，眺望远处并放松眼睛。</string>
+</resources>
