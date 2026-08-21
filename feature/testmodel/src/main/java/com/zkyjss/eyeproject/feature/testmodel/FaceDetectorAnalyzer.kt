@@ -150,7 +150,8 @@ class FaceDetectorAnalyzer(
         smoothedFps = if (smoothedFps == 0f) {
             frameFps
         } else {
-            0.85f * smoothedFps + 0.15f * frameFps
+            // 0.5/0.5：快速反映真实帧率（原 0.85/0.15 滞后太严重，推理变慢时 fps 几十秒才降下来）
+            0.5f * smoothedFps + 0.5f * frameFps
         }
         return smoothedFps
     }
@@ -160,7 +161,7 @@ class FaceDetectorAnalyzer(
     }
 
     companion object {
-        private const val MODEL_ASSET = "face_detector_short_range.task"
-        private const val DETECTION_FRAME_INTERVAL = 4
+        private const val MODEL_ASSET = "blaze_face_short_range.tflite"
+        private const val DETECTION_FRAME_INTERVAL = 2
     }
 }

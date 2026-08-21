@@ -2,9 +2,6 @@
 <resources>
 
     <style name="Theme.EyeProject" parent="android:Theme.Material.Light.NoActionBar">
-        <item name="android:windowLightStatusBar">true</item>
-        <item name="android:statusBarColor">@color/app_background</item>
-        <item name="android:navigationBarColor">@color/app_background</item>
         <item name="android:colorAccent">@color/primary</item>
         <item name="android:windowNoTitle">true</item>
     </style>

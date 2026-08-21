@@ -24,7 +24,7 @@ core/
 feature/
   camera/                 CameraX + MediaPipe FaceLandmarker 分析管线
   home/                   Compose 仪表盘 UI + HomeViewModel（MVVM + UDF）
-  testmodel/              模型测试页（LiteRT C++ SDK，JNI 跑 L2CS-Net 注视估计）
+  testmodel/              模型测试页（FaceDetector 检测人脸 + LiteRT 跑 L2CS-Net 注视估计）
 ```
 
 ## 二、技术栈
@@ -32,8 +32,8 @@ feature/
 - JDK 17、AGP 9.3.0、Kotlin 2.2.10、Gradle 9.5、compileSdk 37 / minSdk 26 / targetSdk 37
 - Compose BOM 2026.02.01（自绘组件，已移除 material3）
 - Hilt 2.59.2 + KSP 2.2.10-2.0.2（依赖注入）
-- CameraX 1.4.1、MediaPipe tasks-vision 0.10.14（camera 人脸关键点）
-- LiteRT C++ SDK（testmodel 注视估计：libLiteRt.so + CMake + JNI，`libgaze_native.so`）
+- CameraX 1.4.1、MediaPipe tasks-vision 0.10.14（camera FaceLandmarker + testmodel FaceDetector）
+- LiteRT 双路线（testmodel 注视估计）：LiteRT C++ SDK（JNI，`libgaze_native.so`）+ Maven `com.google.ai.edge.litert:litert:2.1.1`（Android API）
 - NDK 27.3.13750724（r27d）
 
 ## 三、构建前准备

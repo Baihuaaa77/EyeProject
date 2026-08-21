@@ -10,6 +10,9 @@ import androidx.compose.ui.graphics.Color
  */
 @Immutable
 data class EyeColors(
+    val white: Color,
+    val black: Color,
+    val gray: Color,
     val appBackground: Color,
     val panelBackground: Color,
     val surfaceVariant: Color,
@@ -50,7 +53,10 @@ val LightEyeColors = EyeColors(
     danger = Color(0xFFE53935),
     dangerSoft = Color(0xFFFFE2E0),
     neutralSoft = Color(0xFFF0F2EA),
-    overlayScrim = Color(0x66000000)
+    overlayScrim = Color(0x66000000),
+    white = Color.White,
+    black = Color.Black,
+    gray = Color.Gray
 )
 
 val DarkEyeColors = EyeColors(
@@ -72,7 +78,10 @@ val DarkEyeColors = EyeColors(
     danger = Color(0xFFF3847E),
     dangerSoft = Color(0xFF421D1C),
     neutralSoft = Color(0xFF24333D),
-    overlayScrim = Color(0x80000000)
+    overlayScrim = Color(0x80000000),
+    white = Color.White,
+    black = Color.Black,
+    gray = Color.Gray
 )
 
 val LocalEyeColors = staticCompositionLocalOf { LightEyeColors }

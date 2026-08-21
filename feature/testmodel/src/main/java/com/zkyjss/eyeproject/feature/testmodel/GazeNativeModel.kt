@@ -2,13 +2,14 @@ package com.zkyjss.eyeproject.feature.testmodel
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Rect
 import android.os.SystemClock
 import android.util.Log
 import com.google.ai.edge.litert.Accelerator
 import com.google.ai.edge.litert.CompiledModel
 import java.io.File
-import androidx.core.graphics.scale
 import androidx.core.graphics.get
 
 /**
@@ -24,8 +25,21 @@ class GazeNativeModel(context: Context) : TestModel {
 
     private val modelPath: String = copyAssetToFilesDir(context, MODEL_ASSET)
 
+    // Android API 路线：模型只加载一次，避免每次推理重新 create（性能瓶颈）。
+    // analyze 单线程串行，复用 compiledModel/buffers 是安全的。
+    private val compiledModelLazy = lazy {
+        CompiledModel.create(modelPath, CompiledModel.Options(Accelerator.CPU))
+    }
+    private val compiledModel by compiledModelLazy
+    private val inputBuffers by lazy { compiledModel.createInputBuffers() }
+    private val outputBuffers by lazy { compiledModel.createOutputBuffers() }
+
+    // 复用大对象，避免每帧分配触发 GC（卡顿根源）
+    private val inputData = FloatArray(1 * 3 * 448 * 448)
+    private val resizedBitmap = Bitmap.createBitmap(448, 448, Bitmap.Config.ARGB_8888)
+
     override val info = ModelInfo(
-        name = "L2CS-Net (LiteRT C++ / JNI)",
+        name = "L2CS-Net",
         inputShape = intArrayOf(1, 3, 448, 448),
         outputShapes = listOf(intArrayOf(2))  // [yaw, pitch]
     )
@@ -43,31 +57,18 @@ class GazeNativeModel(context: Context) : TestModel {
 
     override fun infer_use_android_api(bitmap: Bitmap): InferenceResult {
         val start = SystemClock.elapsedRealtime()
-        // Load model and initialize runtime
-        val compiledModel = CompiledModel.create(
-            modelPath,
-            CompiledModel.Options(Accelerator.CPU))
-
-        // Preallocate input/output buffers
-        val inputBuffers = compiledModel.createInputBuffers()
-        val outputBuffers = compiledModel.createOutputBuffers()
 
         // 模型输入尺寸
         val modelWidth = 448
         val modelHeight = 448
 
-        // 归一化参数
-        val mean = floatArrayOf(0.485f, 0.456f, 0.406f)
-        val std = floatArrayOf(0.229f, 0.224f, 0.225f)
+        // 图片缩放到模型尺寸（复用缓存 Bitmap，避免每帧分配 800KB）
+        Canvas(resizedBitmap).drawBitmap(
+            bitmap, null,
+            Rect(0, 0, modelWidth, modelHeight), null
+        )
 
-        // 图片缩放到模型需要的尺寸
-        val resizedBitmap = bitmap.scale(modelWidth, modelHeight)
-
-
-
-        // 定义输入数据 float数组 bitmap转浮点 图片transpose BCHW
-        val inputData = FloatArray(1 * 3 * modelHeight * modelWidth)
-
+        // 填充输入张量（复用 inputData，避免每帧分配 2.4MB）
         for (y in 0 until modelHeight ) {
             for (x in 0 until modelWidth) {
                 val pixel = resizedBitmap[x, y]
@@ -76,9 +77,9 @@ class GazeNativeModel(context: Context) : TestModel {
                 val g = Color.green(pixel) / 255.0f
                 val b = Color.blue(pixel) / 255.0f
 
-                inputData[y * modelWidth + x] = (r - mean[0]) / std[0]
-                inputData[1 * modelHeight * modelWidth + y * modelHeight + x] = (g - mean[1]) / std[1]
-                inputData[2 * modelHeight * modelWidth + y * modelHeight + x] = (b - mean[2]) / std[2]
+                inputData[y * modelWidth + x] = (r - MEAN[0]) / STD[0]
+                inputData[1 * modelHeight * modelWidth + y * modelHeight + x] = (g - MEAN[1]) / STD[1]
+                inputData[2 * modelHeight * modelWidth + y * modelHeight + x] = (b - MEAN[2]) / STD[2]
             }
         }
 
@@ -92,14 +93,10 @@ class GazeNativeModel(context: Context) : TestModel {
         val logits_yaw = outputBuffers.get(0).readFloat()
         val logits_pitch = outputBuffers.get(1).readFloat()
 
-        Log.d("TEST-MODEL", logits_pitch.size.toString())
-
         val yawDeg = binsToDegrees(logits_yaw)
         val pitchDeg = binsToDegrees(logits_pitch)
 
         val latency = SystemClock.elapsedRealtime() - start
-
-        compiledModel.close()
 
         return InferenceResult(
             outputs = listOf(floatArrayOf(yawDeg, pitchDeg)),
@@ -108,7 +105,10 @@ class GazeNativeModel(context: Context) : TestModel {
     }
 
     override fun close() {
-        // C++ 侧无显式资源需要释放（模型每次 run 内部加载，也可后续缓存）
+        // 释放 Android API 路线的模型（如果已加载）
+        if (compiledModelLazy.isInitialized()) {
+            compiledModel.close()
+        }
     }
 
     private fun bitmapToRgb(bitmap: Bitmap): Triple<ByteArray, Int, Int> {
@@ -147,5 +147,7 @@ class GazeNativeModel(context: Context) : TestModel {
 
     companion object {
         private const val MODEL_ASSET = "l2cs_net.tflite"
+        private val MEAN = floatArrayOf(0.485f, 0.456f, 0.406f)
+        private val STD = floatArrayOf(0.229f, 0.224f, 0.225f)
     }
 }
