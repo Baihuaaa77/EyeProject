@@ -22,15 +22,12 @@ import com.zkyjss.eyeproject.core.domain.DistanceEstimator
 import com.zkyjss.eyeproject.core.domain.ReminderController
 import com.zkyjss.eyeproject.core.model.AnalysisResolution
 import com.zkyjss.eyeproject.core.model.ColorTemperatureMode
-import com.zkyjss.eyeproject.core.model.DistanceEstimate
 import com.zkyjss.eyeproject.core.model.FaceEyeDetection
 import com.zkyjss.eyeproject.core.model.FrameResult
 import com.zkyjss.eyeproject.core.ui.component.StatusTone
 import com.zkyjss.eyeproject.feature.camera.CameraController
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
-import javax.inject.Inject
-import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -40,6 +37,8 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import javax.inject.Inject
+import kotlin.math.roundToInt
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(

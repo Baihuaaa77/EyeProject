@@ -53,12 +53,6 @@ class ImageUtils {
       const unsigned char* input, int input_width, int input_height,
       int input_channels, int output_width, int output_height);
 
-  // Prepares the input for gaze (L2CS) on the CPU: resize -> [0,1] HWC,
-  // then ImageNet mean/std normalization + HWC->CHW (NCHW model input).
-  static std::vector<float> PreprocessInputForGazeCpu(
-      const unsigned char* input, int input_width, int input_height,
-      int input_channels, int output_width, int output_height);
-
   // Deinterleaves the masks on the CPU.
   static std::vector<std::vector<float>> DeinterleaveMasksCpu(const float* data,
                                                               int mask_width,
@@ -70,6 +64,16 @@ class ImageUtils {
       int original_height, int original_channels,
       const std::vector<std::vector<float>>& masks,
       const std::vector<RGBAColor>& mask_colors);
+
+
+  //*********************************************************************//
+  //                  custom                                             //
+  //*********************************************************************//
+  // Prepares the input for gaze (L2CS) on the CPU: resize -> [0,1] HWC,
+  // then ImageNet mean/std normalization + HWC->CHW (NCHW model input).
+  static std::vector<float> PreprocessInputForGazeCpu(
+      const unsigned char* input, int input_width, int input_height,
+      int input_channels, int output_width, int output_height);
 };
 
 #endif  // IMAGE_UTILS_H_

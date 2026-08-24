@@ -24,11 +24,12 @@ import androidx.core.graphics.get
 class GazeNativeModel(context: Context) : TestModel {
 
     private val modelPath: String = copyAssetToFilesDir(context, MODEL_ASSET)
+    private val shadersDir: String = copyShadersDir(context)
 
     // Android API 路线：模型只加载一次，避免每次推理重新 create（性能瓶颈）。
     // analyze 单线程串行，复用 compiledModel/buffers 是安全的。
     private val compiledModelLazy = lazy {
-        CompiledModel.create(modelPath, CompiledModel.Options(Accelerator.CPU))
+        CompiledModel.create(modelPath, CompiledModel.Options(Accelerator.GPU))
     }
     private val compiledModel by compiledModelLazy
     private val inputBuffers by lazy { compiledModel.createInputBuffers() }
@@ -47,7 +48,7 @@ class GazeNativeModel(context: Context) : TestModel {
     override fun infer_use_cpp_lib(bitmap: Bitmap): InferenceResult {
         val start = SystemClock.elapsedRealtime()
         val (pixels, w, h) = bitmapToRgb(bitmap)
-        val yawPitch = GazeNative.run(pixels, w, h, modelPath)
+        val yawPitch = GazeNative.run(pixels, w, h, modelPath, shadersDir)
         val latency = SystemClock.elapsedRealtime() - start
         return InferenceResult(
             outputs = listOf(yawPitch),
@@ -124,6 +125,20 @@ class GazeNativeModel(context: Context) : TestModel {
             rgb[i * 3 + 2] = (p and 0xff).toByte()           // B
         }
         return Triple(rgb, w, h)
+    }
+
+    /** 把 assets/shaders 下 6 个 shader 拷贝到 filesDir/shaders，返回目录路径（C++ 需要真实路径）。 */
+    private fun copyShadersDir(context: Context): String {
+        val dir = File(context.filesDir, "shaders")
+        if (!dir.exists()) {
+            context.assets.list("shaders")?.forEach { name ->
+                context.assets.open("shaders/$name").use { input ->
+                    File(dir, name).apply { parentFile?.mkdirs() }
+                        .outputStream().use { output -> input.copyTo(output) }
+                }
+            }
+        }
+        return dir.absolutePath
     }
 
     private fun copyAssetToFilesDir(context: Context, assetName: String): String {

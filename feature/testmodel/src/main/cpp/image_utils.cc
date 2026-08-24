@@ -150,32 +150,6 @@ std::vector<float> ImageUtils::PreprocessInputForSegmentationCpu(
   return resized_image;
 }
 
-std::vector<float> ImageUtils::PreprocessInputForGazeCpu(
-    const unsigned char* input, int input_width, int input_height,
-    int input_channels, int output_width, int output_height) {
-  auto resized_image =
-      ResizeImageCpu(input, input_width, input_height, input_channels,
-                     output_width, output_height);
-
-  const float mean[3] = {0.485f, 0.456f, 0.406f};
-  const float stdv[3] = {0.229f, 0.224f, 0.225f};
-
-  // The model expects the input to be normalized to [0, 1] shape(CHW)
-  std::vector<float> output(input_channels * output_height * output_width);
-  const int hw = output_height * output_width;
-  for (size_t y = 0; y < output_height; y++) {
-    for (size_t x = 0; x < output_width; x++) {
-      const int hwc = (y * output_width + x) * input_channels;  // 当前像素起点（随 y,x 变！）
-      for (size_t c = 0; c < input_channels; c++) {
-        output[c * hw + y * output_width + x] =                // 平面内行主序偏移
-            (resized_image[hwc + c] - mean[c]) / stdv[c];
-      }
-    }
-  }
-
-  return output;
-}
-
 std::vector<std::vector<float>> ImageUtils::DeinterleaveMasksCpu(
     const float* data, int mask_width, int mask_height) {
   std::vector<std::vector<float>> out_masks_data;
@@ -237,4 +211,35 @@ std::vector<unsigned char> ImageUtils::ApplyColoredMasksCpu(
     }
   }
   return blended_image;
+}
+
+
+//*********************************************************************//
+//                  custom                                             //
+//*********************************************************************//
+std::vector<float> ImageUtils::PreprocessInputForGazeCpu(
+    const unsigned char* input, int input_width, int input_height,
+    int input_channels, int output_width, int output_height) {
+  auto resized_image =
+      ResizeImageCpu(input, input_width, input_height, input_channels,
+                     output_width, output_height);
+
+  const float mean[3] = {0.485f, 0.456f, 0.406f};
+  const float stdv[3] = {0.229f, 0.224f, 0.225f};
+
+  // The model expects the input to be normalized to [0, 1] shape(CHW)
+  std::vector<float> output(input_channels * output_height * output_width);
+  const int hw = output_height * output_width;
+  for (size_t y = 0; y < output_height; y++) {
+    for (size_t x = 0; x < output_width; x++) {
+      const int hwc = (y * output_width + x) *
+                      input_channels;  // 当前像素起点（随 y,x 变！）
+      for (size_t c = 0; c < input_channels; c++) {
+        output[c * hw + y * output_width + x] =  // 平面内行主序偏移
+            (resized_image[hwc + c] - mean[c]) / stdv[c];
+      }
+    }
+  }
+
+  return output;
 }

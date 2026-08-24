@@ -15,5 +15,5 @@ object GazeNative {
      * @param pixels RGB 字节数组（width*height*3，RGB 顺序，值 0..255）
      * @return FloatArray[2] = [yaw, pitch]（度）
      */
-    external fun run(pixels: ByteArray, width: Int, height: Int, modelPath: String): FloatArray
+    external fun run(pixels: ByteArray, width: Int, height: Int, modelPath: String, shadersDir: String): FloatArray
 }
