@@ -25,6 +25,7 @@
             <option value="$PROJECT_DIR$/build-logic" />
             <option value="$PROJECT_DIR$/build-logic/convention" />
             <option value="$PROJECT_DIR$/core" />
+            <option value="$PROJECT_DIR$/core/camera" />
             <option value="$PROJECT_DIR$/core/common" />
             <option value="$PROJECT_DIR$/core/data" />
             <option value="$PROJECT_DIR$/core/designsystem" />
@@ -34,8 +35,10 @@
             <option value="$PROJECT_DIR$/core/testing" />
             <option value="$PROJECT_DIR$/core/ui" />
             <option value="$PROJECT_DIR$/feature" />
-            <option value="$PROJECT_DIR$/feature/camera" />
-            <option value="$PROJECT_DIR$/feature/home" />
+            <option value="$PROJECT_DIR$/feature/agent" />
+            <option value="$PROJECT_DIR$/feature/fatigue" />
+            <option value="$PROJECT_DIR$/feature/mine" />
+            <option value="$PROJECT_DIR$/feature/services" />
             <option value="$PROJECT_DIR$/feature/testmodel" />
           </set>
         </option>

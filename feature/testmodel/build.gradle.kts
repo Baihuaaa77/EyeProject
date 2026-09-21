@@ -2,6 +2,7 @@ plugins {
     id("eyeproject.android.library")
     id("eyeproject.android.library.compose")
     id("eyeproject.android.hilt")
+    id("eyeproject.kotlin.serialization")
 }
 
 android {
@@ -49,6 +50,7 @@ dependencies {
     implementation(libs.androidx.camera.view)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.hilt.navigation.compose)
+    implementation(libs.androidx.navigation.compose)
 
     // MediaPipe Tasks（Face Landmarker，478 点）
     implementation(libs.mediapipe.tasks.vision)

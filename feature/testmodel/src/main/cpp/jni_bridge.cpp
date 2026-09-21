@@ -1,4 +1,4 @@
-// JNI bridge: Java_com_zkyjss_eyeproject_feature_testmodel_GazeNative_run
+// JNI bridge: Java_com_zkyjss_eyeproject_feature_testmodel_gaze_GazeNative_run
 // 使用常驻 GazeEngine：首次调用 Init（EGL/shader/模型编译），之后每帧 Run 复用。
 #include <jni.h>
 
@@ -17,7 +17,7 @@ bool g_init_ok = false;
 extern "C" {
 
 JNIEXPORT jfloatArray JNICALL
-Java_com_zkyjss_eyeproject_feature_testmodel_GazeNative_run(JNIEnv* env,
+Java_com_zkyjss_eyeproject_feature_testmodel_gaze_GazeNative_run(JNIEnv* env,
                                                             jobject /*thiz*/,
                                                             jbyteArray pixels,
                                                             jint width,

@@ -1,5 +1,6 @@
 #include "gaze_engine.h"
 
+#include <android/log.h>
 #include <iostream>
 #include <mutex>
 #include <string>
@@ -8,81 +9,23 @@
 #include "absl/types/span.h"
 #include "image_utils.h"
 #include "litert/cc/litert_macros.h"
+#include "litert/cc/options/litert_gpu_options.h"
+
+#define GAZE_LOG(...) __android_log_print(ANDROID_LOG_INFO, "GazeEngine", __VA_ARGS__)
 
 namespace gaze {
 
 namespace {
 
-litert::Options CreateGpuOptions(bool use_gl_buffers) {
+// 设备实测：GL 外部张量零拷贝（RunAsync）在此设备报 "Output buffers cannot have events attached"，
+// 因此走官方 main_cpu.cc 的 CPU 缓冲 + Write 路线；加速器仍 kGpu|kCpu（推理尽量 GPU，输入走 Write）。
+litert::Options CreateGpuOptions() {
   LITERT_ASSIGN_OR_ABORT(litert::Options options, litert::Options::Create());
   LITERT_ASSIGN_OR_ABORT(auto& gpu_options, options.GetGpuOptions());
-  if (use_gl_buffers) {
-    LITERT_ABORT_IF_ERROR(
-        gpu_options.SetPrecision(litert::GpuOptions::Precision::kFp32));
-    LITERT_ABORT_IF_ERROR(gpu_options.SetBufferStorageType(
-        litert::GpuOptions::BufferStorageType::kBuffer));
-    LITERT_ABORT_IF_ERROR(gpu_options.EnableExternalTensorsMode(true));
-  } else {
-    LITERT_ABORT_IF_ERROR(gpu_options.EnableExternalTensorsMode(false));
-  }
-
+  LITERT_ABORT_IF_ERROR(gpu_options.EnableExternalTensorsMode(false));
   options.SetHardwareAccelerators(litert::HwAccelerators::kGpu |
                                   litert::HwAccelerators::kCpu);
   return options;
-}
-
-litert::Expected<std::vector<litert::TensorBuffer>> CreateGlInputBuffers(
-    litert::Environment& env, litert::CompiledModel& compiled_model,
-    int signature_index) {
-  LITERT_ASSIGN_OR_RETURN(
-      auto input_names, compiled_model.GetSignatureInputNames(signature_index));
-  std::vector<litert::TensorBuffer> input_buffers;
-  for (int i = 0; i < static_cast<int>(input_names.size()); ++i) {
-    LITERT_ASSIGN_OR_RETURN(
-        litert::TensorBufferRequirements input_buffer_requirements,
-        compiled_model.GetInputBufferRequirements(signature_index, i));
-    LITERT_ASSIGN_OR_RETURN(
-        litert::RankedTensorType ranked_tensor_type,
-        compiled_model.GetInputTensorType(signature_index, i));
-    LITERT_ASSIGN_OR_RETURN(size_t buffer_size,
-                            input_buffer_requirements.BufferSize());
-
-    LITERT_ASSIGN_OR_RETURN(auto input_buffer,
-                            litert::TensorBuffer::CreateManaged(
-                                env, litert::TensorBufferType::kGlBuffer,
-                                ranked_tensor_type, buffer_size));
-
-    input_buffers.push_back(std::move(input_buffer));
-  }
-  return input_buffers;
-}
-
-litert::Expected<std::vector<litert::TensorBuffer>> CreateGlOutputBuffers(
-    litert::Environment& env, litert::CompiledModel& compiled_model,
-    int signature_index) {
-  LITERT_ASSIGN_OR_RETURN(
-      auto output_names,
-      compiled_model.GetSignatureOutputNames(signature_index));
-  std::vector<litert::TensorBuffer> output_buffers;
-  output_buffers.reserve(output_names.size());
-  for (int i = 0; i < static_cast<int>(output_names.size()); ++i) {
-    LITERT_ASSIGN_OR_RETURN(
-        litert::TensorBufferRequirements output_buffer_requirements,
-        compiled_model.GetOutputBufferRequirements(signature_index, i));
-    LITERT_ASSIGN_OR_RETURN(
-        litert::RankedTensorType ranked_tensor_type,
-        compiled_model.GetOutputTensorType(signature_index, i));
-    LITERT_ASSIGN_OR_RETURN(size_t buffer_size,
-                            output_buffer_requirements.BufferSize());
-
-    LITERT_ASSIGN_OR_RETURN(auto output_buffer,
-                            litert::TensorBuffer::CreateManaged(
-                                env, litert::TensorBufferType::kGlBuffer,
-                                ranked_tensor_type, buffer_size));
-
-    output_buffers.push_back(std::move(output_buffer));
-  }
-  return output_buffers;
 }
 
 // 90 angle bins -> degrees, same as Python: (p * arange(90)).sum() * 4 - 180
@@ -102,12 +45,10 @@ bool GazeEngine::Init(const char* model_path, const char* shaders_dir) {
   if (initialized_) return true;
   if (model_path == nullptr || *model_path == '\0') return false;
 
-  // App 里相对路径不可用（cwd 不是 shader 所在处），shaders_dir 由 Kotlin 传入 filesDir/shaders
   const std::string sd = (shaders_dir != nullptr && *shaders_dir != '\0')
                              ? shaders_dir
-                             : "shaders";  // 独立二进制时保持相对路径
+                             : "shaders";
 
-  // 直接初始化成员（ImageProcessor 持 GL 句柄，禁止拷贝）
   if (!processor_.InitializeGL(
           sd + "/passthrough_shader.vert", sd + "/mask_blend_compute.glsl",
           sd + "/resize_compute.glsl", sd + "/preprocess_compute.glsl",
@@ -121,9 +62,9 @@ bool GazeEngine::Init(const char* model_path, const char* shaders_dir) {
     std::cerr << "GazeEngine::Init: Environment::Create failed." << std::endl;
     return false;
   }
-  env_ = std::move(*env_result);  // 必须持有 env，模型句柄依赖它
+  env_ = std::move(*env_result);
 
-  litert::Options options = CreateGpuOptions(true);
+  litert::Options options = CreateGpuOptions();
   auto compiled_result =
       litert::CompiledModel::Create(*env_, model_path, options);
   if (!compiled_result) {
@@ -132,16 +73,17 @@ bool GazeEngine::Init(const char* model_path, const char* shaders_dir) {
   }
   compiled_model_ = std::move(*compiled_result);
 
-  auto in = CreateGlInputBuffers(*env_, compiled_model_, 0);
+  // 官方 main_cpu.cc：默认（CPU 管理）缓冲，输入走 Write()
+  auto in = compiled_model_.CreateInputBuffers();
   if (!in) {
-    std::cerr << "GazeEngine::Init: input buffers failed." << std::endl;
+    std::cerr << "GazeEngine::Init: CreateInputBuffers failed." << std::endl;
     return false;
   }
   input_buffers_ = std::move(*in);
 
-  auto out = CreateGlOutputBuffers(*env_, compiled_model_, 0);
+  auto out = compiled_model_.CreateOutputBuffers();
   if (!out) {
-    std::cerr << "GazeEngine::Init: output buffers failed." << std::endl;
+    std::cerr << "GazeEngine::Init: CreateOutputBuffers failed." << std::endl;
     return false;
   }
   output_buffers_ = std::move(*out);
@@ -162,41 +104,71 @@ bool GazeEngine::Run(const uint8_t* rgb, int width, int height,
     return false;
   }
 
-  GLuint tex_id_orig = processor_.CreateOpenGLTexture(rgb, width, height, 3);
-  if (!tex_id_orig) {
+  // 1) 上传纹理（官方 main_cpu.cc 同款）
+  GLuint tex_id = processor_.CreateOpenGLTexture(rgb, width, height, 3);
+  if (!tex_id) {
     std::cerr << "Failed to create OpenGL texture for image" << std::endl;
     return false;
   }
 
-  // Preprocess -> 448x448x3 NCHW float（直接写入 LiteRT GPU 输入缓冲，零拷贝）
+  // 2) GL 预处理写入普通 SSBO
   const int kOut = 448;
   const int num_channels = 3;
-  GLuint preprocessed_buffer_id;
-  LITERT_ASSIGN_OR_RETURN(auto gl_buffer, input_buffers_[0].GetGlBuffer(),
-                         false);
-  preprocessed_buffer_id = gl_buffer.id;
-
+  const size_t input_elems = kOut * kOut * num_channels;
+  GLuint ssbo = processor_.CreateOpenGLBuffer(nullptr,
+                                              input_elems * sizeof(float));
   if (!processor_.PreprocessInputForL2CS_NET(
-          tex_id_orig, width, height, kOut, kOut, preprocessed_buffer_id,
-          num_channels)) {
+          tex_id, width, height, kOut, kOut, ssbo, num_channels)) {
     std::cerr << "Failed to preprocess input image for gaze." << std::endl;
-    processor_.DeleteOpenGLTexture(tex_id_orig);
+    processor_.DeleteOpenGLBuffer(ssbo);
+    processor_.DeleteOpenGLTexture(tex_id);
     return false;
   }
-  processor_.DeleteOpenGLTexture(tex_id_orig);  // 预处理结束，释放纹理
+  processor_.DeleteOpenGLTexture(tex_id);
 
+  // 3) 读回 CPU（官方 ReadBufferData 流程）
+  std::vector<float> input(input_elems);
+  if (!processor_.ReadBufferData(ssbo, 0, input.size() * sizeof(float),
+                                input.data())) {
+    std::cerr << "Failed to read preprocessed SSBO." << std::endl;
+    processor_.DeleteOpenGLBuffer(ssbo);
+    return false;
+  }
+  processor_.DeleteOpenGLBuffer(ssbo);
+
+  // ---- DEBUG：确认输入是真实图像数据（非 0/恒定）----
+  {
+    float s = 0; for (float v : input) s += v;
+    GAZE_LOG("DEBUG input sum=%.2f first=%.4f %.4f %.4f", s, input[0],
+             input[1], input[2]);
+  }
+
+  // 4) Write + Run（官方 main_cpu.cc 喂数据方式）
+  LITERT_RETURN_IF_ERROR(
+      input_buffers_[0].Write(absl::MakeConstSpan(input)), false);
   LITERT_RETURN_IF_ERROR(compiled_model_.Run(input_buffers_, output_buffers_),
                          false);
 
-  // Outputs: yaw bins [1,90], pitch bins [1,90]
+  // 5) 读输出
   std::vector<float> yaw_bins(90), pitch_bins(90);
   LITERT_RETURN_IF_ERROR(output_buffers_[0].Read(absl::MakeSpan(yaw_bins)),
                          false);
   LITERT_RETURN_IF_ERROR(output_buffers_[1].Read(absl::MakeSpan(pitch_bins)),
                          false);
 
+  // ---- DEBUG：原始 bins（恒定 = 模型输出没变化）----
+  {
+    float sy = 0, sp = 0;
+    for (float v : yaw_bins) sy += v;
+    for (float v : pitch_bins) sp += v;
+    GAZE_LOG("DEBUG yaw_bins[0..3]=%.4f %.4f %.4f %.4f sum=%.2f | pitch_bins[0..3]=%.4f %.4f %.4f %.4f sum=%.2f",
+             yaw_bins[0], yaw_bins[1], yaw_bins[2], yaw_bins[3], sy,
+             pitch_bins[0], pitch_bins[1], pitch_bins[2], pitch_bins[3], sp);
+  }
+
   *yaw = BinsToDegrees(yaw_bins);
   *pitch = BinsToDegrees(pitch_bins);
+  GAZE_LOG("yaw=%.2f pitch=%.2f", *yaw, *pitch);
   return true;
 }
 
@@ -206,7 +178,6 @@ void GazeEngine::Close() {
   output_buffers_.clear();
   compiled_model_ = litert::CompiledModel();
   env_.reset();
-  // processor_ 的 GL 资源由 ImageProcessor 析构自动清理
   initialized_ = false;
 }
 
@@ -215,7 +186,7 @@ bool RunGaze(const uint8_t* rgb, int width, int height, const char* model_path,
              const char* shaders_dir, float* yaw, float* pitch) {
   static GazeEngine engine;
   static std::once_flag init_flag;
-  static std::mutex run_mutex;  // GL/模型非线程安全
+  static std::mutex run_mutex;
   static bool init_ok = false;
   std::call_once(init_flag, [&] { init_ok = engine.Init(model_path, shaders_dir); });
   if (!init_ok) return false;

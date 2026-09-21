@@ -14,3 +14,12 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Claude Code 本项目记忆与本地配置
+memory/
+.claude/settings.local.json
+
+# 构建/IDE 本地产物
+.kotlin/
+build-logic/convention/bin/
+.idea/androidTestResultsUserPreferences.xml

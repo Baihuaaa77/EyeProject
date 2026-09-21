@@ -11,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeShapes
@@ -36,7 +37,7 @@ fun EyeTopBar(
             modifier = Modifier
                 .size(44.dp)
                 .clip(EyeShapes.small)
-                .background(colors.primary),
+                .background(Color(0xFFFFB91A)),
             contentAlignment = Alignment.Center
         ) {
             EyeText(

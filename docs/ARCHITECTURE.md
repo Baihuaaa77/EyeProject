@@ -97,9 +97,9 @@ app
   `EyeStatusChip`、`EyeSegmentedRow`、`EyeTopBar`。
 - **feature:camera**：`CameraController`（CameraX）、`FaceLandmarkerAnalyzer`（MediaPipe Face Landmarker）。
 - **feature:home**：`HomeViewModel`（MVVM+UDF）、`HomeScreen`、`EyeOverlay`、`HomeUiState`。
-- **feature:testmodel**：`FaceDetectorAnalyzer`（MediaPipe FaceDetector 检人脸框）、`GazeNative`（JNI 桥，对应 `src/main/cpp/jni_bridge.cpp`）、
-  `GazeNativeModel`（双推理路线：C++ JNI `infer_use_cpp_lib` + Maven litert Android API `infer_use_android_api`）、
-  `TestModelViewModel`、`TestModelScreen`；C++ 源码 + `litert_cc_sdk/` + CMake 在 `src/main/cpp/`。
+- **feature:testmodel**：实验测试主页 `TestModelScreen`（入口选择，`TestModelRoute`）+ 子包 `gaze/`（`FaceDetectorAnalyzer`（MediaPipe FaceDetector 检人脸框）、`GazeNative`（JNI 桥，对应 `src/main/cpp/jni_bridge.cpp`）、
+  `GazeNativeModel`（双推理路线：C++ JNI `infer_use_cpp_lib` + Maven litert Android API `infer_use_android_api`）、`GazeViewModel`、`GazeScreen`）
+  + 子包 `blink/`（`BlinkLandmarkerAnalyzer`、`BlinkDetector`（EAR 眨眼计数）、`BlinkTestScreen`）；C++ 源码 + `litert_cc_sdk/` + CMake 在 `src/main/cpp/`。
 - **app**：`MainActivity`、`EyeProtectApplication`、`ColorTemperatureOverlayService`、
   `EyeCareReminderScheduler/Receiver`、`BootCompletedReceiver`、`AppModule`（Hilt @Binds）。
 

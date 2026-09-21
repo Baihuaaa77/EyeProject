@@ -5,14 +5,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeProjectTheme
-import com.zkyjss.eyeproject.feature.home.HomeScreen
-import com.zkyjss.eyeproject.feature.testmodel.TestModelScreen
+import com.zkyjss.eyeproject.ui.EyeProjectNavHost
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
@@ -25,15 +20,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             EyeProjectTheme {
-                var showTestModel by remember { mutableStateOf(false) }
-                if (showTestModel) {
-                    TestModelScreen(onBack = { showTestModel = false })
-                } else {
-                    HomeScreen(
-                        onNavigateToTestModel = { showTestModel = true },
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
+                EyeProjectNavHost(modifier = Modifier.fillMaxSize())
             }
         }
     }

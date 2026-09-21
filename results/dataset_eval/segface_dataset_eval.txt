@@ -1,0 +1,10 @@
+loading SegFace mobilenet ...
+C:\Users\djj\xd-workspace\miniconda3\envs\model_tr\lib\site-packages\torchvision\models\_utils.py:207: UserWarning: The parameter 'pretrained' is deprecated since 0.13 and may be removed in the future, please use 'weights' instead.
+  warnings.warn(
+C:\Users\djj\xd-workspace\miniconda3\envs\model_tr\lib\site-packages\torchvision\models\_utils.py:222: UserWarning: Arguments other than a weight enum or `None` for 'weights' are deprecated since 0.13 and may be removed in the future. The current behavior is equivalent to passing `weights=MobileNet_V3_Large_Weights.IMAGENET1K_V1`. You can also use `weights=MobileNet_V3_Large_Weights.DEFAULT` to get the most up-to-date weights.
+  warnings.warn(msg)
+images: 400  seg-latency: mean=492ms  p95=572ms (PC CPU)
+eye-class 出现率: 44.5%  (miss=222)
+mask-vs-GT框 IoU: mean=0.128  p25=0.000
+SegFace+OCEC: accuracy=79.21%  precision=0.9786  recall=0.8012  F1=0.8810
+对照: GT框+OCEC F1=0.9938(99.38%) | BlazeFace+几何+OCEC F1=0.9873(98.75%) | DEIMv2+OCEC F1=0.9975(99.75%)

@@ -13,6 +13,7 @@ data class EyeColors(
     val white: Color,
     val black: Color,
     val gray: Color,
+    val blue: Color,
     val appBackground: Color,
     val panelBackground: Color,
     val surfaceVariant: Color,
@@ -35,17 +36,17 @@ data class EyeColors(
 )
 
 val LightEyeColors = EyeColors(
-    appBackground = Color(0xFFF5F6F1),
-    panelBackground = Color(0xFFFFFFFF),
+    appBackground = Color(0xFFF1F9FF),
+    panelBackground = Color(0xF2FFFFFF),
     surfaceVariant = Color(0xFFEEF1E8),
     cameraSurface = Color(0xFF0E1111),
-    primary = Color(0xFFFFD21E),
-    primaryDark = Color(0xFFD9A900),
+    primary = Color(0xFF5956e9),
+    primaryDark = Color(0xFF5956e9),
     primarySoft = Color(0xFFFFF4B8),
     textPrimary = Color(0xFF111512),
     textSecondary = Color(0xFF5F685F),
     textInverse = Color(0xFFFFFFFF),
-    borderSubtle = Color(0xFFDDE3D6),
+    borderSubtle = Color(0xFFFFFFFF),
     success = Color(0xFF2E7D32),
     successSoft = Color(0xFFE4F7DD),
     warning = Color(0xFFC47B00),
@@ -56,7 +57,8 @@ val LightEyeColors = EyeColors(
     overlayScrim = Color(0x66000000),
     white = Color.White,
     black = Color.Black,
-    gray = Color.Gray
+    gray = Color.Gray,
+    blue = Color(0xFF3B74FF)
 )
 
 val DarkEyeColors = EyeColors(
@@ -64,8 +66,8 @@ val DarkEyeColors = EyeColors(
     panelBackground = Color(0xFF18242D),
     surfaceVariant = Color(0xFF22313C),
     cameraSurface = Color(0xFF070B10),
-    primary = Color(0xFFFFD54A),
-    primaryDark = Color(0xFFFFE082),
+    primary = Color(0xFF5956e9),
+    primaryDark = Color(0xFF5956e9),
     primarySoft = Color(0xFF3E3210),
     textPrimary = Color(0xFFEAF2F6),
     textSecondary = Color(0xFFA7B6C0),
@@ -81,7 +83,8 @@ val DarkEyeColors = EyeColors(
     overlayScrim = Color(0x80000000),
     white = Color.White,
     black = Color.Black,
-    gray = Color.Gray
+    gray = Color.Gray,
+    blue = Color(0xFF3B74FF)
 )
 
 val LocalEyeColors = staticCompositionLocalOf { LightEyeColors }

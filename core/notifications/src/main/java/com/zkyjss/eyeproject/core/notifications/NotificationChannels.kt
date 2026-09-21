@@ -11,8 +11,10 @@ import android.os.Build
 object NotificationChannels {
     const val REMINDER_CHANNEL_ID = "eye_care_reminders"
     const val COLOR_TEMPERATURE_CHANNEL_ID = "color_temperature_service"
+    const val MONITORING_CHANNEL_ID = "eye_care_monitoring"
     const val REMINDER_NOTIFICATION_ID = 3201
     const val COLOR_TEMPERATURE_NOTIFICATION_ID = 2101
+    const val MONITORING_NOTIFICATION_ID = 2201
 
     fun createReminderChannel(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
@@ -42,6 +44,19 @@ object NotificationChannels {
             NotificationManager.IMPORTANCE_LOW
         ).apply {
             description = "保持护眼色温滤镜在其他应用上层运行"
+            setShowBadge(false)
+        }
+        context.getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+    }
+
+    fun createMonitoringChannel(context: Context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val channel = NotificationChannel(
+            MONITORING_CHANNEL_ID,
+            "眼健康监测",
+            NotificationManager.IMPORTANCE_LOW
+        ).apply {
+            description = "保持眼健康监测在后台实时运行"
             setShowBadge(false)
         }
         context.getSystemService(NotificationManager::class.java).createNotificationChannel(channel)

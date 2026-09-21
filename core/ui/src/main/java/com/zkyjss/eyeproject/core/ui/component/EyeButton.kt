@@ -38,13 +38,13 @@ fun EyeButton(
     val pressed by interactionSource.collectIsPressedAsState()
 
     val backgroundColor: Color = when (role) {
-        EyeButtonRole.PRIMARY -> colors.primary
+        EyeButtonRole.PRIMARY -> Color(0xFFFFB91A)
         EyeButtonRole.SECONDARY -> colors.primarySoft
         EyeButtonRole.DANGER -> colors.dangerSoft
     }
     val contentColor: Color = when (role) {
         EyeButtonRole.PRIMARY -> colors.textPrimary
-        EyeButtonRole.SECONDARY -> colors.primary
+        EyeButtonRole.SECONDARY -> Color(0xFFFFB91A)
         EyeButtonRole.DANGER -> colors.danger
     }
     val finalAlpha = when {

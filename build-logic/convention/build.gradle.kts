@@ -12,6 +12,7 @@ java {
 dependencies {
     implementation("com.android.tools.build:gradle:9.3.0")
     implementation("org.jetbrains.kotlin:compose-compiler-gradle-plugin:2.2.10")
+    implementation("org.jetbrains.kotlin:kotlin-serialization:2.2.10")
     implementation("com.google.dagger:hilt-android-gradle-plugin:2.59.2")
     implementation("com.google.devtools.ksp:symbol-processing-gradle-plugin:2.2.10-2.0.2")
 }
@@ -37,6 +38,10 @@ gradlePlugin {
         register("androidHilt") {
             id = "eyeproject.android.hilt"
             implementationClass = "com.zkyjss.eyeproject.buildlogic.AndroidHiltConventionPlugin"
+        }
+        register("androidKotlinSerialization") {
+            id = "eyeproject.kotlin.serialization"
+            implementationClass = "com.zkyjss.eyeproject.buildlogic.AndroidKotlinSerializationConventionPlugin"
         }
     }
 }

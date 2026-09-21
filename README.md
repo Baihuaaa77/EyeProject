@@ -1,101 +1,117 @@
-# EyeProject — 眼健康助手（Compose + MediaPipe 重构版）
+# EyeProject — 眼健康助手
 
-将 `EyeProtect_handoff_2026-07-24`（Kotlin View + CameraX + ML Kit）重构为
-**Jetpack Compose + MediaPipe Face Landmarker** 版本，采用官方多模块分层架构，
-UI 完全自定义（不使用 Material 默认组件）。
+基于 **Jetpack Compose + MediaPipe Face Landmarker** 的实时眼疲劳监测应用：
+实时采集用眼环境/姿势/眨眼等数据，经 C++ 疲劳评分算法（EyeFatigueAlgorithm）综合评分，
+以仪表盘 + 曲线图展示，后台前台服务持续运行，数据本地持久化（滚动保留 2 天）。
 
 ## 一、架构与模块
 
-完全参照 [Now in Android (NIA)](https://github.com/android/nowinandroid)：`app` / `core` / `feature`
-三层 + `build-logic` 约定插件。详见 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)。
+参照 [Now in Android (NIA)](https://github.com/android/nowinandroid) 的分层多模块结构，
+UI 全部自绘（不依赖 Material 默认组件、不依赖第三方图表库）。
 
 ```
-build-logic/convention/   约定插件（android.library/application/compose/hilt）
-app/                      入口 + Hilt DI + 系统组件(色温服务/提醒接收器)
+app/                      入口 + Hilt DI + 系统组件（色温服务 / 提醒接收器 / 监测前台服务 MonitoringService）
 core/
   common/                 通用工具（时间/光照格式化）
   designsystem/           设计令牌（颜色/排版/形状/主题）
-  ui/                     可复用自绘组件（EyeButton/EyeMetricCard/…）
-  model/                  纯 Kotlin 领域模型
-  domain/                 距离估算纯逻辑 + 色温/提醒控制接口
-  data/                   使用时长/亮度/光线/偏好 仓储
-  notifications/          通知抽象（Notifier + SystemNotifier）
+  ui/                     可复用自绘组件（EyeButton/EyeMetricCard/EyeText/EyeSwitch/…）
+  model/                  纯 Kotlin 领域模型（RiskFactors/FatigueRisk/MonitoringSample/HeadPose/…）
+  domain/                 BlinkDetector(EAR 眨眼) + DepthFromIris(测距) + 色温/提醒控制接口
+  data/                   环境光照 / 屏幕亮度 / 监测数据(JSON) 仓储
+  notifications/          通知抽象（Notifier + SystemNotifier + NotificationChannels）
   testing/                测试工具（MainDispatcherRule）
 feature/
-  camera/                 CameraX + MediaPipe FaceLandmarker 分析管线
-  home/                   Compose 仪表盘 UI + HomeViewModel（MVVM + UDF）
+  camera/                 CameraX + MediaPipe FaceLandmarker（头姿 / 虹膜 / EAR 关键点）+ 相机内参
+  fatigue/                眼疲劳监测：C++ 评分算法(JNI) + FatigueMonitor 引擎 + 仪表盘 UI（自绘图表）
   testmodel/              模型测试页（FaceDetector 检测人脸 + LiteRT 跑 L2CS-Net 注视估计）
 ```
 
-## 二、技术栈
+## 二、数据采集与存储
+
+### 1. 输入：采样时间序列 + 用户画像
+
+算法输入改为「时间序列」：把保存的 `MonitoringSample` 序列（每 30 秒一条）整体传入，外加一份静态用户画像 `UserProfile`（7 字段，当前用默认值）：
+
+- **MonitoringSample[]**（时间序列，各字段等长数组）：
+  - `timestampMillis`（毫秒）、`ambientLux`（lux）、`screenBrightness`（0~100）、
+    `distanceCm`（cm，0 = 未检测到人脸）、`durationMin`（分钟，算法可从时间戳重新推导）、
+    `blinkCount`（本 30 秒区间眨眼次数）
+- **UserProfile**（profile double[7]）：
+  - `age`、`hasMyopia`、`hasDryEye`、`parentalMyopia`、`readingPosture`、
+    `discomfortScore`、`contentContrast`
+
+### 2. 算法输出（FatigueRisk）
+
+`computeRiskSeries` 返回 double[27]、`computeRiskSeriesText` 返回 String[8]，映射为 `feature/fatigue/FatigueRisk.kt`：
+
+- `totalRisk`（综合风险 0~1）、`level`（LOW/MEDIUM/HIGH，阈值 0.3/0.7）、`advice`（总体建议）
+- `factors`：6 因子（light/distance/time/blink/personal/feedback）各含 value/label/advice
+- `metrics`：派生指标（连续/累计用眼时长、眨眼频率、平均距离/光照/亮度、样本数、片段数）
+- `features`：10 维特征向量（离线训练用）
+- 组合层可切换：规则版（默认）/ 训练版逻辑回归（`setCombinerLogistic`）
+
+### 3. 保存的记录结构（MonitoringSample）
+
+每次采样（间隔 **30 秒**）保存一条 `core/model/MonitoringSample.kt`：
+
+| 字段 | 类型 | 含义 |
+|---|---|---|
+| timestampMillis | Long | 采样时间戳 |
+| ambientLux | Float | 环境光照（lux） |
+| screenBrightness | Int | 屏幕亮度（0~100） |
+| distanceCm | Float | 用眼距离（cm） |
+| durationMin | Float | 连续用眼时长（分钟） |
+| blinkCount | Int | 眨眼次数（本 30 秒区间） |
+
+> 综合风险（totalRisk / riskLevel / advice）改为实时计算、仅界面展示，不落盘。
+
+### 4. 持久化格式（JSON）
+
+`core/data/MonitoringRepository.kt`（`JsonMonitoringRepository`）保存到
+`filesDir/monitoring_samples.json`：
+
+```json
+{
+  "version": 1,
+  "samples": [
+    {
+      "ts": 1760000000000,
+      "lux": 320.5,
+      "brightness": 50,
+      "distance": 38.2,
+      "duration": 12.5,
+      "blink": 7
+    }
+  ]
+}
+```
+
+- **采样间隔**：30 秒一条，**每采一条立即写入 JSON**。
+- **保留策略**：滚动保留最近 **2 天**，更早的自动清理。
+- **演示数据**：首次运行（无历史数据）会自动捏造最近 24 小时数据（每 5 分钟一条，共 288 条），便于直接查看图表效果。
+
+## 三、技术栈
 
 - JDK 17、AGP 9.3.0、Kotlin 2.2.10、Gradle 9.5、compileSdk 37 / minSdk 26 / targetSdk 37
-- Compose BOM 2026.02.01（自绘组件，已移除 material3）
-- Hilt 2.59.2 + KSP 2.2.10-2.0.2（依赖注入）
-- CameraX 1.4.1、MediaPipe tasks-vision 0.10.14（camera FaceLandmarker + testmodel FaceDetector）
-- LiteRT 双路线（testmodel 注视估计）：LiteRT C++ SDK（JNI，`libgaze_native.so`）+ Maven `com.google.ai.edge.litert:litert:2.1.1`（Android API）
+- Compose BOM 2026.02.01（自绘组件，无 material3、无第三方图表库）
+- Hilt 2.59.2 + KSP 2.2.10-2.0.2
+- CameraX 1.4.1、MediaPipe tasks-vision 0.10.14
+- C++ 疲劳评分算法：`feature/fatigue` 内 `model.cpp` + `eye_health_jni.cpp` → `libeye_health_jni.so`
+- LiteRT（`feature/testmodel` 注视估计）：LiteRT C++ SDK（JNI）+ Maven `com.google.ai.edge.litert:litert:2.1.1`（`libLiteRt.so` 来自 AAR）
 - NDK 27.3.13750724（r27d）
 
-## 三、构建前准备
+## 四、构建
 
-1. **模型文件**（均已随项目，无需下载）：
-   - `feature/camera/src/main/assets/face_landmarker.task`（3.7MB，MediaPipe 人脸关键点）
-   - `feature/testmodel/src/main/assets/l2cs_net.tflite`（45.7MB，L2CS-Net 注视估计）
-   - `feature/testmodel/src/main/jniLibs/arm64-v8a/libLiteRt.so`（LiteRT C++ 运行时）
+```powershell
+.\gradlew.bat assembleDebug
+```
 
-2. **JDK 17 + NDK 27**：确认 `JAVA_HOME` 指向 JDK 17；装 NDK **27.3.13750724**（r27d）与 CMake 3.22.1。
+- 模型文件随项目：`feature/camera/src/main/assets/face_landmarker.task`、`feature/testmodel/src/main/assets/l2cs_net.tflite`、`blaze_face_short_range.tflite`、`shaders/`。
+- 首次构建 CMake `FetchContent` 会联网拉 abseil/flatbuffers/OpenCL。
+- 本机需 JDK 17 + NDK 27.3.13750724（r27d）+ CMake 3.22.1。
 
-3. 构建：
+## 五、说明
 
-   ```powershell
-   .\gradlew.bat assembleDebug
-   ```
-
-   > 首次构建会 CMake `FetchContent` 联网拉 abseil/flatbuffers/OpenCL。
-
-## 四、与原项目的功能对齐
-
-| 能力 | 旧实现 | 新实现 |
-|---|---|---|
-| 前置摄像头 | CameraX | CameraX（feature:camera） |
-| 眼部检测 | ML Kit Face Detection | **MediaPipe Face Landmarker**（478 点 + 虹膜） |
-| 距离估算 | 40cm 标定比例法 | 保留算法，改用虹膜中心更精准 |
-| 过近提醒 | <30cm 警告 | 保留（Compose 状态驱动） |
-| 屏幕时长 / 亮度 / 光照 | 主 Activity 内联 | core:data 仓储 + Flow |
-| 全局色温 | Overlay 前台服务 | 保留（app 层） |
-| 定时提醒 | AlarmManager | 保留（app 层） |
-
-## 五、已知风险（首次构建时可能需要微调）
-
-1. **Hilt × AGP 9（内置 Kotlin）**：已通过 `android.disallowKotlinSourceSets=false` 解决
-   （放行 KSP/Hilt 的 kotlin.sourceSets 集成，参考
-   [dagger#5099](https://github.com/google/dagger/issues/5099)）。构建已验证通过。
-2. **版本号**：`coreKtx/lifecycle/activityCompose` 等已按 compileSdk 37 上调，构建已验证通过。
-3. **旋转/镜像**：MediaPipe 关键点坐标基于图像原生方向，预览 overlay 的旋转/镜像映射
-   可能需要按目标设备方向微调（`EyeOverlay` 已做水平镜像）。
-4. **配置缓存**：`gradle.properties` 开启了 `configuration-cache`，构建已验证兼容。
-
-## 六、构建验证结果（2026-08-19）
-
-- `.\gradlew.bat assembleDebug` → **BUILD SUCCESSFUL**（387 个任务）。
-- 产物：`app/build/outputs/apk/debug/app-debug.apk`（约 97 MB）。
-- 原生库：`libgaze_native.so`（LiteRT C++ 注视管线）+ `libLiteRt.so` + `libmediapipe_tasks_vision_jni.so`（tasks）。
-- 资产：`face_landmarker.task`（3.7MB）+ `l2cs_net.tflite`（45.7MB）。
-
-### 本机（沙箱）构建专用的额外配置
-
-以下配置是为适配受限执行环境（无 `~/.android` 写权限、出网需代理、Kotlin 守护进程受限）加入的，
-在你本机正常开发环境下可以保留（不影响功能）或移除：
-
-- `gradle.properties` 中的 `systemProp.*.proxyHost/proxyPort`（本地 Clash 代理 127.0.0.1:7897）
-- `gradle.properties` 中的 `-Djava.io.tmpdir=E:/workspace/.gradle-tmp`（沙箱临时目录）
-- `gradle.properties` 中的 `kotlin.compiler.execution.strategy=in-process`
-- `app/build.gradle.kts` 中的 `signingConfigs.sandboxDebug`（工作区内 debug keystore）
-- `gradle.properties` 中的 `android.disallowKotlinSourceSets=false` —— **此条为 Hilt×AGP9 必需，建议保留**
-
-## 七、说明
-
-- 已删除旧模板 `app/src/main/java/com/zkyjss/eyeproject/ui/theme/{Theme,Color,Type}.kt`
-  中的 Material 主题实现（保留占位文件），改为 `core:designsystem` 的自定义 `EyeProjectTheme`。
-- 构建缓存重定向：本执行环境将 `GRADLE_USER_HOME` 指向 `E:\workspace\.gradle-home`，
-  你的本机环境仍使用默认 `D:\gradle\caches`。
+- 距离测距已从「40cm 标定比例法」改为 **Depth-from-Iris**（无需标定）；已移除分辨率切换与使用情况访问（`PACKAGE_USAGE_STATS`）。
+- 首页摄像头预览已移除，相机在后台由 `MonitoringService`（`foregroundServiceType="camera"`）持有，保证应用退到后台仍实时监测。
+- 权限流程：首次进入按标准流程请求相机权限，之后仅在缺失权限时再次请求。
