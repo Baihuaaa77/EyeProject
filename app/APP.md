@@ -30,7 +30,7 @@
 
 | 类型 | 说明 |
 |---|---|
-| `monitoring/MonitoringService` | 后台实时监测前台服务（`foregroundServiceType="camera"`，`LifecycleService`）：`startForeground` 后 `monitor.start(this)`——**把自身作为 LifecycleOwner 传给 FatigueMonitor，是相机后台持续运行的关键**；`START_STICKY`，`onDestroy` 时 `monitor.stop()` |
+| `monitoring/MonitoringService` | 后台实时监测前台服务（`foregroundServiceType="camera"`，`LifecycleService`）：`startForeground` 后 `monitor.start(this)`——**把自身作为 LifecycleOwner 传给 FatigueMonitor，是相机后台持续运行的关键**；`START_NOT_STICKY`（相机型 FGS 在 Android 14+ 不能由系统后台重建）；通知带「停止监测」操作（`ACTION_STOP`）；监测自行停止（相机失败）时 `stopSelf()`；`onDestroy` 时 `monitor.stop()` |
 | `monitoring/MonitoringServiceLauncherImpl` | `MonitoringServiceLauncher` 实现：`startForegroundService` / `stopService` |
 | `display/ColorTemperatureOverlayService` | 色温滤镜前台服务（`specialUse`）：`WindowManager` 挂全屏半透明 View，按 `ColorTemperatureMode` 着色 |
 | `reminder/EyeCareReminderScheduler` | object：`AlarmManager` 精确闹钟调度 + SharedPreferences 状态（开关/间隔/下次触发） |

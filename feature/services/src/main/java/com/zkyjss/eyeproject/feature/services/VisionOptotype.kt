@@ -31,7 +31,7 @@ fun TumblingE(
     Canvas(modifier = modifier.size(size)) {
         val w = this.size.width
         val h = this.size.height
-        val bar = w * 0.18f
+        val bar = w * 0.20f
         rotate(degrees = direction * 90f) {
             // 左侧竖线
             drawRect(color = color, topLeft = Offset(0f, 0f), size = Size(bar, h))

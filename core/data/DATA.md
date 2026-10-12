@@ -6,7 +6,7 @@
 
 - 传感器与系统设置读取（光照、亮度）
 - 监测采样的持久化仓储（接口 + 实现 + DI 绑定同模块，NIA 规范）
-- 色温模式偏好持久化
+- 用户偏好持久化（色温模式、护眼提醒）——「偏好存哪」全项目只有这一层
 
 ## 对外 API
 
@@ -17,6 +17,7 @@
 | `AmbientLightMonitor` | 光线传感器 → `luxFlow(): Flow<Float>`（`callbackFlow`，收集时注册、取消时注销） |
 | `ScreenBrightnessReader` | 读 `Settings.System`：`BrightnessReading(percent, raw, automatic)`，失败字段为 null |
 | `ColorTemperaturePreferences` | SharedPreferences 存取 `ColorTemperatureMode` |
+| `ReminderPreferences` | SharedPreferences 存取护眼提醒：启用标记 / 间隔分钟 / 下次触发时刻；闹钟调度仍在 app 的 `EyeCareReminderScheduler` |
 | `di/DataModule` | Hilt 绑定：`JsonMonitoringRepository → MonitoringRepository` |
 
 ## 持久化格式

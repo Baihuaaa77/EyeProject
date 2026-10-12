@@ -1,5 +1,8 @@
 package com.zkyjss.eyeproject.core.ui.component
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -12,18 +15,22 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.zkyjss.eyeproject.core.designsystem.theme.EyeMotion
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeShapes
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
 
 enum class EyeButtonRole { PRIMARY, SECONDARY, DANGER }
 
-/** 自定义按钮，三态（primary/secondary/danger），带按压反馈，不使用 Material Button。 */
+/**
+ * 自定义按钮，三态（primary/secondary/danger），不使用 Material Button。
+ * 交互：按下以弹簧缩放到 96%，角色切换（如 开始↔停止）时底色平滑过渡。
+ */
 @Composable
 fun EyeButton(
     text: String,
@@ -37,29 +44,43 @@ fun EyeButton(
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
 
-    val backgroundColor: Color = when (role) {
-        EyeButtonRole.PRIMARY -> Color(0xFFFFB91A)
-        EyeButtonRole.SECONDARY -> colors.primarySoft
-        EyeButtonRole.DANGER -> colors.dangerSoft
-    }
-    val contentColor: Color = when (role) {
-        EyeButtonRole.PRIMARY -> colors.textPrimary
-        EyeButtonRole.SECONDARY -> Color(0xFFFFB91A)
-        EyeButtonRole.DANGER -> colors.danger
-    }
-    val finalAlpha = when {
-        !enabled -> 0.55f
-        pressed -> 0.82f
-        else -> 1f
-    }
+    // 全部走设计令牌，不在组件里硬写颜色
+    val backgroundColor by animateColorAsState(
+        targetValue = when (role) {
+            EyeButtonRole.PRIMARY -> colors.primary
+            EyeButtonRole.SECONDARY -> colors.surfaceVariant
+            EyeButtonRole.DANGER -> colors.dangerSoft
+        },
+        animationSpec = tween(EyeMotion.MEDIUM),
+        label = "按钮底色"
+    )
+    val contentColor by animateColorAsState(
+        targetValue = when (role) {
+            EyeButtonRole.PRIMARY -> colors.onPrimary
+            EyeButtonRole.SECONDARY -> colors.textPrimary
+            EyeButtonRole.DANGER -> colors.danger
+        },
+        animationSpec = tween(EyeMotion.MEDIUM),
+        label = "按钮文字色"
+    )
+    val scale by animateFloatAsState(
+        targetValue = if (pressed && enabled) 0.96f else 1f,
+        animationSpec = EyeMotion.pressSpring(),
+        label = "按压缩放"
+    )
 
     Box(
         modifier = modifier
-            .alpha(finalAlpha)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+                alpha = if (enabled) 1f else 0.5f
+            }
             .clip(EyeShapes.medium)
             .background(backgroundColor)
             .clickable(
                 enabled = enabled,
+                role = Role.Button,
                 interactionSource = interactionSource,
                 indication = null
             ) { onClick() }

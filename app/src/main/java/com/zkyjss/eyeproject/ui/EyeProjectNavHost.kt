@@ -1,6 +1,32 @@
 package com.zkyjss.eyeproject.ui
 
-import androidx.compose.foundation.Image
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.res.painterResource
+import com.zkyjss.eyeproject.core.designsystem.theme.EyeMotion
+import com.zkyjss.eyeproject.core.ui.component.EyeIcon
+import com.zkyjss.eyeproject.core.ui.component.EyeText
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.draw.clip
+import com.zkyjss.eyeproject.core.designsystem.theme.EyeShapes
+import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
@@ -8,20 +34,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -30,12 +48,9 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navOptions
-import com.zkyjss.eyeproject.core.designsystem.R
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
 import com.zkyjss.eyeproject.core.designsystem.util.borderTop
-import com.zkyjss.eyeproject.core.designsystem.util.clickableNoRipple
 import com.zkyjss.eyeproject.feature.agent.navigation.agentScreen
-import com.zkyjss.eyeproject.feature.agent.navigation.navigateToAgent
 import com.zkyjss.eyeproject.feature.fatigue.navigation.FatigueRoute
 import com.zkyjss.eyeproject.feature.fatigue.navigation.fatigueScreen
 import com.zkyjss.eyeproject.feature.fatigue.navigation.navigateToFatigue
@@ -78,27 +93,17 @@ fun EyeProjectNavHost(
                 EyeProjectBottomBar(navController = navController, currentDestination = currentDestination)
             }
         },
-        floatingActionButton = {
-            if (currentDestination.isTopLevelDestination()) {
-                Image(
-                    painter = painterResource(R.drawable.agent),
-                    contentDescription = "智能体",
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier
-                        .size(72.dp)
-                        .shadow(elevation = 12.dp, shape = CircleShape, clip = false)
-                        .background(colors.white, shape = CircleShape)
-                        .clickableNoRipple(
-                            onClick = {navController.navigateToAgent()}
-                        ),
-                )
-            }
-        }
+
     ) { innerPadding ->
         NavHost(
             navController = navController,
             startDestination = FatigueRoute,
             modifier = Modifier.padding(bottom = innerPadding.calculateBottomPadding()),
+            // 品牌过渡：淡入 + 轻微上浮，退出只淡出，避免页面「飞来飞去」
+            enterTransition = { fadeIn(tween(EyeMotion.MEDIUM)) + slideInVertically(tween(EyeMotion.MEDIUM, easing = EyeMotion.Standard)) { it / 24 } },
+            exitTransition = { fadeOut(tween(EyeMotion.SHORT)) },
+            popEnterTransition = { fadeIn(tween(EyeMotion.MEDIUM)) },
+            popExitTransition = { fadeOut(tween(EyeMotion.SHORT)) + slideOutVertically(tween(EyeMotion.MEDIUM)) { it / 24 } },
         ) {
             fatigueScreen(
                 onNavigateToTestModel = { navController.navigateToTestModel() }
@@ -135,24 +140,63 @@ private fun EyeProjectBottomBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(colors.appBackground)
+            .background(colors.panelBackground)
+            .borderTop(color = colors.borderSubtle)
             .navigationBarsPadding()
-            .height(64.dp)
-            .borderTop(color = Color(0xFFFFFFFF)),
+            .height(68.dp)
+            .selectableGroup(),
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         TopLevelDestination.entries.forEach { destination ->
             val selected = currentDestination.isInHierarchy(destination)
-            Text(
-                text = destination.label,
-                fontSize = 16.sp,
-                color = if (selected) colors.primary else colors.textSecondary,
-                modifier = Modifier
-                    .clickableNoRipple { navController.navigateToTopLevelDestination(destination) }
-                    .padding(horizontal = 20.dp, vertical = 4.dp),
+            BottomBarItem(
+                destination = destination,
+                selected = selected,
+                onClick = { navController.navigateToTopLevelDestination(destination) },
+                modifier = Modifier.weight(1f),
             )
         }
+    }
+}
+
+/** 选中项：图标后方的浅主色胶囊以弹簧展开，图标/文字同步变色并轻微放大。 */
+@Composable
+private fun BottomBarItem(
+    destination: TopLevelDestination,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = LocalEyeColors.current
+    val typography = LocalEyeTypography.current
+    val pillWidth by animateDpAsState(if (selected) 56.dp else 0.dp, EyeMotion.dpSpring, label = "导航胶囊")
+    val tint by animateColorAsState(if (selected) colors.primary else colors.textSecondary, tween(EyeMotion.MEDIUM), label = "导航色")
+    val iconScale by animateFloatAsState(if (selected) 1.08f else 1f, EyeMotion.settleSpring(), label = "导航图标")
+    Column(
+        modifier = modifier
+            .fillMaxHeight()
+            .selectable(
+                selected = selected,
+                role = Role.Tab,
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick,
+            ),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Box(Modifier.height(30.dp).width(56.dp), contentAlignment = Alignment.Center) {
+            Box(Modifier.height(30.dp).width(pillWidth).clip(EyeShapes.chip).background(colors.primarySoft))
+            EyeIcon(
+                painter = painterResource(destination.iconRes),
+                contentDescription = null,
+                tint = tint,
+                modifier = Modifier.size(22.dp).graphicsLayer { scaleX = iconScale; scaleY = iconScale },
+            )
+        }
+        Spacer(Modifier.height(4.dp))
+        EyeText(destination.label, style = typography.chip, color = tint)
     }
 }
 

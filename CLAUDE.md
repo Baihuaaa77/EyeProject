@@ -33,14 +33,13 @@ core/
   common/       格式化纯函数
   domain/       算法（BlinkDetector/DepthFromIris）+ app 实现的端口接口
   data/         传感器/亮度/JSON 持久化仓储 + DataModule
-  camera/       无预览相机 + MediaPipe FaceLandmarker（共享单例引擎）+ 相机内参
+  camera/       相机管线唯一绑定点（预览可选）+ MediaPipe FaceLandmarker + 相机内参
   notifications/ Notifier 抽象 + 渠道 + NotifierModule
   designsystem/ 设计令牌 + EyeProjectTheme（唯一视觉事实源）
   ui/           自绘通用组件（EyeButton/EyeText/…）
-  testing/      MainDispatcherRule（单测基建，待推广）
 feature/
   fatigue/      核心：监测引擎 + C++ 评分(JNI) + 仪表盘
-  services/     干眼/老花/斜视自检
+  services/     干眼/老视/斜视自检
   testmodel/    实验页：主导航 + gaze/（FaceDetector + LiteRT L2CS-Net 注视估计）+ blink/（FaceLandmarker EAR 眨眼检测）
   mine/ agent/  占位页
 ```

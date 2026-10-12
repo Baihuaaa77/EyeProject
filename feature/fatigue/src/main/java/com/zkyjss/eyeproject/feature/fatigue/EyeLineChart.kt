@@ -1,6 +1,8 @@
 package com.zkyjss.eyeproject.feature.fatigue
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -9,7 +11,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.unit.dp
@@ -29,6 +33,7 @@ import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartModelProducer
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianValueFormatter
 import com.patrykandpatrick.vico.core.cartesian.data.lineSeries
 import com.patrykandpatrick.vico.core.cartesian.layer.LineCartesianLayer
+import com.zkyjss.eyeproject.core.designsystem.theme.EyeShapes
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
 import com.zkyjss.eyeproject.core.model.MonitoringSample
@@ -89,6 +94,25 @@ fun EyeLineChart(
         }
         Spacer(Modifier.height(4.dp))
 
+        if (downsampled.size < 2) {
+            // 不足两点画不出折线：给出明确空态，而不是留一块空白
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(160.dp)
+                    .clip(EyeShapes.medium)
+                    .background(colors.surfaceVariant),
+                contentAlignment = Alignment.Center
+            ) {
+                EyeText(
+                    text = "监测约 1 分钟后显示趋势",
+                    style = typography.bodySecondary,
+                    color = colors.textSecondary
+                )
+            }
+            return@Column
+        }
+
         ProvideVicoTheme(
             rememberM3VicoTheme(
                 lineColor = colors.borderSubtle,
@@ -113,7 +137,7 @@ fun EyeLineChart(
                     bottomAxis = HorizontalAxis.rememberBottom(
                         valueFormatter = CartesianValueFormatter { _, value, _ ->
                             val index = value.toInt().coerceIn(0, downsampled.lastIndex)
-                            formatTime(downsampled[index].timestampMillis)
+                            formatAxisTime(downsampled[index].timestampMillis)
                         }
                     )
                 ),
@@ -140,5 +164,6 @@ private fun downsample(samples: List<MonitoringSample>, maxPoints: Int): List<Mo
     return result
 }
 
-private fun formatTime(millis: Long): String =
+/** 图表横轴时间标签：固定 HH:mm，与 core:common 的短时间格式刻意不同，故不复用也不重名。 */
+private fun formatAxisTime(millis: Long): String =
     Instant.ofEpochMilli(millis).atZone(ZONE).format(TIME_FORMATTER)

@@ -1,5 +1,10 @@
 package com.zkyjss.eyeproject.core.ui.component
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.ui.semantics.Role
+import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
+import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -15,13 +20,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.zkyjss.eyeproject.core.designsystem.R
 import com.zkyjss.eyeproject.core.designsystem.util.borderBottom
-import com.zkyjss.eyeproject.core.designsystem.util.clickableNoRipple
 
 /**
  * 作为应用顶部的返回组件，背景覆盖了手机状态栏
@@ -35,18 +36,14 @@ import com.zkyjss.eyeproject.core.designsystem.util.clickableNoRipple
 @Composable
 fun TopBackBar(
     modifier: Modifier = Modifier,
-    containerColor: Color = Color.White,
+    containerColor: Color = LocalEyeColors.current.appBackground,
     containerBrush: Brush? = null,
     useBottomBorder: Boolean = false,
     noText: Boolean = false,
     title: String? = null,
     onBackClick: () -> Unit
 ) {
-    val titleStyle = TextStyle(
-        fontSize = 20.sp,
-        fontWeight = FontWeight.W300,
-        color = Color.Black
-    )
+    val titleStyle = LocalEyeTypography.current.subtitle.copy(color = LocalEyeColors.current.textPrimary)
 
     TopAppBar(
         modifier = modifier
@@ -66,7 +63,8 @@ fun TopBackBar(
             Row(
                 modifier = Modifier
                     .align(Alignment.CenterStart)
-                    .clickableNoRipple(onClick = onBackClick)
+                    .clickable(role = Role.Button, onClick = onBackClick)
+                    .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
                     .offset(x = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(
                     space = 4.dp,
@@ -77,16 +75,15 @@ fun TopBackBar(
                 EyeIcon(
                     modifier = Modifier.size(10.dp),
                     painter = painterResource(R.drawable.ic_pointer_left),
-                    contentDescription = null,
+                    contentDescription = if (noText) "返回" else null,
+                    tint = LocalEyeColors.current.primary,
                 )
 
                 if (!noText) {
                     EyeText(
                         text = stringResource(R.string.designsystem_back_text),
-                        style = TextStyle(
-                            fontWeight = FontWeight.W200,
-                            color = Color(0xFF111111)
-                        )
+                        style = LocalEyeTypography.current.body,
+                        color = LocalEyeColors.current.primary
                     )
                 }
             }

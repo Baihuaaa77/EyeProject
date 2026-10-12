@@ -19,7 +19,6 @@ core/
   domain/                 BlinkDetector(EAR 眨眼) + DepthFromIris(测距) + 色温/提醒控制接口
   data/                   环境光照 / 屏幕亮度 / 监测数据(JSON) 仓储
   notifications/          通知抽象（Notifier + SystemNotifier + NotificationChannels）
-  testing/                测试工具（MainDispatcherRule）
 feature/
   camera/                 CameraX + MediaPipe FaceLandmarker（头姿 / 虹膜 / EAR 关键点）+ 相机内参
   fatigue/                眼疲劳监测：C++ 评分算法(JNI) + FatigueMonitor 引擎 + 仪表盘 UI（自绘图表）

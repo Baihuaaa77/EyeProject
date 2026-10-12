@@ -6,27 +6,24 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.SystemClock
+import com.zkyjss.eyeproject.core.data.ReminderPreferences
 
+/** 护眼提醒的闹钟调度：偏好读写走 [ReminderPreferences]（core:data），这里只管 AlarmManager。 */
 object EyeCareReminderScheduler {
-    private const val PREFS_NAME = "eye_care_reminder"
-    private const val KEY_ENABLED = "enabled"
-    private const val KEY_INTERVAL_MINUTES = "interval_minutes"
-    private const val KEY_NEXT_TRIGGER_ELAPSED = "next_trigger_elapsed"
-    private const val DEFAULT_INTERVAL_MINUTES = 20
     private const val REQUEST_CODE = 3201
 
     fun isEnabled(context: Context): Boolean =
-        preferences(context).getBoolean(KEY_ENABLED, false)
+        ReminderPreferences.isEnabled(context)
 
     fun getIntervalMinutes(context: Context): Int =
-        preferences(context).getInt(KEY_INTERVAL_MINUTES, DEFAULT_INTERVAL_MINUTES)
+        ReminderPreferences.intervalMinutes(context)
 
     fun getNextTriggerElapsed(context: Context): Long =
-        preferences(context).getLong(KEY_NEXT_TRIGGER_ELAPSED, 0L)
+        ReminderPreferences.nextTriggerElapsed(context)
 
     fun setIntervalMinutes(context: Context, minutes: Int) {
         require(minutes > 0)
-        preferences(context).edit().putInt(KEY_INTERVAL_MINUTES, minutes).apply()
+        ReminderPreferences.setIntervalMinutes(context, minutes)
         if (isEnabled(context)) {
             schedule(context, minutes)
         }
@@ -45,27 +42,19 @@ object EyeCareReminderScheduler {
         }
         val alarmManager = context.getSystemService(AlarmManager::class.java)
         val triggerAt = SystemClock.elapsedRealtime() + minutes * 60_000L
-        val pendingIntent = reminderPendingIntent(context)
         alarmManager.setExactAndAllowWhileIdle(
             AlarmManager.ELAPSED_REALTIME_WAKEUP,
             triggerAt,
-            pendingIntent
+            reminderPendingIntent(context)
         )
-        preferences(context).edit()
-            .putBoolean(KEY_ENABLED, true)
-            .putInt(KEY_INTERVAL_MINUTES, minutes)
-            .putLong(KEY_NEXT_TRIGGER_ELAPSED, triggerAt)
-            .apply()
+        ReminderPreferences.setScheduled(context, nextTriggerElapsed = triggerAt, minutes = minutes)
         return true
     }
 
     fun cancel(context: Context) {
         context.getSystemService(AlarmManager::class.java)
             .cancel(reminderPendingIntent(context))
-        preferences(context).edit()
-            .putBoolean(KEY_ENABLED, false)
-            .putLong(KEY_NEXT_TRIGGER_ELAPSED, 0L)
-            .apply()
+        ReminderPreferences.setCancelled(context)
     }
 
     fun restoreAfterBoot(context: Context) {
@@ -82,7 +71,4 @@ object EyeCareReminderScheduler {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
     }
-
-    private fun preferences(context: Context) =
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 }

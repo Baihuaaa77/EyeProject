@@ -1,34 +1,44 @@
 package com.zkyjss.eyeproject.feature.services
 
+import android.Manifest
+import android.app.Activity
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
-import androidx.camera.view.PreviewView
+import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -46,14 +56,23 @@ import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartModelProducer
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianValueFormatter
 import com.patrykandpatrick.vico.core.cartesian.data.columnSeries
 import com.patrykandpatrick.vico.core.cartesian.data.lineSeries
+import com.zkyjss.eyeproject.core.common.formatDistanceCm
+import com.zkyjss.eyeproject.core.designsystem.theme.EyeShapes
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
 import com.zkyjss.eyeproject.core.designsystem.util.screenHorizontalPaddingLarge
+import com.zkyjss.eyeproject.core.ui.component.EyeButton
+import com.zkyjss.eyeproject.core.ui.component.EyeButtonRole
+import com.zkyjss.eyeproject.core.ui.component.EyeDisclosure
 import com.zkyjss.eyeproject.core.ui.component.EyeSectionCard
+import com.zkyjss.eyeproject.core.ui.component.EyeSwitch
 import com.zkyjss.eyeproject.core.ui.component.EyeText
 import com.zkyjss.eyeproject.core.ui.component.TopBackBar
 
-/** 干眼检测页：阶段 1 连续眨眼 60s + 阶段 2 保持睁眼 20s，记录眨眼时间分布与距离。 */
+/**
+ * 干眼自测页：问卷 → 40 cm 准备 → 视标练习 → 60 秒自然眨眼 + 紧接 20 秒持续睁眼（全程辨认视标）→ 结果。
+ * 结果页可延长测试或闭眼休息 1 分钟后复测。
+ */
 @Composable
 fun DryEyeScreen(
     onBack: () -> Unit,
@@ -63,302 +82,321 @@ fun DryEyeScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val lifecycleOwner = LocalLifecycleOwner.current
     val context = LocalContext.current
-    val previewView = remember {
-        PreviewView(context).apply {
-            implementationMode = PreviewView.ImplementationMode.COMPATIBLE
-            scaleType = PreviewView.ScaleType.FILL_CENTER
+    val voice = remember(context) { ScreeningVoice(context) }
+    var voiceEnabled by rememberSaveable { mutableStateOf(true) }
+    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        if (it) viewModel.startMonitoring(lifecycleOwner) else viewModel.permissionDenied()
+    }
+    val ensureCamera: () -> Unit = {
+        if (lifecycleOwner.lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)) {
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)
+                viewModel.startMonitoring(lifecycleOwner)
+            else permission.launch(Manifest.permission.CAMERA)
         }
     }
-
-    // 准备阶段启动摄像头：人眼检测 + 距离门禁 + 预览
-    LaunchedEffect(state.phase) {
-        if (state.phase == DryEyePhase.Setup) {
-            viewModel.startMonitoring(lifecycleOwner, previewView)
+    LaunchedEffect(state.phase) { if (state.phase != DryEyePhase.Profile) ensureCamera() }
+    val distance = distanceStatus(state.distanceCm, state.faceDetected, DryEyeProtocol.TARGET_DISTANCE_CM, DryEyeProtocol.DISTANCE_TOLERANCE_CM)
+    val distanceMatters = state.phase in setOf(DryEyePhase.Setup, DryEyePhase.FormalGuide, DryEyePhase.Practice, DryEyePhase.Natural, DryEyePhase.Open)
+    val distanceHint = if (distanceMatters && distance.clearlyOff()) distance.spoken else null
+    val voiceAnswer = rememberVoiceAnswer(
+        active = state.phase in setOf(DryEyePhase.Practice, DryEyePhase.Natural, DryEyePhase.Open),
+        voice = voice,
+    ) { command ->
+        when (command) {
+            is VoiceCommand.Direction -> viewModel.answer(command.direction, byVoice = true)
+            VoiceCommand.Unsure -> viewModel.answer(-1, byVoice = true)
+            else -> Unit
         }
     }
-
+    val basePrompt = when (state.phase) {
+        DryEyePhase.Profile -> "请先填写基本信息"
+        DryEyePhase.Setup -> "建议佩戴最佳矫正视力眼镜。准备好后开始"
+        DryEyePhase.PracticeGuide -> guideCueDryEyePractice
+        DryEyePhase.FormalGuide -> "正式测试。先自然眨眼，之后不停顿，直接保持睁眼二十秒"
+        DryEyePhase.Open -> "现在尽量保持睁眼"
+        DryEyePhase.Rest -> if (state.remainingSeconds <= 1) "请睁开眼睛" else "请闭上眼睛休息"
+        DryEyePhase.Result -> "测试完成"
+        else -> state.qualityWarning ?: state.instruction
+    }
+    // 距离提示优先；距离持续偏离时每 6 秒重复一次，回到合适区间立即停止
+    val prompt = distanceHint ?: basePrompt
+    LaunchedEffect(prompt, voiceEnabled) {
+        if (voiceEnabled) {
+            kotlinx.coroutines.delay(650)
+            if (lifecycleOwner.lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)) voice.speak(prompt)
+            while (distanceHint != null && prompt == distanceHint) {
+                kotlinx.coroutines.delay(6_000)
+                voice.speak(prompt)
+            }
+        } else voice.stop()
+    }
+    DisposableEffect(viewModel, voice) { onDispose { viewModel.stopMonitoring(); voice.close() } }
+    // 测试期间窗口亮度固定为最高，保证视标对比度一致（原文要求记录屏幕亮度）
+    DisposableEffect(context) {
+        val window = (context as? Activity)?.window
+        val old = window?.attributes?.screenBrightness
+        window?.let { it.attributes = it.attributes.apply { screenBrightness = 1f } }
+        onDispose { if (window != null && old != null) window.attributes = window.attributes.apply { screenBrightness = old } }
+    }
+    DisposableEffect(lifecycleOwner, voice) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_STOP) {
+                voice.stop()
+                val phase = viewModel.uiState.value.phase
+                if (phase != DryEyePhase.Result && phase != DryEyePhase.Profile) viewModel.backToSetup("应用切到后台，测试已中断")
+            } else if (event == androidx.lifecycle.Lifecycle.Event.ON_START) {
+                if (viewModel.uiState.value.phase == DryEyePhase.Setup) ensureCamera()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    val running = state.phase in setOf(DryEyePhase.Practice, DryEyePhase.Countdown, DryEyePhase.Natural, DryEyePhase.Open, DryEyePhase.Rest)
+    Box(modifier.fillMaxSize()) {
     Column(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxSize()
             .background(LocalEyeColors.current.appBackground)
+            .navigationBarsPadding()
+            .imePadding()
             .screenHorizontalPaddingLarge()
     ) {
-        TopBackBar(onBackClick = onBack)
-
-        if (state.phase == DryEyePhase.Result) {
-            // 结果页：无预览
-            ResultContent(
-                state = state,
-                onRestart = viewModel::backToSetup,
-            )
-        } else {
-            // 预览框：跨阶段常驻组合树（AndroidView 不销毁，surface 不重建）
-            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                PreviewBox(previewView = previewView)
+        TopBackBar(title = "干眼自测", onBackClick = onBack)
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+                EyeText("语音", style = LocalEyeTypography.current.bodySecondary, color = LocalEyeColors.current.textSecondary)
+                EyeSwitch(voiceEnabled, { voiceEnabled = it })
             }
-            Spacer(Modifier.height(12.dp))
-
             when (state.phase) {
-                DryEyePhase.Setup -> SetupGate(
-                    state = state,
-                    onStart = viewModel::startTest,
+                DryEyePhase.Profile -> QuestionnaireContent(dryEyeQuestions, state.fields, viewModel::setField, viewModel::finishProfile, stateKey = "dryeye")
+                DryEyePhase.Setup -> {
+                    SetupGate(state, viewModel::startTest)
+                    if (!state.faceDetected) EyeButton("重试相机", EyeButtonRole.SECONDARY, { viewModel.stopMonitoring(); ensureCamera() }, Modifier.fillMaxWidth())
+                }
+                DryEyePhase.PracticeGuide -> TestGuide(GuideMotion.ACUITY, "视标练习 · 约 12 秒", guideCueDryEyePractice, viewModel::confirmPracticeGuide)
+                DryEyePhase.FormalGuide -> FormalGuideContent(state, viewModel::confirmFormalGuide)
+                DryEyePhase.Countdown -> CountdownContent(state.instruction, state.remainingSeconds)
+                DryEyePhase.Practice, DryEyePhase.Natural, DryEyePhase.Open -> {
+                    if (distance.zone != DistanceZone.OK) DistanceBanner(distance, compact = true)
+                    VoiceAnswerBar(voiceAnswer)
+                    TrialContent(state) { viewModel.answer(it) }
+                }
+                DryEyePhase.Rest -> RestContent(state)
+                DryEyePhase.Result -> ResultContent(
+                    state,
+                    onExtend = viewModel::startExtended,
+                    onRest = viewModel::startRestRetest,
+                    onRestart = viewModel::restartAll,
                 )
-                DryEyePhase.Countdown -> CountdownContent(
-                    instruction = state.instruction,
-                    seconds = state.remainingSeconds,
-                )
-                DryEyePhase.Blink60, DryEyePhase.Open20 -> TestingContent(state = state)
-                DryEyePhase.Result -> {}
             }
+            if (running) {
+                EyeButton("停止测试", EyeButtonRole.SECONDARY, { viewModel.backToSetup("已停止，本次结果不计入") }, Modifier.fillMaxWidth())
+            }
+            Spacer(Modifier.height(24.dp))
         }
     }
-}
-
-/** 主操作按钮：primary 底色（首页上半配色），不使用黄色。 */
-@Composable
-private fun PrimaryAction(
-    text: String,
-    enabled: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val colors = LocalEyeColors.current
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .alpha(if (enabled) 1f else 0.45f)
-            .clip(RoundedCornerShape(14.dp))
-            .background(colors.primary)
-            .clickable(enabled = enabled) { onClick() }
-            .padding(vertical = 14.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        EyeText(text = text, style = LocalEyeTypography.current.button, color = colors.textInverse)
+    if (distanceMatters) DistanceEdgeGlow(distance.zone)
     }
 }
 
-/** 准备页内容：说明 + 门禁 + 注意事项 + 开始按钮（预览框已在外层）。 */
+internal const val guideCueDryEyePractice = "先练习一下：2 秒内点选 E 的开口方向；练习不计入结果"
+
+/** 准备页：最佳矫正提示 + 姿势示范 + 40 cm 门禁 + 开始按钮。 */
 @Composable
-private fun SetupGate(
+internal fun SetupGate(
     state: DryEyeTestUiState,
     onStart: () -> Unit,
 ) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        EyeSectionCard {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                EyeText(text = "干眼检测", style = typography.title, color = colors.textPrimary)
-                EyeText(
-                    text = "共两个阶段：第 1 阶段自然眨眼 60 秒，观察眨眼的时间分布；第 2 阶段保持睁眼 20 秒，尽量不眨眼。",
-                    style = typography.body,
-                    color = colors.textSecondary,
-                )
-            }
-        }
-
-        EyeSectionCard(title = "开始前检测") {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                GateRow(
-                    label = "人眼检测",
-                    value = if (state.faceDetected) "已检测到双眼" else "未检测到人眼，请正对屏幕",
-                    ok = state.faceDetected,
-                )
-                GateRow(
-                    label = "观测距离",
-                    value = when {
-                        state.distanceCm <= 0f -> "检测中…"
-                        state.distanceCm < DryEyeTestViewModel.MIN_TEST_DISTANCE_CM ->
-                            "${formatCm(state.distanceCm)}，未达到 ${DryEyeTestViewModel.MIN_TEST_DISTANCE_CM.toInt()}cm"
-                        else -> "${formatCm(state.distanceCm)}，距离合适"
-                    },
-                    ok = state.faceDetected && state.distanceCm >= DryEyeTestViewModel.MIN_TEST_DISTANCE_CM,
-                )
-            }
-        }
-
-        EyeSectionCard(title = "注意事项") {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                EyeText(text = "· 保持正对屏幕，检测过程中不要移动手机", style = typography.body, color = colors.textSecondary)
-                EyeText(text = "· 阶段 1 请自然眨眼，阶段 2 请尽量保持睁眼", style = typography.body, color = colors.textSecondary)
-                EyeText(text = "· 本检测为健康参考，不构成医疗诊断", style = typography.body, color = colors.textSecondary)
-            }
-        }
-
-        PrimaryAction(
-            text = if (state.gateReady) "开始检测" else "满足条件后开始检测",
-            enabled = state.gateReady,
-            onClick = onStart,
-        )
-
-        if (state.error != null) {
-            EyeText(text = "错误：${state.error}", style = typography.body, color = colors.danger)
-        }
+    NoticeCard("建议佩戴最佳矫正视力眼镜进行测试")
+    TestGuide(GuideMotion.POSTURE, "调整姿势 · 约 40 cm", "正对屏幕，手机距离眼睛约 40 厘米，光线均匀")
+    DistanceBanner(distanceStatus(state.distanceCm, state.faceDetected, DryEyeProtocol.TARGET_DISTANCE_CM, DryEyeProtocol.DISTANCE_TOLERANCE_CM))
+    EyeText("测试中可以直接说出 E 的开口方向作答，手机不用离手。", style = typography.bodySecondary, color = colors.textSecondary)
+    EyeButton("开始测试", EyeButtonRole.PRIMARY, onStart, Modifier.fillMaxWidth(), state.gateReady)
+    EyeDisclosure("测量详情") {
+        EyeText("距离 ${formatDistanceCm(state.distanceCm)}（目标 40±5 cm）", style = typography.bodySecondary, color = colors.textSecondary)
+        EyeText("环境光 ${state.lux?.let { "%.0f lux".format(it) } ?: "无传感器读数"}", style = typography.bodySecondary, color = colors.textSecondary)
     }
+    state.error?.let { EyeText(it, style = typography.body, color = colors.danger) }
 }
 
-/** 门禁状态行：label + 状态值（✓ 绿 / ✗ 红）。 */
 @Composable
-private fun GateRow(label: String, value: String, ok: Boolean) {
+private fun NoticeCard(text: String) {
     val colors = LocalEyeColors.current
-    val typography = LocalEyeTypography.current
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        EyeText(text = label, style = typography.body, color = colors.textPrimary)
-        EyeText(
-            text = if (ok) "✓ $value" else "✗ $value",
-            style = typography.body,
-            color = if (ok) colors.success else colors.danger,
-        )
-    }
+    EyeText(
+        text, style = LocalEyeTypography.current.body, color = colors.textPrimary,
+        modifier = Modifier.fillMaxWidth().clip(EyeShapes.medium).background(colors.accentSoft).padding(14.dp)
+    )
+}
+
+/** 正式说明：两段任务连续进行，先讲清楚再开始。 */
+@Composable
+private fun FormalGuideContent(state: DryEyeTestUiState, onStart: () -> Unit) {
+    val colors = LocalEyeColors.current
+    if (state.afterRest) NoticeCard("休息结束，下面进行复测，流程与首次相同")
+    DistanceBanner(distanceStatus(state.distanceCm, state.faceDetected, DryEyeProtocol.TARGET_DISTANCE_CM, DryEyeProtocol.DISTANCE_TOLERANCE_CM), compact = true)
+    TestGuide(
+        GuideMotion.FVA,
+        "正式测试 · ${state.naturalSeconds} 秒 + 20 秒",
+        "全程看 E 选方向。前 ${state.naturalSeconds} 秒自然眨眼，随后不停顿，直接尽量保持睁眼 20 秒",
+    )
+    EyeButton("开始正式测试", EyeButtonRole.PRIMARY, onStart, Modifier.fillMaxWidth(), state.gateReady)
+    state.error?.let { EyeText(it, style = LocalEyeTypography.current.body, color = colors.danger) }
 }
 
 @Composable
 private fun CountdownContent(instruction: String, seconds: Int) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
         Spacer(Modifier.height(24.dp))
         EyeText(text = "$seconds", style = typography.headline, color = colors.primary)
         Spacer(Modifier.height(12.dp))
-        EyeText(text = instruction, style = typography.subtitle, color = colors.textPrimary)
-        Spacer(Modifier.height(8.dp))
-        EyeText(text = "请保持正对屏幕", style = typography.body, color = colors.textSecondary)
+        EyeText(text = instruction, style = typography.subtitle, color = colors.textPrimary, textAlign = TextAlign.Center)
     }
 }
 
-/** 检测中内容：进度 + 剩余 + 眨眼计数 + 指令（预览框已在外层）。 */
+/** 练习/正式测试中：阶段 + 剩余时间 + 2 秒限时视标 + 方向按键。 */
 @Composable
-private fun TestingContent(state: DryEyeTestUiState) {
+internal fun TrialContent(state: DryEyeTestUiState, onAnswer: (Int) -> Unit) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
-
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Spacer(Modifier.height(8.dp))
+    val stageLabel = when (state.phase) {
+        DryEyePhase.Practice -> "练习（不计入结果）"
+        DryEyePhase.Natural -> "自然眨眼"
+        else -> "持续睁眼"
+    }
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            EyeText(stageLabel, style = typography.subtitle, color = if (state.phase == DryEyePhase.Open) colors.warning else colors.primary)
+            EyeText("剩余 ${state.remainingSeconds} 秒", style = typography.subtitle, color = colors.textPrimary)
+        }
         LinearProgressIndicator(
             progress = { state.progressFraction },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(8.dp)
-                .clip(RoundedCornerShape(4.dp)),
+            modifier = Modifier.fillMaxWidth().height(8.dp).clip(EyeShapes.small),
             color = colors.primary,
             trackColor = colors.neutralSoft,
         )
-        Spacer(Modifier.height(20.dp))
-
-        EyeText(
-            text = "剩余 ${state.remainingSeconds} s",
-            style = typography.headline,
-            color = colors.primary,
-        )
-        Spacer(Modifier.height(12.dp))
-        EyeText(
-            text = "已记录眨眼 ${if (state.phase == DryEyePhase.Blink60) state.phase1BlinkCount else state.phase2BlinkCount} 次",
-            style = typography.subtitle,
-            color = colors.success,
-        )
-        Spacer(Modifier.height(8.dp))
-        EyeText(text = state.instruction, style = typography.body, color = colors.textSecondary)
+        EyeText(state.instruction, style = typography.body, color = colors.textSecondary)
+        val size = with(LocalDensity.current) { state.optotypePx.toDp() }
+        Box(Modifier.fillMaxWidth().height(220.dp), contentAlignment = Alignment.Center) {
+            if (state.trialVisible) OptotypeSurface(state.direction, size)
+        }
+        TrialTimer(state.trialId, state.trialVisible)
+        DirectionButtons(onAnswer, enabled = state.trialVisible)
+        state.qualityWarning?.let { EyeText(it, style = typography.title, color = colors.warning) }
+        if (state.phase != DryEyePhase.Practice) {
+            EyeText(
+                "已记录眨眼 ${if (state.phase == DryEyePhase.Natural) state.phase1BlinkCount else state.phase2BlinkCount} 次 · 已答 ${state.trialCount} 题",
+                style = typography.bodySecondary, color = colors.textSecondary
+            )
+        }
     }
 }
 
-/** 相机预览框：detection 页同款尺寸（0.7 宽、3:4、圆角）。 */
+/** 每题 2 秒限时条：随题目重置。 */
 @Composable
-private fun PreviewBox(previewView: PreviewView, modifier: Modifier = Modifier) {
-    Box(
-        modifier = modifier
-            .fillMaxWidth(0.7f)
-            .aspectRatio(3f / 4f)
-            .clip(RoundedCornerShape(12.dp))
-            .background(LocalEyeColors.current.cameraSurface),
-    ) {
-        AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
+private fun TrialTimer(trialId: Int, visible: Boolean) {
+    val colors = LocalEyeColors.current
+    val remaining = remember { Animatable(1f) }
+    LaunchedEffect(trialId, visible) {
+        if (visible) {
+            remaining.snapTo(1f)
+            remaining.animateTo(0f, tween(DryEyeProtocol.TRIAL_TIMEOUT_MS.toInt(), easing = LinearEasing))
+        } else remaining.snapTo(0f)
+    }
+    LinearProgressIndicator(
+        progress = { remaining.value },
+        modifier = Modifier.fillMaxWidth().height(4.dp).clip(EyeShapes.small),
+        color = colors.accent,
+        trackColor = colors.neutralSoft,
+    )
+}
+
+@Composable
+private fun RestContent(state: DryEyeTestUiState) {
+    val colors = LocalEyeColors.current
+    val typography = LocalEyeTypography.current
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Spacer(Modifier.height(24.dp))
+        EyeText("闭眼休息", style = typography.title, color = colors.textPrimary)
+        EyeText("${state.remainingSeconds}", style = typography.headline, color = colors.primary)
+        EyeText("请闭上眼睛放松，倒计时结束会有语音提示", style = typography.body, color = colors.textSecondary, textAlign = TextAlign.Center)
     }
 }
 
 @Composable
 private fun ResultContent(
     state: DryEyeTestUiState,
+    onExtend: () -> Unit,
+    onRest: () -> Unit,
     onRestart: () -> Unit,
 ) {
     val typography = LocalEyeTypography.current
     val colors = LocalEyeColors.current
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        EyeText(text = "检测结果", style = typography.title, color = colors.textPrimary)
-
-        // ---- 阶段 1 ----
-        EyeSectionCard(title = "阶段 1 · 连续眨眼 60 秒") {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    val report = state.report ?: return
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        EyeSectionCard(title = if (state.afterRest) "复测结果（闭眼休息后）" else "检测结果") {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                val riskColor = when (report.riskLevel) {
+                    ScreeningRiskLevel.LOW -> colors.success
+                    ScreeningRiskLevel.MEDIUM -> colors.warning
+                    ScreeningRiskLevel.HIGH -> colors.danger
+                    ScreeningRiskLevel.UNKNOWN -> colors.textSecondary
+                }
                 EyeText(
-                    text = "眨眼总数：${state.phase1BlinkCount} 次",
-                    style = typography.body,
-                    color = colors.textPrimary,
+                    if (report.valid) "干眼${report.riskLevel.label}" else "数据无效",
+                    style = typography.title, color = riskColor
                 )
                 EyeText(
-                    text = "平均眨眼间隔：${avgGapText(state.phase1Blinks)}",
-                    style = typography.body,
-                    color = colors.textSecondary,
+                    if (report.valid) "检测数据有效" else "无效原因：${report.validityReasons.joinToString("；")}",
+                    style = typography.bodySecondary, color = colors.textSecondary
                 )
+                if (report.abnormal.isNotEmpty()) {
+                    EyeText("主要异常指标", style = typography.subtitle, color = colors.textPrimary)
+                    report.abnormal.forEach { EyeText("· $it", style = typography.body, color = colors.textPrimary) }
+                }
+                EyeText(report.advice, style = typography.body, color = colors.textPrimary)
+                EyeText("手机初筛结果，不能替代眼科诊断；分级规则尚未经临床验证。", style = typography.bodySecondary, color = colors.textSecondary)
             }
         }
-        EyeSectionCard(title = "阶段 1 · 眨眼时间分布（每 5 秒）") {
-            BlinkDistributionChart(
-                blinks = state.phase1Blinks,
-                phaseSeconds = DRY_EYE_PHASE1_SECONDS,
-                bucketSeconds = 5,
-            )
+        state.previousReport?.let { previous -> ComparisonCard(previous, report) }
+        EyeDisclosure("完整指标") {
+            report.indicators.forEach { EyeText(it, style = typography.bodySecondary, color = colors.textSecondary) }
+            state.savedFile?.let { EyeText("原始数据已保存：$it", style = typography.bodySecondary, color = colors.textSecondary) }
         }
+        EyeDisclosure("眨眼分布 · 自然眨眼") {
+            BlinkDistributionChart(state.phase1Blinks, state.naturalSeconds, bucketSeconds = if (state.naturalSeconds > 60) 15 else 5)
+        }
+        EyeDisclosure("眨眼分布 · 持续睁眼") {
+            BlinkDistributionChart(state.phase2Blinks, DryEyeProtocol.OPEN_SECONDS, bucketSeconds = 5)
+        }
+        EyeDisclosure("观测距离") { DistanceChart(samples = state.distanceSamples) }
+        if (report.valid && (report.borderline || report.riskLevel == ScreeningRiskLevel.MEDIUM) && state.naturalSeconds == DryEyeProtocol.NATURAL_SECONDS) {
+            EyeButton("延长测试（自然眨眼 3 分钟）", EyeButtonRole.PRIMARY, onExtend, Modifier.fillMaxWidth())
+        }
+        if (report.valid && !state.afterRest) {
+            EyeButton("闭眼休息 1 分钟后复测", EyeButtonRole.SECONDARY, onRest, Modifier.fillMaxWidth())
+        }
+        EyeButton("重新检测", EyeButtonRole.SECONDARY, onRestart, Modifier.fillMaxWidth())
+    }
+}
 
-        // ---- 阶段 2 ----
-        EyeSectionCard(title = "阶段 2 · 保持睁眼 20 秒") {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                EyeText(
-                    text = "眨眼次数：${state.phase2BlinkCount} 次${if (state.phase2BlinkCount == 0) "（未眨眼）" else ""}",
-                    style = typography.body,
-                    color = colors.textPrimary,
-                )
-                EyeText(
-                    text = "保持睁眼期间的眨眼次数越少，泪膜维持能力越好",
-                    style = typography.body,
-                    color = colors.textSecondary,
-                )
-            }
+/** 延长或休息后复测时，与上一次结果并排对比关键指标。 */
+@Composable
+private fun ComparisonCard(previous: DryEyeReport, current: DryEyeReport) {
+    val typography = LocalEyeTypography.current
+    val colors = LocalEyeColors.current
+    fun f(v: Double?, digits: Int = 1) = v?.let { "%.${digits}f".format(it) } ?: "—"
+    fun p(v: Double?) = v?.let { "${(it * 100).toInt()}%" } ?: "—"
+    EyeSectionCard(title = "与上一次对比") {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            EyeText("眨眼频率：${f(previous.blinkRatePerMin)} → ${f(current.blinkRatePerMin)} 次/分钟", style = typography.body, color = colors.textPrimary)
+            EyeText("最长持续睁眼：${f(previous.longestOpenSec)} → ${f(current.longestOpenSec)} 秒", style = typography.body, color = colors.textPrimary)
+            EyeText("视觉维持率：${f(previous.vmr, 2)} → ${f(current.vmr, 2)}", style = typography.body, color = colors.textPrimary)
+            EyeText("睁眼阶段正确率：${p(previous.accuracyOpen)} → ${p(current.accuracyOpen)}", style = typography.body, color = colors.textPrimary)
         }
-        EyeSectionCard(title = "阶段 2 · 眨眼时间分布（每 5 秒）") {
-            BlinkDistributionChart(
-                blinks = state.phase2Blinks,
-                phaseSeconds = DRY_EYE_PHASE2_SECONDS,
-                bucketSeconds = 5,
-            )
-        }
-
-        // ---- 距离 ----
-        EyeSectionCard(title = "观测距离变化") {
-            DistanceChart(samples = state.distanceSamples)
-        }
-
-        PrimaryAction(text = "重新检测", enabled = true, onClick = onRestart)
     }
 }
 
@@ -397,7 +435,7 @@ private fun BlinkDistributionChart(blinks: List<Float>, phaseSeconds: Int, bucke
                 bottomAxis = HorizontalAxis.rememberBottom(
                     valueFormatter = CartesianValueFormatter { _, value, _ -> "${value.toInt()}s" }
                 ),
-                getXStep = { 5.0 },
+                getXStep = { bucketSeconds.toDouble() },
             ),
             modelProducer = modelProducer,
             modifier = Modifier
@@ -445,16 +483,3 @@ private fun DistanceChart(samples: List<DryEyeDistanceSample>) {
         )
     }
 }
-
-private fun avgGapText(blinks: List<Float>): String {
-    if (blinks.size < 2) return "--"
-    val sorted = blinks.sorted()
-    val gaps = sorted.zipWithNext { a, b -> b - a }
-    return String.format(java.util.Locale.US, "%.1f 秒", gaps.average().toFloat())
-}
-
-private fun formatCm(cm: Float): String =
-    if (cm > 0f) String.format(java.util.Locale.US, "%.0f cm", cm) else "--"
-
-private const val DRY_EYE_PHASE1_SECONDS = 60
-private const val DRY_EYE_PHASE2_SECONDS = 20

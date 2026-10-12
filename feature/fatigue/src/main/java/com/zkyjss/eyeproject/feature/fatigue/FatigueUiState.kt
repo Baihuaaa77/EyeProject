@@ -3,17 +3,17 @@ package com.zkyjss.eyeproject.feature.fatigue
 import com.zkyjss.eyeproject.core.model.ColorTemperatureMode
 import com.zkyjss.eyeproject.core.model.MonitoringSample
 import com.zkyjss.eyeproject.core.model.RealTimeMetrics
-import com.zkyjss.eyeproject.core.ui.component.StatusTone
 
 /** 疲劳监测仪表盘 UI 状态（单向数据流，由 FatigueViewModel 产出）。 */
 data class FatigueUiState(
     val monitoring: Boolean = false,
-    val statusMessage: String = "眼健康监测",
-    val statusTone: StatusTone = StatusTone.NEUTRAL,
     val realtime: RealTimeMetrics = RealTimeMetrics(),
     val samples: List<MonitoringSample> = emptyList(),
-    val fps: Float = 0f,
     val error: String? = null,
+    /** 摄像头权限被拒：界面给出原因与「打开系统设置」入口。 */
+    val cameraPermissionDenied: Boolean = false,
+    /** 护眼设置操作的结果提示（如通知权限被拒），为 null 时不显示。 */
+    val notice: String? = null,
     val colorTemperatureMode: ColorTemperatureMode = ColorTemperatureMode.OFF,
     val reminderEnabled: Boolean = false,
     val reminderIntervalMinutes: Int = 20,

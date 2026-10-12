@@ -1,21 +1,43 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  品牌标志 v2：白色「小瞳」团子头像 + 双叶嫩芽 + 豆豆眼 + 腮红与微笑。
+  几何与 core:ui EyeBrand.kt 的 drawBrandMark 一致（108dp 视口，可见区 18..90），全部位于 66dp 安全区内。
+-->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- 眼形外轮廓 -->
+    <!-- 嫩芽：茎 + 两片叶 -->
     <path
-        android:pathData="M30,54 C30,41 41,33 54,33 C67,33 78,41 78,54 C78,67 67,75 54,75 C41,75 30,67 30,54 Z"
-        android:strokeColor="#111512"
-        android:strokeWidth="3"
+        android:pathData="M54,38 Q54.5,33 55,29"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="2.2"
+        android:strokeLineCap="round"
         android:fillColor="#00000000" />
-    <!-- 瞳孔 -->
+    <group android:pivotX="50" android:pivotY="28" android:rotation="25">
+        <path android:pathData="M45.5,28 a4.5,2.4 0 1,0 9,0 a4.5,2.4 0 1,0 -9,0" android:fillColor="#FFFFFFFF" />
+    </group>
+    <group android:pivotX="59.5" android:pivotY="26.5" android:rotation="-30">
+        <path android:pathData="M54.5,26.5 a5,2.6 0 1,0 10,0 a5,2.6 0 1,0 -10,0" android:fillColor="#FFFFFFFF" />
+    </group>
+    <!-- 团子头 -->
     <path
-        android:pathData="M54,54 m-9,0 a9,9 0 1,0 18,0 a9,9 0 1,0 -18,0"
-        android:fillColor="#111512" />
-    <!-- 高光 -->
+        android:pathData="M49,38 H59 A20,20 0 0 1 79,58 V60 A20,20 0 0 1 59,80 H49 A20,20 0 0 1 29,60 V58 A20,20 0 0 1 49,38 Z"
+        android:fillColor="#FFFFFFFF" />
+    <!-- 豆豆眼 -->
+    <path android:pathData="M41.75,58 a2.75,3.75 0 1,0 5.5,0 a2.75,3.75 0 1,0 -5.5,0" android:fillColor="#FF13201F" />
+    <path android:pathData="M60.75,58 a2.75,3.75 0 1,0 5.5,0 a2.75,3.75 0 1,0 -5.5,0" android:fillColor="#FF13201F" />
+    <path android:pathData="M44.35,56.25 a1.25,1.25 0 1,0 2.5,0 a1.25,1.25 0 1,0 -2.5,0" android:fillColor="#FFFFFFFF" />
+    <path android:pathData="M63.35,56.25 a1.25,1.25 0 1,0 2.5,0 a1.25,1.25 0 1,0 -2.5,0" android:fillColor="#FFFFFFFF" />
+    <!-- 腮红 -->
+    <path android:pathData="M35.9,64.5 a2.6,1.6 0 1,0 5.2,0 a2.6,1.6 0 1,0 -5.2,0" android:fillColor="#B3F2A33A" />
+    <path android:pathData="M66.9,64.5 a2.6,1.6 0 1,0 5.2,0 a2.6,1.6 0 1,0 -5.2,0" android:fillColor="#B3F2A33A" />
+    <!-- 微笑 -->
     <path
-        android:pathData="M51,50 m-3.5,0 a3.5,3.5 0 1,0 7,0 a3.5,3.5 0 1,0 -7,0"
-        android:fillColor="#FFFFFF" />
+        android:pathData="M49,64.5 Q54,68.5 59,64.5"
+        android:strokeColor="#FF12A39A"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
 </vector>

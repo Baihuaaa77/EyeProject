@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 主题图标（Android 13+ 单色）：小瞳头像线稿 + 豆豆眼 + 嫩芽，系统负责着色 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path android:pathData="M54,38 Q54.5,33 55,29" android:strokeColor="#FFFFFFFF" android:strokeWidth="2.4" android:strokeLineCap="round" android:fillColor="#00000000" />
+    <group android:pivotX="50" android:pivotY="28" android:rotation="25">
+        <path android:pathData="M45.5,28 a4.5,2.4 0 1,0 9,0 a4.5,2.4 0 1,0 -9,0" android:fillColor="#FFFFFFFF" />
+    </group>
+    <group android:pivotX="59.5" android:pivotY="26.5" android:rotation="-30">
+        <path android:pathData="M54.5,26.5 a5,2.6 0 1,0 10,0 a5,2.6 0 1,0 -10,0" android:fillColor="#FFFFFFFF" />
+    </group>
+    <path android:pathData="M49,38 H59 A20,20 0 0 1 79,58 V60 A20,20 0 0 1 59,80 H49 A20,20 0 0 1 29,60 V58 A20,20 0 0 1 49,38 Z"
+        android:strokeColor="#FFFFFFFF" android:strokeWidth="3.4" android:fillColor="#00000000" />
+    <path android:pathData="M41.75,58 a2.75,3.75 0 1,0 5.5,0 a2.75,3.75 0 1,0 -5.5,0" android:fillColor="#FFFFFFFF" />
+    <path android:pathData="M60.75,58 a2.75,3.75 0 1,0 5.5,0 a2.75,3.75 0 1,0 -5.5,0" android:fillColor="#FFFFFFFF" />
+    <path android:pathData="M49,64.5 Q54,68.5 59,64.5" android:strokeColor="#FFFFFFFF" android:strokeWidth="2" android:strokeLineCap="round" android:fillColor="#00000000" />
+</vector>

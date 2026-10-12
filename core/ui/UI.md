@@ -16,29 +16,30 @@
 | `EyeText` | 文字原语（BasicText 封装），替代 Material `Text` |
 | `EyeIcon` | 图标（Image + ColorFilter.tint），装饰性图标 `contentDescription = null` |
 | `Button.kt` | 通用基础按钮（形状/背景/边框/内边距可配，默认矩形） |
-| `EyeButton` | 业务按钮，三态 `EyeButtonRole(PRIMARY/SECONDARY/DANGER)`，带按压反馈 |
+| `EyeButton` | 业务按钮，三态 `EyeButtonRole(PRIMARY/SECONDARY/DANGER)`，按下弹簧缩放、角色切换颜色过渡 |
+| `EyeBrand.kt` | 品牌绘制：`EyeBrandMark` / `EyeBrandLockup`、`leafEyePath`、吉祥物 `drawMascot`、`drawMitten`、`drawCartoonPhone`、`drawTumblingE` |
 
 ### 容器与卡片
 
 | 组件 | 说明 |
 |---|---|
 | `EyeSectionCard` | 分区卡片：圆角面板 + 细边框 + 可选标题 |
-| `EyeMetricCard` | 指标卡：可选图标 + 标签 + 大数值 + 说明 |
-| `EyeSelectCard` | 选择卡：整行可点的面板（内容文本 + 箭头），72dp 高，用于入口列表 |
+| `EyeDisclosure` | 默认折叠的次级信息，展开/收起高度+透明度过渡、箭头旋转，带展开状态无障碍语义 |
+| `EyeSelectCard` | 入口卡：可选前置图标 + 标题/副标题 + 箭头，按下轻缩，最小 80dp 高 |
 
 ### 控件
 
 | 组件 | 说明 |
 |---|---|
-| `EyeSwitch` | 开关（Box + 动画），选中轨道主色 |
-| `EyeSegmentedRow` | 分段选择器，泛型 `SegmentedOption<T>`，选中项高亮主色 |
-| `EyeStatusChip` | 状态徽标，`StatusTone(NEUTRAL/SUCCESS/DANGER/WARNING)` 语义色 |
+| `EyeSwitch` | 开关（Box + 动画），选中轨道主色；`onCheckedChange = null` 时仅展示（由外层整行切换） |
+| `EyeSegmentedRow` | 分段选择器，泛型 `SegmentedOption<T>`：浅色轨道 + 主色滑块弹簧滑动，RadioButton 语义 |
+| `EyeStatusChip` | 状态徽标，`StatusTone(NEUTRAL/SUCCESS/DANGER/WARNING)` 语义色；`live` 时带呼吸圆点 |
 
 ### 栏
 
 | 组件 | 说明 |
 |---|---|
-| `EyeTopBar` | 首页顶栏：Logo + 标题/副标题 + 状态徽标 |
+| `EyeTopBar` | 顶栏：可选前置标志 + 标题/副标题 + 状态徽标 |
 | `TopAppBar` | 通用顶栏（含状态栏 padding 处理） |
 | `TopBackBar` | 返回顶栏（背景覆盖状态栏，支持渐变/标题/无文字模式） |
 

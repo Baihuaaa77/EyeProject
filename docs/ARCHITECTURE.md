@@ -29,7 +29,7 @@ NIA 是 Google 官方的"模块化最佳实践"参考实现，核心思想：
 | `core/datastore/` | —（暂用 SharedPreferences） | 未来可迁移到 DataStore |
 | `core/network/` | —（无） | 无网络请求 |
 | `core/notifications/` | `core/notifications/` | Notifier + SystemNotifier（提醒/色温通知） |
-| `core/testing/` | `core/testing/` | 测试工具（MainDispatcherRule） |
+| `core/testing/` | —（无） | 原 `MainDispatcherRule` 模块 0 消费方，已删除；写第一个单测时按 NIA 重建 |
 | `feature/foryou` 等 | `feature/camera/`、`feature/home/`、`feature/testmodel/` | 摄像头视觉管线 + 主仪表盘 + 模型测试（LiteRT C++） |
 | `sync/work/` | —（无） | 无后台同步任务 |
 

@@ -23,17 +23,17 @@ data class EyeTypography(
 val EyeTypographyDefaults = EyeTypography(
     headline = TextStyle(
         fontFamily = FontFamily.SansSerif,
-        fontWeight = FontWeight.Bold,
-        fontSize = 40.sp
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 34.sp
     ),
     title = TextStyle(
         fontFamily = FontFamily.SansSerif,
-        fontWeight = FontWeight.Bold,
+        fontWeight = FontWeight.SemiBold,
         fontSize = 22.sp
     ),
     subtitle = TextStyle(
         fontFamily = FontFamily.SansSerif,
-        fontWeight = FontWeight.Bold,
+        fontWeight = FontWeight.SemiBold,
         fontSize = 18.sp
     ),
     body = TextStyle(
@@ -48,18 +48,18 @@ val EyeTypographyDefaults = EyeTypography(
     ),
     metricValue = TextStyle(
         fontFamily = FontFamily.SansSerif,
-        fontWeight = FontWeight.Bold,
+        fontWeight = FontWeight.SemiBold,
         fontSize = 30.sp
     ),
     chip = TextStyle(
         fontFamily = FontFamily.SansSerif,
-        fontWeight = FontWeight.Bold,
+        fontWeight = FontWeight.SemiBold,
         fontSize = 12.sp
     ),
     button = TextStyle(
         fontFamily = FontFamily.SansSerif,
-        fontWeight = FontWeight.Bold,
-        fontSize = 18.sp
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 17.sp
     )
 )
 

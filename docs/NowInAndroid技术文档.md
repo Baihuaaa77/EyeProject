@@ -194,7 +194,7 @@ EyeProject 是单屏应用，故未引入导航，`MainActivity` 直接 `setCont
 - 仓储层单测用**假数据源（fake）**，ViewModel 用 `MainDispatcherRule` 测状态流。
 - UI 用 Compose UI Test + 语义树断言。
 
-EyeProject 落地：已加 `core:testing`（`MainDispatcherRule`），后续补单测时可复用。
+EyeProject 落地：曾建 `core:testing`（`MainDispatcherRule`），因 0 消费方已删除；补单测时按需重建。
 
 ## 12. 构建与工具链
 
@@ -211,7 +211,7 @@ EyeProject 落地：已加 `core:testing`（`MainDispatcherRule`），后续补�
 | core:common | 通用格式化工具 |
 | core:model / domain / data | 同构 |
 | core:notifications | `Notifier` + `SystemNotifier`（提醒/色温通知） |
-| core:testing | `MainDispatcherRule` |
+| core:testing | 无（0 消费方已删，写单测时重建） |
 | core:database / network / datastore / sync | 无（单机无网络，做减法） |
 | feature:* | feature:camera / feature:home |
 | app | MainActivity + Hilt DI + 系统组件 |

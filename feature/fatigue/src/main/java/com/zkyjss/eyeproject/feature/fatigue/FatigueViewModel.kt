@@ -12,7 +12,6 @@ import com.zkyjss.eyeproject.core.common.formatTime
 import com.zkyjss.eyeproject.core.domain.ColorTemperatureController
 import com.zkyjss.eyeproject.core.domain.ReminderController
 import com.zkyjss.eyeproject.core.model.ColorTemperatureMode
-import com.zkyjss.eyeproject.core.ui.component.StatusTone
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -49,16 +48,16 @@ class FatigueViewModel @Inject constructor(
         refreshReminderState()
     }
 
+    /** 首次进入自动开始监测只做一次：切 Tab 回来不应把用户手动停掉的监测又拉起来。 */
+    private var autoStartHandled = false
+
+    /** 跳去系统页申请精确闹钟权限后，回到前台要接着把提醒开起来。 */
+    private var pendingExactAlarm = false
+
     private fun observeMonitor() {
         viewModelScope.launch {
             monitor.isRunning.collect { running ->
-                _uiState.update {
-                    it.copy(
-                        monitoring = running,
-                        statusMessage = if (running) "眼健康监测运行中" else it.statusMessage,
-                        statusTone = if (running) StatusTone.SUCCESS else it.statusTone
-                    )
-                }
+                _uiState.update { it.copy(monitoring = running) }
             }
         }
         viewModelScope.launch {
@@ -72,46 +71,56 @@ class FatigueViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            monitor.latestFrame.collect { frame ->
-                _uiState.update { it.copy(fps = frame?.fps ?: 0f) }
-            }
-        }
-        viewModelScope.launch {
             monitor.error.collect { error ->
                 _uiState.update { it.copy(error = error) }
             }
         }
     }
 
+    /** 页面回到前台：同步可能在应用外被改变的状态（系统设置授权、通知栏关闭滤镜、提醒已触发）。 */
+    fun refresh() {
+        if (_uiState.value.cameraPermissionDenied && hasCameraPermission()) {
+            _uiState.update { it.copy(cameraPermissionDenied = false) }
+        }
+        refreshColorTemperature()
+        if (pendingExactAlarm) {
+            pendingExactAlarm = false
+            if (reminderController.canScheduleExactAlarms()) startReminder()
+        }
+        refreshReminderState()
+    }
+
+    /** 返回 true 表示本次应执行首次自动开始（之后恒为 false）。 */
+    fun consumeAutoStart(): Boolean {
+        if (autoStartHandled) return false
+        autoStartHandled = true
+        return true
+    }
+
+    private fun hasCameraPermission(): Boolean =
+        ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
+            PackageManager.PERMISSION_GRANTED
+
     // region 监测
 
     fun startMonitoring() {
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA)
-            != PackageManager.PERMISSION_GRANTED
-        ) {
+        if (!hasCameraPermission()) {
             _permissionEvents.tryEmit(FatiguePermissionEvent.Camera)
             return
         }
+        _uiState.update { it.copy(cameraPermissionDenied = false) }
         serviceLauncher.start()
-        _uiState.update {
-            it.copy(statusMessage = "眼健康监测运行中", statusTone = StatusTone.SUCCESS)
-        }
     }
 
     fun stopMonitoring() {
         serviceLauncher.stop()
-        _uiState.update {
-            it.copy(statusMessage = "监测已停止", statusTone = StatusTone.NEUTRAL)
-        }
     }
 
     fun onCameraPermissionResult(granted: Boolean) {
         if (granted) {
             startMonitoring()
         } else {
-            _uiState.update {
-                it.copy(statusMessage = "摄像头权限被拒绝，无法监测", statusTone = StatusTone.DANGER)
-            }
+            _uiState.update { it.copy(cameraPermissionDenied = true) }
         }
     }
 
@@ -129,6 +138,7 @@ class FatigueViewModel @Inject constructor(
             _permissionEvents.tryEmit(FatiguePermissionEvent.Overlay(mode))
             return
         }
+        _uiState.update { it.copy(notice = null) }
         colorTemperatureController.setMode(mode)
         refreshColorTemperature()
     }
@@ -136,6 +146,9 @@ class FatigueViewModel @Inject constructor(
     fun applyPendingColorTemperature(mode: ColorTemperatureMode) {
         if (colorTemperatureController.hasOverlayPermission()) {
             colorTemperatureController.setMode(mode)
+            _uiState.update { it.copy(notice = null) }
+        } else {
+            _uiState.update { it.copy(notice = "未授予悬浮窗权限，无法开启色温滤镜") }
         }
         refreshColorTemperature()
     }
@@ -151,6 +164,7 @@ class FatigueViewModel @Inject constructor(
     fun toggleReminder() {
         if (reminderController.isEnabled()) {
             reminderController.cancel()
+            _uiState.update { it.copy(notice = null) }
             refreshReminderState()
             return
         }
@@ -165,22 +179,23 @@ class FatigueViewModel @Inject constructor(
     }
 
     fun onNotificationPermissionResult(granted: Boolean) {
-        if (granted) startReminder()
-    }
-
-    fun onExactAlarmPermissionResult() {
-        startReminder()
+        if (granted) {
+            startReminder()
+        } else {
+            _uiState.update { it.copy(notice = "未授予通知权限，无法发送休息提醒") }
+        }
     }
 
     private fun startReminder() {
-        if (!reminderController.canScheduleExactAlarms()) {
+        if (!reminderController.canScheduleExactAlarms() ||
+            !reminderController.schedule(_uiState.value.reminderIntervalMinutes)
+        ) {
+            pendingExactAlarm = true
+            _uiState.update { it.copy(notice = "请允许「闹钟和提醒」权限，以便准时提醒休息") }
             _permissionEvents.tryEmit(FatiguePermissionEvent.ExactAlarm)
             return
         }
-        val ok = reminderController.schedule(_uiState.value.reminderIntervalMinutes)
-        if (!ok) {
-            _permissionEvents.tryEmit(FatiguePermissionEvent.ExactAlarm)
-        }
+        _uiState.update { it.copy(notice = null) }
         refreshReminderState()
     }
 

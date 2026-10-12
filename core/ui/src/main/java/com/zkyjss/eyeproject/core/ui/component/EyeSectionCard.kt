@@ -1,7 +1,6 @@
 package com.zkyjss.eyeproject.core.ui.component
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Spacer
@@ -30,13 +29,12 @@ fun EyeSectionCard(
             .fillMaxWidth()
             .clip(EyeShapes.panel)
             .background(colors.panelBackground)
-            .border(width = 1.dp, color = colors.borderSubtle, shape = EyeShapes.panel)
-            .padding(14.dp)
+            .padding(20.dp)
     ) {
         if (title != null) {
             EyeText(
                 text = title,
-                style = typography.title,
+                style = typography.subtitle,
                 color = colors.textPrimary
             )
             Spacer(Modifier.height(12.dp))

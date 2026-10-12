@@ -4,5 +4,7 @@
     <style name="Theme.EyeProject" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:colorAccent">@color/primary</item>
         <item name="android:windowNoTitle">true</item>
+        <!-- 冷启动窗口底色与应用背景一致，避免白闪 -->
+        <item name="android:windowBackground">@color/app_background</item>
     </style>
 </resources>

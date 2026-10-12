@@ -1,8 +1,13 @@
 package com.zkyjss.eyeproject.core.camera
 
 import android.content.Context
+import android.content.pm.ApplicationInfo
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Color
 import android.graphics.Matrix
+import android.os.Build
+import android.os.SystemClock
 import androidx.annotation.OptIn
 import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.ImageAnalysis
@@ -18,9 +23,16 @@ import com.zkyjss.eyeproject.core.model.BoundingBox
 import com.zkyjss.eyeproject.core.model.EyeLandmarks
 import com.zkyjss.eyeproject.core.model.FaceLandmarkFrame
 import com.zkyjss.eyeproject.core.model.FaceMetrics
+import com.zkyjss.eyeproject.core.model.HeadPoseEstimate
 import com.zkyjss.eyeproject.core.model.Point2f
+import java.io.File
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.hypot
+import kotlin.math.asin
+import kotlin.math.atan2
+import kotlin.math.sqrt
 
 /**
  * 基于 MediaPipe FaceLandmarker（478 点）的逐帧分析器，输出疲劳检测所需指标：
@@ -33,25 +45,38 @@ class FaceLandmarkerAnalyzer(
 ) : ImageAnalysis.Analyzer {
 
     private val faceLandmarker: FaceLandmarker
-    private val resultHandler: (FaceLandmarkerResult) -> Unit = { handleResult(it) }
+    private val resultHandler: (FaceLandmarkerResult) -> Unit = { result ->
+        runCatching { handleResult(result) }.onFailure(onError)
+    }
 
     private var frameIndex = 0
     private var previousFrameNanos = 0L
     private var smoothedFps = 0f
 
-    @Volatile
-    private var pendingFrame: PendingFrame? = null
+    // 仅在 Debug 包且电脑端预览窗口开启时，保存少量实际送入模型的帧。
+    private val debugFrameEnabled = context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
+    private val debugFrameSwitch = File(context.filesDir, "camera_debug.enable")
+    private val debugFrameOutput = File(context.filesDir, "camera_debug_frame.jpg")
+    private val debugInputFrame = File(context.filesDir, "camera_debug_input.jpg")
+    private var lastDebugFrameMs = 0L
+    private val debugFrameWriter = Executors.newSingleThreadExecutor()
+    private val debugFrameWriting = AtomicBoolean(false)
+
+    private val pendingFrames = LinkedHashMap<Long, PendingFrame>()
 
     private data class PendingFrame(
         val startNanos: Long,
+        val analysisElapsedRealtimeMs: Long,
         val sourceWidth: Int,
         val sourceHeight: Int,
-        val fps: Float
+        val fps: Float,
+        val imageBrightness: Float,
+        val bitmap: Bitmap,
     )
 
     init {
-        handlers.add(resultHandler)
         faceLandmarker = SharedFaceLandmarker.get(context)
+        handlers.add(resultHandler)
     }
 
     @OptIn(ExperimentalGetImage::class)
@@ -63,95 +88,164 @@ class FaceLandmarkerAnalyzer(
             imageProxy.close()
             return
         }
+        // 同一时刻只保留一次异步推理，确保光学像素与关键点属于同一帧。
+        val busy = synchronized(pendingFrames) {
+            val latest = pendingFrames.values.firstOrNull()
+            if (latest != null && System.nanoTime() - latest.startNanos < 1_000_000_000L) true
+            else { pendingFrames.clear(); false }
+        }
+        if (busy) {
+            imageProxy.close()
+            return
+        }
 
         // 开始分析前记录时刻
         val startNanos = System.nanoTime()
 
         val fps = updateFps(startNanos)
 
-        // 获取图片旋转角度，得到图片的真实宽高
+        // 获取图片旋转角度。
         val rotationDegrees = imageProxy.imageInfo.rotationDegrees
-        val sourceWidth = if (rotationDegrees == 90 || rotationDegrees == 270) {
-            imageProxy.height
-        } else {
-            imageProxy.width
-        }
-        val sourceHeight = if (rotationDegrees == 90 || rotationDegrees == 270) {
-            imageProxy.width
-        } else {
-            imageProxy.height
-        }
 
         // 分析图片得到数据
         try {
-            // rotationDegrees不为0时，需要对图片应用旋转
-            val upright = rotateBitmap(toArgbBitmap(imageProxy), rotationDegrees)
+            // Windows 上模拟器 webcam0 会错误地只取原视频的半幅；Debug 时改用电脑端送来的完整帧。
+            val upright = readDebugInputFrame() ?: rotateBitmap(toArgbBitmap(imageProxy), rotationDegrees)
+            val sourceWidth = upright.width
+            val sourceHeight = upright.height
             val mpImage = BitmapImageBuilder(upright).build()
 
-            pendingFrame = PendingFrame(
+            val timestampMs = imageProxy.imageInfo.timestamp / 1_000_000
+            synchronized(pendingFrames) {
+                pendingFrames[timestampMs] = PendingFrame(
                 startNanos = startNanos,
+                analysisElapsedRealtimeMs = SystemClock.elapsedRealtime(),
                 sourceWidth = sourceWidth,
                 sourceHeight = sourceHeight,
-                fps = fps
-            )
+                fps = fps,
+                imageBrightness = estimateBrightness(upright),
+                bitmap = upright,
+                )
+            }
             // CameraX 时间戳为纳秒，MediaPipe detectAsync 期望毫秒
-            faceLandmarker.detectAsync(mpImage, imageProxy.imageInfo.timestamp / 1_000_000)
+            saveDebugFrame(upright)
+            faceLandmarker.detectAsync(mpImage, timestampMs)
         } catch (throwable: Throwable) {
-            pendingFrame = null
+            synchronized(pendingFrames) { pendingFrames.clear() }
             onError(throwable)
         } finally {
             imageProxy.close()
         }
     }
 
-    private fun handleResult(result: FaceLandmarkerResult) {
-        val frame = pendingFrame ?: return
-        pendingFrame = null
-        val latencyMillis = (System.nanoTime() - frame.startNanos) / 1_000_000L
-        val timestampMillis = System.currentTimeMillis()
+    private fun saveDebugFrame(bitmap: Bitmap) {
+        if (!debugFrameEnabled || !debugFrameSwitch.exists()) return
+        // 电脑端窗口意外退出后，不再持续写入相机帧。
+        if (System.currentTimeMillis() - debugFrameSwitch.lastModified() > 5_000L) return
+        val nowMs = SystemClock.elapsedRealtime()
+        if (nowMs - lastDebugFrameMs < 100L || !debugFrameWriting.compareAndSet(false, true)) return
+        lastDebugFrameMs = nowMs
 
-        val landmarks = result.faceLandmarks().firstOrNull()
-
-        val face = landmarks?.let { lms ->
-            toFaceMetrics(lms, frame.sourceWidth, frame.sourceHeight)
+        // 缩图后交给独立线程编码，避免 JPEG 写盘阻塞 CameraX 分析线程。
+        val preview = runCatching {
+            val width = 640.coerceAtMost(bitmap.width)
+            val height = (bitmap.height.toLong() * width / bitmap.width).toInt().coerceAtLeast(1)
+            Bitmap.createScaledBitmap(bitmap, width, height, false).let {
+                if (it === bitmap) bitmap.copy(bitmap.config ?: Bitmap.Config.ARGB_8888, false) else it
+            }
+        }.getOrNull()
+        if (preview == null) {
+            debugFrameWriting.set(false)
+            return
         }
+        runCatching {
+            debugFrameWriter.execute {
+                try {
+                    val temporary = File(debugFrameOutput.parentFile, "${debugFrameOutput.name}.tmp")
+                    try {
+                        temporary.outputStream().use { preview.compress(Bitmap.CompressFormat.JPEG, 70, it) }
+                        temporary.renameTo(debugFrameOutput)
+                    } finally {
+                        temporary.delete()
+                    }
+                } catch (_: Exception) {
+                    // 调试窗口异常不影响模型分析。
+                } finally {
+                    preview.recycle()
+                    debugFrameWriting.set(false)
+                }
+            }
+        }.onFailure {
+            preview.recycle()
+            debugFrameWriting.set(false)
+        }
+    }
 
-        onResult(
-            FaceLandmarkFrame(
-                faces = listOfNotNull(face),
-                sourceWidth = frame.sourceWidth,
-                sourceHeight = frame.sourceHeight,
-                timestampMillis = timestampMillis,
-                detectionLatencyMillis = latencyMillis,
-                fps = frame.fps
+    private fun readDebugInputFrame(): Bitmap? {
+        if (!debugFrameEnabled || (Build.HARDWARE != "ranchu" && Build.HARDWARE != "goldfish")) return null
+        if (!debugFrameSwitch.exists() || !debugInputFrame.exists()) return null
+        if (System.currentTimeMillis() - debugInputFrame.lastModified() > 2_000L) return null
+        return runCatching { BitmapFactory.decodeFile(debugInputFrame.path) }.getOrNull()
+    }
+
+    private fun handleResult(result: FaceLandmarkerResult) {
+        val frame = synchronized(pendingFrames) { pendingFrames.remove(result.timestampMs()) } ?: return
+        try {
+            val latencyMillis = (System.nanoTime() - frame.startNanos) / 1_000_000L
+            val timestampMillis = System.currentTimeMillis()
+            val landmarks = result.faceLandmarks().firstOrNull()
+            val face = landmarks?.let { lms ->
+                val matrix = result.facialTransformationMatrixes().orElse(emptyList()).firstOrNull()
+                toFaceMetrics(lms, frame.sourceWidth, frame.sourceHeight, frame.bitmap, matrix)
+            }
+            onResult(
+                FaceLandmarkFrame(
+                    faces = listOfNotNull(face),
+                    sourceWidth = frame.sourceWidth,
+                    sourceHeight = frame.sourceHeight,
+                    timestampMillis = timestampMillis,
+                    detectionLatencyMillis = latencyMillis,
+                    fps = frame.fps,
+                    imageBrightness = frame.imageBrightness,
+                    analysisElapsedRealtimeMs = frame.analysisElapsedRealtimeMs,
+                )
             )
-        )
+        } finally {
+            frame.bitmap.recycle()
+        }
     }
 
     private fun toFaceMetrics(
         lms: List<NormalizedLandmark>,
         sourceWidth: Int,
-        sourceHeight: Int
+        sourceHeight: Int,
+        bitmap: Bitmap,
+        matrix: FloatArray?,
     ): FaceMetrics {
+        val left = extractEye("LEFT", LEFT_EAR, LEFT_IRIS, lms, sourceWidth, sourceHeight)
+        val right = extractEye("RIGHT", RIGHT_EAR, RIGHT_IRIS, lms, sourceWidth, sourceHeight)
         return FaceMetrics(
             faceBox = lms.boundingBox(sourceWidth, sourceHeight),
-            leftEye = extractEye(
-                label = "LEFT",
-                earIndices = LEFT_EAR,
-                irisIndices = LEFT_IRIS,
-                lms = lms,
-                sourceWidth = sourceWidth,
-                sourceHeight = sourceHeight
-            ),
-            rightEye = extractEye(
-                label = "RIGHT",
-                earIndices = RIGHT_EAR,
-                irisIndices = RIGHT_IRIS,
-                lms = lms,
-                sourceWidth = sourceWidth,
-                sourceHeight = sourceHeight
-            )
+            leftEye = left,
+            rightEye = right,
+            leftOptical = EyeOpticalDetector.measure(bitmap, left),
+            rightOptical = EyeOpticalDetector.measure(bitmap, right),
+            headPose = matrix?.let(::headPose),
         )
+    }
+
+    /** 4×4 列主序矩阵的旋转部分；去掉统一尺度后得到相对欧拉角。 */
+    private fun headPose(matrix: FloatArray): HeadPoseEstimate? {
+        if (matrix.size != 16) return null
+        val scale = sqrt(matrix[0] * matrix[0] + matrix[1] * matrix[1] + matrix[2] * matrix[2])
+        if (scale <= 0f) return null
+        val r00 = matrix[0] / scale; val r10 = matrix[1] / scale
+        val r20 = matrix[2] / scale; val r21 = matrix[6] / scale; val r22 = matrix[10] / scale
+        val yaw = asin((-r20).coerceIn(-1f, 1f))
+        val pitch = atan2(r21, r22)
+        val roll = atan2(r10, r00)
+        val degrees = (180.0 / Math.PI).toFloat()
+        return HeadPoseEstimate(yaw * degrees, pitch * degrees, roll * degrees)
     }
 
     private fun extractEye(
@@ -226,7 +320,9 @@ class FaceLandmarkerAnalyzer(
             return bitmap
         }
         val matrix = Matrix().apply { postRotate(degrees.toFloat()) }
-        return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+        return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true).also {
+            if (it !== bitmap) bitmap.recycle()
+        }
     }
 
     private fun toArgbBitmap(imageProxy: ImageProxy): Bitmap {
@@ -242,8 +338,26 @@ class FaceLandmarkerAnalyzer(
         return if (rowPadding == 0) {
             bitmap
         } else {
-            Bitmap.createBitmap(bitmap, 0, 0, imageProxy.width, imageProxy.height)
+            Bitmap.createBitmap(bitmap, 0, 0, imageProxy.width, imageProxy.height).also {
+                if (it !== bitmap) bitmap.recycle()
+            }
         }
+    }
+
+    /** 稀疏采样全帧亮度；不可冒充照度 lux。 */
+    private fun estimateBrightness(bitmap: Bitmap): Float {
+        var total = 0f
+        var count = 0
+        for (row in 0 until 12) {
+            val y = ((row + 0.5f) * bitmap.height / 12f).toInt().coerceIn(0, bitmap.height - 1)
+            for (column in 0 until 12) {
+                val x = ((column + 0.5f) * bitmap.width / 12f).toInt().coerceIn(0, bitmap.width - 1)
+                val color = bitmap.getPixel(x, y)
+                total += 0.2126f * Color.red(color) + 0.7152f * Color.green(color) + 0.0722f * Color.blue(color)
+                count++
+            }
+        }
+        return total / count
     }
 
     private fun updateFps(nowNanos: Long): Float {
@@ -263,11 +377,13 @@ class FaceLandmarkerAnalyzer(
 
     fun close() {
         handlers.remove(resultHandler)
+        synchronized(pendingFrames) { pendingFrames.clear() }
+        debugFrameWriter.shutdown()
     }
 
     companion object {
         private const val MODEL_ASSET = "face_landmarker.task"
-        private const val DETECTION_FRAME_INTERVAL = 1
+        private const val DETECTION_FRAME_INTERVAL = 2
 
         private val handlers = CopyOnWriteArrayList<(FaceLandmarkerResult) -> Unit>()
 
@@ -279,15 +395,23 @@ class FaceLandmarkerAnalyzer(
             fun get(context: Context): FaceLandmarker {
                 instance?.let { return it }
                 return synchronized(this) {
+                    // 模拟器的 OpenGL 推理图可能在首帧报 GL_INVALID_ENUM；
+                    // CPU 路径仍运行同一份模型，真机继续使用 GPU。
+                    val baseOptions = BaseOptions.builder().setModelAssetPath(MODEL_ASSET)
+                    if (Build.HARDWARE == "ranchu" || Build.HARDWARE == "goldfish") {
+                        baseOptions.setDelegate(Delegate.CPU)
+                    } else {
+                        baseOptions.setDelegate(Delegate.GPU)
+                            .setDelegateOptions(BaseOptions.DelegateOptions.GpuOptions.builder().build())
+                    }
                     instance ?: FaceLandmarker.createFromOptions(
                         context,
                         FaceLandmarker.FaceLandmarkerOptions.builder()
-                            .setBaseOptions(
-                                BaseOptions.builder().setDelegate(Delegate.GPU).setDelegateOptions(BaseOptions.DelegateOptions.GpuOptions.builder().build()).setModelAssetPath(MODEL_ASSET).build()
-                            )
+                            .setBaseOptions(baseOptions.build())
                             .setRunningMode(RunningMode.LIVE_STREAM)
                             .setNumFaces(1)
                             .setOutputFaceBlendshapes(false)
+                            .setOutputFacialTransformationMatrixes(true)
                             .setResultListener { result, _ ->
                                 handlers.forEach { it(result) }
                             }

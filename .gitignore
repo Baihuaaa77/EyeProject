@@ -23,3 +23,11 @@ memory/
 .kotlin/
 build-logic/convention/bin/
 .idea/androidTestResultsUserPreferences.xml
+
+# APK 解包与反编译临时目录
+/build_tmp_apk/
+/build_tmp_javap/
+
+# Python 缓存
+__pycache__/
+*.pyc

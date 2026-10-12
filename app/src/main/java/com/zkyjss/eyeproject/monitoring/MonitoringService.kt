@@ -1,15 +1,20 @@
 package com.zkyjss.eyeproject.monitoring
 
-import android.app.Notification
-import android.app.PendingIntent
+import android.content.Context
 import android.content.Intent
-import androidx.core.app.NotificationCompat
+import android.util.Log
 import androidx.lifecycle.LifecycleService
+import androidx.lifecycle.lifecycleScope
 import com.zkyjss.eyeproject.MainActivity
 import com.zkyjss.eyeproject.core.notifications.NotificationChannels
+import com.zkyjss.eyeproject.core.notifications.Notifier
 import com.zkyjss.eyeproject.feature.fatigue.FatigueMonitor
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 /**
  * 后台实时监测前台服务（`foregroundServiceType="camera"`）：
@@ -21,11 +26,41 @@ class MonitoringService : LifecycleService() {
     @Inject
     lateinit var monitor: FatigueMonitor
 
+    @Inject
+    lateinit var notifier: Notifier
+
+    private var stopWatcher: Job? = null
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
-        startForeground(NotificationChannels.MONITORING_NOTIFICATION_ID, buildNotification())
+        if (intent?.action == ACTION_STOP) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
+        try {
+            startForeground(
+                NotificationChannels.MONITORING_NOTIFICATION_ID,
+                notifier.buildMonitoringNotification(
+                    openAppIntent = Intent(this, MainActivity::class.java),
+                    stopIntent = Intent(this, MonitoringService::class.java).setAction(ACTION_STOP)
+                )
+            )
+        } catch (e: RuntimeException) {
+            // Android 14+ 后台无相机权限/不允许启动相机型前台服务时会抛异常，放弃本次启动而不是崩溃
+            Log.w(TAG, "无法进入前台，停止监测服务", e)
+            stopSelf()
+            return START_NOT_STICKY
+        }
         monitor.start(this)
-        return START_STICKY
+        // 监测因相机失败等原因自行停止时，同步结束服务，避免通知栏残留「运行中」
+        if (stopWatcher == null) {
+            stopWatcher = lifecycleScope.launch {
+                monitor.isRunning.drop(1).first { running -> !running }
+                stopSelf()
+            }
+        }
+        // 相机型前台服务不能由系统在后台重建（Android 14+ 会被拒绝），被杀后由用户回到前台重新开启
+        return START_NOT_STICKY
     }
 
     override fun onDestroy() {
@@ -33,22 +68,10 @@ class MonitoringService : LifecycleService() {
         super.onDestroy()
     }
 
-    private fun buildNotification(): Notification {
-        NotificationChannels.createMonitoringChannel(this)
-        val openIntent = PendingIntent.getActivity(
-            this,
-            0,
-            Intent(this, MainActivity::class.java),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        return NotificationCompat.Builder(this, NotificationChannels.MONITORING_CHANNEL_ID)
-            .setSmallIcon(com.zkyjss.eyeproject.core.notifications.R.drawable.ic_stat_eye)
-            .setContentTitle("眼健康监测运行中")
-            .setContentText("正在后台实时采集用眼数据")
-            .setContentIntent(openIntent)
-            .setOngoing(true)
-            .setCategory(NotificationCompat.CATEGORY_SERVICE)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .build()
+    companion object {
+        private const val TAG = "MonitoringService"
+        private const val ACTION_STOP = "com.zkyjss.eyeproject.action.STOP_MONITORING"
+
+        fun createIntent(context: Context): Intent = Intent(context, MonitoringService::class.java)
     }
 }

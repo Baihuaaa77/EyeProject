@@ -30,13 +30,13 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.zkyjss.eyeproject.core.common.formatDistanceCm
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
 import com.zkyjss.eyeproject.core.designsystem.util.screenHorizontalPaddingLarge
 import com.zkyjss.eyeproject.core.ui.component.EyeSectionCard
 import com.zkyjss.eyeproject.core.ui.component.EyeText
 import com.zkyjss.eyeproject.core.ui.component.TopBackBar
-import java.util.Locale
 
 /** 检测服务通用界面：摄像头预览 + 眼睛关键点标记 + 下方距离/眨眼次数。 */
 @Composable
@@ -105,7 +105,7 @@ fun DetectionContent(
         EyeSectionCard(title = "实时检测") {
             MetricRow(
                 label = "用眼距离",
-                value = formatDistance(state.distanceCm),
+                value = formatDistanceCm(state.distanceCm),
                 valueColor = if (state.distanceCm > 0f) colors.success else colors.textSecondary
             )
             MetricRow(
@@ -156,6 +156,3 @@ private fun MetricRow(
         }
     }
 }
-
-private fun formatDistance(cm: Float): String =
-    if (cm > 0f) String.format(Locale.US, "%.0f cm", cm) else "--"

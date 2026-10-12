@@ -16,39 +16,57 @@ class BlinkDetector(
     private val earThreshold: Float = 0.23f,
     private val consecutiveFrames: Int = 3
 ) {
+    // update() 跑在相机分析线程，blinkCount / reset() 由协程（每秒展示、每 30 秒采样）读取与清零，
+    // 跨线程访问，必须互斥——否则 reset() 撞上 update() 会丢眨眼或把计数清成 0。
+    private val lock = Any()
     private var closedFrameCount = 0
     private var isClosed = false
+    private var _blinkCount = 0
 
     /** 累计眨眼次数（自上次 [reset] 起）。 */
-    var blinkCount = 0
-        private set
+    val blinkCount: Int
+        get() = synchronized(lock) { _blinkCount }
 
-
-    /** 每次完成一次完整眨眼时回调（用于记录连续睁眼时长）。 */
+    /** 每次完成一次完整眨眼时回调（用于记录连续睁眼时长）；在调用 [update] 的线程上执行。 */
     var onBlink: (() -> Unit)? = null
 
     /** 每帧调用，传入双眼平均 EAR；未检测到眼睛时传 null（不中断计数）。 */
     fun update(ear: Float?) {
         if (ear == null) return
-        if (ear < earThreshold) {
-            closedFrameCount++
-            if (closedFrameCount >= consecutiveFrames) {
-                isClosed = true
+        var completedBlink = false
+        synchronized(lock) {
+            if (ear < earThreshold) {
+                closedFrameCount++
+                if (closedFrameCount >= consecutiveFrames) {
+                    isClosed = true
+                }
+            } else {
+                if (isClosed) {
+                    _blinkCount++
+                    isClosed = false
+                    completedBlink = true
+                }
+                closedFrameCount = 0
             }
-        } else {
-            if (isClosed) {
-                blinkCount++
-                isClosed = false
-                onBlink?.invoke()
-            }
+        }
+        // 回调放在锁外：onBlink 会写调用方的 @Volatile 字段，不该在持锁时执行
+        if (completedBlink) onBlink?.invoke()
+    }
+
+    /** 跟踪中断（如人脸短暂丢失）：只清闭眼状态，保留本区间已累计的眨眼次数。 */
+    fun interrupt() {
+        synchronized(lock) {
             closedFrameCount = 0
+            isClosed = false
         }
     }
 
     fun reset() {
-        closedFrameCount = 0
-        isClosed = false
-        blinkCount = 0
+        synchronized(lock) {
+            closedFrameCount = 0
+            isClosed = false
+            _blinkCount = 0
+        }
     }
 
     companion object {

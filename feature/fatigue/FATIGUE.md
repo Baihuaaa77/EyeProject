@@ -67,6 +67,8 @@ flowchart TD
 ## 注意事项
 
 - `EyeHealthNative` kdoc 写的 `double[29]/String[9]` 与 `FatigueRisk.fromOutput` 的 `double[27]/String[8]` 布局描述不一致，以后者为准（改 C++ 输出布局时两处都要同步）
-- `BlinkDetector.reset()` 在每条样本写入后调用，保证样本记录的是「本采样区间」眨眼数
+- `BlinkDetector.reset()` 在每条样本写入后调用，保证样本记录的是「本采样区间」眨眼数；人脸短暂丢失只调 `interrupt()`（清闭眼状态、保留计数），否则区间眨眼被抹掉、干眼风险虚高
+- 相机绑定失败时 `FatigueMonitor` 自行 `stop()`（取消采样协程）并写 `error`；单帧分析异常不打断监测
+- 首页自动开始监测每个 ViewModel 只做一次（`consumeAutoStart()`），切 Tab 回来不会重启用户手动停止的监测；`ON_RESUME` 调 `refresh()` 同步系统设置/通知栏中的变化
 - 未检测到人脸时距离/眨眼置 0 且跳过打分（实时指标显示「未检测到人脸」）
 - `lifecycleOwner` 传的是前台服务（`LifecycleService`），这是相机能在后台持续运行的关键

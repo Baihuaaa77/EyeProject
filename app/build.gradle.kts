@@ -15,13 +15,17 @@ android {
         versionCode = 1
         versionName = "1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        // tasks-vision / LiteRT 预编译 .so 只提供 arm64-v8a
+        // 正式包保持 ARM64；Debug 额外构建 x86_64 供模拟器直接运行。
         ndk {
             abiFilters += listOf("arm64-v8a")
         }
     }
 
     buildTypes {
+        debug {
+            // 模拟器直接运行 x86_64 MediaPipe，避免 ARM64 原生库转译崩溃。
+            ndk.abiFilters += "x86_64"
+        }
         release {
             optimization {
                 enable = false
@@ -36,6 +40,7 @@ dependencies {
     implementation(project(":core:data"))
     implementation(project(":core:notifications"))
     implementation(project(":core:designsystem"))
+    implementation(project(":core:ui"))
     implementation(project(":core:camera"))
     implementation(project(":feature:fatigue"))
     implementation(project(":feature:testmodel"))

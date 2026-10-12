@@ -3,6 +3,7 @@ package com.zkyjss.eyeproject.feature.testmodel.gaze
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Matrix
+import android.os.Build
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
@@ -43,6 +44,12 @@ class GazeViewModel @Inject constructor(
     }
 
     private fun loadModel() {
+        if (Build.SUPPORTED_ABIS.firstOrNull()?.startsWith("x86") == true) {
+            _uiState.update {
+                it.copy(modelError = "当前模拟器构建不包含视线估计 JNI，请在 ARM64 真机测试此实验功能。")
+            }
+            return
+        }
         val loaded = try {
             // LiteRT C++ SDK（JNI）实现
             GazeNativeModel(context)
@@ -60,6 +67,7 @@ class GazeViewModel @Inject constructor(
     }
 
     fun startCamera(lifecycleOwner: LifecycleOwner, previewView: PreviewView) {
+        if (model == null) return
         stopCamera()
         val future = ProcessCameraProvider.getInstance(context)
         future.addListener(

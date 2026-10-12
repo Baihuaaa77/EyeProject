@@ -7,10 +7,15 @@ plugins {
 
 android {
     namespace = "com.zkyjss.eyeproject.feature.services"
+    testOptions.unitTests.isIncludeAndroidResources = true
+    testOptions.unitTests.all {
+        it.systemProperty("robolectric.dependency.repo.url", "https://repo.maven.apache.org/maven2")
+    }
 }
 
 dependencies {
     implementation(project(":core:model"))
+    implementation(project(":core:common"))
     implementation(project(":core:domain"))
     implementation(project(":core:camera"))
     implementation(project(":core:designsystem"))
@@ -35,4 +40,8 @@ dependencies {
     implementation(libs.vico.compose.m3)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
+    testImplementation(libs.junit)
+    testImplementation("org.robolectric:robolectric:4.16.1")
+    testImplementation(libs.androidx.compose.ui.test.junit4)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
 }

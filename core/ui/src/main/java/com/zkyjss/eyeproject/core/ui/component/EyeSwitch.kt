@@ -2,8 +2,9 @@ package com.zkyjss.eyeproject.core.ui.component
 
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.Role
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
@@ -11,7 +12,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
@@ -25,13 +25,17 @@ import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
 @Composable
 fun EyeSwitch(
     checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
+    /** 传 null 表示仅展示，由外层整行负责切换（避免一行两个点击目标）。 */
+    onCheckedChange: ((Boolean) -> Unit)?,
     modifier: Modifier = Modifier,
     enabled: Boolean = true
 ) {
     val colors = LocalEyeColors.current
-    val trackColor = if (checked) colors.primary else colors.borderSubtle
-    val thumbColor = colors.textInverse
+    val trackColor by androidx.compose.animation.animateColorAsState(
+        if (checked) colors.primary else colors.borderSubtle,
+        label = "eyeSwitchTrack"
+    )
+    val thumbColor = colors.white
 
     // 滑块水平位移动画（轨道 52dp、滑块 28dp、两侧各 2dp padding）
     val thumbOffsetX by animateDpAsState(
@@ -41,15 +45,19 @@ fun EyeSwitch(
 
     Box(
         modifier = modifier
+            .then(
+                if (onCheckedChange != null) {
+                    Modifier.toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = onCheckedChange)
+                } else {
+                    Modifier
+                }
+            )
+            .padding(vertical = 8.dp)
             .size(width = 52.dp, height = 32.dp)
             .alpha(if (enabled) 1f else 0.5f)
             .clip(RoundedCornerShape(16.dp))
             .background(trackColor)
-            .clickable(
-                enabled = enabled,
-                indication = null,
-                interactionSource = remember { MutableInteractionSource() }
-            ) { onCheckedChange(!checked) }
+
     ) {
         Box(
             modifier = Modifier

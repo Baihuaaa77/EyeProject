@@ -7,6 +7,10 @@ plugins {
 
 android {
     namespace = "com.zkyjss.eyeproject.feature.fatigue"
+    testOptions.unitTests.isIncludeAndroidResources = true
+    testOptions.unitTests.all {
+        it.systemProperty("robolectric.dependency.repo.url", "https://repo.maven.apache.org/maven2")
+    }
 
     // 本机 NDK 28 安装不完整（缺 source.properties），改用完整的 27.3（r27d）
     ndkVersion = "27.3.13750724"
@@ -19,6 +23,11 @@ android {
             cmake {
                 cppFlags += "-std=c++17"
             }
+        }
+    }
+    buildTypes {
+        debug {
+            ndk.abiFilters += "x86_64"
         }
     }
     externalNativeBuild {
@@ -51,4 +60,8 @@ dependencies {
     implementation(libs.vico.compose.m3)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
+    testImplementation(libs.junit)
+    testImplementation("org.robolectric:robolectric:4.16.1")
+    testImplementation(libs.androidx.compose.ui.test.junit4)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
 }

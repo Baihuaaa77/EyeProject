@@ -79,4 +79,30 @@ class SystemNotifier @Inject constructor(
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
     }
+
+    override fun buildMonitoringNotification(openAppIntent: Intent, stopIntent: Intent): Notification {
+        NotificationChannels.createMonitoringChannel(context)
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            0,
+            openAppIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val stopPendingIntent = PendingIntent.getService(
+            context,
+            2,
+            stopIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        return NotificationCompat.Builder(context, NotificationChannels.MONITORING_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_stat_eye)
+            .setContentTitle("眼健康监测运行中")
+            .setContentText("正在后台实时采集用眼数据")
+            .setContentIntent(pendingIntent)
+            .addAction(0, "停止监测", stopPendingIntent)
+            .setOngoing(true)
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .build()
+    }
 }

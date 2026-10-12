@@ -297,7 +297,7 @@ dependencies {
 | 网络 | Retrofit + 离线同步 | 无网络层 | 接入云端（如智能体后端）时新建 `core:network`，Repository 接口先行 |
 | 后台同步 | WorkManager + `Synchronizer` | 前台服务（相机实时监测）+ AlarmManager（提醒） | 我们的场景要求持续相机帧流，前台服务是正确选择；**新增「定时拉取/上传」类任务时再引入 WorkManager** |
 | core:ui 依赖 | 可依赖数据层模型渲染组合组件 | 组件不依赖业务模型（纯通用件） | 出现「多 feature 共用的业务组合组件」时再放宽 |
-| 测试 | 无 mock 库 + Test 替身体系 + Roborazzi | 仅 `core:testing`（MainDispatcherRule）与少量 androidTest | **下一步优先项**：给 `BlinkDetector`/`DepthFromIris`/ViewModel 建单测，替身从 `core:testing` 出 |
+| 测试 | 无 mock 库 + Test 替身体系 + Roborazzi | 仅 `app` 下少量 androidTest（`core:testing` 因 0 消费方已删除） | **下一步优先项**：给 `BlinkDetector`/`DepthFromIris`/ViewModel 建单测；写第一个单测时按需重建 `core:testing`（一个 build 文件 + `MainDispatcherRule`） |
 | lint / benchmark / baseline profile | 全套启用 | 未启用 | 稳定后引入 lint 模块；性能问题出现时启用 benchmark |
 | 版本管理 | 单一 version catalog | build-logic 与 toml 双份 | 尽快收敛（让 build-logic 读 catalog） |
 

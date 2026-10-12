@@ -14,4 +14,7 @@ interface Notifier {
         openAppIntent: Intent,
         stopIntent: Intent
     ): Notification
+
+    /** 构建监测前台服务通知（带「停止监测」操作），供 Service.startForeground 使用。 */
+    fun buildMonitoringNotification(openAppIntent: Intent, stopIntent: Intent): Notification
 }

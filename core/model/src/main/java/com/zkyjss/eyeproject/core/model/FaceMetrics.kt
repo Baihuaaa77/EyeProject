@@ -4,5 +4,8 @@ package com.zkyjss.eyeproject.core.model
 data class FaceMetrics(
     val faceBox: BoundingBox,
     val leftEye: EyeLandmarks?,
-    val rightEye: EyeLandmarks?
+    val rightEye: EyeLandmarks?,
+    val leftOptical: OpticalEyeMeasurement? = null,
+    val rightOptical: OpticalEyeMeasurement? = null,
+    val headPose: HeadPoseEstimate? = null,
 )

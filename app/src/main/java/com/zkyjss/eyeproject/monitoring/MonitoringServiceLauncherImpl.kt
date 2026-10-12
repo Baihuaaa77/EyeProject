@@ -1,7 +1,6 @@
 package com.zkyjss.eyeproject.monitoring
 
 import android.content.Context
-import android.content.Intent
 import androidx.core.content.ContextCompat
 import com.zkyjss.eyeproject.feature.fatigue.MonitoringServiceLauncher
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -15,11 +14,10 @@ class MonitoringServiceLauncherImpl @Inject constructor(
 ) : MonitoringServiceLauncher {
 
     override fun start() {
-        val intent = Intent(context, MonitoringService::class.java)
-        ContextCompat.startForegroundService(context, intent)
+        ContextCompat.startForegroundService(context, MonitoringService.createIntent(context))
     }
 
     override fun stop() {
-        context.stopService(Intent(context, MonitoringService::class.java))
+        context.stopService(MonitoringService.createIntent(context))
     }
 }
