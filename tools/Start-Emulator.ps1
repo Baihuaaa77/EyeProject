@@ -1,4 +1,6 @@
-﻿param([switch]$Test)
+﻿# -Test：启动后跑冒烟测试并重装最新 Debug 包
+# -SoftwareGpu：若显卡加速导致模拟器黑屏或闪退，改回纯软件渲染（很耗 CPU）
+param([switch]$Test, [switch]$SoftwareGpu)
 
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
@@ -28,12 +30,14 @@ if (-not (Test-Path (Join-Path $env:ANDROID_AVD_HOME "$avdName.ini"))) {
 
 $running = @(& $adb devices | Where-Object { $_ -match '^emulator-\d+\s+(device|offline)$' })
 if ($running.Count -eq 0) {
-    Start-Process -FilePath $emulator -ArgumentList @('-avd', $avdName) -WindowStyle Normal | Out-Null
+    # 默认用电脑显卡（host GPU）渲染界面；AVD 里 hw.gpu.enabled=no 时全部画面由 CPU 软件渲染，风扇狂转的主因之一
+    $gpu = if ($SoftwareGpu) { 'swiftshader_indirect' } else { 'host' }
+    Start-Process -FilePath $emulator -ArgumentList @('-avd', $avdName, '-gpu', $gpu, '-cores', '6', '-memory', '4096') -WindowStyle Normal | Out-Null
     Write-Host "正在启动 $avdName ..."
 } elseif ($running.Count -gt 1) {
     throw '检测到多个模拟器，请只保留 EyeProject_API30。'
 } else {
-    Write-Host '模拟器已经在运行。'
+    Write-Host '模拟器已经在运行（若要启用显卡加速，请先关闭模拟器窗口再运行本脚本）。'
 }
 
 $ready = $false

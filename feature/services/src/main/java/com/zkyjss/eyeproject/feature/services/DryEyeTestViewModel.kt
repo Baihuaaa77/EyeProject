@@ -96,6 +96,7 @@ class DryEyeTestViewModel @Inject constructor(
     val uiState: StateFlow<DryEyeTestUiState> = _uiState.asStateFlow()
 
     private val blinkDetector = BlinkDetector()
+    private val distanceTracker = ScreeningDistanceTracker()
     private val blinkEvents = ConcurrentLinkedQueue<Long>()
     private val sensors = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
 
@@ -487,6 +488,10 @@ class DryEyeTestViewModel @Inject constructor(
         val pose = face?.headPose
         headTurned = pose != null && (abs(pose.yawDeg) > HEAD_LIMIT_DEG || abs(pose.pitchDeg) > HEAD_LIMIT_DEG)
         eyesVisible = eyesDetected
+        // 与老视/斜视相同的 1 秒稳健平滑，抑制虹膜关键点逐帧跳动造成的距离抖动
+        val now0 = SystemClock.elapsedRealtime()
+        if (distanceCm > 0f) distanceTracker.add(now0, distanceCm)
+        distanceCm = if (eyesDetected) distanceTracker.estimate(now0)?.distanceCm ?: distanceCm else 0f
         lastDistanceCm = distanceCm
 
         val gate = eyesDetected && abs(distanceCm - DryEyeProtocol.TARGET_DISTANCE_CM) <= DryEyeProtocol.DISTANCE_TOLERANCE_CM

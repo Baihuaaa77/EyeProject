@@ -1,7 +1,6 @@
 package com.zkyjss.eyeproject.core.camera
 
 import android.content.Context
-import android.content.pm.ApplicationInfo
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
@@ -25,10 +24,7 @@ import com.zkyjss.eyeproject.core.model.FaceLandmarkFrame
 import com.zkyjss.eyeproject.core.model.FaceMetrics
 import com.zkyjss.eyeproject.core.model.HeadPoseEstimate
 import com.zkyjss.eyeproject.core.model.Point2f
-import java.io.File
 import java.util.concurrent.CopyOnWriteArrayList
-import java.util.concurrent.Executors
-import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.hypot
 import kotlin.math.asin
 import kotlin.math.atan2
@@ -53,14 +49,11 @@ class FaceLandmarkerAnalyzer(
     private var previousFrameNanos = 0L
     private var smoothedFps = 0f
 
-    // 仅在 Debug 包且电脑端预览窗口开启时，保存少量实际送入模型的帧。
-    private val debugFrameEnabled = context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
-    private val debugFrameSwitch = File(context.filesDir, "camera_debug.enable")
-    private val debugFrameOutput = File(context.filesDir, "camera_debug_frame.jpg")
-    private val debugInputFrame = File(context.filesDir, "camera_debug_input.jpg")
-    private var lastDebugFrameMs = 0L
-    private val debugFrameWriter = Executors.newSingleThreadExecutor()
-    private val debugFrameWriting = AtomicBoolean(false)
+    private val isEmulator = Build.HARDWARE == "ranchu" || Build.HARDWARE == "goldfish"
+    // Debug 模拟器：可改用电脑摄像头画面（见 DebugCameraFeed）
+    private val hostFeed = DebugCameraFeed.supported(context)
+    private var lastHostSequence = 0L
+    private var lastInferenceNanos = 0L
 
     private val pendingFrames = LinkedHashMap<Long, PendingFrame>()
 
@@ -75,6 +68,7 @@ class FaceLandmarkerAnalyzer(
     )
 
     init {
+        DebugCameraFeed.ensureStarted(context)
         faceLandmarker = SharedFaceLandmarker.get(context)
         handlers.add(resultHandler)
     }
@@ -102,6 +96,19 @@ class FaceLandmarkerAnalyzer(
         // 开始分析前记录时刻
         val startNanos = System.nanoTime()
 
+        // 模拟器在 CPU 上推理：限制最高推理频率，避免把电脑 CPU 跑满
+        if (isEmulator && startNanos - lastInferenceNanos < EMULATOR_MIN_INTERVAL_NANOS) {
+            imageProxy.close()
+            return
+        }
+        // 电脑摄像头画面正在送入但还没有新帧：跳过，不对同一张画面重复推理
+        val hostFrame = if (hostFeed) DebugCameraFeed.takeIfNewer(lastHostSequence) else null
+        if (hostFeed && hostFrame == null && DebugCameraFeed.active()) {
+            imageProxy.close()
+            return
+        }
+        lastInferenceNanos = startNanos
+
         val fps = updateFps(startNanos)
 
         // 获取图片旋转角度。
@@ -110,7 +117,10 @@ class FaceLandmarkerAnalyzer(
         // 分析图片得到数据
         try {
             // Windows 上模拟器 webcam0 会错误地只取原视频的半幅；Debug 时改用电脑端送来的完整帧。
-            val upright = readDebugInputFrame() ?: rotateBitmap(toArgbBitmap(imageProxy), rotationDegrees)
+            val upright = hostFrame?.let { (seq, jpeg) ->
+                lastHostSequence = seq
+                BitmapFactory.decodeByteArray(jpeg, 0, jpeg.size)
+            } ?: rotateBitmap(toArgbBitmap(imageProxy), rotationDegrees)
             val sourceWidth = upright.width
             val sourceHeight = upright.height
             val mpImage = BitmapImageBuilder(upright).build()
@@ -128,7 +138,6 @@ class FaceLandmarkerAnalyzer(
                 )
             }
             // CameraX 时间戳为纳秒，MediaPipe detectAsync 期望毫秒
-            saveDebugFrame(upright)
             faceLandmarker.detectAsync(mpImage, timestampMs)
         } catch (throwable: Throwable) {
             synchronized(pendingFrames) { pendingFrames.clear() }
@@ -136,56 +145,6 @@ class FaceLandmarkerAnalyzer(
         } finally {
             imageProxy.close()
         }
-    }
-
-    private fun saveDebugFrame(bitmap: Bitmap) {
-        if (!debugFrameEnabled || !debugFrameSwitch.exists()) return
-        // 电脑端窗口意外退出后，不再持续写入相机帧。
-        if (System.currentTimeMillis() - debugFrameSwitch.lastModified() > 5_000L) return
-        val nowMs = SystemClock.elapsedRealtime()
-        if (nowMs - lastDebugFrameMs < 100L || !debugFrameWriting.compareAndSet(false, true)) return
-        lastDebugFrameMs = nowMs
-
-        // 缩图后交给独立线程编码，避免 JPEG 写盘阻塞 CameraX 分析线程。
-        val preview = runCatching {
-            val width = 640.coerceAtMost(bitmap.width)
-            val height = (bitmap.height.toLong() * width / bitmap.width).toInt().coerceAtLeast(1)
-            Bitmap.createScaledBitmap(bitmap, width, height, false).let {
-                if (it === bitmap) bitmap.copy(bitmap.config ?: Bitmap.Config.ARGB_8888, false) else it
-            }
-        }.getOrNull()
-        if (preview == null) {
-            debugFrameWriting.set(false)
-            return
-        }
-        runCatching {
-            debugFrameWriter.execute {
-                try {
-                    val temporary = File(debugFrameOutput.parentFile, "${debugFrameOutput.name}.tmp")
-                    try {
-                        temporary.outputStream().use { preview.compress(Bitmap.CompressFormat.JPEG, 70, it) }
-                        temporary.renameTo(debugFrameOutput)
-                    } finally {
-                        temporary.delete()
-                    }
-                } catch (_: Exception) {
-                    // 调试窗口异常不影响模型分析。
-                } finally {
-                    preview.recycle()
-                    debugFrameWriting.set(false)
-                }
-            }
-        }.onFailure {
-            preview.recycle()
-            debugFrameWriting.set(false)
-        }
-    }
-
-    private fun readDebugInputFrame(): Bitmap? {
-        if (!debugFrameEnabled || (Build.HARDWARE != "ranchu" && Build.HARDWARE != "goldfish")) return null
-        if (!debugFrameSwitch.exists() || !debugInputFrame.exists()) return null
-        if (System.currentTimeMillis() - debugInputFrame.lastModified() > 2_000L) return null
-        return runCatching { BitmapFactory.decodeFile(debugInputFrame.path) }.getOrNull()
     }
 
     private fun handleResult(result: FaceLandmarkerResult) {
@@ -378,12 +337,13 @@ class FaceLandmarkerAnalyzer(
     fun close() {
         handlers.remove(resultHandler)
         synchronized(pendingFrames) { pendingFrames.clear() }
-        debugFrameWriter.shutdown()
     }
 
     companion object {
         private const val MODEL_ASSET = "face_landmarker.task"
         private const val DETECTION_FRAME_INTERVAL = 2
+        /** 模拟器推理间隔下限：约 15 帧/秒，与真机实际分析帧率（30 帧隔帧取 1）一致，保证眨眼检测不漏帧。 */
+        private const val EMULATOR_MIN_INTERVAL_NANOS = 66_000_000L
 
         private val handlers = CopyOnWriteArrayList<(FaceLandmarkerResult) -> Unit>()
 
