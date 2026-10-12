@@ -157,17 +157,17 @@ internal object DryEyeAssessment {
             if (session.headTurnRatio > 0.3) add("头部明显偏转的时间超过 30%")
         }
 
-        val symptoms = fields["干眼症状"].orEmpty().split("、").filter { it.isNotBlank() && it != "无" }
-        val symptomFrequent = fields["症状频率"] in setOf("经常", "总是")
+        val symptoms = fields["干眼症状"].orEmpty().split("、").filter { it.isNotBlank() && it != DRY_EYE_NO_SYMPTOM }
+        val symptomFrequent = fields["症状频率"] in setOf("经常", "几乎总是")
         val abnormal = buildList {
             if (blinkRate < DryEyeProtocol.BLINK_RATE_MIN || blinkRate > DryEyeProtocol.BLINK_RATE_MAX)
-                add("自然眨眼 ${fmt1(blinkRate)} 次/分钟，不在参考范围 10–16 次/分钟")
+                add("每分钟眨眼约 ${blinkRate.toInt()} 次，${if (blinkRate > DryEyeProtocol.BLINK_RATE_MAX) "比正常多" else "比正常少"}（正常 10–16 次）")
             if (longestOpen < DryEyeProtocol.OPEN_INTERVAL_MIN_SEC)
-                add("睁眼阶段最长持续睁眼 ${fmt1(longestOpen)} 秒，短于参考值 10 秒")
+                add("最多只能坚持睁眼约 ${longestOpen.toInt()} 秒（正常 10 秒以上）")
             if (vmr != null && vmr < DryEyeProtocol.VMR_THRESHOLD)
-                add("视觉维持率 ${fmt2(vmr)}，低于候选阈值 ${DryEyeProtocol.VMR_THRESHOLD}")
+                add("看 E 时视力保持度只有 ${(vmr * 100).toInt()}%，看久了容易模糊")
             if (declineSec != null)
-                add("持续睁眼约 ${fmt1(declineSec)} 秒后视标需放大 ${DryEyeProtocol.DECLINE_STEPS} 档以上")
+                add("坚持睁眼约 ${declineSec.toInt()} 秒后，需要更大的 E 才能看清")
         }
         val borderline = (blinkRate in 9.0..10.0 || blinkRate in 16.0..18.0) ||
             (longestOpen in 8.0..12.0) || (vmr != null && vmr in 0.8..0.9) || abnormal.size == 1
@@ -268,22 +268,30 @@ internal object DryEyeAssessment {
     private fun pct(v: Double?) = v?.let { "${(it * 100).toInt()}%" } ?: "—"
 }
 
-/** 干眼问卷（原文研究内容一（1）列出的全部条目）。 */
+/** 干眼症状里表示「没有不适」的选项。 */
+internal const val DRY_EYE_NO_SYMPTOM = "都没有"
+
+/** 干眼问卷：覆盖原文研究内容一（1）的全部条目，问法改为患者容易理解的大白话。key 保持稳定供评估读取。 */
 internal val dryEyeQuestions = listOf(
     ageQuestion(6..100),
-    Question("性别", listOf("男", "女", "不愿透露")),
-    Question("眼部疾病", listOf("无", "屈光不正", "白内障", "青光眼", "黄斑病变", "视网膜病变", "眼睑病变", "干眼症"), multiple = true),
-    Question("眼手术或外伤史", listOf("无", "有", "不清楚")),
-    Question("佩戴隐形眼镜史", listOf("无", "曾经佩戴", "目前佩戴")),
-    Question("近期眼部用药", listOf("无", "人工泪液", "其他眼药", "不清楚")),
-    Question("屈光矫正状态", listOf("无需矫正", "框架眼镜", "隐形眼镜", "屈光手术后", "需要但未矫正", "不清楚")),
-    Question("基础视力", listOf("正常", "偏低", "不清楚")),
-    Question("近期用眼情况", listOf("较少", "一般", "较多", "很多（长时间近距离）")),
-    Question("每日电子产品使用", listOf("少于 2 小时", "2–4 小时", "4–8 小时", "超过 8 小时")),
-    Question("是否眼部化妆", listOf("否", "偶尔", "经常")),
-    Question("睡眠时长", listOf("少于 6 小时", "6–8 小时", "超过 8 小时")),
-    Question("全身疾病", listOf("无", "糖尿病", "甲状腺疾病", "类风湿", "干燥综合征"), multiple = true),
-    Question("干眼症状", listOf("无", "干涩", "异物感", "烧灼感", "视物模糊或波动", "畏光", "眼疲劳"), multiple = true),
-    Question("症状频率", listOf("从不", "有时", "经常", "总是"),
-        visibleWhen = { f -> f["干眼症状"].orEmpty().split("、").any { it.isNotBlank() && it != "无" } }),
+    Question("性别", "你的性别", listOf("男", "女", "不愿透露")),
+    Question("干眼症状", "最近眼睛有这些感觉吗？",
+        listOf("眼睛发干、发涩", "像进了沙子", "有烧灼感", "看东西模糊，时好时坏", "怕光", "容易累", DRY_EYE_NO_SYMPTOM),
+        multiple = true),
+    Question("症状频率", "这些感觉多久出现一次？", listOf("偶尔", "有时", "经常", "几乎总是"),
+        visibleWhen = { f -> f["干眼症状"].orEmpty().split("、").any { it.isNotBlank() && it != DRY_EYE_NO_SYMPTOM } }),
+    Question("每日电子产品使用", "每天看手机、电脑大约多久？", listOf("不到 2 小时", "2–4 小时", "4–8 小时", "8 小时以上")),
+    Question("近期用眼情况", "最近用眼比平时多吗？", listOf("比平时少", "差不多", "比平时多", "多很多")),
+    Question("屈光矫正状态", "平时怎么看清东西？",
+        listOf("不用戴眼镜", "戴框架眼镜", "戴隐形眼镜", "做过近视手术", "需要但没戴", "不清楚")),
+    Question("佩戴隐形眼镜史", "戴过隐形眼镜吗？", listOf("没戴过", "以前戴过", "现在在戴")),
+    Question("基础视力", "你觉得自己视力怎么样？", listOf("挺好", "一般", "比较差", "不清楚")),
+    Question("眼部疾病", "医生诊断过以下眼病吗？",
+        listOf("近视、远视或散光", "干眼", "白内障", "青光眼", "眼底病", "眼皮（眼睑）疾病", "都没有"),
+        multiple = true, hints = mapOf("眼底病" to "如黄斑病变、视网膜病变")),
+    Question("眼手术或外伤史", "眼睛做过手术或受过伤吗？", listOf("没有", "有", "不清楚")),
+    Question("近期眼部用药", "最近在用眼药水吗？", listOf("没有", "人工泪液", "其他眼药水", "不清楚")),
+    Question("全身疾病", "有以下疾病吗？", listOf("糖尿病", "甲状腺疾病", "类风湿", "干燥综合征", "都没有"), multiple = true),
+    Question("是否眼部化妆", "平时化眼妆（眼线、睫毛膏）吗？", listOf("不化", "偶尔", "经常")),
+    Question("睡眠时长", "每天大约睡多久？", listOf("不到 6 小时", "6–8 小时", "8 小时以上")),
 )

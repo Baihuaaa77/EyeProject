@@ -62,7 +62,8 @@ internal object ScreeningAssessmentModel {
         val age = state.fields["年龄"]?.toDoubleOrNull()
         val minAmp = age?.let(PresbyopiaProtocol::minimumAmplitude)
         val avgAmp = age?.let(PresbyopiaProtocol::averageAmplitude)
-        val standardMode = state.mode.startsWith("标准") && state.fields["近用 Add"] != "有"
+        // 标准模式：测试时摘下老花镜/渐进镜，戴看远的眼镜或不戴镜
+        val standardMode = state.mode.startsWith("标准")
         val ampAge = if (standardMode) amplitude?.let(PresbyopiaProtocol::amplitudeAge) else null
         val cycles = flip.chunked(2).count { it.size == 2 && it.all(VisionAnswer::correct) }
         val nearFlip = flip.filter { it.distanceCm < 35f }
@@ -84,6 +85,7 @@ internal object ScreeningAssessmentModel {
             "curve_33_decimal" to curve.firstOrNull { it.distanceCm == 33f }?.thresholdDecimal?.toDouble(),
             "curve_25_decimal" to curve.firstOrNull { it.distanceCm == 25f }?.thresholdDecimal?.toDouble(),
             "daily_correction_mode" to if (standardMode) 0.0 else 1.0,
+            "near_correction_in_use" to if (nearCorrectionInUse(state.fields)) 1.0 else 0.0,
             "invalid_trials" to state.invalidTrialCount.toDouble(),
         )
         val qualityReasons = buildList {
@@ -111,8 +113,8 @@ internal object ScreeningAssessmentModel {
         val findings = buildList {
             add("$status：调节幅度约 ${fmt(effectiveAmp)} D（近点 ${pointCm?.let { "%.1f cm".format(it) } ?: "< 12 cm"}），同龄最小参考 ${minAmp?.let(::fmt) ?: "—"} D、平均 ${avgAmp?.let(::fmt) ?: "—"} D。")
             add("40 cm 阅读需调节 ${fmt(PresbyopiaProtocol.READING_DEMAND_D)} D；舒适阅读一般需约 ${fmt(PresbyopiaProtocol.COMFORT_RESERVE_D)} D（保留一半储备），本次${if (effectiveAmp >= PresbyopiaProtocol.COMFORT_RESERVE_D) "可满足" else "不足"}。")
-            if (reducedEyes.isNotEmpty()) add("40 cm ${reducedEyes.joinToString("、") { it.label }}近视力未通过 0.5 档。")
-            if (cycles < 3) add("远近切换 60 秒内正确循环 $cycles 次，调节切换偏慢（候选阈值 3 次/分钟）。")
+            if (reducedEyes.isNotEmpty()) add("${reducedEyes.joinToString("、") { it.label }}在 40 cm 处看近的视力低于 0.5，看小字可能吃力。")
+            if (cycles < 3) add("远近切换 1 分钟只完成 $cycles 次，眼睛在远近之间切换偏慢（参考 3 次以上）。")
             ampAge?.let { add("调节年龄参考约 ${it.toInt()} 岁（按平均调节幅度公式反推，未经验证，仅供参考）。") }
         }
         val riskLevel = when {
@@ -122,7 +124,7 @@ internal object ScreeningAssessmentModel {
         }
         return ScreeningAssessment(VERSION, "可用于探索性评估", riskLevel, riskScope, status, features, findings,
             buildList {
-                if (!standardMode) add("日常近用/渐进矫正会改变结果，不能据此估计真实残余调节能力；可用「标准模式」再测一次对比。")
+                if (!standardMode) add("戴着看近用的眼镜测试，结果反映的是戴镜后的效果，不代表眼睛本身的调节能力；可摘下老花镜再测一次对比。")
                 add("前置相机测距及屏幕像素密度未经实物校准；分级规则未经临床验证，需结合验光与调节检查解释。")
             })
     }

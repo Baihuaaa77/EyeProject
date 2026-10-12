@@ -21,7 +21,8 @@
 | `ScreeningAssessment` | 质量门控 + 规则评估：老视按 Hofstetter 15−0.25×年龄 给出三档调节状态；斜视按 Hirschberg 估算 HDE/VDE（Δ）、遮盖再注视、BSI 输出「未见异常 / 可疑阳性 / 高度疑似斜视」；`StrabismusMeasures` 为可单测的纯计算 |
 | `ScreeningProtocol` | 老视 / 斜视的原文参数与候选阈值、遮盖动作序列、追踪轨迹（±10°）、问卷题目 |
 | `DryEyeProtocol` | 干眼协议参数、阶梯 `DryEyeStaircase`、评估 `DryEyeAssessment`、问卷 `dryEyeQuestions` |
-| `Questionnaire` | 三病种共用的逐题问卷组件（单选 / 多选互斥 / 输入 / 条件显示） |
+| `Questionnaire` | 三病种共用的逐题问卷：`key` 存储字段（评估读取，保持稳定）与 `title` 大白话问题分离；整行选项、单选自动翻页、进度条、条件追问 |
+| `ReportComponents` | 三病种共用的报告排版：结论卡（等级徽标 + 一句话结论 + 建议 + 小瞳）→ 关键指标两列卡片（按正常 / 需关注着色）→ 需要关注 → 折叠的详细数据与问卷回答 |
 | `ScreeningHistory`（在 ScreeningMetrics.kt） | 读取本机上一次同病种记录，结果页「与上次对比」 |
 | `ScreeningOptotype` / `ScreeningVoice` | 按前摄眼屏距离和系统屏幕像素密度换算视标尺寸及显示门槛；系统中文语音播报 |
 | `navigation/ServicesNavigation` | 4 个路由：`ServicesRoute` / `DryEyeRoute` / `PresbyopiaRoute` / `StrabismusRoute` 及对应 navigate / NavGraphBuilder 扩展 |
@@ -71,6 +72,6 @@
 
 - 本模块与 `core:camera` 的集成方式是「自带预览绑定」：`FaceLandmarkerAnalyzer` 共享单例引擎（回调列表机制），但相机生命周期由本模块 ViewModel 管理
 - 干眼测试的计时/相位状态在 ViewModel 内协程驱动，`onCleared` 时务必停相机
-- 老视流程：问卷 → 双模式 → 40 cm 近视力（右/左/双）→ 连续移近法 ×3（≥45 cm 起、速度 > 5 cm/秒本次不计）→ 多距离视力 60/33/25 cm → 远近切换 60 秒 → 结果
+- 老视流程：问卷（「近用 Add」不再单独询问，由「平时戴什么眼镜」推断，见 `nearCorrectionInUse`）→ 「这次测试戴哪副眼镜」→ 40 cm 近视力（右/左/双）→ 连续移近法 ×3（≥45 cm 起、速度 > 5 cm/秒本次不计）→ 多距离视力 60/33/25 cm → 远近切换 60 秒 → 结果
 - 斜视流程：问卷 → 33±5 cm → 卡通闪烁注视 12 秒 → 交替遮盖 9 个动作（协助者点按标记真实动作时刻，界面给出保持计时）→ 追踪 22 秒（±10° 按实测距离换算，屏幕不足时缩小并记录）→ 结果
 - 原文中被批注删除的「远近注视切换」未实现；参数冲突与实现约定见 `docs/三病种流程对齐-2026-10-11.md`

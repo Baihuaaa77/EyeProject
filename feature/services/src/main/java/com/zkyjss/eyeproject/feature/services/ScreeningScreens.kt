@@ -267,14 +267,23 @@ internal fun ProfileContent(kind: ScreeningKind, s: ScreeningState, vm: Screenin
         extraPageComplete = kind != ScreeningKind.PRESBYOPIA || s.mode.isNotBlank(),
         extraPage = if (kind == ScreeningKind.PRESBYOPIA) {
             {
-                EyeText("测试时戴哪种眼镜？", typography.subtitle, colors.textPrimary)
-                listOf("标准模式：远用矫正，无近用 Add", "日常模式：保持近用或渐进矫正").forEach { mode ->
-                    EyeButton(mode, if (s.mode == mode) EyeButtonRole.PRIMARY else EyeButtonRole.SECONDARY, { vm.setMode(mode) }, Modifier.fillMaxWidth())
+                EyeText("这次测试戴哪副眼镜？", typography.title, colors.textPrimary)
+                OptionRow(
+                    "戴看远的眼镜，或不戴眼镜",
+                    "推荐：能测出眼睛本身的调节能力",
+                    s.mode.startsWith("标准"), multiple = false,
+                ) { vm.setMode(PRESBYOPIA_MODE_STANDARD) }
+                OptionRow(
+                    "戴平时看近用的眼镜",
+                    "老花镜或渐进镜：看戴镜后的实际效果",
+                    s.mode.startsWith("日常"), multiple = false,
+                ) { vm.setMode(PRESBYOPIA_MODE_DAILY) }
+                if (nearCorrectionInUse(s.fields) && s.mode.startsWith("标准")) {
+                    EyeText("请先摘下老花镜或渐进镜。", typography.body, colors.warning)
                 }
-                EyeText("标准模式反映真实残余调节能力；日常模式反映平时戴镜的近距离表现。两种模式可各测一次对比。", typography.bodySecondary, colors.textSecondary)
                 val age = s.fields["年龄"]?.toIntOrNull()
                 if (age != null && age < PresbyopiaProtocol.TARGET_MIN_AGE) {
-                    EyeText("本测试主要面向 35 岁以上人群，年轻人的结果仅供参考。", typography.bodySecondary, colors.warning)
+                    EyeText("这项测试主要适合 35 岁以上，结果仅供参考。", typography.body, colors.textSecondary)
                 }
             }
         } else null,
@@ -493,40 +502,64 @@ private fun PursuitContent(s: ScreeningState, vm: ScreeningTestViewModel) {
 
 @Composable
 internal fun ScreeningResultContent(s: ScreeningState, vm: ScreeningTestViewModel) {
-    EyeSectionCard(title = "测试结果") {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            val colors = LocalEyeColors.current
-            val riskColor = when (s.riskLevel) {
-                ScreeningRiskLevel.LOW -> colors.success
-                ScreeningRiskLevel.MEDIUM -> colors.warning
-                ScreeningRiskLevel.HIGH -> colors.danger
-                ScreeningRiskLevel.UNKNOWN -> colors.textSecondary
-            }
-            EyeText(s.riskLevel.labelFor(s.kind), LocalEyeTypography.current.title, riskColor)
-            EyeText(s.riskScope, LocalEyeTypography.current.subtitle, colors.textPrimary)
-            EyeText(when {
-                s.riskLevel == ScreeningRiskLevel.UNKNOWN -> "关键数据不足，请改善测试条件并重新完成测试。"
-                s.kind == ScreeningKind.STRABISMUS && s.riskLevel == ScreeningRiskLevel.HIGH -> "建议尽快到斜视专科就诊，做遮盖试验与三棱镜检查。"
-                s.kind == ScreeningKind.STRABISMUS && s.riskLevel == ScreeningRiskLevel.MEDIUM -> "建议近期到眼科复查眼位；家长可留意孩子歪头、眯眼或一只眼外漂。"
-                s.kind == ScreeningKind.STRABISMUS -> "本次未见明显眼位异常，建议每半年复测一次。"
-                s.riskLevel == ScreeningRiskLevel.HIGH -> "建议到眼科做验光与调节功能检查，评估是否需要近用矫正。"
-                s.riskLevel == ScreeningRiskLevel.MEDIUM -> "建议按相同矫正状态复测；近距离用眼不适时请到眼科检查。"
-                else -> "本次调节功能与年龄基本匹配；若有近距离阅读不适，仍建议眼科检查。"
-            }, LocalEyeTypography.current.body, colors.textPrimary)
-            if (s.riskLevel != ScreeningRiskLevel.UNKNOWN) s.result.firstOrNull { !it.startsWith("评估依据") }?.let { EyeText(it, LocalEyeTypography.current.body, colors.textPrimary) }
-            if (s.history.isNotEmpty()) {
-                EyeDisclosure("与上次对比") { s.history.forEach { EyeText(it, LocalEyeTypography.current.bodySecondary, colors.textSecondary) } }
-            }
-            EyeText("初筛参考，不能代替眼科诊断。", LocalEyeTypography.current.bodySecondary, colors.textSecondary)
-            EyeDisclosure("完整报告") {
-                EyeText("年龄 ${s.fields["年龄"].orEmpty()} · ${if (s.kind == ScreeningKind.PRESBYOPIA) s.mode else "儿童眼动流程"}", LocalEyeTypography.current.body, colors.textPrimary)
-                s.fields.forEach { (key, value) -> if (value.isNotBlank()) EyeText("$key：$value", LocalEyeTypography.current.bodySecondary, colors.textSecondary) }
-                s.result.forEach { EyeText(it, LocalEyeTypography.current.body, colors.textPrimary) }
-                EyeText("光照 ${lightingLabel(s)}", LocalEyeTypography.current.bodySecondary, colors.textSecondary)
-                EyeText("规则分级未经临床验证，不代表患病概率；有症状或疑虑请到眼科检查。", LocalEyeTypography.current.bodySecondary, colors.textSecondary)
-            }
-            EyeButton("重新测试", EyeButtonRole.SECONDARY, vm::restart)
+    val colors = LocalEyeColors.current
+    val typography = LocalEyeTypography.current
+    val valid = s.riskLevel != ScreeningRiskLevel.UNKNOWN
+    val strabismus = s.kind == ScreeningKind.STRABISMUS
+    val badge = when {
+        !valid -> "需要重测"
+        strabismus -> when (s.riskLevel) {
+            ScreeningRiskLevel.LOW -> "未见异常"
+            ScreeningRiskLevel.MEDIUM -> "可疑"
+            else -> "高度疑似"
         }
+        else -> "老视${s.riskLevel.label}"
+    }
+    val title = when {
+        !valid -> "数据不足，暂时无法判断"
+        strabismus -> when (s.riskLevel) {
+            ScreeningRiskLevel.LOW -> "眼位未见明显异常"
+            ScreeningRiskLevel.MEDIUM -> "眼位有可疑表现"
+            else -> "高度疑似斜视"
+        }
+        else -> s.category.ifBlank { s.riskLevel.label }
+    }
+    val advice = when {
+        !valid -> "关键数据不足，请改善测试条件并重新完成测试。"
+        strabismus && s.riskLevel == ScreeningRiskLevel.HIGH -> "建议尽快到斜视专科就诊，做遮盖试验与三棱镜检查。"
+        strabismus && s.riskLevel == ScreeningRiskLevel.MEDIUM -> "建议近期到眼科复查眼位；平时留意孩子是否歪头、眯眼或一只眼往外飘。"
+        strabismus -> "本次未见明显眼位异常，建议每半年复测一次。"
+        s.riskLevel == ScreeningRiskLevel.HIGH -> "建议到眼科验光并检查调节功能，评估是否需要配老花镜。"
+        s.riskLevel == ScreeningRiskLevel.MEDIUM -> "建议用同样的眼镜再测一次；看近处吃力时请到眼科检查。"
+        else -> "调节能力与年龄基本相符；如果看近处不舒服，仍建议到眼科检查。"
+    }
+    // 关键指标卡已展示的测量汇总不再重复列出，只保留需要关注的结论性条目
+    val summaryPrefixes = listOf("注视眼位", "遮盖解除后再注视", "双眼对称性指数", "40 cm 阅读需调节", "调节年龄参考")
+    val attention = s.findings.drop(if (!strabismus && valid) 1 else 0).filterNot { f -> summaryPrefixes.any(f::startsWith) }
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        ReportHero(s.riskLevel, badge, title, advice)
+        if (!valid) {
+            ReportFindings("没测好的原因", s.findings, colors.textSecondary)
+        } else {
+            ReportMetricGrid(if (strabismus) strabismusMetrics(s.features) else presbyopiaMetrics(s.features))
+            ReportFindings("需要关注", attention, colors.warning)
+            if (!strabismus) s.features["amplitude_age_years"]?.let {
+                EyeText("你的调节能力大约相当于 ${it.toInt()} 岁人群的平均水平（参考）。", typography.body, colors.textSecondary)
+            }
+        }
+        EyeButton("重新测试", EyeButtonRole.SECONDARY, vm::restart, Modifier.fillMaxWidth())
+        if (s.history.isNotEmpty()) {
+            EyeDisclosure("与上次对比") { s.history.forEach { EyeText(it, typography.bodySecondary, colors.textSecondary) } }
+        }
+        EyeDisclosure("完整报告") {
+            s.result.forEach { EyeText(it, typography.bodySecondary, colors.textSecondary) }
+            EyeText("光照 ${lightingLabel(s)}", typography.bodySecondary, colors.textSecondary)
+        }
+        EyeDisclosure(if (strabismus) "孩子的基本信息" else "我的问卷回答") {
+            ProfileAnswers(if (strabismus) strabismusQuestions else presbyopiaQuestions, s.fields)
+            if (!strabismus && s.mode.isNotBlank()) EyeText("测试戴镜：${if (s.mode.startsWith("标准")) "看远的眼镜或不戴镜" else "看近用的眼镜"}", typography.body, colors.textPrimary)
+        }
+        ReportFootnote()
     }
 }
 

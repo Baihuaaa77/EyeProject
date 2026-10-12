@@ -61,7 +61,7 @@ class DryEyeProtocolTest {
         val report = DryEyeAssessment.evaluate(session(blinks, openLevel = { t -> if (t < 66f) 0.5f else 0.25f }), emptyMap())
         assertEquals(ScreeningRiskLevel.HIGH, report.riskLevel)
         assertTrue(report.abnormal.any { it.contains("眨眼") })
-        assertTrue(report.abnormal.any { it.contains("最长持续睁眼") })
+        assertTrue(report.abnormal.any { it.contains("坚持睁眼约") })
         assertTrue(report.declineSec != null)
     }
 
@@ -73,7 +73,7 @@ class DryEyeProtocolTest {
     }
 
     @Test fun questionnaireCoversDocumentItems() {
-        val labels = dryEyeQuestions.map { it.label }
+        val labels = dryEyeQuestions.map { it.key }
         listOf("年龄", "性别", "眼部疾病", "眼手术或外伤史", "佩戴隐形眼镜史", "近期眼部用药", "屈光矫正状态",
             "基础视力", "近期用眼情况", "每日电子产品使用", "是否眼部化妆", "睡眠时长", "全身疾病", "干眼症状")
             .forEach { assertTrue("缺少 $it", it in labels) }

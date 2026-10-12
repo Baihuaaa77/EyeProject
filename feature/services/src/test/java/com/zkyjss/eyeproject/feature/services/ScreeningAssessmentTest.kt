@@ -55,7 +55,7 @@ class ScreeningAssessmentTest {
     @Test fun dailyModeDoesNotReportAmplitudeAge() {
         val result = ScreeningAssessmentModel.presbyopia(presbyopiaState(50, 0.8f, 30f, mode = "日常模式：保持近用或渐进矫正"))
         assertEquals(null, result.features["amplitude_age_years"])
-        assertTrue(result.limitations.any { it.contains("日常近用") })
+        assertTrue(result.limitations.any { it.contains("看近用的眼镜") })
     }
 
     // endregion

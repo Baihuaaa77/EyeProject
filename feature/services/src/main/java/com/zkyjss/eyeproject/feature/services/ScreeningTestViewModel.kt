@@ -164,6 +164,11 @@ data class ScreeningState(
     val result: List<String> = emptyList(),
     val riskLevel: ScreeningRiskLevel = ScreeningRiskLevel.UNKNOWN,
     val riskScope: String = "",
+    /** 结构化评估结果：报告页据此排版（结论、关键指标、需要关注）。 */
+    val category: String = "",
+    val findings: List<String> = emptyList(),
+    val limitations: List<String> = emptyList(),
+    val features: Map<String, Double?> = emptyMap(),
     val savedFile: String? = null,
 )
 
@@ -294,9 +299,8 @@ class ScreeningTestViewModel @Inject constructor(
             _state.update { it.copy(warning = "请填写有效年龄") }; return
         }
         if (_state.value.kind == ScreeningKind.PRESBYOPIA &&
-            (_state.value.mode.isBlank() || _state.value.fields["日常矫正方式"].isNullOrBlank() ||
-                _state.value.fields["近用 Add"].isNullOrBlank())) {
-            _state.update { it.copy(warning = "请选择测试模式、日常矫正方式和近用 Add 状态") }; return
+            (_state.value.mode.isBlank() || _state.value.fields["日常矫正方式"].isNullOrBlank())) {
+            _state.update { it.copy(warning = "请选择平时戴的眼镜和这次测试戴哪副眼镜") }; return
         }
         _state.update { it.copy(step = ScreeningStep.ENVIRONMENT, warning = null) }
     }
@@ -691,7 +695,9 @@ class ScreeningTestViewModel @Inject constructor(
         val capturedQualityEligible = qualityEligibleFrames
         val capturedQualityValid = qualityEligibleValidFrames
         _state.update { it.copy(step = ScreeningStep.RESULT, result = result,
-            riskLevel = assessment.riskLevel, riskScope = assessment.riskScope, secondsLeft = 0) }
+            riskLevel = assessment.riskLevel, riskScope = assessment.riskScope, secondsLeft = 0,
+            category = assessment.category, findings = assessment.findings, limitations = assessment.limitations,
+            features = assessment.features) }
         stopCamera()
         viewModelScope.launch(Dispatchers.IO) {
             runCatching {

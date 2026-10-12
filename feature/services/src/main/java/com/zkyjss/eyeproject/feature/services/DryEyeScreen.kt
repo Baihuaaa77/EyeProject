@@ -333,53 +333,47 @@ private fun ResultContent(
     onRest: () -> Unit,
     onRestart: () -> Unit,
 ) {
-    val typography = LocalEyeTypography.current
     val colors = LocalEyeColors.current
     val report = state.report ?: return
+    val title = when (report.riskLevel) {
+        ScreeningRiskLevel.LOW -> "未见明显干眼迹象"
+        ScreeningRiskLevel.MEDIUM -> "有一些干眼迹象"
+        ScreeningRiskLevel.HIGH -> "干眼迹象比较明显"
+        ScreeningRiskLevel.UNKNOWN -> "这次数据无效"
+    }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        EyeSectionCard(title = if (state.afterRest) "复测结果（闭眼休息后）" else "检测结果") {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                val riskColor = when (report.riskLevel) {
-                    ScreeningRiskLevel.LOW -> colors.success
-                    ScreeningRiskLevel.MEDIUM -> colors.warning
-                    ScreeningRiskLevel.HIGH -> colors.danger
-                    ScreeningRiskLevel.UNKNOWN -> colors.textSecondary
-                }
-                EyeText(
-                    if (report.valid) "干眼${report.riskLevel.label}" else "数据无效",
-                    style = typography.title, color = riskColor
-                )
-                EyeText(
-                    if (report.valid) "检测数据有效" else "无效原因：${report.validityReasons.joinToString("；")}",
-                    style = typography.bodySecondary, color = colors.textSecondary
-                )
-                if (report.abnormal.isNotEmpty()) {
-                    EyeText("主要异常指标", style = typography.subtitle, color = colors.textPrimary)
-                    report.abnormal.forEach { EyeText("· $it", style = typography.body, color = colors.textPrimary) }
-                }
-                EyeText(report.advice, style = typography.body, color = colors.textPrimary)
-                EyeText("手机初筛结果，不能替代眼科诊断；分级规则尚未经临床验证。", style = typography.bodySecondary, color = colors.textSecondary)
-            }
+        ReportHero(
+            level = report.riskLevel,
+            badge = if (report.valid) "干眼${report.riskLevel.label}" else "需要重测",
+            title = if (state.afterRest) "休息后复测：$title" else title,
+            advice = report.advice,
+        )
+        if (!report.valid) {
+            ReportFindings("没测好的原因", report.validityReasons, colors.textSecondary)
+        } else {
+            ReportMetricGrid(dryEyeMetrics(report))
+            ReportFindings("需要关注", report.abnormal, colors.warning)
         }
         state.previousReport?.let { previous -> ComparisonCard(previous, report) }
-        EyeDisclosure("完整指标") {
-            report.indicators.forEach { EyeText(it, style = typography.bodySecondary, color = colors.textSecondary) }
-            state.savedFile?.let { EyeText("原始数据已保存：$it", style = typography.bodySecondary, color = colors.textSecondary) }
-        }
-        EyeDisclosure("眨眼分布 · 自然眨眼") {
-            BlinkDistributionChart(state.phase1Blinks, state.naturalSeconds, bucketSeconds = if (state.naturalSeconds > 60) 15 else 5)
-        }
-        EyeDisclosure("眨眼分布 · 持续睁眼") {
-            BlinkDistributionChart(state.phase2Blinks, DryEyeProtocol.OPEN_SECONDS, bucketSeconds = 5)
-        }
-        EyeDisclosure("观测距离") { DistanceChart(samples = state.distanceSamples) }
         if (report.valid && (report.borderline || report.riskLevel == ScreeningRiskLevel.MEDIUM) && state.naturalSeconds == DryEyeProtocol.NATURAL_SECONDS) {
-            EyeButton("延长测试（自然眨眼 3 分钟）", EyeButtonRole.PRIMARY, onExtend, Modifier.fillMaxWidth())
+            EyeButton("延长测试（3 分钟）", EyeButtonRole.PRIMARY, onExtend, Modifier.fillMaxWidth())
         }
         if (report.valid && !state.afterRest) {
-            EyeButton("闭眼休息 1 分钟后复测", EyeButtonRole.SECONDARY, onRest, Modifier.fillMaxWidth())
+            EyeButton("闭眼休息 1 分钟后再测", EyeButtonRole.SECONDARY, onRest, Modifier.fillMaxWidth())
         }
         EyeButton("重新检测", EyeButtonRole.SECONDARY, onRestart, Modifier.fillMaxWidth())
+        EyeDisclosure("详细数据") {
+            report.indicators.forEach { EyeText(it, style = LocalEyeTypography.current.bodySecondary, color = colors.textSecondary) }
+        }
+        EyeDisclosure("眨眼分布") {
+            EyeText("自然眨眼", style = LocalEyeTypography.current.bodySecondary, color = colors.textSecondary)
+            BlinkDistributionChart(state.phase1Blinks, state.naturalSeconds, bucketSeconds = if (state.naturalSeconds > 60) 15 else 5)
+            EyeText("坚持睁眼", style = LocalEyeTypography.current.bodySecondary, color = colors.textSecondary)
+            BlinkDistributionChart(state.phase2Blinks, DryEyeProtocol.OPEN_SECONDS, bucketSeconds = 5)
+        }
+        EyeDisclosure("测试距离") { DistanceChart(samples = state.distanceSamples) }
+        EyeDisclosure("我的问卷回答") { ProfileAnswers(dryEyeQuestions, state.fields) }
+        ReportFootnote()
     }
 }
 
@@ -483,3 +477,7 @@ private fun DistanceChart(samples: List<DryEyeDistanceSample>) {
         )
     }
 }
+
+/** 供本地界面检查渲染干眼报告（无按钮回调）。 */
+@Composable
+internal fun DryEyeResultForTest(state: DryEyeTestUiState) = ResultContent(state, onExtend = {}, onRest = {}, onRestart = {})

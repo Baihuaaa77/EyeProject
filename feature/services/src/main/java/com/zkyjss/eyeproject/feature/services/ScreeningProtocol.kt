@@ -105,31 +105,43 @@ internal object StrabismusProtocol {
 /** 一个遮盖动作：执行时遮住 [covered]，此刻被解除遮盖的是 [uncovered]，需保持 [holdMs]。 */
 internal data class CoverAction(val label: String, val covered: VisionEye?, val holdMs: Long, val uncovered: VisionEye?)
 
+/** 老视测试的两种戴镜方式（存储值以「标准」「日常」开头，评估按前缀判断）。 */
+internal const val PRESBYOPIA_MODE_STANDARD = "标准模式"
+internal const val PRESBYOPIA_MODE_DAILY = "日常模式"
+
+/** 平时是否戴看近用的眼镜（老花镜 / 渐进多焦点）：即原「近用 Add」，由日常戴镜情况推断，不再单独询问。 */
+internal fun nearCorrectionInUse(fields: Map<String, String>): Boolean =
+    fields.hasAny("日常矫正方式", "老花镜", "渐进多焦点眼镜")
+
 internal val presbyopiaQuestions = listOf(
-    ageQuestion(18..100, note = "本测试主要面向 35 岁以上人群"),
-    Question("性别", listOf("男", "女", "不愿透露")),
-    Question("职业", listOf("办公室", "户外", "精细作业", "教师/学生", "退休", "其他")),
-    Question("每日近距离用眼", listOf("少于 2 小时", "2–4 小时", "4–8 小时", "超过 8 小时")),
-    Question("既往眼病", listOf("无", "干眼", "白内障", "青光眼", "黄斑或视网膜病变", "其他"), multiple = true),
-    Question("屈光情况", listOf("无或不清楚", "近视", "远视", "散光", "老视"), multiple = true),
-    Question("日常矫正方式", listOf("未戴镜", "单光框架眼镜", "渐进多焦点", "近用眼镜", "隐形眼镜", "其他")),
-    Question("近用 Add", listOf("无", "有", "不清楚")),
-    Question(
-        "眼部手术",
-        listOf("无", "SMILE", "FS-LASIK", "PRK", "白内障手术", "ICL 植入", "多焦点/EDOF 人工晶状体", "其他", "不清楚"),
-        multiple = true,
-    ),
-    Question(
-        "手术时间及术后矫正", optional = true, note = "如：2021 年 SMILE，术后未戴镜",
-        visibleWhen = { f -> f["眼部手术"].orEmpty().split("、").any { it.isNotBlank() && it != "无" && it != "不清楚" } },
-    ),
+    ageQuestion(18..100),
+    Question("性别", "你的性别", listOf("男", "女", "不愿透露")),
+    Question("日常矫正方式", "平时戴什么眼镜？",
+        listOf("不戴眼镜", "近视或远视眼镜", "老花镜", "渐进多焦点眼镜", "隐形眼镜"),
+        multiple = true, hints = mapOf("渐进多焦点眼镜" to "一副镜片看远看近都清楚")),
+    Question("屈光情况", "知道自己有以下情况吗？", listOf("近视", "远视", "散光", "老花", "都没有或不清楚"), multiple = true),
+    Question("每日近距离用眼", "每天看手机、电脑或书本大约多久？", listOf("不到 2 小时", "2–4 小时", "4–8 小时", "8 小时以上")),
+    Question("职业", "平时主要做什么工作？", listOf("办公室工作", "户外工作", "精细手工", "老师或学生", "已退休", "其他")),
+    Question("既往眼病", "得过以下眼病吗？", listOf("干眼", "白内障", "青光眼", "眼底病", "其他眼病", "没有"),
+        multiple = true, hints = mapOf("眼底病" to "如黄斑病变、视网膜病变")),
+    Question("眼部手术", "做过眼部手术吗？",
+        listOf("近视激光手术", "白内障手术", "ICL 晶体植入", "其他眼部手术", "没有", "不清楚"),
+        multiple = true, hints = mapOf("近视激光手术" to "全飞秒、半飞秒、表层手术等", "ICL 晶体植入" to "在眼内放一片矫正近视的镜片")),
+    Question("激光手术类型", "做的是哪种近视激光手术？", listOf("全飞秒（SMILE）", "半飞秒（FS-LASIK）", "表层手术（PRK）", "不清楚"),
+        visibleWhen = { f -> f.hasAny("眼部手术", "近视激光手术") }),
+    Question("人工晶体类型", "白内障手术换的是哪种人工晶体？", listOf("普通单焦点", "多焦点或景深延长（EDOF）", "不清楚"),
+        visibleWhen = { f -> f.hasAny("眼部手术", "白内障手术") }),
+    Question("手术年份", "手术大约是哪一年做的？", numeric = true, optional = true,
+        visibleWhen = { f -> f.hasAny("眼部手术", "近视激光手术", "白内障手术", "ICL 晶体植入", "其他眼部手术") },
+        validate = { it.toIntOrNull()?.let { y -> y in 1980..2100 } == true }),
 )
 
+/** 斜视测试多为家长替孩子填写：问法以「孩子」为主语。 */
 internal val strabismusQuestions = listOf(
-    ageQuestion(3..100, note = "本流程主要面向 3–12 岁儿童，成人结果仅供参考"),
-    Question("性别", listOf("男", "女", "不愿透露")),
-    Question("基础视力", listOf("正常", "较差", "未测过", "不清楚")),
-    Question("屈光状态", listOf("无或不清楚", "近视", "远视", "散光", "已戴矫正眼镜"), multiple = true),
-    Question("既往眼病或手术", listOf("无", "斜视", "弱视", "眼部手术", "其他"), multiple = true),
-    Question("协助测试者", listOf("家长", "医护人员", "其他")),
+    ageQuestion(3..100, title = "孩子的年龄"),
+    Question("性别", "孩子的性别", listOf("男", "女", "不愿透露")),
+    Question("基础视力", "孩子平时视力怎么样？", listOf("正常", "偏差", "没测过", "不清楚")),
+    Question("屈光状态", "孩子有以下情况吗？", listOf("近视", "远视", "散光", "已经配了眼镜", "都没有或不清楚"), multiple = true),
+    Question("既往眼病或手术", "孩子以前有过这些情况吗？", listOf("斜视", "弱视", "做过眼部手术", "其他眼病", "都没有"), multiple = true),
+    Question("协助测试者", "谁来帮忙完成测试？", listOf("家长", "医生或护士", "其他")),
 )

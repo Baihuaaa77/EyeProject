@@ -109,12 +109,17 @@ class ServiceVisualTest {
                 }
             }
         }
-        compose.onNodeWithText("继续").assertIsNotEnabled()
+        compose.onNodeWithText("下一题").assertIsNotEnabled()
         compose.onNode(hasSetTextAction()).performTextInput("46")
-        compose.onNodeWithText("继续").assertIsEnabled()
+        compose.onNodeWithText("下一题").assertIsEnabled()
+        compose.onNodeWithText("下一题").performClick()
+        compose.onNodeWithText("你的性别").assertIsDisplayed()
+        // 单选：点选后自动进入下一题
+        compose.onNodeWithText("女").performClick()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.onNodeWithText("平时戴什么眼镜？").assertIsDisplayed()
+        compose.onNodeWithText("渐进多焦点眼镜").performClick()
         capture("profile")
-        compose.onNodeWithText("继续").performClick()
-        compose.onNodeWithText("性别").assertIsDisplayed()
     }
 
     @Test fun unknownResultKeepsQualityWarning() {
@@ -224,6 +229,57 @@ class ServiceVisualTest {
         compose.onNodeWithText("把手机往近处移约 8 cm").assertExists()
         compose.onNodeWithText("听到：左").assertExists()
         capture("distance-feedback")
+    }
+
+    @Test fun reportsUseHeroMetricsAndFindings() {
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val vm = ScreeningTestViewModel(context,
+            com.zkyjss.eyeproject.core.camera.CameraController(context),
+            com.zkyjss.eyeproject.core.camera.CameraIntrinsicsProvider(context))
+        var kind by androidx.compose.runtime.mutableStateOf(ScreeningKind.PRESBYOPIA)
+        compose.setContent {
+            EyeProjectTheme {
+                Column(Modifier.fillMaxSize().background(LocalEyeColors.current.appBackground).verticalScroll(rememberScrollState()).padding(20.dp)) {
+                    if (kind == ScreeningKind.PRESBYOPIA) {
+                        ScreeningResultContent(ScreeningState(kind = ScreeningKind.PRESBYOPIA, step = ScreeningStep.RESULT,
+                            riskLevel = ScreeningRiskLevel.MEDIUM, category = "调节功能较同龄人偏低", mode = PRESBYOPIA_MODE_STANDARD,
+                            findings = listOf("调节功能较同龄人偏低：调节幅度约 2.4 D", "40 cm 双眼近视力未通过 0.5 档。"),
+                            features = mapOf("amplitude_d" to 2.4, "hofstetter_min_d" to 3.75, "near_point_cm" to 42.0,
+                                "near_both_decimal" to 0.4, "flipper_cycles_per_min" to 5.0),
+                            fields = mapOf("年龄" to "45", "日常矫正方式" to "老花镜")), vm)
+                    } else {
+                        ScreeningResultContent(ScreeningState(kind = ScreeningKind.STRABISMUS, step = ScreeningStep.RESULT,
+                            riskLevel = ScreeningRiskLevel.HIGH, category = "高度疑似斜视",
+                            findings = listOf("注视偏差持续 ≥ 10Δ（水平）或 ≥ 5Δ（垂直），建议尽快到斜视专科检查。"),
+                            features = mapOf("fixation_hde_prism" to 14.0, "fixation_vde_prism" to 1.2,
+                                "cover_refix_median_prism" to 7.5, "bsi" to 0.82)), vm)
+                    }
+                }
+            }
+        }
+        compose.onNodeWithText("调节功能较同龄人偏低").assertExists()
+        compose.onNodeWithText("关键指标").assertExists()
+        capture("report-presbyopia")
+        kind = ScreeningKind.STRABISMUS
+        compose.onNodeWithText("高度疑似斜视").assertExists()
+        capture("report-strabismus")
+    }
+
+    @Test fun dryEyeReportLayout() {
+        val session = DryEyeSession(60, 0.5f,
+            (0 until 26).map { DryEyeTrial(DryEyeStage.NATURAL, it * 2.3f, 0.5f, 0, 0, 900L, 40f, 30f) } +
+                (0 until 8).map { DryEyeTrial(DryEyeStage.OPEN, 60f + it * 2.3f, if (it < 3) 0.5f else 0.25f, 0, if (it % 2 == 0) 0 else 1, 900L, 40f, 30f) },
+            (1..22).map { it * 2.6f } + listOf(64f, 70f), 0.95, 0.9, 0.05, false, true)
+        val report = DryEyeAssessment.evaluate(session, mapOf("干眼症状" to "眼睛发干、发涩", "症状频率" to "经常"))
+        compose.setContent {
+            EyeProjectTheme {
+                Column(Modifier.fillMaxSize().background(LocalEyeColors.current.appBackground).verticalScroll(rememberScrollState()).padding(20.dp)) {
+                    DryEyeResultForTest(DryEyeTestUiState(phase = DryEyePhase.Result, report = report))
+                }
+            }
+        }
+        compose.onNodeWithText("需要关注").assertExists()
+        capture("report-dry-eye")
     }
 
     /** 品牌标志与字标的大尺寸渲染（亮/暗），用于检查 Logo 细节。 */
