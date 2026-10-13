@@ -192,15 +192,19 @@ private fun QuestionField(question: Question, value: String, onChange: (String) 
             onSingleChosen()
         }
     }
+    // 按完整选项匹配，避免把选项文案里的「、」误拆成多条答案；保留作答顺序。
+    val storedOptions = "、$value、"
+    val selectedOptions = options.filter { "、$it、" in storedOptions }
+        .sortedBy { storedOptions.indexOf("、$it、") }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         options.forEach { option ->
-            val selected = if (question.multiple) value.split("、").contains(option) else value == option
+            val selected = if (question.multiple) option in selectedOptions else value == option
             OptionRow(option, question.hints[option], selected, question.multiple) {
                 if (!question.multiple) {
                     onChange(option)
                     pendingAdvance = true
                 } else {
-                    val current = value.split("、").filter { it.isNotBlank() }
+                    val current = selectedOptions
                     val updated = when {
                         selected -> current - option
                         option in question.exclusive -> listOf(option)
