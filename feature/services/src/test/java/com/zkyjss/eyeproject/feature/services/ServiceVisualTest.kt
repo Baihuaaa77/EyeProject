@@ -302,6 +302,24 @@ class ServiceVisualTest {
         capture("brand")
     }
 
+    @Test fun gazeCalibrationRetryIsVisible() {
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val vm = ScreeningTestViewModel(context,
+            com.zkyjss.eyeproject.core.camera.CameraController(context),
+            com.zkyjss.eyeproject.core.camera.CameraIntrinsicsProvider(context))
+        compose.setContent {
+            EyeProjectTheme {
+                Column(Modifier.fillMaxSize().background(LocalEyeColors.current.appBackground).padding(20.dp)) {
+                    GazeCalibrationContent(ScreeningState(kind = ScreeningKind.STRABISMUS,
+                        step = ScreeningStep.GAZE_CALIBRATION, gazeCalibrationIndex = 3, gazeCalibrationFailed = true), vm)
+                }
+            }
+        }
+        compose.onNodeWithText("注视校准 · 4/5").assertIsDisplayed()
+        compose.onNodeWithText("重试注视校准").assertIsDisplayed().assertIsEnabled()
+        capture("gaze-calibration")
+    }
+
     private fun capture(name: String) {
         compose.mainClock.advanceTimeBy(700)
         val bitmap = compose.runOnIdle {

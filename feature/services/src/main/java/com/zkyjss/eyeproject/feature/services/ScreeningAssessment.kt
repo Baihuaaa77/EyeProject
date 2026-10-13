@@ -155,6 +155,7 @@ internal object ScreeningAssessmentModel {
             "pursuit_max_y_deg" to state.pursuitMaxDeg?.second?.toDouble(),
         )
         val qualityReasons = buildList {
+            addAll(PursuitGazeCheck.qualityReasons(samples, state.gazeCalibrated))
             if (qualityRate < 0.5) add("可测阶段有效帧率低于 50%")
             if (m.fixationFrames < 20 || m.fixationContinuousMs < 3_000L) add("注视任务缺少连续 3 秒的有效映光测量")
             if (m.refixations.size < 2) add("解除遮盖后的可用事件不足 2 次")
@@ -231,7 +232,7 @@ internal data class StrabismusMeasures(
         fun compute(samples: List<EyeMotionSample>, marks: List<CoverMark>): StrabismusMeasures {
             val k = StrabismusProtocol.PRISM_PER_IRIS_UNIT
             val fixed = samples.filter {
-                it.step == ScreeningStep.FIXATION && it.leftNasal != null && it.rightNasal != null &&
+                it.step == ScreeningStep.FIXATION && it.gazeOnTarget == true && it.leftNasal != null && it.rightNasal != null &&
                     it.leftVertical != null && it.rightVertical != null
             }
             val hde = fixed.map { (it.leftNasal!! - it.rightNasal!!).toDouble() * k }
@@ -239,7 +240,7 @@ internal data class StrabismusMeasures(
             val baselineL = ScreeningAssessmentModel.median(fixed.map { it.leftNasal!!.toDouble() })
             val baselineR = ScreeningAssessmentModel.median(fixed.map { it.rightNasal!!.toDouble() })
 
-            val cover = samples.filter { it.step == ScreeningStep.COVER }
+            val cover = samples.filter { it.step == ScreeningStep.COVER && it.gazeOnTarget == true }
             val refix = marks.mapNotNull { mark ->
                 val eye = mark.uncovered ?: return@mapNotNull null
                 val window = cover.filter { it.timeMs in mark.timeMs..(mark.timeMs + StrabismusProtocol.REFIX_WINDOW_MS) }
@@ -261,7 +262,7 @@ internal data class StrabismusMeasures(
                 )
             }
 
-            val pursuit = samples.filter { it.step == ScreeningStep.PURSUIT }
+            val pursuit = samples.filter { it.step == ScreeningStep.PURSUIT && it.gazeOnTarget == true }
             fun velocityCorr(segments: Set<Int>, horizontal: Boolean): Double? {
                 val pairs = pursuit.filter { it.pursuitSegment in segments }.zipWithNext()
                     .filter { (a, b) -> b.timeMs > a.timeMs && b.timeMs - a.timeMs <= 200L && a.pursuitSegment == b.pursuitSegment }

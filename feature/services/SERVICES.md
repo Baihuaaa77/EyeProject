@@ -22,6 +22,7 @@
 | `ScreeningProtocol` | 老视 / 斜视的原文参数与候选阈值、遮盖动作序列、追踪轨迹（±10°）、问卷题目 |
 | `DryEyeProtocol` | 干眼协议参数、阶梯 `DryEyeStaircase`、评估 `DryEyeAssessment`、问卷 `dryEyeQuestions` |
 | `Questionnaire` | 三病种共用的逐题问卷：`key` 存储字段（评估读取，保持稳定）与 `title` 大白话问题分离；整行选项、单选自动翻页、进度条、条件追问 |
+| `StrabismusGaze` | 斜视任务的五点注视校准与宽容监督：各眼独立映射到屏幕坐标，允许单眼有效跟随；实际显示轨迹与眼动比较，避免同步静止或看别处被判为协调正常 |
 | `ReportComponents` | 三病种共用的报告排版：结论卡（等级徽标 + 一句话结论 + 建议 + 小瞳）→ 关键指标两列卡片（按正常 / 需关注着色）→ 需要关注 → 折叠的详细数据与问卷回答 |
 | `ScreeningHistory`（在 ScreeningMetrics.kt） | 读取本机上一次同病种记录，结果页「与上次对比」 |
 | `ScreeningOptotype` / `ScreeningVoice` | 按前摄眼屏距离和系统屏幕像素密度换算视标尺寸及显示门槛；系统中文语音播报 |
@@ -46,6 +47,7 @@
 - `TestGuide`：十二种卡通方法演示（POSTURE/ACUITY/FVA/BLINK/OPEN/NEAR/MOVE/CURVE/SWITCH/FIXATE/COVER/FOLLOW），演示内容与原文任务一一对应（如遮盖按 右2s→移开2s→左2s→移开2s→右左各1s×2），吉祥物「小瞳」在 320×200 舞台单位的 Canvas 中出镜；每个场景配 2–3 个与动画同步高亮的分镜步骤，可点「暂停演示」，系统移除动画时停在关键帧。`guidePending` 期间不启动正式计时、不计入采样，确认后才进入任务。
 - `ScreeningGuidance`：距离和光照映射为简短行动提示；保留原始呈现、作答和医学质量门控。遮盖任务不因单眼不可见提示移开遮盖。
 - 问卷逐题展示；距离、光照和详细结果通过 `EyeDisclosure` 默认收起。
+- 斜视正式注视前增加约 9 秒五点校准，校准失败停留并提供重试；正式注视仍为 12 秒。以实际绘制位置及分析帧单调时间对齐，给出约 25% 屏幕宽、20% 屏幕高的容差，追踪允许最多 600 ms 延迟；持续明显偏离时提示，整体有效注视不足或任一追踪段不匹配时拒判并要求重测。遮盖时只监督未遮眼；短暂眨眼不作为偏离，另一眼的异常仍保留供原斜视指标分析。屏幕注视估计仅为任务质量监督，准确度仍需真机验证。
 - 视标保持固定黑白对比及原有物理尺寸算法，与界面深浅主题无关。
 - 本地验证：`./gradlew.bat :feature:services:testDebugUnitTest`；截图输出 `feature/services/build/reports/ui/`，不连接设备。
 

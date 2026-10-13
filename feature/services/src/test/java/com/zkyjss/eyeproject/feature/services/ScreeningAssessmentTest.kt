@@ -73,7 +73,7 @@ class ScreeningAssessmentTest {
     private fun strabismusSamples(fixNasal: Float, refix: Float, coordinated: Boolean): Pair<List<EyeMotionSample>, List<CoverMark>> {
         val fixed = (0..39).map {
             EyeMotionSample(it * 100L, ScreeningStep.FIXATION, 0f, 0f, 0f, 0f, 33f,
-                leftNasal = fixNasal + 0.1f, rightNasal = 0.1f, leftVertical = 0f, rightVertical = 0f)
+                leftNasal = fixNasal + 0.1f, rightNasal = 0.1f, leftVertical = 0f, rightVertical = 0f, gazeOnTarget = true)
         }
         val marks = listOf(
             CoverMark("移开遮盖，双眼注视", 5_000L, uncovered = VisionEye.RIGHT),
@@ -81,24 +81,27 @@ class ScreeningAssessmentTest {
         )
         val cover = listOf(5_000L, 6_000L).flatMap { t ->
             listOf(
-                EyeMotionSample(t + 100, ScreeningStep.COVER, 0f, 0f, 0f, 0f, 33f, leftNasal = 0.1f, rightNasal = 0.1f, leftVertical = 0f, rightVertical = 0f),
-                EyeMotionSample(t + 400, ScreeningStep.COVER, 0f, 0f, 0f, 0f, 33f, leftNasal = 0.1f + refix, rightNasal = 0.1f + refix, leftVertical = 0f, rightVertical = 0f),
+                EyeMotionSample(t + 100, ScreeningStep.COVER, 0f, 0f, 0f, 0f, 33f, leftNasal = 0.1f, rightNasal = 0.1f, leftVertical = 0f, rightVertical = 0f, gazeOnTarget = true),
+                EyeMotionSample(t + 400, ScreeningStep.COVER, 0f, 0f, 0f, 0f, 33f, leftNasal = 0.1f + refix, rightNasal = 0.1f + refix, leftVertical = 0f, rightVertical = 0f, gazeOnTarget = true),
             )
         }
-        val pursuit = (0 until 60).map { i ->
-            val seg = i / 20
+        val pursuit = (0 until 72).map { i ->
+            val seg = i / 24
             val a = sin(i * 0.3f) * 0.2f
             val b = if (coordinated) a else cos(i * 0.3f) * 0.2f
             val (lx, ly) = when (seg) { 0 -> a to 0f; 1 -> 0f to a; else -> a to a }
             val (rx, ry) = when (seg) { 0 -> b to 0f; 1 -> 0f to b; else -> b to b }
-            EyeMotionSample(7_000L + i * 100L, ScreeningStep.PURSUIT, lx, ly, rx, ry, 33f, pursuitSegment = seg)
+            EyeMotionSample(7_000L + i * 100L, ScreeningStep.PURSUIT, lx, ly, rx, ry, 33f, pursuitSegment = seg,
+                targetScreenX = 0.5f + lx, targetScreenY = 0.5f + ly,
+                leftGazeX = 0.5f + lx, leftGazeY = 0.5f + ly, rightGazeX = 0.5f + rx, rightGazeY = 0.5f + ry,
+                gazeOnTarget = true)
         }
         return fixed + cover + pursuit to marks
     }
 
     private fun strabismus(fixNasal: Float, refix: Float, coordinated: Boolean = true): ScreeningAssessment {
         val (samples, marks) = strabismusSamples(fixNasal, refix, coordinated)
-        return ScreeningAssessmentModel.strabismus(ScreeningState(kind = ScreeningKind.STRABISMUS, coverMarks = marks), samples, 100, 90)
+        return ScreeningAssessmentModel.strabismus(ScreeningState(kind = ScreeningKind.STRABISMUS, coverMarks = marks, gazeCalibrated = true), samples, 100, 90)
     }
 
     @Test fun fixationDeviationAboveTenPrismIsHighSuspicion() {

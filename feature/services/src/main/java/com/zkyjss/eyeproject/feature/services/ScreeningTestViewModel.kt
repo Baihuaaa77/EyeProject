@@ -14,6 +14,7 @@ import androidx.lifecycle.viewModelScope
 import com.zkyjss.eyeproject.core.camera.CameraController
 import com.zkyjss.eyeproject.core.camera.CameraIntrinsicsProvider
 import com.zkyjss.eyeproject.core.domain.DepthFromIris
+import com.zkyjss.eyeproject.core.domain.BlinkDetector
 import com.zkyjss.eyeproject.core.model.EyeLandmarks
 import com.zkyjss.eyeproject.core.model.FaceLandmarkFrame
 import com.zkyjss.eyeproject.core.model.HeadPoseEstimate
@@ -35,7 +36,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.isActive
 
 enum class ScreeningKind { PRESBYOPIA, STRABISMUS }
-enum class ScreeningStep { PROFILE, ENVIRONMENT, NEAR_VISION, PUSH_UP, DISTANCE_CURVE, FLIPPER, FIXATION, COVER, PURSUIT, RESULT }
+enum class ScreeningStep { PROFILE, ENVIRONMENT, NEAR_VISION, PUSH_UP, DISTANCE_CURVE, FLIPPER, GAZE_CALIBRATION, FIXATION, COVER, PURSUIT, RESULT }
 enum class VisionEye(val label: String) { RIGHT("右眼"), LEFT("左眼"), BOTH("双眼") }
 enum class PushStage { READY, APPROACH }
 
@@ -72,6 +73,13 @@ data class EyeMotionSample(
     val rightVertical: Float? = null,
     /** 追踪段：0 水平 / 1 垂直 / 2 斜向；其他任务为 -1。 */
     val pursuitSegment: Int = -1,
+    val targetScreenX: Float? = null,
+    val targetScreenY: Float? = null,
+    val leftGazeX: Float? = null,
+    val leftGazeY: Float? = null,
+    val rightGazeX: Float? = null,
+    val rightGazeY: Float? = null,
+    val gazeOnTarget: Boolean? = null,
 )
 
 data class VisionAnswer(
@@ -160,6 +168,10 @@ data class ScreeningState(
     val coverMarks: List<CoverMark> = emptyList(),
     val targetX: Float = 0f,
     val targetY: Float = 0f,
+    val gazeCalibrated: Boolean = false,
+    val gazeCalibrationIndex: Int = 0,
+    val gazeCalibrationFailed: Boolean = false,
+    val gazeWarning: String? = null,
     val warning: String? = null,
     val result: List<String> = emptyList(),
     val riskLevel: ScreeningRiskLevel = ScreeningRiskLevel.UNKNOWN,
@@ -182,6 +194,15 @@ class ScreeningTestViewModel @Inject constructor(
     val state: StateFlow<ScreeningState> = _state.asStateFlow()
     private val frames = Channel<Triple<Long, ScreeningStep, FaceLandmarkFrame>>(Channel.UNLIMITED)
     private val samples = mutableListOf<EyeMotionSample>()
+    private var gaze: StrabismusGaze? = null
+    private val gazeCalibration = mutableListOf<GazeCalibrationSample>()
+    private data class RenderedTarget(val timeMs: Long, val step: ScreeningStep, val index: Int, val point: GazePoint)
+    private val renderedTargets = ArrayDeque<RenderedTarget>()
+    private var gazeBadSinceMs: Long? = null
+    private var lastGazeFrameMs = 0L
+    private var lastPursuitCheckMs = 0L
+    private var pursuitFollowing: Boolean? = null
+    private var nasalSign = -1f
     private val sensors = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
     private var timer: Job? = null
     private var questionStartMs = 0L
@@ -597,12 +618,15 @@ class ScreeningTestViewModel @Inject constructor(
     }
 
     private fun startFixation() {
+        gaze = null; gazeCalibration.clear(); renderedTargets.clear()
         stepStartMs = SystemClock.elapsedRealtime()
-        _state.update { it.copy(step = ScreeningStep.FIXATION, guidePending = true, secondsLeft = StrabismusProtocol.FIXATION_SECONDS, instruction = "看着中央闪烁的小瞳，头和手机保持不动。", warning = null) }
+        _state.update { it.copy(step = ScreeningStep.FIXATION, guidePending = true, gazeCalibrated = false,
+            gazeWarning = null, secondsLeft = StrabismusProtocol.FIXATION_SECONDS, instruction = "看着中央闪烁的小瞳，头和手机保持不动。", warning = null) }
 
     }
 
     private fun startCover() {
+        resetGazeWindow()
         coverIndex = 0
         coverStageStartMs = SystemClock.elapsedRealtime()
         stepStartMs = SystemClock.elapsedRealtime()
@@ -635,6 +659,7 @@ class ScreeningTestViewModel @Inject constructor(
     }
 
     private fun startPursuit() {
+        resetGazeWindow()
         stepStartMs = SystemClock.elapsedRealtime()
         _state.update { it.copy(step = ScreeningStep.PURSUIT, guidePending = true, secondsLeft = StrabismusProtocol.PURSUIT_SECONDS,
             instruction = "只用眼睛跟随小球：水平 8 秒、垂直 8 秒、斜向 6 秒。", warning = null) }
@@ -659,10 +684,53 @@ class ScreeningTestViewModel @Inject constructor(
                     finish()
                 }
             }
-            ScreeningStep.FIXATION -> runTimedStep(StrabismusProtocol.FIXATION_SECONDS) { startCover() }
+            ScreeningStep.FIXATION -> retryGazeCalibration()
             ScreeningStep.PURSUIT -> runTimedStep(StrabismusProtocol.PURSUIT_SECONDS) { finish() }
             else -> Unit
         }
+    }
+
+    /** 校准不计入正式眼位测量；失败停留在本页，不能带着无效校准进入结果。 */
+    fun retryGazeCalibration() {
+        if (_state.value.step != ScreeningStep.FIXATION && _state.value.step != ScreeningStep.GAZE_CALIBRATION) return
+        timer?.cancel(); gaze = null; gazeCalibration.clear(); renderedTargets.clear(); resetGazeWindow()
+        faceCenterBaseline = null
+        stepStartMs = SystemClock.elapsedRealtime()
+        _state.update { it.copy(step = ScreeningStep.GAZE_CALIBRATION, guidePending = false,
+            gazeCalibrationIndex = 0, gazeCalibrationFailed = false, gazeCalibrated = false,
+            instruction = "只用眼睛依次看着圆点，头和手机保持不动。", warning = null) }
+        timer = viewModelScope.launch {
+            for (index in StrabismusGaze.calibrationTargets.indices) {
+                _state.update { it.copy(gazeCalibrationIndex = index) }
+                delay(StrabismusGaze.CALIBRATION_POINT_MS)
+            }
+            gaze = StrabismusGaze.calibrate(gazeCalibration)
+            if (gaze == null) {
+                _state.update { it.copy(gazeCalibrationFailed = true,
+                    warning = "未获得可靠注视校准。请看着每个圆点，保持头和手机不动后重试。") }
+            } else {
+                stepStartMs = SystemClock.elapsedRealtime(); resetGazeWindow(); faceCenterBaseline = null
+                _state.update { it.copy(step = ScreeningStep.FIXATION, gazeCalibrated = true,
+                    instruction = "看着中央闪烁的小瞳，头和手机保持不动。", targetX = 1f, targetY = 0f) }
+                runTimedStep(StrabismusProtocol.FIXATION_SECONDS) { startCover() }
+            }
+        }
+    }
+
+    /** 记录实际画出的目标，而非未考虑画布缩放、滚动和布局位置的理论轨迹。 */
+    fun reportGazeTarget(xPx: Float, yPx: Float) {
+        val s = _state.value
+        if (s.guidePending || s.step !in setOf(ScreeningStep.GAZE_CALIBRATION, ScreeningStep.FIXATION, ScreeningStep.COVER, ScreeningStep.PURSUIT)) return
+        val display = context.resources.displayMetrics
+        val now = SystemClock.elapsedRealtime()
+        renderedTargets.addLast(RenderedTarget(now, s.step, s.gazeCalibrationIndex,
+            GazePoint(xPx / display.widthPixels, yPx / display.heightPixels)))
+        while (renderedTargets.isNotEmpty() && renderedTargets.first().timeMs < now - 2_000L) renderedTargets.removeFirst()
+    }
+
+    private fun resetGazeWindow() {
+        gazeBadSinceMs = null; lastGazeFrameMs = 0L; lastPursuitCheckMs = 0L; pursuitFollowing = null
+        _state.update { it.copy(gazeWarning = null) }
     }
 
     private fun runTimedStep(seconds: Int, after: () -> Unit) {
@@ -690,6 +758,7 @@ class ScreeningTestViewModel @Inject constructor(
             qualityEligibleFrames, qualityEligibleValidFrames, s.pursuitMaxDeg)
         val result = assessment.displayLines() + metrics
         val capturedSamples = samples.toList()
+        val capturedCalibration = gazeCalibration.toList()
         val capturedTotal = totalFrames
         val capturedValid = validFrames
         val capturedQualityEligible = qualityEligibleFrames
@@ -702,7 +771,15 @@ class ScreeningTestViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             runCatching {
                 val data = JSONObject().apply {
-                    put("protocolVersion", 4)
+                    put("protocolVersion", if (s.kind == ScreeningKind.STRABISMUS) 5 else 4)
+                    if (s.kind == ScreeningKind.STRABISMUS) {
+                        put("gazeCalibrated", s.gazeCalibrated)
+                        put("gazeCalibration", JSONArray().apply { capturedCalibration.forEach { c -> put(JSONObject().apply {
+                            put("index", c.index); put("targetX", c.target.x.toDouble()); put("targetY", c.target.y.toDouble())
+                            put("leftX", c.left?.x?.toDouble() ?: JSONObject.NULL); put("leftY", c.left?.y?.toDouble() ?: JSONObject.NULL)
+                            put("rightX", c.right?.x?.toDouble() ?: JSONObject.NULL); put("rightY", c.right?.y?.toDouble() ?: JSONObject.NULL)
+                        }) } })
+                    }
                     put("kind", s.kind.name)
                     put("assessment", JSONObject().apply {
                         put("modelVersion", assessment.version)
@@ -767,10 +844,17 @@ class ScreeningTestViewModel @Inject constructor(
                     }) } })
                     put("eyeSamples", JSONArray().apply { capturedSamples.forEach { sample -> put(JSONObject().apply {
                         put("elapsedRealtimeMs", sample.timeMs); put("step", sample.step.name)
-                        put("leftX", sample.leftX.toDouble()); put("leftY", sample.leftY.toDouble())
-                        put("rightX", sample.rightX.toDouble()); put("rightY", sample.rightY.toDouble())
+                        put("leftX", sample.leftX.takeIf(Float::isFinite)?.toDouble() ?: JSONObject.NULL)
+                        put("leftY", sample.leftY.takeIf(Float::isFinite)?.toDouble() ?: JSONObject.NULL)
+                        put("rightX", sample.rightX.takeIf(Float::isFinite)?.toDouble() ?: JSONObject.NULL)
+                        put("rightY", sample.rightY.takeIf(Float::isFinite)?.toDouble() ?: JSONObject.NULL)
                         put("distanceCm", sample.distanceCm.toDouble())
                         put("targetX", sample.targetX.toDouble()); put("targetY", sample.targetY.toDouble())
+                        put("targetScreenX", sample.targetScreenX?.toDouble() ?: JSONObject.NULL)
+                        put("targetScreenY", sample.targetScreenY?.toDouble() ?: JSONObject.NULL)
+                        put("leftGazeX", sample.leftGazeX?.toDouble() ?: JSONObject.NULL); put("leftGazeY", sample.leftGazeY?.toDouble() ?: JSONObject.NULL)
+                        put("rightGazeX", sample.rightGazeX?.toDouble() ?: JSONObject.NULL); put("rightGazeY", sample.rightGazeY?.toDouble() ?: JSONObject.NULL)
+                        put("gazeOnTarget", sample.gazeOnTarget ?: JSONObject.NULL)
                         put("leftOpticalX", sample.leftOpticalX?.toDouble() ?: JSONObject.NULL)
                         put("leftOpticalY", sample.leftOpticalY?.toDouble() ?: JSONObject.NULL)
                         put("rightOpticalX", sample.rightOpticalX?.toDouble() ?: JSONObject.NULL)
@@ -815,6 +899,7 @@ class ScreeningTestViewModel @Inject constructor(
         timer?.cancel()
         stopCamera()
         samples.clear()
+        gaze = null; gazeCalibration.clear(); renderedTargets.clear(); resetGazeWindow()
         distanceTracker.clear()
         _state.value = ScreeningState(kind = current.kind, fields = current.fields, mode = current.mode,
             step = ScreeningStep.ENVIRONMENT, warning = "测试已中断，请重新开始")
@@ -822,6 +907,7 @@ class ScreeningTestViewModel @Inject constructor(
 
     fun restart() {
         timer?.cancel(); stopCamera(); samples.clear(); distanceTracker.clear()
+        gaze = null; gazeCalibration.clear(); renderedTargets.clear(); resetGazeWindow()
         _state.value = ScreeningState(kind = _state.value.kind)
     }
 
@@ -896,9 +982,27 @@ class ScreeningTestViewModel @Inject constructor(
         val valid = smoothedDistance in 10f..100f &&
             (_state.value.kind != ScreeningKind.PRESBYOPIA || (left != null || right != null)) &&
             (_state.value.kind != ScreeningKind.STRABISMUS ||
-                (left != null && right != null && abs(smoothedDistance - StrabismusProtocol.DISTANCE_CM) <= StrabismusProtocol.DISTANCE_TOLERANCE_CM && headStable && poseStable)) &&
+                ((if (step == ScreeningStep.COVER) left != null || right != null else left != null && right != null) &&
+                    abs(smoothedDistance - StrabismusProtocol.DISTANCE_CM) <= StrabismusProtocol.DISTANCE_TOLERANCE_CM && headStable && poseStable)) &&
             (_state.value.lux == null || _state.value.lux!! >= 50f)
-        if (!_state.value.guidePending && step == _state.value.step && time >= stepStartMs && step != ScreeningStep.PROFILE && step != ScreeningStep.ENVIRONMENT && step != ScreeningStep.RESULT) {
+        val rendered = renderedTargets.lastOrNull { it.timeMs <= time && it.step == step }
+        val covered = if (step == ScreeningStep.COVER) _state.value.coverMarks.lastOrNull()?.covered else null
+        fun openEye(eye: EyeLandmarks?, position: Pair<Float, Float>?, which: VisionEye): GazePoint? =
+            position?.takeIf { covered != which && eye != null && (BlinkDetector.ear(eye.earPoints) ?: 0f) >= 0.16f }
+                ?.let { GazePoint(it.first, it.second) }
+        val gazeLeft = openEye(face?.leftEye, left, VisionEye.LEFT)
+        val gazeRight = openEye(face?.rightEye, right, VisionEye.RIGHT)
+        if (step == ScreeningStep.GAZE_CALIBRATION && !_state.value.gazeCalibrationFailed &&
+            step == _state.value.step && valid && rendered != null && rendered.index == _state.value.gazeCalibrationIndex) {
+            val firstShown = renderedTargets.firstOrNull { it.step == step && it.index == rendered.index }?.timeMs ?: time
+            if (time - firstShown >= StrabismusGaze.SETTLE_MS)
+                gazeCalibration.add(GazeCalibrationSample(rendered.index, rendered.point, gazeLeft, gazeRight))
+        }
+        val estimates = if (valid) gaze?.estimate(gazeLeft, gazeRight) else null
+        val gazeOnTarget = rendered?.let { target -> estimates?.let { (l, r) ->
+            if (l == null && r == null) null else StrabismusGaze.onTarget(l, target.point) || StrabismusGaze.onTarget(r, target.point)
+        } }
+        if (!_state.value.guidePending && step == _state.value.step && time >= stepStartMs && step != ScreeningStep.PROFILE && step != ScreeningStep.ENVIRONMENT && step != ScreeningStep.RESULT && step != ScreeningStep.GAZE_CALIBRATION) {
             totalFrames++
             val eligible = step != ScreeningStep.COVER ||
                 _state.value.coverMarks.lastOrNull()?.label?.let { it.startsWith("移开") || it.startsWith("完全") } == true
@@ -914,13 +1018,14 @@ class ScreeningTestViewModel @Inject constructor(
                 // 每只眼单独记录：交替遮盖时总有一只眼被遮，未遮眼的数据仍要保留。
                 val leftCenter = face?.leftEye?.irisPoints?.firstOrNull()?.x
                 val rightCenter = face?.rightEye?.irisPoints?.firstOrNull()?.x
-                val leftNasalSign = if (leftCenter != null && rightCenter != null && rightCenter > leftCenter) 1f else -1f
+                if (leftCenter != null && rightCenter != null) nasalSign = if (rightCenter > leftCenter) 1f else -1f
+                val leftNasalSign = nasalSign
                 val leftNasal = leftOptical?.horizontalIrisUnits?.let { -it * leftNasalSign }
                 val rightNasal = rightOptical?.horizontalIrisUnits?.let { -it * -leftNasalSign }
                 val leftVertical = leftOptical?.verticalIrisUnits?.let { -it }
                 val rightVertical = rightOptical?.verticalIrisUnits?.let { -it }
-                if (_state.value.kind == ScreeningKind.STRABISMUS && left != null && right != null) {
-                    samples.add(EyeMotionSample(time, step, left.first, left.second, right.first, right.second,
+                if (_state.value.kind == ScreeningKind.STRABISMUS && (left != null || right != null)) {
+                    samples.add(EyeMotionSample(time, step, left?.first ?: Float.NaN, left?.second ?: Float.NaN, right?.first ?: Float.NaN, right?.second ?: Float.NaN,
                         smoothedDistance, target.first, target.second,
                         if (opticalReady) leftOptical?.horizontalIrisUnits else null,
                         if (opticalReady) leftOptical?.verticalIrisUnits else null,
@@ -931,8 +1036,31 @@ class ScreeningTestViewModel @Inject constructor(
                         leftOptical?.cornealReflex?.x, leftOptical?.cornealReflex?.y,
                         rightOptical?.pupilCenter?.x, rightOptical?.pupilCenter?.y,
                         rightOptical?.cornealReflex?.x, rightOptical?.cornealReflex?.y,
-                        leftNasal, rightNasal, leftVertical, rightVertical, pursuit?.third ?: -1))
+                        leftNasal, rightNasal, leftVertical, rightVertical, pursuit?.third ?: -1,
+                        rendered?.point?.x, rendered?.point?.y, estimates?.first?.x, estimates?.first?.y,
+                        estimates?.second?.x, estimates?.second?.y, gazeOnTarget))
                 }
+            }
+            if (_state.value.kind == ScreeningKind.STRABISMUS &&
+                step in setOf(ScreeningStep.FIXATION, ScreeningStep.COVER, ScreeningStep.PURSUIT)) {
+                if (time - lastGazeFrameMs > 500L) gazeBadSinceMs = null
+                lastGazeFrameMs = time
+                if (step == ScreeningStep.PURSUIT && time - lastPursuitCheckMs >= 500L) {
+                    lastPursuitCheckMs = time
+                    pursuitFollowing = PursuitGazeCheck.follows(samples.filter { it.timeMs >= time - 4_000L }, segment =
+                        StrabismusProtocol.pursuitTarget((time - stepStartMs) / 1000f).third)
+                }
+                val offTarget = gazeOnTarget != true || pursuitFollowing == false
+                if (offTarget) {
+                    if (gazeBadSinceMs == null) gazeBadSinceMs = time
+                } else gazeBadSinceMs = null
+                val gazeWarning = when {
+                    gazeOnTarget == null && gazeBadSinceMs?.let { time - it >= 2_000L } == true -> "暂时无法确认注视，请保持头部稳定并看着屏幕目标"
+                    gazeOnTarget != null && gazeBadSinceMs?.let { time - it >= 1_500L } == true ->
+                        if (step == ScreeningStep.PURSUIT) "未检测到有效跟随，请只用眼睛跟随移动的小球" else "注视明显偏离，请看着屏幕上的小瞳"
+                    else -> null
+                }
+                _state.update { it.copy(gazeWarning = gazeWarning) }
             }
         }
         if (time - lastUiFrameMs >= 200) {
