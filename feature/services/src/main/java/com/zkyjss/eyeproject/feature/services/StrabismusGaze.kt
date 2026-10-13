@@ -23,13 +23,13 @@ internal class StrabismusGaze private constructor(private val left: Mapping?, pr
         leftEye?.let { left?.estimate(it) } to rightEye?.let { right?.estimate(it) }
 
     companion object {
-        // 点位与正式任务共用屏幕坐标；约 9 秒，等待眼动稳定后采样。
+        // 点位与正式任务共用屏幕坐标；约 15 秒，每点先等待 1.2 秒，再采样 1.8 秒。
         val calibrationTargets = listOf(
             GazePoint(0.5f, 0.5f), GazePoint(0.15f, 0.5f), GazePoint(0.85f, 0.5f),
             GazePoint(0.5f, 0.15f), GazePoint(0.5f, 0.85f),
         )
-        const val CALIBRATION_POINT_MS = 1_800L
-        const val SETTLE_MS = 600L
+        const val CALIBRATION_POINT_MS = 3_000L
+        const val SETTLE_MS = 1_200L
         const val TOLERANCE_X = 0.25f
         const val TOLERANCE_Y = 0.20f
 
