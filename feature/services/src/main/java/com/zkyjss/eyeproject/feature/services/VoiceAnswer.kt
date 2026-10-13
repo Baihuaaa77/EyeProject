@@ -108,7 +108,8 @@ internal object VoiceCommandParser {
 
 /**
  * 连续识别循环：利用部分结果尽早识别指令（缩短反应时），识别到指令后立即重启下一轮。
- * 优先使用设备端识别（隐私与延迟更好），不支持中文时回退到系统识别服务。所有调用须在主线程。
+ * 优先使用设备端识别；无设备端引擎时直接用内置离线模型，系统识别失败时也有离线后备。
+ * Android 识别服务的调用均在主线程，离线模型加载在工作线程。
  */
 internal class VoiceAnswerRecognizer(
     private val context: Context,
@@ -119,37 +120,46 @@ internal class VoiceAnswerRecognizer(
         fun onHeard(text: String)
         fun onCommand(command: VoiceCommand)
         fun onUnavailable(reason: String)
+        fun onPreparing(preparing: Boolean) = Unit
     }
 
-    val available: Boolean = SpeechRecognizer.isRecognitionAvailable(context)
+    val available: Boolean = true // APK 内置离线模型，不再由系统识别服务是否存在决定功能可用性。
     private val handler = Handler(Looper.getMainLooper())
     private var recognizer: SpeechRecognizer? = null
     private var onDevice = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
         runCatching { SpeechRecognizer.isOnDeviceRecognitionAvailable(context) }.getOrDefault(false)
     private var active = false
     private var firedThisUtterance = false
+    private var failures = 0
+    private var recognitionGeneration = 0
+    // 没有设备端引擎时直接用内置模型，避免厂商系统服务看似可用却无法识别。
+    private var useOffline = !onDevice
+    private val offline by lazy { OfflineVoiceAnswer(context, callbacks) }
+    private var offlineCreated = false
 
     private val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
         putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
         putExtra(RecognizerIntent.EXTRA_LANGUAGE, "zh-CN")
         putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
         putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
-        putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
         putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 700L)
     }
 
     fun start() {
-        if (!available) { callbacks.onUnavailable("本机没有可用的语音识别服务"); return }
         if (active) return
         active = true
-        ensureRecognizer()
+        failures = 0
+        if (useOffline) { offlineCreated = true; offline.start(); return }
         listen()
     }
 
     fun stop() {
         active = false
         handler.removeCallbacksAndMessages(null)
-        runCatching { recognizer?.cancel() }
+        recognitionGeneration++
+        runCatching { recognizer?.destroy() }
+        recognizer = null
+        if (offlineCreated) offline.stop()
         callbacks.onListening(false)
     }
 
@@ -157,19 +167,45 @@ internal class VoiceAnswerRecognizer(
         stop()
         runCatching { recognizer?.destroy() }
         recognizer = null
+        if (offlineCreated) offline.destroy()
     }
 
     private fun ensureRecognizer() {
         if (recognizer != null) return
+        val token = ++recognitionGeneration
+        fun current() = active && !useOffline && token == recognitionGeneration
         recognizer = (if (onDevice && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
             SpeechRecognizer.createOnDeviceSpeechRecognizer(context) else SpeechRecognizer.createSpeechRecognizer(context))
-            .also { it.setRecognitionListener(this) }
+            .also { it.setRecognitionListener(object : RecognitionListener {
+                override fun onReadyForSpeech(params: Bundle?) { if (current()) this@VoiceAnswerRecognizer.onReadyForSpeech(params) }
+                override fun onBeginningOfSpeech() = Unit
+                override fun onRmsChanged(rmsdB: Float) = Unit
+                override fun onBufferReceived(buffer: ByteArray?) = Unit
+                override fun onEndOfSpeech() = Unit
+                override fun onPartialResults(partialResults: Bundle?) { if (current()) this@VoiceAnswerRecognizer.onPartialResults(partialResults) }
+                override fun onResults(results: Bundle?) { if (current()) this@VoiceAnswerRecognizer.onResults(results) }
+                override fun onError(error: Int) { if (current()) this@VoiceAnswerRecognizer.onError(error) }
+                override fun onEvent(eventType: Int, params: Bundle?) = Unit
+            }) }
     }
 
     private fun listen() {
         if (!active) return
         firedThisUtterance = false
-        runCatching { recognizer?.startListening(intent) }.onFailure { restart(400) }
+        runCatching {
+            ensureRecognizer()
+            intent.putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, onDevice)
+            recognizer?.startListening(intent)
+        }.onFailure { startOffline() }
+    }
+
+    private fun startOffline() {
+        if (!active) return
+        handler.removeCallbacksAndMessages(null)
+        recognitionGeneration++
+        runCatching { recognizer?.destroy() }; recognizer = null
+        useOffline = true; offlineCreated = true
+        offline.start()
     }
 
     private fun restart(delayMs: Long) {
@@ -178,6 +214,8 @@ internal class VoiceAnswerRecognizer(
     }
 
     private fun handle(results: Bundle?, final: Boolean) {
+        if (!active || useOffline) return
+        failures = 0
         val texts = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION).orEmpty()
         val first = texts.firstOrNull()?.takeIf { it.isNotBlank() }
         if (first != null) callbacks.onHeard(first)
@@ -198,7 +236,7 @@ internal class VoiceAnswerRecognizer(
         if (final) restart(100)
     }
 
-    override fun onReadyForSpeech(params: Bundle?) = callbacks.onListening(true)
+    override fun onReadyForSpeech(params: Bundle?) { if (active && !useOffline) callbacks.onListening(true) }
     override fun onBeginningOfSpeech() = Unit
     override fun onRmsChanged(rmsdB: Float) = Unit
     override fun onBufferReceived(buffer: ByteArray?) = Unit
@@ -209,7 +247,7 @@ internal class VoiceAnswerRecognizer(
 
     override fun onError(error: Int) {
         callbacks.onListening(false)
-        if (!active) return
+        if (!active || useOffline) return
         when (error) {
             SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> {
                 active = false
@@ -220,14 +258,12 @@ internal class VoiceAnswerRecognizer(
                 onDevice = false
                 runCatching { recognizer?.destroy() }
                 recognizer = null
-                ensureRecognizer()
                 restart(200)
             } else {
-                active = false
-                callbacks.onUnavailable("语音识别不支持中文")
+                startOffline()
             }
-            SpeechRecognizer.ERROR_RECOGNIZER_BUSY, SpeechRecognizer.ERROR_CLIENT -> restart(400)
-            else -> restart(150) // 无匹配、超时等：继续听
+            SpeechRecognizer.ERROR_NO_MATCH, SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> restart(150)
+            else -> if (++failures >= 3) startOffline() else restart(400)
         }
     }
 }
@@ -238,6 +274,8 @@ internal class VoiceAnswerState {
     var available by mutableStateOf<Boolean?>(null)
     var permissionGranted by mutableStateOf(false)
     var listening by mutableStateOf(false)
+    var preparing by mutableStateOf(false)
+    var pausedForSpeech by mutableStateOf(false)
     var heard by mutableStateOf("")
     var unavailableReason by mutableStateOf<String?>(null)
     var requestPermission: () -> Unit = {}
@@ -261,6 +299,7 @@ internal fun rememberVoiceAnswer(active: Boolean, voice: ScreeningVoice?, onComm
     val recognizer = remember(context) {
         VoiceAnswerRecognizer(context.applicationContext, object : VoiceAnswerRecognizer.Callbacks {
             override fun onListening(listening: Boolean) { state.listening = listening }
+            override fun onPreparing(preparing: Boolean) { state.preparing = preparing }
             override fun onHeard(text: String) { if (latestVoice?.busy() != true) state.heard = text }
             override fun onCommand(command: VoiceCommand) { if (latestVoice?.busy() != true) latestOnCommand(command) }
             override fun onUnavailable(reason: String) { state.unavailableReason = reason }
@@ -271,10 +310,10 @@ internal fun rememberVoiceAnswer(active: Boolean, voice: ScreeningVoice?, onComm
         state.permissionGranted = granted
         if (!granted) state.unavailableReason = "未授予麦克风权限"
     }
-    state.permissionGranted = state.permissionGranted ||
-        ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+    state.permissionGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
     state.requestPermission = { askedPermission = true; launcher.launch(Manifest.permission.RECORD_AUDIO) }
-    val run = active && state.enabled && recognizer.available
+    state.pausedForSpeech = voice?.speaking == true
+    val run = active && state.enabled && recognizer.available && !state.pausedForSpeech
     LaunchedEffect(run, state.permissionGranted) {
         if (run && !state.permissionGranted && !askedPermission) state.requestPermission()
         if (run && state.permissionGranted) {
@@ -301,11 +340,16 @@ internal fun VoiceAnswerBar(state: VoiceAnswerState, hint: String = "说「上�
         Column(Modifier.weight(1f)) {
             when {
                 !state.enabled -> EyeText("语音作答已关闭，请点按钮", style = typography.body, color = colors.textSecondary)
+                state.preparing -> EyeText("正在准备离线语音，请稍候", style = typography.body, color = colors.textSecondary)
                 state.available == false || state.unavailableReason != null ->
                     EyeText("${state.unavailableReason ?: "本机不支持语音识别"}，请点按钮作答", style = typography.body, color = colors.textSecondary)
                 !state.permissionGranted -> EyeText("需要麦克风权限才能语音作答", style = typography.body, color = colors.textPrimary)
                 else -> {
-                    EyeText(hint, style = typography.body, color = colors.primary)
+                    EyeText(when {
+                        state.listening -> "正在听：$hint"
+                        state.pausedForSpeech -> "播报结束后可语音作答"
+                        else -> "正在启动语音作答，请稍候"
+                    }, style = typography.body, color = colors.primary)
                     if (state.heard.isNotBlank()) EyeText("听到：${state.heard}", style = typography.bodySecondary, color = colors.textSecondary)
                 }
             }

@@ -1,0 +1,2 @@
+# 保持第三方语音模型原始字节，避免 Windows 换行转换改变模型数据。
+feature/services/src/main/assets/vosk-model-small-cn-0.22/** -text -diff

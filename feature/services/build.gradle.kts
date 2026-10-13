@@ -38,6 +38,8 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.compose.material3)
     implementation(libs.vico.compose.m3)
+    implementation("com.alphacephei:vosk-android:0.3.75@aar")
+    implementation("net.java.dev.jna:jna:5.18.1@aar")
 
     debugImplementation(libs.androidx.compose.ui.tooling)
     testImplementation(libs.junit)
