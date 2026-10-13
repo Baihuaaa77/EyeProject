@@ -40,7 +40,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.text.TextStyle
@@ -116,7 +118,7 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, modifier: M
         ScreeningStep.FIXATION -> "请保持三十三厘米，看着中间闪烁的小瞳，头和手机都不要动。"
         ScreeningStep.GAZE_CALIBRATION -> "请只用眼睛依次看着圆点，头和手机都不要动。"
         ScreeningStep.COVER -> StrabismusProtocol.COVER_SEQUENCE.getOrNull(s.coverMarks.size)?.label ?: "遮盖完成"
-        ScreeningStep.PURSUIT -> "请只用双眼跟随小球，保持头部稳定。"
+        ScreeningStep.PURSUIT -> "请只用双眼跟随移动的小瞳，保持头部稳定。"
         ScreeningStep.RESULT -> "测试完成，请查看结果。"
     }
     val guidance = screeningGuidance(s)
@@ -410,7 +412,7 @@ private fun FixationContent(s: ScreeningState, vm: ScreeningTestViewModel) {
 
 /**
  * 原文：中央动态闪烁、高对比度的卡通注视点，1–2 Hz；直径 1.5–2 cm。
- * 用小瞳脸作为卡通目标，白底呈现；「暗」相只降低亮度，不让目标消失。
+ * 用小瞳脸作为卡通目标，白底呈现；整体透明度交替变化，让小瞳本身闪烁。
  */
 @Composable
 private fun FixationTarget(diameterMm: Float, bright: Boolean, vm: ScreeningTestViewModel) {
@@ -421,9 +423,9 @@ private fun FixationTarget(diameterMm: Float, bright: Boolean, vm: ScreeningTest
     Canvas(Modifier.fillMaxWidth().height(240.dp).clip(EyeShapes.medium).background(colors.white)
         .onGloballyPositioned { origin = it.positionInWindow() }) {
         val s = sizePx.coerceAtMost(minOf(size.width, size.height) * 0.6f)
-        if (bright) drawCircle(colors.white, s * 0.75f, center, alpha = 0.18f)
+        drawContext.canvas.saveLayer(Rect(Offset.Zero, size), Paint().apply { alpha = if (bright) 1f else 0.3f })
         drawMascot(colors, center, s, lid = 0f)
-        if (!bright) drawCircle(colors.black, s * 0.7f, center, alpha = 0.45f)
+        drawContext.canvas.restore()
         vm.reportGazeTarget(origin.x + center.x, origin.y + center.y)
     }
 }
@@ -505,9 +507,9 @@ private fun PursuitContent(s: ScreeningState, vm: ScreeningTestViewModel) {
     val metrics = LocalContext.current.resources.displayMetrics
     val pxPerMm = metrics.xdpi / 25.4f
     val distanceMm = (if (s.distanceCm > 0f) s.distanceCm else StrabismusProtocol.DISTANCE_CM) * 10f
-    val radiusPx = 10f / 2f * pxPerMm // 1 cm 小球
+    val radiusPx = 10f / 2f * pxPerMm // 保持原有 1 cm 目标包络和轨迹边界。
     var origin by remember { mutableStateOf(Offset.Zero) }
-    EyeSectionCard(title = "跟随小球 · 剩余 ${s.secondsLeft} 秒") {
+    EyeSectionCard(title = "跟随小瞳 · 剩余 ${s.secondsLeft} 秒") {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             EyeText(s.instruction, LocalEyeTypography.current.body, colors.textPrimary)
             Canvas(Modifier.fillMaxWidth().height(360.dp).clip(EyeShapes.medium).background(colors.white)
@@ -522,8 +524,8 @@ private fun PursuitContent(s: ScreeningState, vm: ScreeningTestViewModel) {
                 val scale = minOf(1f, maxX / StrabismusProtocol.PURSUIT_AMPLITUDE_DEG, maxY / StrabismusProtocol.PURSUIT_AMPLITUDE_DEG)
                 val x = size.width / 2f + degToPx(s.targetX * scale)
                 val y = size.height / 2f - degToPx(s.targetY * scale)
-                drawCircle(colors.white, radiusPx * 1.8f, Offset(x, y), alpha = 0.15f)
-                drawCircle(colors.accent, radiusPx, Offset(x, y))
+                // 含头顶嫩芽的整个小瞳放入原目标包络，不改变轨迹或注视位置上报。
+                drawMascot(colors, Offset(x, y), radiusPx / 0.65f, lid = 0f)
                 vm.reportGazeTarget(origin.x + x, origin.y + y)
             }
         }

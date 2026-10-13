@@ -662,7 +662,7 @@ class ScreeningTestViewModel @Inject constructor(
         resetGazeWindow()
         stepStartMs = SystemClock.elapsedRealtime()
         _state.update { it.copy(step = ScreeningStep.PURSUIT, guidePending = true, secondsLeft = StrabismusProtocol.PURSUIT_SECONDS,
-            instruction = "只用眼睛跟随小球：水平 8 秒、垂直 8 秒、斜向 6 秒。", warning = null) }
+            instruction = "只用眼睛跟随移动的小瞳：水平 8 秒、垂直 8 秒、斜向 6 秒。", warning = null) }
 
     }
 
@@ -1057,7 +1057,7 @@ class ScreeningTestViewModel @Inject constructor(
                 val gazeWarning = when {
                     gazeOnTarget == null && gazeBadSinceMs?.let { time - it >= 2_000L } == true -> "暂时无法确认注视，请保持头部稳定并看着屏幕目标"
                     gazeOnTarget != null && gazeBadSinceMs?.let { time - it >= 1_500L } == true ->
-                        if (step == ScreeningStep.PURSUIT) "未检测到有效跟随，请只用眼睛跟随移动的小球" else "注视明显偏离，请看着屏幕上的小瞳"
+                        if (step == ScreeningStep.PURSUIT) "未检测到有效跟随，请只用眼睛跟随移动的小瞳" else "注视明显偏离，请看着屏幕上的小瞳"
                     else -> null
                 }
                 _state.update { it.copy(gazeWarning = gazeWarning) }

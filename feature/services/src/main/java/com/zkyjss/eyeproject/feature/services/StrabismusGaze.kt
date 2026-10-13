@@ -116,6 +116,6 @@ internal object PursuitGazeCheck {
                 add("${stepTitle(step)}未获得足够的有效注视，请看着屏幕目标重新测试")
         }
         for (segment in 0..2) if (follows(samples, segment) != true)
-            add("${listOf("水平", "垂直", "斜向")[segment]}跟随未获得有效轨迹，请跟随小球重新测试")
+            add("${listOf("水平", "垂直", "斜向")[segment]}跟随未获得有效轨迹，请跟随小瞳重新测试")
     }
 }

@@ -30,8 +30,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -475,7 +477,7 @@ private val switchScene = GuideScene(
 
 private val fixateScene = GuideScene(
     cycleMs = 4000,
-    beats = listOf(GuideBeat(0f, "① 看着屏幕中央的圆点"), GuideBeat(0.45f, "② 头和手机都保持不动")),
+    beats = listOf(GuideBeat(0f, "① 看着屏幕中央闪烁的小瞳"), GuideBeat(0.45f, "② 头和手机都保持不动")),
     keyframe = 0.5f,
 ) { phase ->
     floorShadow(95f, 182f, 110f)
@@ -485,9 +487,11 @@ private val fixateScene = GuideScene(
     val (tl, screen) = scope.drawCartoonPhone(colors, p(242f, 100f), u(160f))
     val dot = Offset(tl.x + screen.width / 2, tl.y + screen.height / 2)
     val pulse = (sin(phase * 2f * PI.toFloat() * 2f) + 1f) / 2f
-    scope.drawCircle(colors.primary, u(9f + 6f * pulse), dot, alpha = 0.25f)
-    scope.drawCircle(colors.primary, u(7f), dot)
-    // 视线：从双眼流向圆点的虚线
+    scope.drawContext.canvas.saveLayer(Rect(dot - Offset(u(20f), u(20f)), Size(u(40f), u(40f))),
+        Paint().apply { alpha = if (pulse > 0.5f) 1f else 0.3f })
+    scope.drawMascot(colors, dot, u(22f))
+    scope.drawContext.canvas.restore()
+    // 视线：从双眼流向屏幕小瞳的虚线
     val eye = mascotEyeCenter(mascot, u(108f), 1)
     scope.drawLine(
         colors.primary.copy(alpha = 0.45f), Offset(eye.x + u(16f), eye.y), Offset(dot.x - u(14f), dot.y), u(2f),
@@ -533,7 +537,7 @@ private val coverScene = GuideScene(
 /** 水平正弦 → 垂直正弦 → 45° 斜向直线往复，与正式追踪任务的顺序一致。 */
 private val followScene = GuideScene(
     cycleMs = 7200,
-    beats = listOf(GuideBeat(0f, "① 水平：只用眼睛跟随圆点"), GuideBeat(0.36f, "② 垂直：头保持不动"), GuideBeat(0.72f, "③ 斜向：继续跟随")),
+    beats = listOf(GuideBeat(0f, "① 水平：只用眼睛跟随小瞳"), GuideBeat(0.36f, "② 垂直：头保持不动"), GuideBeat(0.72f, "③ 斜向：继续跟随")),
     keyframe = 0.2f,
 ) { phase ->
     val twoPi = 2f * PI.toFloat()
@@ -561,8 +565,7 @@ private val followScene = GuideScene(
         gaze = Offset(((dot.x - 72f) / 140f).coerceIn(-1f, 1f), ((dot.y - 130f) / 90f).coerceIn(-1f, 1f))
     )
     headLock(72f, 126f, 54f)
-    scope.drawCircle(colors.primary, u(9f), p(dot.x, dot.y))
-    scope.drawCircle(colors.primary, u(15f), p(dot.x, dot.y), alpha = 0.18f)
+    scope.drawMascot(colors, p(dot.x, dot.y), u(9f / 0.65f))
     scope.drawRoundRect(colors.panelBackground, p(12f, 12f), Size(u(64f), u(28f)), CornerRadius(u(14f)))
     label(text, 44f, 26f, colors.primary)
 }
@@ -664,7 +667,7 @@ internal fun guideCue(step: ScreeningStep) = when (step) {
     ScreeningStep.FLIPPER -> "交替移近、移远，停稳后点选 E 的开口方向"
     ScreeningStep.FIXATION -> "先依次看着五个圆点完成约 15 秒注视校准，再看中央闪烁的小瞳 12 秒，头和手机保持不动"
     ScreeningStep.COVER -> "协助者按提示遮右眼、移开、遮左眼、移开，再左右交替；不压眼球、不挡摄像头，每次动作同时点按"
-    ScreeningStep.PURSUIT -> "只用眼睛跟随小球：水平、垂直、斜向各一段，头保持不动"
+    ScreeningStep.PURSUIT -> "只用眼睛跟随移动的小瞳：水平、垂直、斜向各一段，头保持不动"
     else -> "正对屏幕，保持光线均匀"
 }
 
@@ -675,9 +678,9 @@ internal fun stepTitle(step: ScreeningStep) = when (step) {
     ScreeningStep.PUSH_UP -> "调节幅度（移近法）"
     ScreeningStep.DISTANCE_CURVE -> "多距离视力"
     ScreeningStep.FLIPPER -> "调节灵敏度（远近切换）"
-    ScreeningStep.FIXATION -> "注视圆点"
+    ScreeningStep.FIXATION -> "注视小瞳"
     ScreeningStep.GAZE_CALIBRATION -> "注视校准"
     ScreeningStep.COVER -> "交替遮盖"
-    ScreeningStep.PURSUIT -> "跟随圆点"
+    ScreeningStep.PURSUIT -> "跟随小瞳"
     ScreeningStep.RESULT -> "测试结果"
 }
