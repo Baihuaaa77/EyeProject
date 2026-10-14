@@ -111,11 +111,13 @@ struct EyeTestView: View {
             } else if phase == "PUSH_UP" && runtime.string("pushStage") == "READY" {
                 Button("开始移近") { runtime.act("pushStart") }.buttonStyle(EyeButtonStyle())
             } else {
-                TumblingEView(runtime: runtime).frame(height: max(180, CGFloat(runtime.number("optotypePx")) / UIScreen.main.scale + 30))
                 if phase == "PUSH_UP" {
+                    TumblingEView(runtime: runtime).frame(height: max(180, CGFloat(runtime.number("optotypePx")) / UIScreen.main.scale + 30))
                     Button("开始持续模糊了") { runtime.act("blur") }.buttonStyle(EyeButtonStyle())
                 } else if phase != "Rest" && phase != "Countdown" {
-                    DirectionAnswerView { runtime.answer($0) }.disabled(!runtime.bool("trialVisible"))
+                    OptotypeAnswerPad(runtime: runtime)
+                } else {
+                    TumblingEView(runtime: runtime).frame(height: 180)
                 }
             }
         }
@@ -189,14 +191,30 @@ private struct QuestionnaireView: View {
     }
 }
 
-private struct DirectionAnswerView: View {
-    let answer: (Int) -> Void
+private struct OptotypeAnswerPad: View {
+    @ObservedObject var runtime: EyeRuntime
     var body: some View {
-        VStack {
-            HStack { Button("↑ 上") { answer(3) }; Button("下 ↓") { answer(1) } }
-            HStack { Button("← 左") { answer(2) }; Button("右 →") { answer(0) } }
-            Button("看不清") { answer(-1) }
-        }.buttonStyle(EyeButtonStyle())
+        VStack(spacing: EyeStyle.spacing) {
+            ZStack {
+                TumblingEView(runtime: runtime)
+                VStack { arrow("arrow.up", "向上", 3); Spacer(); arrow("arrow.down", "向下", 1) }
+                HStack { arrow("arrow.left", "向左", 2); Spacer(); arrow("arrow.right", "向右", 0) }
+            }.frame(height: max(240, CGFloat(runtime.number("optotypePx")) / UIScreen.main.scale + 136))
+            Button("看不清 / 跳过") { runtime.answer(-1) }
+        }.buttonStyle(DirectionAnswerButtonStyle()).disabled(!runtime.bool("trialVisible"))
+    }
+    private func arrow(_ symbol: String, _ label: String, _ direction: Int) -> some View {
+        Button { runtime.answer(direction) } label: { Image(systemName: symbol).font(.system(size: 22, weight: .semibold)) }
+            .frame(width: 56, height: 56).accessibilityLabel(label)
+    }
+}
+
+private struct DirectionAnswerButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var enabled
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label.frame(maxWidth: .infinity, minHeight: 56).foregroundStyle(EyeStyle.text)
+            .background(EyeStyle.surfaceVariant, in: RoundedRectangle(cornerRadius: 14))
+            .opacity(enabled ? (configuration.isPressed ? 0.7 : 1) : 0.5)
     }
 }
 

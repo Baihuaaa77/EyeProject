@@ -4,6 +4,7 @@ import SwiftUI
 enum EyeStyle {
     static let background = Color(rgb: 0xF3F6F5)
     static let panel = Color(rgb: 0xFFFFFF)
+    static let surfaceVariant = Color(rgb: 0xE9EFEE)
     static let text = Color(rgb: 0x13201F)
     static let secondary = Color(rgb: 0x566664)
     static let primary = Color(rgb: 0x0B7A78)

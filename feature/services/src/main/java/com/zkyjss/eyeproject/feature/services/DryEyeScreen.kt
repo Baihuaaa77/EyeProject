@@ -280,11 +280,8 @@ internal fun TrialContent(state: DryEyeTestUiState, onAnswer: (Int) -> Unit) {
         )
         EyeText(state.instruction, style = typography.body, color = colors.textSecondary)
         val size = with(LocalDensity.current) { state.optotypePx.toDp() }
-        Box(Modifier.fillMaxWidth().height(220.dp), contentAlignment = Alignment.Center) {
-            if (state.trialVisible) OptotypeSurface(state.direction, size)
-        }
+        OptotypeAnswerPad(state.direction, size, state.trialVisible, onAnswer)
         TrialTimer(state.trialId, state.trialVisible)
-        DirectionButtons(onAnswer, enabled = state.trialVisible)
         state.qualityWarning?.let { EyeText(it, style = typography.title, color = colors.warning) }
         if (state.phase != DryEyePhase.Practice) {
             EyeText(

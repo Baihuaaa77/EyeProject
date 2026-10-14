@@ -315,9 +315,8 @@ internal fun VisionContent(s: ScreeningState, vm: ScreeningTestViewModel) {
             if (s.nearAwaitingEyeReady) {
                 EyeButton("${s.visionEye.label}已准备好", EyeButtonRole.PRIMARY, vm::readyForNearEye)
             } else {
-                if (s.trialVisible) OptotypeSurface(s.direction, size)
-                else EyeText("停稳后视标会自动出现", LocalEyeTypography.current.subtitle, LocalEyeColors.current.textSecondary)
-                DirectionButtons({ vm.answer(it) }, enabled = s.trialVisible)
+                if (!s.trialVisible) EyeText("停稳后视标会自动出现", LocalEyeTypography.current.subtitle, LocalEyeColors.current.textSecondary)
+                OptotypeAnswerPad(s.direction, size, s.trialVisible) { vm.answer(it) }
             }
             s.nearStopReason?.let { EyeText(it, LocalEyeTypography.current.bodySecondary, LocalEyeColors.current.textSecondary) }
         }
@@ -360,8 +359,7 @@ private fun CurveContent(s: ScreeningState, vm: ScreeningTestViewModel) {
     EyeSectionCard(title = "多距离视力 · ${target.toInt()} cm（${s.curveIndex + 1}/${PresbyopiaProtocol.CURVE_DISTANCES.size}）") {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
             EyeText(if (s.trialVisible) "点选 E 的开口方向" else "移到 ${target.toInt()} cm 并停稳", LocalEyeTypography.current.body, LocalEyeColors.current.textPrimary)
-            if (s.trialVisible) OptotypeSurface(s.direction, size)
-            DirectionButtons({ vm.answer(it) }, enabled = s.trialVisible)
+            OptotypeAnswerPad(s.direction, size, s.trialVisible) { vm.answer(it) }
             if (s.curvePoints.isNotEmpty()) {
                 EyeText("已完成：" + s.curvePoints.joinToString("、") { "${it.distanceCm.toInt()} cm ${it.thresholdDecimal ?: "—"}" },
                     LocalEyeTypography.current.bodySecondary, LocalEyeColors.current.textSecondary)
@@ -377,24 +375,9 @@ private fun FlipperContent(s: ScreeningState, vm: ScreeningTestViewModel) {
     EyeSectionCard(title = "远近切换 · ${s.secondsLeft} 秒") {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
             EyeText("点选 E 的开口方向", LocalEyeTypography.current.body, LocalEyeColors.current.textPrimary)
-            if (s.trialVisible) OptotypeSurface(s.direction, size)
-            else EyeText("停稳后开始", LocalEyeTypography.current.subtitle, LocalEyeColors.current.textSecondary)
-            DirectionButtons({ vm.answer(it) }, enabled = s.trialVisible)
+            if (!s.trialVisible) EyeText("停稳后开始", LocalEyeTypography.current.subtitle, LocalEyeColors.current.textSecondary)
+            OptotypeAnswerPad(s.direction, size, s.trialVisible) { vm.answer(it) }
 
-        }
-    }
-}
-
-@Composable
-internal fun DirectionButtons(onAnswer: (Int) -> Unit, enabled: Boolean) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            EyeButton("右 →", EyeButtonRole.SECONDARY, { onAnswer(0) }, Modifier.weight(1f), enabled)
-            EyeButton("下 ↓", EyeButtonRole.SECONDARY, { onAnswer(1) }, Modifier.weight(1f), enabled)
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            EyeButton("← 左", EyeButtonRole.SECONDARY, { onAnswer(2) }, Modifier.weight(1f), enabled)
-            EyeButton("↑ 上", EyeButtonRole.SECONDARY, { onAnswer(3) }, Modifier.weight(1f), enabled)
         }
     }
 }

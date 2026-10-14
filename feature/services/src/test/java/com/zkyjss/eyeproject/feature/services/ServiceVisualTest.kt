@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import com.zkyjss.eyeproject.core.designsystem.theme.*
 import com.zkyjss.eyeproject.core.ui.component.*
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -153,8 +154,52 @@ class ServiceVisualTest {
                 }
             }
         }
-        compose.onNodeWithText("右 →").assertIsEnabled()
+        compose.onNodeWithText("→").assertIsEnabled()
         capture("near-vision-dark")
+    }
+
+    @Test fun arrowsSurroundTheOptotypeAndKeepAnswerMapping() {
+        val answers = mutableListOf<Int>()
+        compose.setContent {
+            EyeProjectTheme {
+                Column(Modifier.fillMaxSize().padding(20.dp)) {
+                    OptotypeAnswerPad(0, 120.dp, true) { answers.add(it) }
+                }
+            }
+        }
+        val target = compose.onNodeWithTag("answer-optotype").fetchSemanticsNode().boundsInRoot
+        val up = compose.onNodeWithText("↑").fetchSemanticsNode().boundsInRoot
+        val down = compose.onNodeWithText("↓").fetchSemanticsNode().boundsInRoot
+        val left = compose.onNodeWithText("←").fetchSemanticsNode().boundsInRoot
+        val right = compose.onNodeWithText("→").fetchSemanticsNode().boundsInRoot
+        assertTrue(up.bottom <= target.top && down.top >= target.bottom)
+        assertTrue(left.right <= target.left && right.left >= target.right)
+        assertEquals(target.center.x, up.center.x, 0.01f)
+        assertEquals(target.center.x, down.center.x, 0.01f)
+        assertEquals(target.center.y, left.center.y, 0.01f)
+        assertEquals(target.center.y, right.center.y, 0.01f)
+        assertEquals(120f, target.width, 0.01f)
+        compose.onNodeWithContentDescription("向上").performClick()
+        compose.onNodeWithContentDescription("向左").performClick()
+        compose.onNodeWithContentDescription("向右").performClick()
+        compose.onNodeWithContentDescription("向下").performClick()
+        compose.onNodeWithText("看不清 / 跳过").performClick()
+        assertEquals(listOf(3, 2, 0, 1, -1), answers)
+        capture("direction-pad")
+    }
+
+    @Test fun invisibleOptotypeDisablesAllFiveAnswerOptions() {
+        compose.setContent {
+            EyeProjectTheme {
+                Column(Modifier.fillMaxSize().padding(20.dp)) {
+                    OptotypeAnswerPad(0, 60.dp, false) { error("视标未显示时不可作答") }
+                }
+            }
+        }
+        compose.onNodeWithTag("answer-optotype").assertDoesNotExist()
+        for (arrow in listOf("↑", "↓", "←", "→", "看不清 / 跳过")) {
+            compose.onNodeWithText(arrow).assertIsNotEnabled()
+        }
     }
 
     /** 逐组渲染全部演示场景，供人工检查卡通画面。 */
@@ -203,7 +248,7 @@ class ServiceVisualTest {
             }
         }
         compose.onNodeWithText("持续睁眼").assertExists()
-        compose.onNodeWithText("↑ 上").performClick()
+        compose.onNodeWithText("↑").performClick()
         assertEquals(3, answered)
         capture("dry-eye-open")
         page = 1

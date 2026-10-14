@@ -362,17 +362,27 @@ private val openScene = GuideScene(
     label("${(20 - (progress * 20).toInt()).coerceAtLeast(0)}s", 255f, 92f, colors.textPrimary)
 }
 
-/** 手机屏幕底部的四向按键；[highlight] 为被点选的方向（-1 无），[tap] 0..1 为点按涟漪进度。 */
+/** 视标四周的箭头按键；[highlight] 为被点选的方向（-1 无），[tap] 0..1 为点按涟漪进度。 */
 private fun SceneScope.arrowPad(screenTl: Offset, screen: Size, highlight: Int, tap: Float) {
-    val c = Offset(screenTl.x + screen.width / 2, screenTl.y + screen.height * 0.76f)
-    val d = screen.width * 0.26f
+    val c = Offset(screenTl.x + screen.width / 2, screenTl.y + screen.height * 0.3f)
+    val d = screen.width * 0.35f
     val dirs = listOf(Offset(1f, 0f), Offset(0f, 1f), Offset(-1f, 0f), Offset(0f, -1f))
     dirs.forEachIndexed { i, v ->
         val at = Offset(c.x + v.x * d, c.y + v.y * d)
         val on = i == highlight
         scope.drawCircle(if (on) colors.primary else colors.borderSubtle, screen.width * 0.11f, at)
         if (on && tap > 0f) scope.drawCircle(colors.primary, screen.width * (0.11f + 0.12f * tap), at, alpha = (1f - tap) * 0.4f)
+        val ink = if (on) colors.white else colors.ink
+        val length = screen.width * 0.055f
+        val tip = at + v * length
+        val normal = Offset(-v.y, v.x) * length
+        scope.drawLine(ink, at - v * length, tip, u(1.5f), StrokeCap.Round)
+        scope.drawLine(ink, tip, at + normal, u(1.5f), StrokeCap.Round)
+        scope.drawLine(ink, tip, at - normal, u(1.5f), StrokeCap.Round)
     }
+    scope.drawRoundRect(colors.borderSubtle,
+        Offset(screenTl.x + screen.width * 0.12f, screenTl.y + screen.height * 0.67f),
+        Size(screen.width * 0.76f, screen.height * 0.13f), CornerRadius(screen.width * 0.06f))
 }
 
 private val nearDirections = listOf(0, 3, 2, 1)
