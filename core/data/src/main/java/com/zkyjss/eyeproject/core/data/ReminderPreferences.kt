@@ -5,7 +5,7 @@ import android.content.Context
 /**
  * 定时护眼提醒的偏好持久化。
  *
- * 与 [ColorTemperaturePreferences] 并列：**用户偏好存哪**在这一层统一，
+ * 用户偏好在数据层统一持久化，
  * 闹钟调度（AlarmManager）留在 app 层的 `EyeCareReminderScheduler`。
  */
 object ReminderPreferences {

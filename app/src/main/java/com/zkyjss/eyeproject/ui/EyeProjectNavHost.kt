@@ -51,9 +51,9 @@ import androidx.navigation.navOptions
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
 import com.zkyjss.eyeproject.core.designsystem.util.borderTop
 import com.zkyjss.eyeproject.feature.agent.navigation.agentScreen
-import com.zkyjss.eyeproject.feature.fatigue.navigation.FatigueRoute
-import com.zkyjss.eyeproject.feature.fatigue.navigation.fatigueScreen
-import com.zkyjss.eyeproject.feature.fatigue.navigation.navigateToFatigue
+import com.zkyjss.eyeproject.feature.home.navigation.HomeRoute
+import com.zkyjss.eyeproject.feature.home.navigation.homeScreen
+import com.zkyjss.eyeproject.feature.home.navigation.navigateToHome
 import com.zkyjss.eyeproject.feature.mine.navigation.MineRoute
 import com.zkyjss.eyeproject.feature.services.navigation.ServicesRoute
 import com.zkyjss.eyeproject.feature.services.navigation.dryEyeScreen
@@ -97,7 +97,7 @@ fun EyeProjectNavHost(
     ) { innerPadding ->
         NavHost(
             navController = navController,
-            startDestination = FatigueRoute,
+            startDestination = HomeRoute,
             modifier = Modifier.padding(bottom = innerPadding.calculateBottomPadding()),
             // 品牌过渡：淡入 + 轻微上浮，退出只淡出，避免页面「飞来飞去」
             enterTransition = { fadeIn(tween(EyeMotion.MEDIUM)) + slideInVertically(tween(EyeMotion.MEDIUM, easing = EyeMotion.Standard)) { it / 24 } },
@@ -105,7 +105,7 @@ fun EyeProjectNavHost(
             popEnterTransition = { fadeIn(tween(EyeMotion.MEDIUM)) },
             popExitTransition = { fadeOut(tween(EyeMotion.SHORT)) + slideOutVertically(tween(EyeMotion.MEDIUM)) { it / 24 } },
         ) {
-            fatigueScreen(
+            homeScreen(
                 onNavigateToTestModel = { navController.navigateToTestModel() }
             )
             servicesScreen(
@@ -208,7 +208,7 @@ private fun NavDestination?.isInHierarchy(destination: TopLevelDestination): Boo
 
 /** 类型安全路由的序列化串即 @Serializable data object 的全限定名。 */
 private fun TopLevelDestination.routeName(): String = when (this) {
-    TopLevelDestination.HOME -> FatigueRoute::class.qualifiedName.orEmpty()
+    TopLevelDestination.HOME -> HomeRoute::class.qualifiedName.orEmpty()
     TopLevelDestination.SERVICES -> ServicesRoute::class.qualifiedName.orEmpty()
     TopLevelDestination.MINE -> MineRoute::class.qualifiedName.orEmpty()
 }
@@ -220,7 +220,7 @@ private fun NavHostController.navigateToTopLevelDestination(destination: TopLeve
         restoreState = true
     }
     when (destination) {
-        TopLevelDestination.HOME -> navigateToFatigue(options)
+        TopLevelDestination.HOME -> navigateToHome(options)
         TopLevelDestination.SERVICES -> navigateToServices(options)
         TopLevelDestination.MINE -> navigateToMine(options)
     }

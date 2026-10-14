@@ -199,7 +199,7 @@ dependencies {
 
 ### 5.4 DI 装配
 
-- 接口 + 实现 + `@Binds` 模块**同处一个 core 模块**（如 `core:data/di/DataModule.kt`），app 层不做数据层装配
+- 接口 + 实现 + `@Binds` 模块**同处一个 core 模块**（如 `core:notifications/di/NotifierModule.kt`），app 层不做数据层装配
 - 依赖可见性参照官方 `core:data`：对外暴露的基础设施用 `api`（common/database/datastore/network），实现细节用 `implementation`（analytics/notifications）
 
 ---
@@ -295,7 +295,7 @@ dependencies {
 | feature 拆分 | api / impl 两子模块 | 单模块 + `navigation/` 子包（三件套齐全） | feature 间互相跳转变多、或需要给测试/其他 app 复用导航键时拆分 |
 | 数据持久化 | Room + Proto DataStore | JSON 文件 + SharedPreferences | 数据量/查询复杂度上升、需要迁移策略时引入 Room |
 | 网络 | Retrofit + 离线同步 | 无网络层 | 接入云端（如智能体后端）时新建 `core:network`，Repository 接口先行 |
-| 后台同步 | WorkManager + `Synchronizer` | 前台服务（相机实时监测）+ AlarmManager（提醒） | 我们的场景要求持续相机帧流，前台服务是正确选择；**新增「定时拉取/上传」类任务时再引入 WorkManager** |
+| 后台同步 | WorkManager + `Synchronizer` | 前台测试相机 + AlarmManager（提醒） | **新增「定时拉取/上传」类任务时再引入 WorkManager** |
 | core:ui 依赖 | 可依赖数据层模型渲染组合组件 | 组件不依赖业务模型（纯通用件） | 出现「多 feature 共用的业务组合组件」时再放宽 |
 | 测试 | 无 mock 库 + Test 替身体系 + Roborazzi | 仅 `app` 下少量 androidTest（`core:testing` 因 0 消费方已删除） | **下一步优先项**：给 `BlinkDetector`/`DepthFromIris`/ViewModel 建单测；写第一个单测时按需重建 `core:testing`（一个 build 文件 + `MainDispatcherRule`） |
 | lint / benchmark / baseline profile | 全套启用 | 未启用 | 稳定后引入 lint 模块；性能问题出现时启用 benchmark |
@@ -306,7 +306,7 @@ dependencies {
 - 三层 + UDF（`StateFlow<UiState>` + lambda 事件上抛）✅
 - 依赖铁律 1~5（core 不依赖 feature；app 顶层汇聚）✅（camera 下沉后）
 - 导航三件套 + app 持有 NavHost + 底部 Tab 状态恢复 ✅
-- DI 绑定随模块（DataModule / NotifierModule）✅
+- DI 绑定随模块（NotifierModule）✅
 - designsystem 令牌化、组件不写死样式 ✅
 - settings：FAIL_ON_PROJECT_REPOS + google 仓库正则过滤 + build-logic 复合构建 ✅
 

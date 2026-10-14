@@ -2,7 +2,7 @@
 
 源码已迁到 `shared/domain/src/commonMain/kotlin`，本安卓模块转发 KMP JVM 算法。眼区灰度算法与 478 点几何转换也由该共享模块提供。详见 `shared/SHARED.md`。
 
-> 领域层：纯算法（眨眼检测、虹膜测距）+ 由 app 层实现的系统控制接口（色温、提醒）。
+> 领域层：纯算法（眨眼检测、虹膜测距）+ 由 app 层实现的系统控制接口（提醒）。
 
 ## 职责
 
@@ -22,13 +22,12 @@
 
 | 接口 | 实现位置 | 能力 |
 |---|---|---|
-| `ColorTemperatureController` | `app/di/ColorTemperatureControllerImpl` | 查询/设置色温模式、检查悬浮窗权限 |
 | `ReminderController` | `app/di/ReminderControllerImpl` | 定时护眼提醒的开关、间隔、精确闹钟调度 |
 
 ## 依赖关系
 
 - **依赖**：`core:model`
-- **被依赖**：`app`、`feature:fatigue`、`feature:services`
+- **被依赖**：`app`、`feature:home`、`feature:services`
 
 ## 注意事项
 

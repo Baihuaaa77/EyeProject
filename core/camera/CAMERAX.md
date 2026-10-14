@@ -1,6 +1,6 @@
 # core:camera
 
-> 前置摄像头采集 + MediaPipe FaceLandmarker 逐帧关键点分析的基础能力模块；**全项目唯一的 CameraX 绑定点**，预览可选（后台监测不需要，界面需要）。
+> 前置摄像头采集 + MediaPipe FaceLandmarker 逐帧关键点分析的基础能力模块；**全项目唯一的 CameraX 绑定点**，预览可选（自测可以只分析帧，实验页可以展示预览）。
 
 ## 职责
 
@@ -100,13 +100,13 @@ Note over H: 列表现在为空
 ## 依赖关系
 
 - **依赖**：`core:model`（FaceLandmarkFrame 等）；CameraX、MediaPipe tasks-vision
-- **被依赖**：`feature:fatigue`（FatigueMonitor）、`feature:services`（检测页）、`app`（Hilt 可见性）
+- **被依赖**：`feature:services`（检测页）、`app`（Hilt 可见性）
 - 模型资产：`src/main/assets/face_landmarker.task` 随本模块打包
 
 ## 注意事项
 
 - **`onFrame` 在分析线程执行**：回调里只能写 `@Volatile` 字段或转投协程，不要直接更新 UI 状态（见 CLAUDE.md 的相机管线线程模式）
-- **`CameraController` 是 `@Singleton`，一个进程只有一路相机**：检测页可通过帧观察者订阅后台监测正在使用的相机，退出时只移除自己的订阅；主动重新绑定的其他页面仍需处理相机所有权
+- **`CameraController` 是 `@Singleton`，一个进程只有一路相机**：检测页可通过帧观察者订阅当前页面正在使用的相机，退出时只移除自己的订阅；主动重新绑定的其他页面仍需处理相机所有权
 - 时间戳：CameraX 给纳秒，`detectAsync` 期望毫秒，代码里做 `/1_000_000` 换算
 - `ImageAnalysis` 使用 `STRATEGY_KEEP_ONLY_LATEST`：旧帧未处理完直接丢弃，分析不阻塞相机
 - `toArgbBitmap` 会处理 `rowStride ≠ pixelStride × width` 的行填充；旋转在送入 MediaPipe 前完成

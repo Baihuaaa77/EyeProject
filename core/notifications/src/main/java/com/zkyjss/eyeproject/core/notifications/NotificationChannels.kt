@@ -10,11 +10,13 @@ import android.os.Build
 /** 通知渠道与通知 ID 定义，供 SystemNotifier 使用。 */
 object NotificationChannels {
     const val REMINDER_CHANNEL_ID = "eye_care_reminders"
-    const val COLOR_TEMPERATURE_CHANNEL_ID = "color_temperature_service"
-    const val MONITORING_CHANNEL_ID = "eye_care_monitoring"
     const val REMINDER_NOTIFICATION_ID = 3201
-    const val COLOR_TEMPERATURE_NOTIFICATION_ID = 2101
-    const val MONITORING_NOTIFICATION_ID = 2201
+
+    /** 升级安装后清理旧版本注册的服务渠道，保留定时提醒渠道。 */
+    fun clearLegacyChannels(context: Context) {
+        val manager = context.getSystemService(NotificationManager::class.java)
+        listOf("color_temperature_service", "eye_care_monitoring").forEach(manager::deleteNotificationChannel)
+    }
 
     fun createReminderChannel(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
@@ -36,29 +38,4 @@ object NotificationChannels {
         context.getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
     }
 
-    fun createColorTemperatureChannel(context: Context) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-        val channel = NotificationChannel(
-            COLOR_TEMPERATURE_CHANNEL_ID,
-            "全局护眼色温",
-            NotificationManager.IMPORTANCE_LOW
-        ).apply {
-            description = "保持护眼色温滤镜在其他应用上层运行"
-            setShowBadge(false)
-        }
-        context.getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
-    }
-
-    fun createMonitoringChannel(context: Context) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-        val channel = NotificationChannel(
-            MONITORING_CHANNEL_ID,
-            "眼健康监测",
-            NotificationManager.IMPORTANCE_LOW
-        ).apply {
-            description = "保持眼健康监测在后台实时运行"
-            setShowBadge(false)
-        }
-        context.getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
-    }
 }

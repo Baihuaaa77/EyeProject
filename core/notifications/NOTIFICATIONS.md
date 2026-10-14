@@ -11,9 +11,9 @@
 
 | 类型 | 说明 |
 |---|---|
-| `Notifier` | 接口：`postReminderNotification(openAppIntent)`；`buildColorTemperatureNotification(mode, openAppIntent, stopIntent)` |
+| `Notifier` | 接口：`postReminderNotification(openAppIntent)` |
 | `SystemNotifier` | 系统实现（`@Singleton`，`@Inject constructor`）：自动建渠道、检查 `POST_NOTIFICATIONS` 权限（T+ 无权限静默跳过） |
-| `NotificationChannels` | 渠道与 ID 常量：提醒（高优先级、闹铃音、振动）、色温服务（低）、监测服务（低） |
+| `NotificationChannels` | 渠道与 ID 常量：提醒（高优先级、闹铃音、振动）；升级时清理旧版本服务渠道 |
 | `di/NotifierModule` | Hilt 绑定：`SystemNotifier → Notifier` |
 
 ### 渠道与 ID
@@ -21,13 +21,11 @@
 | 渠道 | 通知 ID | 用途 |
 |---|---|---|
 | `eye_care_reminders` | 3201 | 定时护眼提醒（`IMPORTANCE_HIGH`，闹铃音 + 振动） |
-| `color_temperature_service` | 2101 | 色温前台服务常驻通知 |
-| `eye_care_monitoring` | 2201 | 后台监测前台服务常驻通知 |
 
 ## 依赖关系
 
-- **依赖**：`core:model`（`ColorTemperatureMode`）
-- **被依赖**：`app`（MonitoringService、提醒调度、色温服务）
+- **依赖**：Android Core
+- **被依赖**：`app`（提醒调度）
 
 ## 注意事项
 

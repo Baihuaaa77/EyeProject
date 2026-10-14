@@ -24,10 +24,10 @@ import javax.inject.Singleton
 /**
  * 前置摄像头分析控制器：**全项目唯一的 CameraX 绑定点**。
  *
- * 调用方只提供生命周期、预览容器（后台监测传 `null`）与业务回调，不再各自拼
+ * 调用方只提供生命周期、预览容器（无预览时传 `null`）与业务回调，不再各自拼
  * `ProcessCameraProvider` / `Executor` / `Preview` / `ImageAnalysis` / `bindToLifecycle`。
  * 逐帧的人脸关键点经 [start] 的 `onFrame` 交给调用方，由调用方决定业务语义
- * （检测页画框、干眼页做门禁与测距、监测引擎做 30 秒采样）—— 这三个业务确实不同，
+ * （检测页画框、干眼页做门禁与测距），
  * 所以只收仪式、不收业务。
  *
  * **线程约束**：`onFrame` 在**分析线程**上调用，回调里只能写 `@Volatile` 字段或转投协程；
@@ -69,7 +69,7 @@ class CameraController @Inject constructor(
     /**
      * 启动相机，重复调用（在上一代尚未就绪时也算）只有最后一次生效。
      *
-     * @param previewView 传 `null` 表示无预览（后台监测）；否则把画面接到该容器
+     * @param previewView 传 `null` 表示只分析帧、不展示预览；否则把画面接到该容器
      * @param onFrame 每帧人脸关键点，**在分析线程回调**
      * @param onError 启动或分析失败，在主线程回调
      */

@@ -1,7 +1,7 @@
 # EyeProject — 眼健康助手
 
-Android 眼疲劳监测应用：CameraX + MediaPipe Face Landmarker 采集用眼数据（距离/眨眼/光照/头姿），
-C++ 算法（JNI）综合评分，Compose 全自绘仪表盘，前台服务后台持续监测。
+安卓 / iOS 眼健康自测应用：三项前台测试共用 Kotlin Multiplatform 核心，
+CameraX / AVFoundation + MediaPipe Face Landmarker 采集眼部数据，安卓 Compose 与苹果 SwiftUI 呈现。
 项目结构严格对齐 [Now in Android (NIA)](docs/NIA项目开发规范.md)。
 
 ## 协作约定
@@ -26,19 +26,19 @@ C++ 算法（JNI）综合评分，Compose 全自绘仪表盘，前台服务后�
 ## 模块地图（每个模块根目录有同名 `.md` 详细文档，改动前先读）
 
 ```
-app/            入口 + EyeProjectNavHost + DI 装配 + 系统组件（监测/色温前台服务、提醒闹钟）
+app/            入口 + EyeProjectNavHost + DI 装配 + 系统组件（提醒闹钟）
 build-logic/    约定插件（eyeproject.*，见其 CONVENTIONS.md）
 core/
   model/        纯 Kotlin 领域模型（零 Android 依赖）
   common/       格式化纯函数
   domain/       算法（BlinkDetector/DepthFromIris）+ app 实现的端口接口
-  data/         传感器/亮度/JSON 持久化仓储 + DataModule
+  data/         休息提醒偏好持久化
   camera/       相机管线唯一绑定点（预览可选）+ MediaPipe FaceLandmarker + 相机内参
   notifications/ Notifier 抽象 + 渠道 + NotifierModule
   designsystem/ 设计令牌 + EyeProjectTheme（唯一视觉事实源）
   ui/           自绘通用组件（EyeButton/EyeText/…）
 feature/
-  fatigue/      核心：监测引擎 + C++ 评分(JNI) + 仪表盘
+  home/         首页：品牌、休息提醒、模型测试入口
   services/     干眼/老视/斜视自检
   testmodel/    实验页：主导航 + gaze/（FaceDetector + LiteRT L2CS-Net 注视估计）+ blink/（FaceLandmarker EAR 眨眼检测）
   mine/ agent/  占位页

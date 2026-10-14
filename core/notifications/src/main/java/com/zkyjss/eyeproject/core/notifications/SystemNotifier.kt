@@ -1,7 +1,6 @@
 package com.zkyjss.eyeproject.core.notifications
 
 import android.Manifest
-import android.app.Notification
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
@@ -10,7 +9,6 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
-import com.zkyjss.eyeproject.core.model.ColorTemperatureMode
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -50,59 +48,4 @@ class SystemNotifier @Inject constructor(
             .notify(NotificationChannels.REMINDER_NOTIFICATION_ID, notification)
     }
 
-    override fun buildColorTemperatureNotification(
-        mode: ColorTemperatureMode,
-        openAppIntent: Intent,
-        stopIntent: Intent
-    ): Notification {
-        NotificationChannels.createColorTemperatureChannel(context)
-        val openPendingIntent = PendingIntent.getActivity(
-            context,
-            0,
-            openAppIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        val stopPendingIntent = PendingIntent.getService(
-            context,
-            1,
-            stopIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        return NotificationCompat.Builder(context, NotificationChannels.COLOR_TEMPERATURE_CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_stat_eye)
-            .setContentTitle("护眼色温正在运行")
-            .setContentText("当前模式：${mode.label}")
-            .setContentIntent(openPendingIntent)
-            .addAction(0, "关闭滤镜", stopPendingIntent)
-            .setOngoing(true)
-            .setCategory(NotificationCompat.CATEGORY_SERVICE)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .build()
-    }
-
-    override fun buildMonitoringNotification(openAppIntent: Intent, stopIntent: Intent): Notification {
-        NotificationChannels.createMonitoringChannel(context)
-        val pendingIntent = PendingIntent.getActivity(
-            context,
-            0,
-            openAppIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        val stopPendingIntent = PendingIntent.getService(
-            context,
-            2,
-            stopIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        return NotificationCompat.Builder(context, NotificationChannels.MONITORING_CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_stat_eye)
-            .setContentTitle("眼健康监测运行中")
-            .setContentText("正在后台实时采集用眼数据")
-            .setContentIntent(pendingIntent)
-            .addAction(0, "停止监测", stopPendingIntent)
-            .setOngoing(true)
-            .setCategory(NotificationCompat.CATEGORY_SERVICE)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .build()
-    }
 }

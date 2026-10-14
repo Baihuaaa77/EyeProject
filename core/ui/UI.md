@@ -46,7 +46,7 @@
 ## 依赖关系
 
 - **依赖**：`core:designsystem`；Compose BOM
-- **被依赖**：全部 5 个 feature 模块（fatigue / testmodel / services / mine / agent）
+- **被依赖**：全部 5 个 feature 模块（home / testmodel / services / mine / agent）
 
 ## 注意事项
 

@@ -25,7 +25,7 @@ import com.zkyjss.eyeproject.core.model.Point2f
 import java.util.concurrent.CopyOnWriteArrayList
 
 /**
- * 基于 MediaPipe FaceLandmarker（478 点）的逐帧分析器，输出疲劳检测所需指标：
+ * 基于 MediaPipe FaceLandmarker（478 点）的逐帧分析器，输出眼部检测所需指标：
  * 人脸框、双眼 EAR 6 点、虹膜 5 点与虹膜直径。
  */
 class FaceLandmarkerAnalyzer(
