@@ -1,0 +1,10 @@
+platform :ios, '16.0'
+use_frameworks! :linkage => :static
+
+target 'EyeProject' do
+  # 与安卓锁定同一 MediaPipe Tasks 发布版本，模型文件也只维护一份。
+  pod 'MediaPipeTasksVision', '1.0.0'
+  target 'EyeProjectTests' do
+    inherit! :search_paths
+  end
+end

@@ -22,8 +22,8 @@ class ScreeningGazeFlowTest {
         val context = ApplicationProvider.getApplicationContext<Context>()
         return ScreeningTestViewModel(context, CameraController(context), CameraIntrinsicsProvider(context)).also { vm ->
             @Suppress("UNCHECKED_CAST")
-            val state = ScreeningTestViewModel::class.java.getDeclaredField("_state").apply { isAccessible = true }
-                .get(vm) as MutableStateFlow<ScreeningState>
+            val state = ScreeningEngine::class.java.getDeclaredField("_state").apply { isAccessible = true }
+                .get(vm.engine) as MutableStateFlow<ScreeningState>
             state.value = ScreeningState(kind = ScreeningKind.STRABISMUS, step = ScreeningStep.FIXATION, guidePending = true)
         }
     }
@@ -52,8 +52,8 @@ class ScreeningGazeFlowTest {
         val vm = viewModel()
         vm.confirmGuide()
         @Suppress("UNCHECKED_CAST")
-        val calibration = ScreeningTestViewModel::class.java.getDeclaredField("gazeCalibration").apply { isAccessible = true }
-            .get(vm) as MutableList<GazeCalibrationSample>
+        val calibration = ScreeningEngine::class.java.getDeclaredField("gazeCalibration").apply { isAccessible = true }
+            .get(vm.engine) as MutableList<GazeCalibrationSample>
         StrabismusGaze.calibrationTargets.forEachIndexed { index, target ->
             repeat(6) {
                 calibration.add(GazeCalibrationSample(index, target,
@@ -72,9 +72,9 @@ class ScreeningGazeFlowTest {
 
     @Test fun coveredEyesPredictionCannotMaskTheUncoveredEyesLookAway() {
         val vm = viewModel()
-        fun field(name: String) = ScreeningTestViewModel::class.java.getDeclaredField(name).apply { isAccessible = true }
+        fun field(name: String) = ScreeningEngine::class.java.getDeclaredField(name).apply { isAccessible = true }
         @Suppress("UNCHECKED_CAST")
-        val state = field("_state").get(vm) as MutableStateFlow<ScreeningState>
+        val state = field("_state").get(vm.engine) as MutableStateFlow<ScreeningState>
         state.value = ScreeningState(kind = ScreeningKind.STRABISMUS, step = ScreeningStep.COVER, gazeCalibrated = true,
             coverMarks = listOf(CoverMark("遮左眼", 0L, covered = VisionEye.LEFT)))
         val calibration = StrabismusGaze.calibrationTargets.flatMapIndexed { index, target ->
@@ -82,16 +82,15 @@ class ScreeningGazeFlowTest {
                 GazePoint((target.x - 0.5f) / 5f, (target.y - 0.5f) / 3f),
                 GazePoint((target.x - 0.5f) / 5f, (target.y - 0.5f) / 3f)) }
         }
-        field("gaze").set(vm, StrabismusGaze.calibrate(calibration))
-        field("cachedFocalWidth").set(vm, 400)
-        field("cachedFocalPx").set(vm, 400f)
-        field("cachedGeometry").set(vm, CameraIntrinsicsProvider.Geometry("test", 400, 400,
-            1f, 1f, 1f, 400f, 200f, 200f, "测试标定"))
-        field("cachedCalibrationVersion").set(vm, (field("intrinsics").get(vm) as CameraIntrinsicsProvider).calibrationVersion())
+        field("gaze").set(vm.engine, StrabismusGaze.calibrate(calibration))
+        field("cachedFocalWidth").set(vm.engine, 400)
+        field("cachedFocalPx").set(vm.engine, 400f)
+        field("cachedGeometry").set(vm.engine, CameraGeometry(400, 400, 400f))
+        field("cachedCalibrationVersion").set(vm.engine, 0L)
         val context = ApplicationProvider.getApplicationContext<Context>()
         val display = context.resources.displayMetrics
         vm.reportGazeTarget(display.widthPixels * 0.5f, display.heightPixels * 0.5f)
-        val process = ScreeningTestViewModel::class.java.getDeclaredMethod("processFrame", Long::class.javaPrimitiveType,
+        val process = ScreeningEngine::class.java.getDeclaredMethod("processFrame", Long::class.javaPrimitiveType,
             ScreeningStep::class.java, FaceLandmarkFrame::class.java).apply { isAccessible = true }
         fun eye(label: String, centerX: Float, rawX: Float, rawY: Float) = EyeLandmarks(label,
             listOf(Point2f(centerX - 40, 100f), Point2f(centerX - 20, 90f), Point2f(centerX + 20, 90f),
@@ -102,12 +101,12 @@ class ScreeningGazeFlowTest {
             val now = SystemClock.elapsedRealtime()
             val face = FaceMetrics(BoundingBox(40f, 40f, 360f, 360f), eye("LEFT", 100f, 0f, 0f),
                 eye("RIGHT", 300f, rightX, rightY), headPose = HeadPoseEstimate(0f, 0f, 0f))
-            process.invoke(vm, now, ScreeningStep.COVER, FaceLandmarkFrame(listOf(face), 400, 400, now, 0L, 10f))
+            process.invoke(vm.engine, now, ScreeningStep.COVER, FaceLandmarkFrame(listOf(face), 400, 400, now, 0L, 10f))
         }
         repeat(25) { feed(0.09f, 0.15f) }
         assertTrue(vm.state.value.gazeWarning!!.contains("偏离"))
         @Suppress("UNCHECKED_CAST")
-        val samples = field("samples").get(vm) as List<EyeMotionSample>
+        val samples = field("samples").get(vm.engine) as List<EyeMotionSample>
         assertEquals(false, samples.last().gazeOnTarget)
         assertNull(samples.last().leftGazeX)
         feed(0f, 0f)

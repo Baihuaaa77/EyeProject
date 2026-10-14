@@ -1,5 +1,7 @@
 # core:model
 
+源码已迁到 `shared/model/src/commonMain/kotlin`，本安卓模块通过 `api` 转发同一份 KMP JVM 类型，包名保持不变。新增公共模型应修改共享目录。
+
 > 纯 Kotlin 领域模型层：全项目共享的数据结构定义，不依赖任何 Android API。
 
 ## 职责

@@ -19,16 +19,10 @@ import com.google.mediapipe.tasks.vision.core.RunningMode
 import com.google.mediapipe.tasks.vision.facelandmarker.FaceLandmarker
 import com.google.mediapipe.tasks.vision.facelandmarker.FaceLandmarkerResult
 import com.zkyjss.eyeproject.core.model.BoundingBox
-import com.zkyjss.eyeproject.core.model.EyeLandmarks
 import com.zkyjss.eyeproject.core.model.FaceLandmarkFrame
 import com.zkyjss.eyeproject.core.model.FaceMetrics
-import com.zkyjss.eyeproject.core.model.HeadPoseEstimate
 import com.zkyjss.eyeproject.core.model.Point2f
 import java.util.concurrent.CopyOnWriteArrayList
-import kotlin.math.hypot
-import kotlin.math.asin
-import kotlin.math.atan2
-import kotlin.math.sqrt
 
 /**
  * 基于 MediaPipe FaceLandmarker（478 点）的逐帧分析器，输出疲劳检测所需指标：
@@ -181,66 +175,15 @@ class FaceLandmarkerAnalyzer(
         bitmap: Bitmap,
         matrix: FloatArray?,
     ): FaceMetrics {
-        val left = extractEye("LEFT", LEFT_EAR, LEFT_IRIS, lms, sourceWidth, sourceHeight)
-        val right = extractEye("RIGHT", RIGHT_EAR, RIGHT_IRIS, lms, sourceWidth, sourceHeight)
-        return FaceMetrics(
-            faceBox = lms.boundingBox(sourceWidth, sourceHeight),
-            leftEye = left,
-            rightEye = right,
-            leftOptical = EyeOpticalDetector.measure(bitmap, left),
-            rightOptical = EyeOpticalDetector.measure(bitmap, right),
-            headPose = matrix?.let(::headPose),
-        )
-    }
-
-    /** 4×4 列主序矩阵的旋转部分；去掉统一尺度后得到相对欧拉角。 */
-    private fun headPose(matrix: FloatArray): HeadPoseEstimate? {
-        if (matrix.size != 16) return null
-        val scale = sqrt(matrix[0] * matrix[0] + matrix[1] * matrix[1] + matrix[2] * matrix[2])
-        if (scale <= 0f) return null
-        val r00 = matrix[0] / scale; val r10 = matrix[1] / scale
-        val r20 = matrix[2] / scale; val r21 = matrix[6] / scale; val r22 = matrix[10] / scale
-        val yaw = asin((-r20).coerceIn(-1f, 1f))
-        val pitch = atan2(r21, r22)
-        val roll = atan2(r10, r00)
-        val degrees = (180.0 / Math.PI).toFloat()
-        return HeadPoseEstimate(yaw * degrees, pitch * degrees, roll * degrees)
-    }
-
-    private fun extractEye(
-        label: String,
-        earIndices: IntArray,
-        irisIndices: IntArray,
-        lms: List<NormalizedLandmark>,
-        sourceWidth: Int,
-        sourceHeight: Int
-    ): EyeLandmarks? {
-        val earPoints = earIndices
-            .map { index -> lms.getOrNull(index)?.toPoint(sourceWidth, sourceHeight) }
-            .filterNotNull()
-        val irisPoints = irisIndices
-            .map { index -> lms.getOrNull(index)?.toPoint(sourceWidth, sourceHeight) }
-            .filterNotNull()
-        if (earPoints.size < 6 || irisPoints.isEmpty()) return null
-
-        return EyeLandmarks(
-            label = label,
-            earPoints = earPoints,
-            irisPoints = irisPoints,
-            irisDiameterPx = maxIrisDiameter(irisPoints)
-        )
-    }
-
-    /** 虹膜直径 = 5 个虹膜点中任意两点的最大距离（对点序不敏感）。 */
-    private fun maxIrisDiameter(points: List<Point2f>): Float {
-        var max = 0f
-        for (i in points.indices) {
-            for (j in i + 1 until points.size) {
-                val d = hypot(points[i].x - points[j].x, points[i].y - points[j].y)
-                if (d > max) max = d
-            }
+        val points = FloatArray(lms.size * 3)
+        lms.forEachIndexed { index, landmark ->
+            points[index * 3] = landmark.x()
+            points[index * 3 + 1] = landmark.y()
+            points[index * 3 + 2] = landmark.z()
         }
-        return max
+        // 同一 478 点索引、头姿矩阵和光学算法也用于 iOS，拒判条件一起维护。
+        return LandmarkGeometry.face(points, matrix ?: FloatArray(0), BitmapGrayImage(bitmap))
+            ?: FaceMetrics(lms.boundingBox(sourceWidth, sourceHeight), null, null)
     }
 
     private fun List<NormalizedLandmark>.boundingBox(
@@ -381,12 +324,5 @@ class FaceLandmarkerAnalyzer(
             }
         }
 
-        // EAR 6 点（MediaPipe FaceMesh 478 点索引，p1..p6）
-        private val LEFT_EAR = intArrayOf(362, 385, 387, 263, 373, 380)
-        private val RIGHT_EAR = intArrayOf(33, 160, 158, 133, 153, 144)
-
-        // 虹膜 5 点（中心 + 4 边界）
-        private val LEFT_IRIS = intArrayOf(473, 474, 475, 476, 477)
-        private val RIGHT_IRIS = intArrayOf(468, 469, 470, 471, 472)
     }
 }

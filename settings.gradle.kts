@@ -24,6 +24,8 @@ dependencyResolutionManagement {
 
 rootProject.name = "EyeProject"
 includeBuild("build-logic")
+// 共享构建独立管理 Kotlin/Native 工具链；JVM API 保持与现有安卓 Kotlin 2.2 兼容。
+includeBuild("shared")
 
 include(":app")
 include(":core:common")

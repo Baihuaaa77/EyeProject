@@ -28,6 +28,20 @@ build-logic/convention/bin/
 /build_tmp_apk/
 /build_tmp_javap/
 
+# iOS 生成工程、依赖、构建产物与本地签名材料
+iosApp/Pods/
+iosApp/build/
+iosApp/EyeProject.xcodeproj/
+iosApp/EyeProject.xcworkspace/
+iosApp/Info.plist
+iosApp/vendor/
+iosApp/.bundle/
+**/xcuserdata/
+**/*.p12
+**/*.mobileprovision
+**/AuthKey_*.p8
+iosApp/ExportOptions.local.plist
+
 # Python 缓存
 __pycache__/
 *.pyc

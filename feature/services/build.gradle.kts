@@ -14,6 +14,7 @@ android {
 }
 
 dependencies {
+    implementation("com.zkyjss.eyeproject.shared:screening:1.0.0")
     implementation(project(":core:model"))
     implementation(project(":core:common"))
     implementation(project(":core:domain"))

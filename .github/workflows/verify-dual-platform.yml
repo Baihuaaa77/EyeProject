@@ -1,0 +1,61 @@
+name: 双端回归与 iOS 编译
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches: [master, "codex/**"]
+permissions:
+  contents: read
+concurrency:
+  group: dual-platform-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  shared:
+    name: 共用算法 JVM 回归
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: "17"}
+      - uses: gradle/actions/setup-gradle@v4
+      - run: python3 scripts/ios/check_project.py
+      - run: chmod +x gradlew && ./gradlew -p shared :model:jvmTest :domain:jvmTest :screening:jvmTest
+  android:
+    name: 安卓原有功能回归
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: "25"}
+      - uses: android-actions/setup-android@v3
+      - run: sdkmanager "platforms;android-37" "build-tools;36.0.0" "ndk;27.3.13750724" "cmake;3.22.1"
+      - uses: gradle/actions/setup-gradle@v4
+      - run: chmod +x gradlew && ./gradlew :app:compileDebugKotlin :feature:services:testDebugUnitTest :core:domain:testDebugUnitTest :app:assembleDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
+  ios:
+    name: iOS 共用算法与模拟器测试（不需要签名）
+    runs-on: macos-26
+    needs: shared
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: "17"}
+      - uses: maxim-lobanov/setup-xcode@v1
+        with: {xcode-version: "26.4"}
+      - uses: gradle/actions/setup-gradle@v4
+      - uses: ruby/setup-ruby@v1
+        with: {ruby-version: "3.3", working-directory: iosApp, bundler-cache: true}
+      - run: brew install xcodegen
+      - run: chmod +x gradlew && ./gradlew -p shared :domain:iosSimulatorArm64Test :screening:iosSimulatorArm64Test
+      - run: ./scripts/ios/verify.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-verification
+          path: |
+            iosApp/build/*.xcresult
+            shared/screening/build/reports/tests/
+            shared/domain/build/reports/tests/

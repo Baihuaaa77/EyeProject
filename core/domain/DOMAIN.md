@@ -1,5 +1,7 @@
 # core:domain
 
+源码已迁到 `shared/domain/src/commonMain/kotlin`，本安卓模块转发 KMP JVM 算法。眼区灰度算法与 478 点几何转换也由该共享模块提供。详见 `shared/SHARED.md`。
+
 > 领域层：纯算法（眨眼检测、虹膜测距）+ 由 app 层实现的系统控制接口（色温、提醒）。
 
 ## 职责

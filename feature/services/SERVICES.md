@@ -1,5 +1,7 @@
 # feature:services
 
+三项协议、状态、问卷模型、状态机、计算规则、注视监督和语音指令解析已迁到 `shared/screening/src/commonMain/kotlin`。安卓 ViewModel 仅连接 `AndroidScreeningPlatform`；修改规则必须修改共享目录。iOS 工程与当前验收边界见 `docs/iOS适配与双端构建.md`。
+
 > 眼病症自检服务集合：干眼 / 老视 / 斜视三项测试，流程对齐《智能眼科-整合9.18》（对照表见 `docs/三病种流程对齐-2026-10-11.md`）。
 
 ## 职责

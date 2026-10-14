@@ -7,5 +7,5 @@ android {
 }
 
 dependencies {
-    implementation(project(":core:model"))
+    api("com.zkyjss.eyeproject.shared:domain:1.0.0")
 }

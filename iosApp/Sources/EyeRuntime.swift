@@ -1,0 +1,149 @@
+import Foundation
+import UIKit
+import SwiftUI
+import EyeScreening
+
+/// 快照只用于界面呈现；所有作答、阶段切换和分级事件进入同一 Kotlin 引擎。
+final class EyeRuntime: ObservableObject {
+    @Published var state: [String: Any] = [:]
+    @Published var questions: [[String: Any]] = []
+    @Published var fields: [String: String] = [:]
+    @Published var error: String?
+    @Published var speechStatus = ""
+    let camera = EyeCamera()
+    let voice = EyeVoice()
+    private var timer: Timer?
+    private var lastSnapshot = ""
+    private var lastQuestionnaire = ""
+    private var lastPrompt = ""
+    private var promptWork: DispatchWorkItem?
+    private var prepared = false
+    private var closed = false
+    private var isForeground = true
+    private lazy var presentation = FramePresentationMarker { [weak self] id in
+        guard let self = self, !self.closed, self.isForeground else { return }
+        self.controller.markPresented(trialId: id)
+    }
+    let kind: String
+    private(set) lazy var controller = MobileScreeningController(systemEvent: { [weak self] event in
+        DispatchQueue.main.async {
+            guard let self = self, !self.closed else { return }
+            if event == "camera:start" { self.camera.start() }
+            else if event == "camera:stop" { self.camera.stop() }
+        }
+        return KotlinUnit()
+    }, recordSaved: { [weak self] name, text in
+        do {
+            let directory = Self.recordsDirectory
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            var record = Self.object(text)
+            let savedScale = UserDefaults.standard.float(forKey: "eye.distanceScale")
+            record["deviceCalibration"] = ["distanceScale": savedScale > 0 ? savedScale : 1,
+                "distanceCalibrated": UserDefaults.standard.bool(forKey: "eye.distanceCalibrated"),
+                "pixelsPerMm": UserDefaults.standard.float(forKey: "eye.pixelsPerMm"), "systemVersion": UIDevice.current.systemVersion]
+            let data = try JSONSerialization.data(withJSONObject: record, options: [.sortedKeys])
+            try data.write(to: directory.appendingPathComponent(name), options: .atomic)
+        } catch { DispatchQueue.main.async { self?.error = "保存记录失败：\(error.localizedDescription)" } }
+        return KotlinUnit()
+    })
+    static var recordsDirectory: URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("Screening", isDirectory: true)
+    }
+    init(kind: String) {
+        self.kind = kind
+        camera.onFrame = { [weak self] points, matrix, image, focal, time, brightness in
+            guard let self = self else { return }
+            DispatchQueue.main.async {
+                guard !self.closed else { return }
+                self.controller.cameraSample(points: points, matrix: matrix, image: image,
+                    focalLengthPx: focal, timeMs: time, brightness: brightness)
+            }
+        }
+        camera.onError = { [weak self] message in
+            DispatchQueue.main.async { self?.error = message; self?.controller.cameraFailed(message: message) }
+        }
+        voice.onAnswer = { [weak self] text in self?.controller.voiceAnswer(text: text) ?? false }
+        voice.onStatus = { [weak self] text in self?.speechStatus = text }
+    }
+    func prepare(pixelsPerMm: Float) {
+        guard !prepared else { return }
+        prepared = true
+        let screen = UIScreen.main
+        controller.configureDisplay(widthPixels: Int32(screen.bounds.width * screen.scale),
+            heightPixels: Int32(screen.bounds.height * screen.scale), pixelsPerMm: pixelsPerMm)
+        controller.selectTest(name: kind)
+        let task = Timer(timeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in self?.refresh() }
+        timer = task; RunLoop.main.add(task, forMode: .common)
+        refresh()
+    }
+    func refresh() {
+        guard prepared, !closed else { return }
+        let snapshot = controller.snapshotJson()
+        if snapshot != lastSnapshot {
+            lastSnapshot = snapshot
+            state = Self.object(snapshot)
+            let phase = string("phase")
+            let prompt: String
+            if phase == "Profile" || phase == "PROFILE" { prompt = "请先填写基本信息。" }
+            else if phase == "Setup" || phase == "ENVIRONMENT" {
+                prompt = kind == "STRABISMUS" ? "请正对屏幕，保持三十三厘米。" : "请正对屏幕，保持四十厘米。"
+            } else { prompt = string("instruction") }
+            if !prompt.isEmpty && prompt != lastPrompt {
+                lastPrompt = prompt; promptWork?.cancel()
+                let work = DispatchWorkItem { [weak self] in
+                    guard let self = self, self.isForeground, !self.closed else { return }
+                    self.voice.speak(prompt)
+                }
+                promptWork = work; DispatchQueue.main.asyncAfter(deadline: .now() + 0.65, execute: work)
+            }
+        }
+        let questionnaire = controller.questionnaireJson()
+        if questionnaire != lastQuestionnaire {
+            lastQuestionnaire = questionnaire
+            let data = Self.object(questionnaire)
+            questions = data["questions"] as? [[String: Any]] ?? []
+            fields = data["fields"] as? [String: String] ?? [:]
+        }
+        voice.setListening(isForeground && bool("voiceActive"))
+    }
+    func string(_ key: String) -> String { state[key] as? String ?? "" }
+    func bool(_ key: String) -> Bool { state[key] as? Bool ?? false }
+    func number(_ key: String) -> Double { (state[key] as? NSNumber)?.doubleValue ?? 0 }
+    func setField(_ key: String, _ value: String) { controller.setField(key: key, value: value); refresh() }
+    func act(_ name: String) { controller.action(name: name); refresh() }
+    func answer(_ direction: Int) { controller.answer(direction: Int32(direction), byVoice: false); refresh() }
+    func schedulePresented(_ id: Int32) { if id > 0 { presentation.schedule(id) } }
+    func finishProfile() {
+        if !controller.profileComplete() { error = "请完成所有必填项，并选择测试戴镜模式。" }
+        refresh()
+    }
+    func interrupt() {
+        isForeground = false
+        promptWork?.cancel(); presentation.cancel(); voice.stop(); camera.stop(); controller.interrupt(); refresh()
+    }
+    func resume() { isForeground = true; lastPrompt = ""; refresh() }
+    func close() {
+        guard !closed else { return }
+        closed = true; timer?.invalidate(); promptWork?.cancel(); presentation.cancel(); voice.close(); camera.stop(); controller.close()
+    }
+    static func object(_ text: String) -> [String: Any] {
+        guard let data = text.data(using: .utf8) else { return [:] }
+        return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
+    }
+}
+
+/// 与安卓的两次 withFrameNanos 对齐：经过两个显示刷新回调后才标记题目已呈现。
+private final class FramePresentationMarker: NSObject {
+    private let presented: (Int32) -> Void
+    private var link: CADisplayLink?
+    private var id: Int32 = 0
+    private var ticks = 0
+    init(_ callback: @escaping (Int32) -> Void) { presented = callback; super.init() }
+    func schedule(_ id: Int32) {
+        cancel(); self.id = id; ticks = 0
+        let next = CADisplayLink(target: self, selector: #selector(tick))
+        link = next; next.add(to: .main, forMode: .common)
+    }
+    @objc private func tick() { ticks += 1; if ticks >= 2 { let trial = id; cancel(); presented(trial) } }
+    func cancel() { link?.invalidate(); link = nil }
+}

@@ -1,0 +1,62 @@
+name: EyeProject
+options:
+  bundleIdPrefix: com.zkyjss.eyeproject
+  deploymentTarget:
+    iOS: "16.0"
+  xcodeVersion: "26.4"
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    FRAMEWORK_SEARCH_PATHS: "$(inherited) $(SRCROOT)/../shared/screening/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)"
+    OTHER_LDFLAGS: "$(inherited) -framework EyeScreening -lc++"
+targets:
+  EyeProject:
+    type: application
+    platform: iOS
+    sources:
+      - Sources
+      - path: ../core/camera/src/main/assets/face_landmarker.task
+        buildPhase: resources
+    info:
+      path: Info.plist
+      properties:
+        CFBundleDisplayName: 眼健康助手
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        NSCameraUsageDescription: 用前置摄像头检测眼部关键点、眨眼和眼屏距离，完成眼健康自测。
+        NSMicrophoneUsageDescription: 在测试中通过语音回答 E 的方向，减少手动操作。
+        NSSpeechRecognitionUsageDescription: 将上、下、左、右等短指令转换为测试答案。
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
+        ITSAppUsesNonExemptEncryption: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.zkyjss.eyeproject.ios
+        GENERATE_INFOPLIST_FILE: NO
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+        CODE_SIGN_STYLE: Automatic
+        TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    preBuildScripts:
+      - name: 构建双端共用核心
+        script: |
+          set -eu
+          cd "$SRCROOT/.."
+          ./gradlew -p shared :screening:embedAndSignAppleFrameworkForXcode
+        basedOnDependencyAnalysis: false
+    scheme:
+      testTargets: [EyeProjectTests]
+  EyeProjectTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: Tests
+    dependencies:
+      - target: EyeProject
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.zkyjss.eyeproject.tests
