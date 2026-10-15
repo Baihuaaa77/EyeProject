@@ -27,7 +27,7 @@ iOS 已提供本机记录保存与分享，但尚未接入安卓已有的历史�
 
 ## Windows 可以做什么
 
-共用代码及安卓开发、JVM 测试、安卓 APK 构建、工程规格检查均可继续在 Windows 进行。当前没有开发者会员、云端 Mac 或已授权仓库时，代码和配置可以完成，但不能据此声称已经生成可安装的 iOS 包。
+共用代码及安卓开发、JVM 测试、安卓 APK 构建、工程规格检查均可继续在 Windows 进行。iOS 编译与模拟器测试由 GitHub Actions 的 macOS runner 执行，无需本机 Mac 或 Apple Developer Program 会员。安装到真实 iPhone 仍需配置苹果签名。
 
 ## 开通云端后进行首次 iOS 验证
 
@@ -87,7 +87,19 @@ export IOS_EXPORT_OPTIONS_PLIST="$PWD/iosApp/ExportOptions.local.plist"
 
 ## 目前未验证项
 
-当前 Windows 环境没有执行 Xcode 编译、iOS Simulator 测试、签名、TestFlight 上传或真实 iPhone 测量。本轮不能提供已经签名的 IPA，不能保证尚未运行的苹果 API 集成无误；第一次 macOS 构建返回的诊断仍需处理。
+签名、IPA 导出、TestFlight 上传和真实 iPhone 测量尚未执行。模拟器通过仅证明本轮编译、桥接和自动化用例通过，真实相机、测距、语音与测量准确性仍需按上述验收顺序验证。
+
+## 首次云端验证（2026-10-15）
+
+[GitHub Actions 验证记录](https://github.com/Baihuaaa77/EyeProject/actions/runs/38672546754)，代码提交 `4045d7f58c7cc1387e621e1a9914b782d72257bc`，分支 `codex/ios-shared-screening`。使用 macOS 26、Xcode 26.4.1，未使用苹果签名。
+
+- 共用算法 JVM 回归通过。
+- iOS Simulator 共用 domain 3 项、screening 10 项测试通过。
+- Swift 应用编译、MediaPipe 链接与模拟器运行通过；两项 XCTest 验证三项任务的共用引擎桥接和 RGB 灰度／区域像素转换，均为零失败。
+- 安卓编译、原有 home/services 单元测试及 Debug APK 打包通过。
+- 构建附件 `ios-verification` 保存 `.xcresult`、共用核心测试报告和生成的桥接头文件；`android-debug` 保存 APK。
+
+首次云端运行修正了 Android SDK 安装包名与过时的 tools 默认包、苹果时间戳属性与 Combine 导入、Swift 无返回值回调适配，以及 XCTest 重复加载 MediaPipe 静态图的问题。测试目标有意覆盖 `OTHER_LDFLAGS`，由宿主应用加载静态图，避免继承 Pods 的 `-force_load` 后重复注册 Calculator；应用自身的 MediaPipe 链接保留。
 
 ## 本轮本地验证（2026-10-14）
 
