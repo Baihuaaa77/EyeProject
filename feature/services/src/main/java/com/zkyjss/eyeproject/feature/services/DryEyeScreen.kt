@@ -84,6 +84,7 @@ fun DryEyeScreen(
     val settings = rememberTestSettings()
     val voiceEnabled = settings.speechEnabled
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
+    TestFeedbackEffect(settings, voice, settingsOpen, viewModel::feedbackCues)
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         if (it) viewModel.startMonitoring(lifecycleOwner) else viewModel.permissionDenied()
     }

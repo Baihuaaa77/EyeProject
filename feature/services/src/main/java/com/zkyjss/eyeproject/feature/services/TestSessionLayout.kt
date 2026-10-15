@@ -33,13 +33,21 @@ internal class TestSettings(private val preferences: SharedPreferences) {
         private set
     var answersEnabled by mutableStateOf(true)
         private set
+    var soundEnabled by mutableStateOf(true)
+        private set
+    var hapticsEnabled by mutableStateOf(true)
+        private set
     init { refresh() }
     fun refresh() {
         speechEnabled = preferences.getBoolean("speech", true)
         answersEnabled = preferences.getBoolean("answers", true)
+        soundEnabled = preferences.getBoolean("sound", true)
+        hapticsEnabled = preferences.getBoolean("haptics", true)
     }
     fun setSpeech(enabled: Boolean) { speechEnabled = enabled; preferences.edit().putBoolean("speech", enabled).apply() }
     fun setAnswers(enabled: Boolean) { answersEnabled = enabled; preferences.edit().putBoolean("answers", enabled).apply() }
+    fun setSound(enabled: Boolean) { soundEnabled = enabled; preferences.edit().putBoolean("sound", enabled).apply() }
+    fun setHaptics(enabled: Boolean) { hapticsEnabled = enabled; preferences.edit().putBoolean("haptics", enabled).apply() }
 }
 
 @Composable
@@ -107,6 +115,14 @@ internal fun TestSettingsSheet(
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = colors.panelBackground) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             EyeText("系统设置", style = typography.title, color = colors.textPrimary)
+            Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).toggleable(settings.soundEnabled, role = Role.Switch, onValueChange = settings::setSound), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                EyeText("音效反馈", style = typography.body, color = colors.textPrimary)
+                EyeSwitch(settings.soundEnabled, null)
+            }
+            Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).toggleable(settings.hapticsEnabled, role = Role.Switch, onValueChange = settings::setHaptics), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                EyeText("震动反馈", style = typography.body, color = colors.textPrimary)
+                EyeSwitch(settings.hapticsEnabled, null)
+            }
             Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).toggleable(settings.speechEnabled, role = Role.Switch, onValueChange = settings::setSpeech), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                 EyeText("语音播报", style = typography.body, color = colors.textPrimary)
                 EyeSwitch(settings.speechEnabled, null)

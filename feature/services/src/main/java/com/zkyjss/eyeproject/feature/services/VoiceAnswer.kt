@@ -234,7 +234,7 @@ internal fun rememberVoiceAnswer(active: Boolean, voice: ScreeningVoice?, enable
     }
     state.permissionGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
     state.requestPermission = { askedPermission = true; launcher.launch(Manifest.permission.RECORD_AUDIO) }
-    state.pausedForSpeech = voice?.speaking == true
+    state.pausedForSpeech = voice?.speaking == true || voice?.feedbackPlaying == true
     val run = active && state.enabled && recognizer.available && !state.pausedForSpeech
     LaunchedEffect(run, state.permissionGranted) {
         if (run && !state.permissionGranted && !askedPermission) state.requestPermission()

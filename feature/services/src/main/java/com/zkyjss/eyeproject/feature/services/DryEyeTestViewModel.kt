@@ -20,6 +20,7 @@ class DryEyeTestViewModel @Inject constructor(
     private val platform = AndroidScreeningPlatform(context, camera, intrinsics)
     val engine = DryEyeEngine(platform, viewModelScope)
     val uiState get() = engine.uiState
+    fun feedbackCues(enabled: Boolean) = platform.feedbackSession.poll(screeningFeedbackFrame(uiState.value), platform.nowMs(), enabled)
     fun setField(key: String, value: String) = engine.setField(key, value)
     fun finishProfile() = engine.finishProfile()
     fun permissionDenied() = engine.permissionDenied()

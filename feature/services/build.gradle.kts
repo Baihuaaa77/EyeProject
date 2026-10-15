@@ -13,6 +13,12 @@ android {
     }
 }
 
+androidComponents {
+    onVariants(selector().all()) { variant ->
+        variant.sources.res?.addStaticSourceDirectory("../../shared/feedback/res")
+    }
+}
+
 dependencies {
     implementation("com.zkyjss.eyeproject.shared:screening:1.0.0")
     implementation(project(":core:model"))

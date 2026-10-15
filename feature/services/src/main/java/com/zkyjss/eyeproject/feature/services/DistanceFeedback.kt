@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -32,8 +31,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -104,7 +101,6 @@ internal fun distanceStatus(distanceCm: Float, faceVisible: Boolean, targetCm: F
 internal fun DistanceBanner(status: DistanceStatus, modifier: Modifier = Modifier, compact: Boolean = false, singleLine: Boolean = false) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
-    val haptics = LocalHapticFeedback.current
     val bg by animateColorAsState(
         when (status.zone) {
             DistanceZone.TOO_CLOSE -> colors.tooClose
@@ -115,11 +111,6 @@ internal fun DistanceBanner(status: DistanceStatus, modifier: Modifier = Modifie
         tween(EyeMotion.MEDIUM), label = "距离状态色"
     )
     val fg = if (status.zone == DistanceZone.UNKNOWN) colors.textPrimary else colors.onStatus
-    LaunchedEffect(status.zone) {
-        if (status.zone == DistanceZone.TOO_CLOSE || status.zone == DistanceZone.TOO_FAR) {
-            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-        }
-    }
     Row(
         modifier
             .fillMaxWidth()

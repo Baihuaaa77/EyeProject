@@ -7,6 +7,7 @@
 - `model`：原 core:model 的纯数据类型，包名不变。
 - `domain`：原 core:domain 的眨眼、虹膜测距及系统端口；共用瞳孔／反光点算法、478 点索引与头姿转换。锁分别用 JVM synchronized 和 iOS NSRecursiveLock。
 - `screening`：三项问卷、完整状态机、质量门控、分级、注视监督、视标尺寸、语音指令解析和记录格式。
+- `ScreeningFeedback`：双端共用的交互反馈事件、距离防抖、阶段及标定点切换提示；引擎只在有效输入后投递作答事件。`shared/feedback/res/raw` 提供同一套短音，平台层各自播放声音与原生轻触觉。
 
 安卓的 `core:model` / `core:domain` 是 API 转发模块；原页面和相机生命周期保留。两个测试 ViewModel 仅适配安卓系统端口，不能重新实现测试规则。
 

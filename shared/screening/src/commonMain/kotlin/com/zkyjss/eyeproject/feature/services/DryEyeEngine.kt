@@ -77,6 +77,7 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
     /** 准备页门禁通过后进入练习说明。 */
     fun startTest() {
         if (!_uiState.value.gateReady || testJob != null) return
+        platform.feedback(ScreeningFeedbackCue.START)
         _uiState.update { it.copy(phase = DryEyePhase.PracticeGuide, error = null) }
     }
 
@@ -120,7 +121,8 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
 
     /** 回答当前视标；只接受每题第一次作答。[direction] 为 -1 表示「看不清」（记为错误）。 */
     fun answer(direction: Int, byVoice: Boolean = false) {
-        pendingAnswer?.takeIf { it.isActive }?.complete(direction to byVoice)
+        if (pendingAnswer?.takeIf { it.isActive }?.complete(direction to byVoice) == true)
+            platform.feedback(ScreeningFeedbackCue.ANSWER)
     }
 
     /** 停止并回到准备页；已完成的问卷保留。 */

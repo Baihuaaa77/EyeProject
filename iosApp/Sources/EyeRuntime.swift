@@ -12,6 +12,7 @@ final class EyeRuntime: ObservableObject {
     @Published var speechStatus = ""
     let camera = EyeCamera()
     let voice = EyeVoice()
+    let feedback = EyeFeedback()
     private var timer: Timer?
     private var lastSnapshot = ""
     private var lastQuestionnaire = ""
@@ -77,6 +78,15 @@ final class EyeRuntime: ObservableObject {
     }
     func refresh() {
         guard prepared, !closed else { return }
+        let cues = controller.feedbackJson(enabled: isForeground && !settingsPresented && (feedback.soundEnabled || feedback.hapticsEnabled))
+        if let data = cues.data(using: .utf8), let events = (try? JSONSerialization.jsonObject(with: data)) as? [[String: Any]] {
+            for event in events {
+                if let name = event["name"] as? String, let sound = event["sound"] as? String,
+                    let pause = event["microphonePauseMs"] as? Int {
+                    feedback.play(name: name, sound: sound, microphonePauseMs: pause, voice: voice)
+                }
+            }
+        }
         let snapshot = controller.snapshotJson()
         if snapshot != lastSnapshot {
             lastSnapshot = snapshot
@@ -118,18 +128,20 @@ final class EyeRuntime: ObservableObject {
     }
     func interrupt() {
         isForeground = false
+        feedback.stop(); _ = controller.feedbackJson(enabled: false)
         promptWork?.cancel(); presentation.cancel(); voice.stop(); camera.stop(); controller.interrupt(); refresh()
     }
-    func resume() { isForeground = true; lastPrompt = ""; refresh() }
+    func resume() { isForeground = true; _ = controller.feedbackJson(enabled: false); lastPrompt = ""; refresh() }
     func setSettingsPresented(_ value: Bool) {
         settingsPresented = value
-        if value { promptWork?.cancel(); voice.stop() }
+        if value { promptWork?.cancel(); voice.stop(); feedback.stop() }
         else { lastPrompt = ""; lastSnapshot = "" }
+        _ = controller.feedbackJson(enabled: false)
         refresh()
     }
     func close() {
         guard !closed else { return }
-        closed = true; timer?.invalidate(); promptWork?.cancel(); presentation.cancel(); voice.close(); camera.stop(); controller.close()
+        closed = true; timer?.invalidate(); promptWork?.cancel(); presentation.cancel(); voice.close(); feedback.stop(); camera.stop(); controller.close()
     }
     static func object(_ text: String) -> [String: Any] {
         guard let data = text.data(using: .utf8) else { return [:] }

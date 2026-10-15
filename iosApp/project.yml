@@ -19,6 +19,8 @@ targets:
       - Sources
       - path: ../core/camera/src/main/assets/face_landmarker.task
         buildPhase: resources
+      - path: ../shared/feedback/res/raw
+        buildPhase: resources
     info:
       path: Info.plist
       properties:

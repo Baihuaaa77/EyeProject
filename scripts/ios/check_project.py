@@ -4,6 +4,7 @@ import hashlib
 import re
 import sys
 import plistlib
+import wave
 
 root = Path(__file__).resolve().parents[2]
 errors = []
@@ -47,6 +48,19 @@ if png[:8] != b'\x89PNG\r\n\x1a\n' or int.from_bytes(png[16:20],'big') != 1024 o
     errors.append('iOS icon must be opaque RGB 1024px PNG')
 for path in (root / 'scripts/ios').glob('*.sh'):
     if '\r' in path.read_text(encoding='utf-8'): errors.append('Shell script contains CRLF: ' + path.name)
+
+feedback_source = root / 'shared/screening/src/commonMain/kotlin/com/zkyjss/eyeproject/feature/services/ScreeningFeedback.kt'
+for name in set(re.findall(r'"(eye_[a-z]+)"', feedback_source.read_text(encoding='utf-8'))):
+    path = root / 'shared/feedback/res/raw' / (name + '.wav')
+    try:
+        with wave.open(str(path)) as sound:
+            if (sound.getnchannels(), sound.getsampwidth(), sound.getframerate()) != (1, 2, 22050) or sound.getnframes() / 22050 > 0.35:
+                errors.append('Invalid short feedback sound: ' + name)
+    except (OSError, wave.Error): errors.append('Missing feedback sound: ' + name)
+if '../../shared/feedback/res' not in (root / 'feature/services/build.gradle.kts').read_text(encoding='utf-8'):
+    errors.append('Android feedback sounds must use the shared asset directory')
+if '../shared/feedback/res/raw' not in (root / 'iosApp/project.yml').read_text(encoding='utf-8'):
+    errors.append('iOS feedback sounds must use the shared asset directory')
 
 if errors:
     for error in errors: print(error)

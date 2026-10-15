@@ -20,6 +20,7 @@ class MobileScreeningController(
     private var kind = "DRY_EYE"
     private var closed = false
     private var captureStartedMs = 0L
+    private val feedbackSession = ScreeningFeedbackSession()
     private val platform = object : ScreeningPlatform {
         override val display get() = this@MobileScreeningController.display
         override val platformName = "iOS"
@@ -32,6 +33,7 @@ class MobileScreeningController(
             cameraFrame = onFrame; cameraError = onError; systemEvent("camera:start")
         }
         override fun stopCamera() { cameraFrame = null; cameraError = null; systemEvent("camera:stop") }
+        override fun feedback(cue: ScreeningFeedbackCue) = feedbackSession.offer(cue)
         override fun startLight(onLux: (Float) -> Unit) = false
         override suspend fun saveRecord(name: String,json: String) { recordSaved(name,json) }
         override suspend fun compareHistory(state: ScreeningState,assessment: ScreeningAssessment) = emptyList<String>()
@@ -100,6 +102,13 @@ class MobileScreeningController(
         return true
     }
     fun markPresented(trialId: Int) { if (kind != "DRY_EYE") screening.markTrialPresented(trialId,platform.nowMs()) }
+    fun feedbackJson(enabled: Boolean): String {
+        val frame = if (kind == "DRY_EYE") screeningFeedbackFrame(dry.uiState.value) else screeningFeedbackFrame(screening.state.value, screening.coverRemainingMs())
+        val events = feedbackSession.poll(frame, platform.nowMs(), enabled && !closed)
+        return RecordArray(events.map { cue -> RecordObject().apply {
+            put("name", cue.name); put("sound", cue.sound); put("microphonePauseMs", cue.microphonePauseMs)
+        } }).toString()
+    }
     fun reportTarget(xPx: Float,yPx: Float) = screening.reportGazeTarget(xPx,yPx)
     fun reportPursuitCapacity(xDeg: Float,yDeg: Float) = screening.reportPursuitCapacity(xDeg,yDeg)
     fun interrupt() {

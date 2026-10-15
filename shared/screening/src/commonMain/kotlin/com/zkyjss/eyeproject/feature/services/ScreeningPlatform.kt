@@ -17,6 +17,7 @@ interface ScreeningPlatform {
     fun cameraGeometry(width: Int, height: Int): CameraGeometry
     fun startCamera(onFrame: (FaceLandmarkFrame) -> Unit, onError: (Throwable) -> Unit)
     fun stopCamera()
+    fun feedback(cue: ScreeningFeedbackCue) {}
     fun startLight(onLux: (Float) -> Unit): Boolean
     suspend fun saveRecord(name: String, json: String)
     suspend fun compareHistory(state: ScreeningState, assessment: ScreeningAssessment): List<String>

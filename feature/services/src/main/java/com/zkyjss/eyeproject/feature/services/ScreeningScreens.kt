@@ -81,6 +81,7 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, modifier: M
     val settings = rememberTestSettings()
     val voiceEnabled = settings.speechEnabled
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
+    TestFeedbackEffect(settings, voice, settingsOpen, viewModel::feedbackCues)
     val cameraPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) viewModel.startCamera(owner) else viewModel.cameraPermissionDenied()
     }

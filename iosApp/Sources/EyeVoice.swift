@@ -24,6 +24,10 @@ final class EyeVoice: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
     private var generation = 0
     private var cooldown = Date.distantPast
     private var retryAfter = Date.distantPast
+    func pauseForFeedback(milliseconds: Int) {
+        stopListening()
+        cooldown = max(cooldown, Date().addingTimeInterval(Double(milliseconds) / 1000))
+    }
     override init() {
         super.init(); synthesizer.delegate = self
         authorized = SFSpeechRecognizer.authorizationStatus() == .authorized && AVAudioSession.sharedInstance().recordPermission == .granted
@@ -68,6 +72,7 @@ final class EyeVoice: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
         do {
             let session = AVAudioSession.sharedInstance()
             try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .mixWithOthers])
+            try session.setAllowHapticsAndSystemSoundsDuringRecording(true)
             try session.setActive(true)
             let next = SFSpeechAudioBufferRecognitionRequest()
             next.shouldReportPartialResults = true; next.requiresOnDeviceRecognition = true

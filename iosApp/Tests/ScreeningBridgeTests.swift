@@ -4,6 +4,15 @@ import EyeScreening
 import CoreVideo
 
 final class ScreeningBridgeTests: XCTestCase {
+    func testFeedbackSoundsAreBundledWithTheApp() throws {
+        for sound in ["eye_start", "eye_answer", "eye_phase", "eye_target", "eye_warning", "eye_tick", "eye_complete"] {
+            let url = try XCTUnwrap(Bundle.main.url(forResource: sound, withExtension: "wav"), "缺少提示音：\(sound)")
+            let data = try Data(contentsOf: url)
+            XCTAssertGreaterThan(data.count, 44)
+            XCTAssertEqual(String(data: data.prefix(4), encoding: .ascii), "RIFF")
+            XCTAssertEqual(String(data: data.dropFirst(8).prefix(4), encoding: .ascii), "WAVE")
+        }
+    }
     func testAllThreeTasksUseTheSharedProfileAndCommands() {
         let controller = MobileScreeningController(systemEvent: { _ in }, recordSaved: { _, _ in })
         controller.configureDisplay(widthPixels: 1170, heightPixels: 2532, pixelsPerMm: 18)

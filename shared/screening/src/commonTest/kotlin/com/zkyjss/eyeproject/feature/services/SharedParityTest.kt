@@ -118,6 +118,8 @@ class SharedParityTest {
         val platform = TestPlatform { 1_000 + testScheduler.currentTime }
         val engine = ScreeningEngine(platform,backgroundScope)
         engine.configure(ScreeningKind.STRABISMUS); engine.setField("年龄","6"); engine.nextFromProfile(); engine.startCamera()
+        engine.begin()
+        assertTrue(platform.feedbackEvents.isEmpty(), "没有满足门控时不确认开始")
         runCurrent()
         repeat(8) { index ->
             val now = platform.nowMs()
@@ -128,6 +130,9 @@ class SharedParityTest {
             advanceTimeBy(100); runCurrent()
         }
         engine.begin(); engine.confirmGuide(); runCurrent()
+        assertEquals(listOf(ScreeningFeedbackCue.START), platform.feedbackEvents)
+        engine.answer(0); engine.markCover()
+        assertEquals(listOf(ScreeningFeedbackCue.START), platform.feedbackEvents, "非作答与遮盖阶段不确认输入")
         assertEquals(ScreeningStep.GAZE_CALIBRATION,engine.state.value.step)
         advanceTimeBy(15_000); runCurrent()
         assertTrue(engine.state.value.gazeCalibrationFailed)
@@ -138,6 +143,8 @@ class SharedParityTest {
         engine.close()
     }
     private class TestPlatform(private val time: () -> Long) : ScreeningPlatform {
+        val feedbackEvents = mutableListOf<ScreeningFeedbackCue>()
+        override fun feedback(cue: ScreeningFeedbackCue) { feedbackEvents += cue }
         override val display = DisplayGeometry(400,800,160f,160f)
         var onFrame: ((FaceLandmarkFrame) -> Unit)? = null
         override fun nowMs() = time()

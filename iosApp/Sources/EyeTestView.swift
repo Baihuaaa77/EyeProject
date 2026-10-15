@@ -47,7 +47,7 @@ struct EyeTestView: View {
                         Button { settingsOpen = true } label: { Image(systemName: "gearshape.fill").foregroundStyle(EyeStyle.primary) }.accessibilityLabel("系统设置")
                     }
                 }
-                .sheet(isPresented: $settingsOpen) { TestSettingsView(voice: runtime.voice, status: runtime.speechStatus) }
+                .sheet(isPresented: $settingsOpen) { TestSettingsView(voice: runtime.voice, feedback: runtime.feedback, status: runtime.speechStatus) }
                 .onChange(of: settingsOpen) { runtime.setSettingsPresented($0) }
                 .onAppear {
                     brightness = UIScreen.main.brightness; UIScreen.main.brightness = 1

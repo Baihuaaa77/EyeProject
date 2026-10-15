@@ -125,6 +125,7 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
         if (state.lux != null && state.lux < 50f) {
             _state.update { it.copy(warning = "环境光低于本原型的 50 lux 采样门槛，请改善照明") }; return
         }
+        platform.feedback(ScreeningFeedbackCue.START)
         samples.clear(); totalFrames = 0; validFrames = 0
         qualityEligibleFrames = 0; qualityEligibleValidFrames = 0; opticalValidFrames = 0
         if (state.kind == ScreeningKind.PRESBYOPIA) startNearVision() else startFixation()
@@ -141,6 +142,7 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
     fun readyForNearEye() {
         val s = _state.value
         if (s.step != ScreeningStep.NEAR_VISION || !s.nearAwaitingEyeReady) return
+        platform.feedback(ScreeningFeedbackCue.PHASE)
         _state.update { it.copy(nearAwaitingEyeReady = false, warning = null,
             instruction = "${s.visionEye.label}测试：保持约 40 cm，点按显示视标后选择 E 开口方向。") }
     }
@@ -213,6 +215,7 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
             s.trialDistanceSpreadCm, answerDistance ?: s.trialDistanceCm,
             targetCm = if (s.step == ScreeningStep.DISTANCE_CURVE) target else null, byVoice = byVoice)
         val answers = s.answers + answer
+        platform.feedback(ScreeningFeedbackCue.ANSWER)
         questionStartMs = 0L
         if (s.step == ScreeningStep.NEAR_VISION) {
             val next = s.trialIndex + 1
@@ -304,6 +307,7 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
         questionStartMs = 0L
         _state.update { it.copy(pushStage = PushStage.APPROACH, trialVisible = true, trialId = nextTrialId,
             trialOptotypePx = spec.sizePx, trialDistanceCm = distance, pushStartCm = distance, direction = 0, warning = null) }
+        platform.feedback(ScreeningFeedbackCue.START)
     }
 
     /** 受试者确认「开始持续模糊」。 */
@@ -326,6 +330,7 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
                 pushStage = PushStage.READY, trialVisible = false, invalidTrialCount = it.invalidTrialCount + 1) }
             return
         }
+        platform.feedback(ScreeningFeedbackCue.ANSWER)
         finishPushTrial(NearPoint(distance, speed, s.pushStartCm))
     }
 
@@ -430,6 +435,7 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
         }
         val action = coverSequence[coverIndex]
         val marks = s.coverMarks + CoverMark(action.label, now, action.uncovered, action.covered)
+        platform.feedback(ScreeningFeedbackCue.ANSWER)
         coverIndex++
         coverStageStartMs = now
         if (coverIndex >= coverSequence.size) {

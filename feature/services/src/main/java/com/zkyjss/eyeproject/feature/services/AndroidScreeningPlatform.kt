@@ -19,6 +19,8 @@ internal class AndroidScreeningPlatform(
     private val camera: CameraController,
     private val intrinsics: CameraIntrinsicsProvider,
 ) : ScreeningPlatform, SensorEventListener {
+    val feedbackSession = ScreeningFeedbackSession()
+    override fun feedback(cue: ScreeningFeedbackCue) = feedbackSession.offer(cue)
     var owner: LifecycleOwner? = null
     private val sensors = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
     private var generation: Int? = null

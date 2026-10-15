@@ -14,12 +14,21 @@ import java.util.Locale
 internal class ScreeningVoice(context: Context) : TextToSpeech.OnInitListener {
     private val preferences = context.getSharedPreferences("screening_voice", Context.MODE_PRIVATE)
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val feedbackHandler = Handler(Looper.getMainLooper())
     private var engine: TextToSpeech? = null
     private var pending: String? = null
     private var utteranceNumber = 0L
     private var currentUtterance: String? = null
     var speaking by mutableStateOf(false)
         private set
+    var feedbackPlaying by mutableStateOf(false)
+        private set
+    private var feedbackGeneration = 0
+    fun pauseForFeedback(durationMs: Long) {
+        val ticket = ++feedbackGeneration
+        feedbackPlaying = true
+        feedbackHandler.postDelayed({ if (ticket == feedbackGeneration) feedbackPlaying = false }, durationMs)
+    }
     var available by mutableStateOf<Boolean?>(null)
         private set
 
@@ -81,10 +90,10 @@ internal class ScreeningVoice(context: Context) : TextToSpeech.OnInitListener {
     }
 
     /** 正在播报或刚播报完 0.6 秒内：语音作答应忽略此时的识别结果，避免把提示语当作答案。 */
-    fun busy(): Boolean = speaking || engine?.isSpeaking == true
+    fun busy(): Boolean = speaking || feedbackPlaying || engine?.isSpeaking == true
 
     fun stop() { currentUtterance = null; speaking = false; engine?.stop(); pending = null; mainHandler.removeCallbacksAndMessages(null) }
-    fun close() { stop(); engine?.shutdown(); engine = null }
+    fun close() { stop(); feedbackGeneration++; feedbackPlaying = false; feedbackHandler.removeCallbacksAndMessages(null); engine?.shutdown(); engine = null }
 }
 
 /** 仅改变送给 TTS 的文本，屏幕上的医学与测量数据保持原样。 */
