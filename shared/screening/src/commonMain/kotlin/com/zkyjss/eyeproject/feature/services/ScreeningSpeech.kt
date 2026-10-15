@@ -3,6 +3,7 @@ package com.zkyjss.eyeproject.feature.services
 /**
  * 仅改变送给 TTS 的文本，屏幕上的医学与测量数据保持原样；两端共用，读法一致。
  * 数字读成中文、量词前的 2 读「两」、符号换成停顿，句末补句号让语调自然落下。
+ * 单独的字母 E（视标）读作「视标」：中文发声人会把它读成「鹅」或英文字母，都不自然。
  */
 fun screeningSpeechText(text: String): String {
     val tolerance = Regex("""(\d+(?:\.\d+)?)\s*±\s*(\d+(?:\.\d+)?)\s*(?:cm|厘米)""")
@@ -13,6 +14,7 @@ fun screeningSpeechText(text: String): String {
         .replace(range) { "${countWord(it.groupValues[1])} 到 ${countWord(it.groupValues[2])}" }
         .replace("cm", "厘米", ignoreCase = true)
         .replace("lux", "勒克斯", ignoreCase = true)
+        .replace(OPTOTYPE_LETTER, "视标")
     val spoken = number.replace(spaced) { match ->
         // 量词前的 2 读「两」（两秒、两次），序数「第 2」仍读「二」。
         val before = spaced.substring(0, match.range.first).trimEnd()
@@ -31,6 +33,8 @@ fun screeningSpeechText(text: String): String {
         .trim('，')
         .let { if (it.isEmpty() || it.last() in "。！？…") it else "$it。" }
 }
+
+private val OPTOTYPE_LETTER = Regex("""(?<![A-Za-z])E(?![A-Za-z])""")
 
 private val MEASURE_WORDS = listOf("秒", "次", "分钟", "个", "只", "下", "遍", "级", "题", "步", "厘米", "米")
 

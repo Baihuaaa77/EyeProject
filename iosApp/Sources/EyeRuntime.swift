@@ -9,7 +9,6 @@ final class EyeRuntime: ObservableObject {
     @Published var questions: [[String: Any]] = []
     @Published var fields: [String: String] = [:]
     @Published var error: String?
-    @Published var speechStatus = ""
     let camera = EyeCamera()
     let voice = EyeVoice()
     let feedback = EyeFeedback()
@@ -67,7 +66,6 @@ final class EyeRuntime: ObservableObject {
             DispatchQueue.main.async { self?.error = message; self?.controller.cameraFailed(message: message) }
         }
         voice.onAnswer = { [weak self] text in self?.controller.voiceAnswer(text: text) ?? false }
-        voice.onStatus = { [weak self] text in self?.speechStatus = text }
     }
     func prepare(pixelsPerMm: Float) {
         guard !prepared else { return }
@@ -76,6 +74,7 @@ final class EyeRuntime: ObservableObject {
         controller.configureDisplay(widthPixels: Int32(screen.bounds.width * screen.scale),
             heightPixels: Int32(screen.bounds.height * screen.scale), pixelsPerMm: pixelsPerMm)
         controller.selectTest(name: kind)
+        voice.prepareForTest(); feedback.prepare()
         let task = Timer(timeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in self?.refresh() }
         timer = task; RunLoop.main.add(task, forMode: .common)
         refresh()
@@ -161,7 +160,7 @@ final class EyeRuntime: ObservableObject {
     }
     func resume() {
         isForeground = true; _ = controller.feedbackJson(enabled: false); lastPrompt = ""
-        feedback.prepare(); controller.resume(); refresh()
+        voice.prepareForTest(); feedback.prepare(); controller.resume(); refresh()
     }
     func setSettingsPresented(_ value: Bool) {
         settingsPresented = value

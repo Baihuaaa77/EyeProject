@@ -118,35 +118,37 @@ struct CountdownRing: View {
     }
 }
 
-/// 圆形方向键与次要胶囊共用的按压反馈：轻缩、加深底色，不可作答时变淡。
+/// 与安卓 OptotypeAnswerPad 同规格的圆键：直径 64、间距 10，按下缩到 90% 并加深底色，不可作答时变淡。
+enum AnswerKey {
+    static let size: CGFloat = 64
+    static let gap: CGFloat = 10
+}
+
+/// 方向键：主色 10% 底、30% 细边，按下底色加深到 24%。
 struct DirectionKeyStyle: ButtonStyle {
-    var capsule = false
     @Environment(\.isEnabled) private var enabled
     func makeBody(configuration: Configuration) -> some View {
-        let fill = capsule ? (configuration.isPressed ? EyeStyle.primary.opacity(0.12) : EyeStyle.panel)
-            : EyeStyle.primary.opacity(configuration.isPressed ? 0.22 : 0.08)
-        return configuration.label
-            .foregroundStyle(capsule ? EyeStyle.text : EyeStyle.primary)
-            .frame(maxWidth: capsule ? CGFloat.infinity : 56, minHeight: capsule ? 52 : 56)
-            .frame(width: capsule ? nil : 56)
-            .background { if capsule { Capsule().fill(fill) } else { Circle().fill(fill) } }
-            .overlay { if capsule { Capsule().stroke(EyeStyle.primary.opacity(0.24), lineWidth: 1) }
-                else { Circle().stroke(EyeStyle.primary.opacity(0.28), lineWidth: 1) } }
-            .contentShape(capsule ? AnyShape(Capsule()) : AnyShape(Circle()))
-            .scaleEffect(configuration.isPressed && enabled ? (capsule ? 0.96 : 0.9) : 1)
+        configuration.label
+            .frame(width: AnswerKey.size, height: AnswerKey.size)
+            .background(EyeStyle.primary.opacity(configuration.isPressed && enabled ? 0.24 : 0.1), in: Circle())
+            .overlay { Circle().stroke(EyeStyle.primary.opacity(0.3), lineWidth: 1) }
+            .contentShape(Circle())
+            .scaleEffect(configuration.isPressed && enabled ? 0.9 : 1)
             .opacity(enabled ? 1 : 0.35)
-            .animation(.spring(response: 0.25, dampingFraction: 0.6), value: configuration.isPressed)
+            .animation(EyeStyle.pressSpring, value: configuration.isPressed)
             .animation(.easeOut(duration: 0.16), value: enabled)
     }
 }
 
-/// 次要操作（重试、延长、复测）：浅底描边，与主按钮区分轻重。
-struct EyeSecondaryButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label.padding().frame(maxWidth: .infinity).foregroundStyle(EyeStyle.text)
-            .background(EyeStyle.surfaceVariant.opacity(configuration.isPressed ? 0.7 : 1), in: RoundedRectangle(cornerRadius: 14))
-            .scaleEffect(configuration.isPressed ? 0.97 : 1)
-            .animation(.spring(response: 0.25, dampingFraction: 0.6), value: configuration.isPressed)
+/// 绘制的箭头（基准朝右），不依赖系统符号字形，两端外观一致。
+struct ArrowGlyph: Shape {
+    func path(in rect: CGRect) -> Path {
+        let w = rect.width, h = rect.height
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX + w * 0.12, y: rect.minY + h * 0.5)); path.addLine(to: CGPoint(x: rect.minX + w * 0.86, y: rect.minY + h * 0.5))
+        path.move(to: CGPoint(x: rect.minX + w * 0.54, y: rect.minY + h * 0.18)); path.addLine(to: CGPoint(x: rect.minX + w * 0.86, y: rect.minY + h * 0.5))
+        path.addLine(to: CGPoint(x: rect.minX + w * 0.54, y: rect.minY + h * 0.82))
+        return path
     }
 }
 
@@ -154,15 +156,46 @@ struct EyeSecondaryButtonStyle: ButtonStyle {
 struct SkipKeyStyle: ButtonStyle {
     @Environment(\.isEnabled) private var enabled
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label.foregroundStyle(EyeStyle.text)
-            .frame(width: 64, height: 64)
-            .background(configuration.isPressed ? EyeStyle.primary.opacity(0.12) : EyeStyle.surfaceVariant, in: Circle())
+        configuration.label.font(EyeStyle.body).foregroundStyle(EyeStyle.text)
+            .frame(width: AnswerKey.size, height: AnswerKey.size)
+            .background(configuration.isPressed && enabled ? EyeStyle.primary.opacity(0.12) : EyeStyle.surfaceVariant, in: Circle())
             .overlay { Circle().stroke(EyeStyle.primary.opacity(0.24), lineWidth: 1) }
             .contentShape(Circle())
             .scaleEffect(configuration.isPressed && enabled ? 0.9 : 1)
             .opacity(enabled ? 1 : 0.4)
-            .animation(.spring(response: 0.25, dampingFraction: 0.6), value: configuration.isPressed)
+            .animation(EyeStyle.pressSpring, value: configuration.isPressed)
             .animation(.easeOut(duration: 0.16), value: enabled)
+    }
+}
+
+/// 测试顶栏：与安卓 TestSessionLayout 一致，左侧主色返回箭头、居中标题、右侧实心齿轮，不用系统导航栏的玻璃胶囊。
+struct TestTopBar: View {
+    let title: String
+    let onBack: () -> Void
+    let onSettings: () -> Void
+    var body: some View {
+        ZStack {
+            Text(title).font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text).lineLimit(1)
+            HStack {
+                Button(action: onBack) {
+                    Image(systemName: "chevron.left").font(.system(size: 19, weight: .semibold))
+                        .frame(width: 48, height: 48).contentShape(Rectangle())
+                }.accessibilityLabel("返回")
+                Spacer()
+                Button(action: onSettings) {
+                    Image(systemName: "gearshape.fill").font(.system(size: 22))
+                        .frame(width: 48, height: 48).contentShape(Rectangle())
+                }.accessibilityLabel("系统设置")
+            }.buttonStyle(TopBarIconStyle())
+        }.frame(height: 52)
+    }
+}
+
+private struct TopBarIconStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label.foregroundStyle(EyeStyle.primary)
+            .opacity(configuration.isPressed ? 0.55 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }
 

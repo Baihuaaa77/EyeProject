@@ -1,9 +1,38 @@
 import Foundation
 import Combine
+import AVFoundation
+import CoreHaptics
 import UIKit
-import AudioToolbox
 
-/// 系统 UI 音效沿用静音与系统音量；触觉与安卓同一分级：作答与节拍最轻、阶段切换次之、提醒两下、完成渐强。
+/// 测试期间唯一的音频会话策略：播报、音效、收听共用，测试中途不切换类别，避免切换时打断正在播放的语音。
+/// 与安卓一致：音效与播报走媒体音量，不被静音键阻断；收听时仍允许触觉与音效。
+enum EyeAudioSession {
+    private static var recording: Bool?
+
+    static func activate(recording wanted: Bool) {
+        let session = AVAudioSession.sharedInstance()
+        do {
+            if recording != wanted {
+                if wanted {
+                    try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .mixWithOthers, .allowBluetoothA2DP])
+                } else {
+                    try session.setCategory(.playback, mode: .spokenAudio, options: [.mixWithOthers])
+                }
+                recording = wanted
+            }
+            try session.setAllowHapticsAndSystemSoundsDuringRecording(true)
+            try session.setActive(true)
+        } catch { recording = nil }
+    }
+
+    static func deactivate() {
+        recording = nil
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    }
+}
+
+/// 触觉与安卓同一分级：作答与节拍最轻、阶段切换次之、提醒两下、完成渐强三下。
+/// 用 Core Haptics 播放（相机与收听期间也能感到），音量按事件分级：高频作答 0.5、其余 0.7。
 final class EyeFeedback: ObservableObject {
     @Published var soundEnabled = UserDefaults.standard.object(forKey: "eye.soundEnabled") as? Bool ?? true {
         didSet { UserDefaults.standard.set(soundEnabled, forKey: "eye.soundEnabled"); if !soundEnabled { stop() } }
@@ -11,58 +40,78 @@ final class EyeFeedback: ObservableObject {
     @Published var hapticsEnabled = UserDefaults.standard.object(forKey: "eye.hapticsEnabled") as? Bool ?? true {
         didSet { UserDefaults.standard.set(hapticsEnabled, forKey: "eye.hapticsEnabled"); if hapticsEnabled { prepare() } }
     }
-    private var sounds: [String: SystemSoundID] = [:]
-    private var pendingHaptics: [DispatchWorkItem] = []
-    private let selection = UISelectionFeedbackGenerator()
-    private let soft = UIImpactFeedbackGenerator(style: .soft)
-    private let light = UIImpactFeedbackGenerator(style: .light)
-    private let rigid = UIImpactFeedbackGenerator(style: .rigid)
-    private let notice = UINotificationFeedbackGenerator()
+    private var players: [String: AVAudioPlayer] = [:]
+    private var engine: CHHapticEngine?
+    private let fallback = UIImpactFeedbackGenerator(style: .medium)
 
     init() { prepare() }
 
-    /// 预热触觉引擎，避免第一下延迟。
+    /// 预热触觉引擎，避免第一下延迟；引擎被系统停掉或重置后在下次播放时自动重启。
     func prepare() {
         guard hapticsEnabled else { return }
-        selection.prepare(); soft.prepare(); light.prepare(); rigid.prepare(); notice.prepare()
+        guard CHHapticEngine.capabilitiesForHardware().supportsHaptics else { fallback.prepare(); return }
+        if engine == nil {
+            engine = try? CHHapticEngine()
+            engine?.playsHapticsOnly = true
+            engine?.isAutoShutdownEnabled = true
+            engine?.resetHandler = { [weak self] in try? self?.engine?.start() }
+        }
+        try? engine?.start()
     }
 
     func play(name: String, sound: String, microphonePauseMs: Int, voice: EyeVoice) {
         if hapticsEnabled { haptic(name) }
-        guard soundEnabled else { return }
-        if sounds[sound] == nil, let url = Bundle.main.url(forResource: sound, withExtension: "wav") {
-            var id: SystemSoundID = 0
-            if AudioServicesCreateSystemSoundID(url as CFURL, &id) == kAudioServicesNoError { sounds[sound] = id }
-        }
-        guard let id = sounds[sound] else { return }
+        guard soundEnabled, let player = player(sound) else { return }
         voice.pauseForFeedback(milliseconds: microphonePauseMs)
-        AudioServicesPlaySystemSound(id)
+        player.volume = name == "ANSWER" || name == "TICK" ? 0.5 : 0.7
+        player.currentTime = 0
+        player.play()
+    }
+
+    private func player(_ sound: String) -> AVAudioPlayer? {
+        if let cached = players[sound] { return cached }
+        guard let url = Bundle.main.url(forResource: sound, withExtension: "wav"),
+              let created = try? AVAudioPlayer(contentsOf: url) else { return nil }
+        created.prepareToPlay()
+        players[sound] = created
+        return created
+    }
+
+    /// （相对时刻秒, 强度, 锐度）；与安卓的振动分级逐项对应。
+    private static func pattern(_ name: String) -> [(TimeInterval, Float, Float)] {
+        switch name {
+        case "TICK": return [(0, 0.45, 0.6)]
+        case "ANSWER": return [(0, 0.55, 0.5)]
+        case "TARGET": return [(0, 0.6, 0.7)]
+        case "PHASE": return [(0, 0.7, 0.5), (0.07, 0.5, 0.7)]
+        case "RECOVER": return [(0, 0.5, 0.4), (0.06, 0.7, 0.5)]
+        case "START": return [(0, 0.9, 0.6)]
+        case "WARNING", "RETRY": return [(0, 0.9, 0.8), (0.14, 0.9, 0.8)]
+        case "COMPLETE": return [(0, 0.5, 0.4), (0.11, 0.75, 0.5), (0.22, 1, 0.6)]
+        default: return [(0, 0.5, 0.5)]
+        }
     }
 
     private func haptic(_ name: String) {
-        cancelHaptics()
-        switch name {
-        case "TICK": selection.selectionChanged()
-        case "ANSWER": soft.impactOccurred(intensity: 0.5)
-        case "TARGET": rigid.impactOccurred(intensity: 0.45)
-        case "PHASE": light.impactOccurred(intensity: 0.6); later(0.06) { $0.rigid.impactOccurred(intensity: 0.4) }
-        case "RECOVER": soft.impactOccurred(intensity: 0.4); later(0.05) { $0.light.impactOccurred(intensity: 0.6) }
-        case "START": light.impactOccurred(intensity: 0.85)
-        case "WARNING", "RETRY": notice.notificationOccurred(.warning)
-        case "COMPLETE": notice.notificationOccurred(.success)
-        default: soft.impactOccurred(intensity: 0.4)
+        let steps = Self.pattern(name)
+        guard let engine = engine else {
+            fallback.impactOccurred(intensity: CGFloat(steps.map { $0.1 }.max() ?? 0.5)); fallback.prepare(); return
         }
-        prepare()
+        let events = steps.map { time, intensity, sharpness in
+            CHHapticEvent(eventType: .hapticTransient, parameters: [
+                CHHapticEventParameter(parameterID: .hapticIntensity, value: intensity),
+                CHHapticEventParameter(parameterID: .hapticSharpness, value: sharpness),
+            ], relativeTime: time)
+        }
+        do {
+            try engine.start()
+            try engine.makePlayer(with: CHHapticPattern(events: events, parameters: [])).start(atTime: CHHapticTimeImmediate)
+        } catch { fallback.impactOccurred(); fallback.prepare() }
     }
 
-    private func later(_ seconds: Double, _ action: @escaping (EyeFeedback) -> Void) {
-        let work = DispatchWorkItem { [weak self] in if let self = self, self.hapticsEnabled { action(self) } }
-        pendingHaptics.append(work)
-        DispatchQueue.main.asyncAfter(deadline: .now() + seconds, execute: work)
+    func stop() {
+        players.values.forEach { $0.stop() }
+        engine?.stop(completionHandler: nil)
     }
-
-    private func cancelHaptics() { pendingHaptics.forEach { $0.cancel() }; pendingHaptics.removeAll() }
-
-    func stop() { cancelHaptics(); for id in sounds.values { AudioServicesDisposeSystemSoundID(id) }; sounds.removeAll() }
-    deinit { stop() }
+    deinit { engine?.stop(completionHandler: nil) }
 }

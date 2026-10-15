@@ -6,6 +6,13 @@ import com.zkyjss.eyeproject.core.model.FaceLandmarkFrame
 import kotlinx.coroutines.*
 import kotlinx.serialization.json.*
 
+/**
+ * 苹果相机每帧给出的内参焦距随对焦、防抖有千分之几的抖动；只有超过 2% 的变化（换镜头、测距校准）
+ * 才视为新的相机标定。否则每帧都会清空测距窗口，近视力题永远凑不够稳定样本而拒收作答。
+ */
+internal fun focalChanged(current: Float, next: Float): Boolean =
+    next.isFinite() && next > 0f && (current <= 0f || kotlin.math.abs(next - current) / current > 0.02f)
+
 /** 苹果界面通过轻量快照与事件连接共用引擎；不在界面中复制流程与分级规则。 */
 class MobileScreeningController(
     private val systemEvent: (String) -> Unit,
@@ -134,9 +141,7 @@ class MobileScreeningController(
     fun cameraFailed(message: String) { cameraError?.invoke(IllegalStateException(message)) }
     fun cameraSample(points: FloatArray,matrix: FloatArray,image: GrayImage,focalLengthPx: Float,timeMs: Long,brightness: Float) {
         if (closed || cameraFrame == null || timeMs < captureStartedMs) return
-        if (focalLengthPx.isFinite() && focalLengthPx > 0 && kotlin.math.abs(focalPx - focalLengthPx) > 0.01f) {
-            focalPx = focalLengthPx; cameraVersion++
-        }
+        if (focalChanged(focalPx, focalLengthPx)) { focalPx = focalLengthPx; cameraVersion++ }
         val face = LandmarkGeometry.face(points,matrix,image)
         cameraFrame?.invoke(FaceLandmarkFrame(listOfNotNull(face),image.width,image.height,timeMs,0,15f,brightness,timeMs))
     }

@@ -12,67 +12,63 @@ struct EyeTestView: View {
     @State private var suspended = false
     init(kind: String) { _runtime = StateObject(wrappedValue: EyeRuntime(kind: kind)) }
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                if let progress = runtime.state["overallProgress"] as? NSNumber, pixelsPerMm > 0 {
-                    TestProgressBar(fraction: progress.doubleValue, text: runtime.string("remainingText"))
-                        .padding(.horizontal, 16).padding(.bottom, 8)
-                        .transition(.opacity)
-                }
-                if hasReflexStimulus {
-                    ZStack { Color.black; Circle().fill(.white).frame(width: 8, height: 8) }.frame(height: 20).clipShape(RoundedRectangle(cornerRadius: 8))
-                }
-                if pixelsPerMm > 0 && runtime.number("targetDistanceCm") > 0 && !runtime.bool("guidePending") {
-                    TestDistanceBanner(runtime: runtime).padding(.horizontal, 16).padding(.top, 4)
-                        .transition(.opacity.combined(with: .move(edge: .top)))
-                }
-                GeometryReader { viewport in
-                    if isRunning {
-                        // 进行中的任务：放得下时舞台伸展占满剩余高度，避免卡片上下大片留白；放不下时滚动。
-                        ViewThatFits(in: .vertical) {
-                            pageContent.environment(\.stageFill, true).padding()
-                                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            ScrollView {
-                                pageContent.padding().frame(maxWidth: .infinity, minHeight: viewport.size.height)
-                            }
-                        }
-                    } else {
+        VStack(spacing: 0) {
+            TestTopBar(title: runtime.string("title").isEmpty ? "眼健康自测" : runtime.string("title"),
+                onBack: { runtime.close(); dismiss() }, onSettings: { settingsOpen = true })
+                .padding(.horizontal, 4)
+            if let progress = runtime.state["overallProgress"] as? NSNumber, pixelsPerMm > 0 {
+                TestProgressBar(fraction: progress.doubleValue, text: runtime.string("remainingText"))
+                    .padding(.horizontal, 16).padding(.bottom, 8)
+                    .transition(.opacity)
+            }
+            if hasReflexStimulus {
+                ZStack { Color.black; Circle().fill(.white).frame(width: 8, height: 8) }.frame(height: 20).clipShape(RoundedRectangle(cornerRadius: 8))
+            }
+            if pixelsPerMm > 0 && runtime.number("targetDistanceCm") > 0 && !runtime.bool("guidePending") {
+                TestDistanceBanner(runtime: runtime).padding(.horizontal, 16).padding(.top, 4)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+            GeometryReader { viewport in
+                if isRunning {
+                    // 进行中的任务：放得下时舞台伸展占满剩余高度，避免卡片上下大片留白；放不下时滚动。
+                    ViewThatFits(in: .vertical) {
+                        pageContent.environment(\.stageFill, true).padding()
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
                         ScrollView {
-                            pageContent.padding().frame(maxWidth: .infinity, minHeight: viewport.size.height, alignment: .top)
+                            pageContent.padding().frame(maxWidth: .infinity, minHeight: viewport.size.height)
                         }
                     }
-                }
-            }.background(EyeStyle.background).navigationTitle(runtime.string("title").isEmpty ? "眼健康自测" : runtime.string("title"))
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) { Button("返回") { runtime.close(); dismiss() } }
-                    ToolbarItem(placement: .navigationBarTrailing) {
-                        Button { settingsOpen = true } label: { Image(systemName: "gearshape.fill").foregroundStyle(EyeStyle.primary) }.accessibilityLabel("系统设置")
+                } else {
+                    ScrollView {
+                        pageContent.padding().frame(maxWidth: .infinity, minHeight: viewport.size.height, alignment: .top)
                     }
                 }
-                .sheet(isPresented: $settingsOpen) { TestSettingsView(voice: runtime.voice, feedback: runtime.feedback, status: runtime.speechStatus) }
-                .onChange(of: settingsOpen) { runtime.setSettingsPresented($0) }
-                .onAppear {
-                    brightness = UIScreen.main.brightness; UIScreen.main.brightness = 1
-                    previousIdleDisabled = UIApplication.shared.isIdleTimerDisabled
-                    UIApplication.shared.isIdleTimerDisabled = true
-                    if pixelsPerMm > 0 { runtime.prepare(pixelsPerMm: pixelsPerMm) }
-                }
-                .onDisappear {
-                    runtime.close(); UIApplication.shared.isIdleTimerDisabled = previousIdleDisabled
+            }
+        }.foregroundStyle(EyeStyle.text).tint(EyeStyle.primary)
+            // 全屏呈现：背景铺满到灵动岛与底部，内容留在安全区内。
+            .background(EyeStyle.background.ignoresSafeArea())
+            .sheet(isPresented: $settingsOpen) { TestSettingsView(voice: runtime.voice, feedback: runtime.feedback) }
+            .onChange(of: settingsOpen) { runtime.setSettingsPresented($0) }
+            .onAppear {
+                brightness = UIScreen.main.brightness; UIScreen.main.brightness = 1
+                previousIdleDisabled = UIApplication.shared.isIdleTimerDisabled
+                UIApplication.shared.isIdleTimerDisabled = true
+                if pixelsPerMm > 0 { runtime.prepare(pixelsPerMm: pixelsPerMm) }
+            }
+            .onDisappear {
+                runtime.close(); UIApplication.shared.isIdleTimerDisabled = previousIdleDisabled
+                if let value = brightness { UIScreen.main.brightness = value }
+            }
+            .onChange(of: scenePhase) { phase in
+                // 只在真正进入后台时中断；权限弹窗、控制中心等短暂失焦（inactive）不打断测试。
+                if phase == .background {
+                    if !suspended { suspended = true; runtime.interrupt() }
                     if let value = brightness { UIScreen.main.brightness = value }
+                } else if phase == .active {
+                    UIScreen.main.brightness = 1
+                    if suspended { suspended = false; runtime.resume() }
                 }
-                .onChange(of: scenePhase) { phase in
-                    // 只在真正进入后台时中断；权限弹窗、控制中心等短暂失焦（inactive）不打断测试。
-                    if phase == .background {
-                        if !suspended { suspended = true; runtime.interrupt() }
-                        if let value = brightness { UIScreen.main.brightness = value }
-                    } else if phase == .active {
-                        UIScreen.main.brightness = 1
-                        if suspended { suspended = false; runtime.resume() }
-                    }
-                }
-        }
+            }
     }
     private var pageContent: some View {
         VStack(spacing: EyeStyle.spacing) {
@@ -106,9 +102,9 @@ struct EyeTestView: View {
     }
     @ViewBuilder private var testContent: some View {
         if phase == "Setup" || phase == "ENVIRONMENT" {
-            Text(runtime.kind == "STRABISMUS" ? "保持约 33 cm，后续遮眼由协助者完成。" : "保持约 40 cm，建议佩戴最佳矫正眼镜。")
+            Text(runtime.kind == "STRABISMUS" ? "保持约 33 cm，后续遮眼由协助者完成。" : "保持约 40 cm，建议佩戴最佳矫正眼镜。").font(EyeStyle.body)
             Button("开始测试") { runtime.act("begin") }.buttonStyle(EyeButtonStyle())
-            Button("重试相机") { runtime.act("retryCamera") }.buttonStyle(EyeSecondaryButtonStyle())
+            Button("重试相机") { runtime.act("retryCamera") }.buttonStyle(EyeButtonStyle(role: .secondary))
             DisclosureGroup("测距校准") {
                 Text("用尺确认眼睛到手机为 40 cm，正对手机且距离读数稳定后点按。")
                 Button("此刻实际为 40 cm，校准测距") {
@@ -134,8 +130,8 @@ struct EyeTestView: View {
                 ShareLink(item: EyeRuntime.recordsDirectory.appendingPathComponent(runtime.string("savedFile"))) { Label("导出本次记录", systemImage: "square.and.arrow.up") }
             }
             if runtime.bool("canExtend") { Button("延长测试至 3 分钟") { runtime.act("extended") }.buttonStyle(EyeButtonStyle()) }
-            if runtime.bool("canRest") { Button("闭眼休息 1 分钟后复测") { runtime.act("rest") }.buttonStyle(EyeSecondaryButtonStyle()) }
-            Button("重新测试") { runtime.act("restart") }.buttonStyle(EyeSecondaryButtonStyle())
+            if runtime.bool("canRest") { Button("闭眼休息 1 分钟后复测") { runtime.act("rest") }.buttonStyle(EyeButtonStyle(role: .secondary)) }
+            Button("重新测试") { runtime.act("restart") }.buttonStyle(EyeButtonStyle(role: .secondary))
         } else if phase == "GAZE_CALIBRATION" || phase == "FIXATION" || phase == "COVER" || phase == "PURSUIT" {
             if phase == "GAZE_CALIBRATION" {
                 Text("注视校准 · \(Int(runtime.number("gazeCalibrationIndex")) + 1)/\(Int(runtime.number("calibrationCount")))").font(EyeStyle.title)
@@ -230,15 +226,14 @@ private struct QuestionnaireView: View {
                                 runtime.setField(key, chosen.joined(separator: "、"))
                             } else { runtime.setField(key, option); if index < runtime.questions.count - 1 { index += 1 } }
                         } label: {
-                            HStack { Text(option); Spacer(); if selected { Image(systemName: "checkmark") } }
-                                .padding().frame(maxWidth: .infinity).background(EyeStyle.panel, in: RoundedRectangle(cornerRadius: 14))
-                        }.foregroundStyle(EyeStyle.text)
+                            HStack { Text(option); Spacer(); if selected { Image(systemName: "checkmark").foregroundStyle(EyeStyle.primary) } }
+                        }.buttonStyle(EyeCardButtonStyle(selected: selected))
                     }
                 } else {
                     TextField("请输入", text: Binding(get: { runtime.fields[key] ?? "" }, set: { runtime.setField(key, $0) }))
                         .keyboardType(q["numeric"] as? Bool == true ? .numberPad : .default).textFieldStyle(.roundedBorder)
                 }
-                if index > 0 { Button("上一题") { index -= 1 } }
+                if index > 0 { Button("上一题") { index -= 1 }.buttonStyle(EyeButtonStyle(role: .secondary)) }
                 if index == runtime.questions.count - 1 && runtime.kind == "PRESBYOPIA" {
                     Text("这次测试戴哪副眼镜？")
                     Picker("测试模式", selection: $mode) {
@@ -265,13 +260,13 @@ private struct OptotypeAnswerPad: View {
         VStack(spacing: 14) {
             TumblingEView(runtime: runtime)
                 .stageHeight(max(152, ringDiameter(CGFloat(runtime.number("optotypePx")) / UIScreen.main.scale) + 24))
-                .background(EyeStyle.panel, in: RoundedRectangle(cornerRadius: 16))
-                .overlay { RoundedRectangle(cornerRadius: 16).stroke(EyeStyle.surfaceVariant, lineWidth: 1) }
-            VStack(spacing: 10) {
+                .background(EyeStyle.panel, in: RoundedRectangle(cornerRadius: EyeStyle.radiusLarge))
+                .overlay { RoundedRectangle(cornerRadius: EyeStyle.radiusLarge).stroke(EyeStyle.borderSubtle, lineWidth: 1) }
+            VStack(spacing: AnswerKey.gap) {
                 arrow("向上", 3)
-                HStack(spacing: 10) {
+                HStack(spacing: AnswerKey.gap) {
                     arrow("向左", 2)
-                    Button { runtime.answer(-1) } label: { Text("跳过").font(.body) }
+                    Button { runtime.answer(-1) } label: { Text("跳过") }
                         .buttonStyle(SkipKeyStyle()).accessibilityHint("看不清时跳过本题")
                     arrow("向右", 0)
                 }
@@ -282,7 +277,8 @@ private struct OptotypeAnswerPad: View {
     /// 基准箭头朝右，按视标方向编码旋转：0=右 1=下 2=左 3=上。
     private func arrow(_ label: String, _ direction: Int) -> some View {
         Button { runtime.answer(direction) } label: {
-            Image(systemName: "arrow.right").font(.system(size: 22, weight: .bold)).rotationEffect(.degrees(Double(direction) * 90))
+            ArrowGlyph().stroke(EyeStyle.primary, style: StrokeStyle(lineWidth: 24 * 0.13, lineCap: .round, lineJoin: .round))
+                .frame(width: 24, height: 24).rotationEffect(.degrees(Double(direction) * 90))
         }.buttonStyle(DirectionKeyStyle()).accessibilityLabel(label)
     }
 }
@@ -327,7 +323,8 @@ private struct GazeTargetView: View {
                     CalibrationDot(index: Int(runtime.number("gazeCalibrationIndex"))).position(point)
                 } else {
                     let width = phase == "PURSUIT" ? CGFloat(5 * pixelsPerMm / 0.65) / UIScreen.main.scale : CGFloat(runtime.number("targetDiameterMm") * Double(pixelsPerMm)) / UIScreen.main.scale
-                    MascotView().frame(width: width, height: width * 1.22)
+                    // 与安卓一致：头宽 = 目标半径 / 0.65，头部中心即上报的目标位置。
+                    MascotView(scale: 1 / 1.3, centerY: 0.5).frame(width: width, height: width)
                         .opacity(phase == "FIXATION" && runtime.number("targetX") <= 0 ? 0.3 : 1).position(point)
                 }
             }.clipShape(RoundedRectangle(cornerRadius: EyeStyle.radius))
