@@ -81,6 +81,7 @@ class MobileScreeningController(
             "calibrate" -> screening.retryGazeCalibration()
             "extended" -> dry.startExtended()
             "rest" -> dry.startRestRetest()
+            "restart" -> if (kind == "DRY_EYE") dry.restartAll() else screening.restart()
             "retryCamera" -> if (kind == "DRY_EYE") { dry.stopMonitoring(); dry.startMonitoring() } else screening.retryCamera()
         }
     }
@@ -109,11 +110,25 @@ class MobileScreeningController(
             put("name", cue.name); put("sound", cue.sound); put("microphonePauseMs", cue.microphonePauseMs)
         } }).toString()
     }
+    /** 送给 TTS 的口语化文本与距离提醒短句，与安卓共用同一套读法。 */
+    fun speechText(text: String) = screeningSpeechText(text)
+    fun distancePrompt(zone: Int, count: Int): String? = SpokenPrompts.distance(zone, count)
+    val distanceOkPrompt: String get() = SpokenPrompts.DISTANCE_OK
     fun reportTarget(xPx: Float,yPx: Float) = screening.reportGazeTarget(xPx,yPx)
     fun reportPursuitCapacity(xDeg: Float,yDeg: Float) = screening.reportPursuitCapacity(xDeg,yDeg)
+    /** 与安卓一致：问卷和结果页切后台不丢内容，只有进行中的任务回到准备页。 */
     fun interrupt() {
-        if (kind == "DRY_EYE") { dry.backToSetup("测试已中断，请重新开始"); dry.stopMonitoring() }
-        else screening.interruptTest()
+        if (kind == "DRY_EYE") {
+            val phase = dry.uiState.value.phase
+            if (phase != DryEyePhase.Profile && phase != DryEyePhase.Result) dry.backToSetup("测试已中断，请重新开始")
+            dry.stopMonitoring()
+        } else screening.interruptTest()
+    }
+    /** 回到前台后重新挂接相机；问卷阶段尚未需要相机。 */
+    fun resume() {
+        if (closed) return
+        if (kind == "DRY_EYE") { if (dry.uiState.value.phase != DryEyePhase.Profile) dry.startMonitoring() }
+        else if (screening.state.value.step == ScreeningStep.ENVIRONMENT) screening.startCamera()
     }
     fun close() { if (!closed) { closed = true; dry.close(); screening.close(); scope.cancel() } }
     fun cameraFailed(message: String) { cameraError?.invoke(IllegalStateException(message)) }
@@ -150,6 +165,10 @@ class MobileScreeningController(
                 put("phase",s.phase.name); put("title","干眼自测"); put("instruction",s.instruction)
                 put("distanceCm",s.distanceCm); put("gateReady",s.gateReady); put("warning",s.error ?: s.qualityWarning)
                 put("faceDetected",s.faceDetected)
+                val distanceSpeech = s.phase in setOf(DryEyePhase.Setup, DryEyePhase.FormalGuide, DryEyePhase.Countdown,
+                    DryEyePhase.Practice, DryEyePhase.Natural, DryEyePhase.Open)
+                put("distanceZone",spokenDistanceZone(s.distanceCm,s.faceDetected,
+                    if (distanceSpeech) DryEyeProtocol.TARGET_DISTANCE_CM to DryEyeProtocol.DISTANCE_TOLERANCE_CM else null))
                 val distanceVisible = s.phase in setOf(DryEyePhase.Setup, DryEyePhase.FormalGuide, DryEyePhase.Countdown,
                     DryEyePhase.Practice, DryEyePhase.Natural, DryEyePhase.Open)
                 put("targetDistanceCm",if (distanceVisible) DryEyeProtocol.TARGET_DISTANCE_CM else null)
@@ -158,6 +177,8 @@ class MobileScreeningController(
                 put("direction",s.direction); put("optotypePx",s.optotypePx); put("savedFile",s.savedFile)
                 put("risk",s.report?.riskLevel?.name); put("findings",RecordArray(s.report?.indicators.orEmpty() + s.report?.abnormal.orEmpty()))
                 put("advice",s.report?.advice); put("voiceActive",s.trialVisible)
+                put("canExtend",s.canExtend); put("canRest",s.canRestRetest); put("progress",s.progressFraction)
+                dryEyeProgress(s).let { p -> put("overallProgress",p?.fraction); put("remainingText",p?.remainingText) }
             }
         } else {
             val s = screening.state.value
@@ -168,6 +189,8 @@ class MobileScreeningController(
                 put("distanceCm",s.distanceCm); put("faceDetected",s.faceDetected); put("warning",s.gazeWarning ?: s.warning ?: screeningGuidance(s)?.takeUnless { it == "保持稳定" })
                 put("secondsLeft",s.secondsLeft); put("trialVisible",s.trialVisible); put("trialId",s.trialId)
                 put("targetDistanceCm",screeningDistanceTarget(s)?.first)
+                put("distanceZone",if (s.guidePending || s.gazeWarning != null || s.warning != null) null else spokenDistanceZone(s.distanceCm,
+                    s.faceDetected || (s.step == ScreeningStep.NEAR_VISION && s.distanceCm > 0f),screeningDistanceTarget(s)))
                 put("distanceToleranceCm",screeningDistanceTarget(s)?.second)
                 put("direction",s.direction); put("optotypePx",s.trialOptotypePx); put("eye",s.visionEye.name)
                 put("nearAwaitingEyeReady",s.nearAwaitingEyeReady); put("pushStage",s.pushStage.name)
@@ -178,6 +201,9 @@ class MobileScreeningController(
                 put("coverRemainingMs",screening.coverRemainingMs())
                 put("risk",s.riskLevel.name); put("category",s.category); put("findings",RecordArray(s.findings + s.limitations))
                 put("voiceActive",s.trialVisible || s.nearAwaitingEyeReady || s.step == ScreeningStep.PUSH_UP)
+                screeningProgress(s).let { p -> put("overallProgress",p?.fraction); put("remainingText",p?.remainingText) }
+                StrabismusGaze.calibrationTargets.getOrNull(s.gazeCalibrationIndex)?.let { put("calibrationX",it.x); put("calibrationY",it.y) }
+                put("calibrationCount",StrabismusGaze.calibrationTargets.size)
             }
         }
         return result.toString()

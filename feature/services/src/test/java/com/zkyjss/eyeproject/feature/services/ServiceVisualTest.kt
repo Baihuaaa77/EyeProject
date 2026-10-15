@@ -186,7 +186,7 @@ class ServiceVisualTest {
                 }
             }
         }
-        compose.onNodeWithText("→").assertIsEnabled()
+        compose.onNodeWithContentDescription("向右").assertIsEnabled()
         capture("near-vision-dark")
     }
 
@@ -200,6 +200,7 @@ class ServiceVisualTest {
             EyeProjectTheme {
                 TestSessionLayout(if (task == 0) "老视自测" else if (task == 1) "干眼自测" else "眼位自测", {}, {}, true,
                     modifier = Modifier.testTag("test-session"), reflexStimulus = task == 2,
+                    progress = when (task) { 0 -> TestProgress(0.82f, 30); 1 -> TestProgress(0.4f, 57); else -> TestProgress(0.15f, 80) },
                     status = { DistanceBanner(distanceStatus(if (task == 0) 50f else if (task == 1) 40f else 33f,
                         true, if (task == 0) 50f else if (task == 1) 40f else 33f, 5f), compact = true) }) {
                     when (task) {
@@ -214,11 +215,14 @@ class ServiceVisualTest {
             }
         }
         fun assertCentered() {
-            val viewport = compose.onNodeWithTag("test-session").fetchSemanticsNode().boundsInRoot
-            val target = compose.onNodeWithTag("answer-optotype").fetchSemanticsNode().boundsInRoot
-            assertTrue("视标应靠近屏幕中心", kotlin.math.abs(target.center.y - viewport.center.y) < viewport.height * 0.1f)
+            // 舞台在顶栏、进度条与距离横幅之下的内容区居中。
+            val viewport = compose.onNodeWithTag("test-content").fetchSemanticsNode().boundsInRoot
+            val target = compose.onNodeWithTag("answer-pad").fetchSemanticsNode().boundsInRoot
+            assertTrue("测试舞台应在内容区居中", kotlin.math.abs(target.center.y - viewport.center.y) < viewport.height * 0.1f)
         }
         assertCentered()
+        compose.onNodeWithTag("test-progress").assertIsDisplayed()
+        compose.onNodeWithText("剩余约 30 秒").assertIsDisplayed()
         compose.onNodeWithText("距离合适").assertIsDisplayed()
         compose.onNodeWithText("点选 E 的开口方向").assertDoesNotExist()
         compose.onNodeWithText("调节灵敏度（远近切换）").assertDoesNotExist()
@@ -274,7 +278,7 @@ class ServiceVisualTest {
             EyeProjectTheme {
                 CompositionLocalProvider(LocalDensity provides Density(1f, 1.5f)) {
                     Box(Modifier.size(320.dp, 640.dp)) {
-                        TestSessionLayout("干眼自测", {}, {}, true,
+                        TestSessionLayout("干眼自测", {}, {}, true, progress = TestProgress(0.9f, 12),
                             status = { DistanceBanner(distanceStatus(25f, true, 40f, 5f), compact = true) }) {
                             TrialContent(DryEyeTestUiState(phase = DryEyePhase.Open, trialVisible = true,
                                 optotypePx = 24f, remainingSeconds = 12)) {}
@@ -285,8 +289,8 @@ class ServiceVisualTest {
         }
         compose.onNodeWithText("把手机往远处移约 10 cm").assertIsDisplayed()
         compose.onNodeWithText("太近了").assertIsDisplayed()
-        compose.onNodeWithText("看不清 / 跳过").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("↓").assertIsDisplayed()
+        compose.onNodeWithText("跳过").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithContentDescription("向下").assertIsDisplayed()
         capture("session-small-large-text")
     }
 
@@ -300,22 +304,26 @@ class ServiceVisualTest {
             }
         }
         val target = compose.onNodeWithTag("answer-optotype").fetchSemanticsNode().boundsInRoot
-        val up = compose.onNodeWithText("↑").fetchSemanticsNode().boundsInRoot
-        val down = compose.onNodeWithText("↓").fetchSemanticsNode().boundsInRoot
-        val left = compose.onNodeWithText("←").fetchSemanticsNode().boundsInRoot
-        val right = compose.onNodeWithText("→").fetchSemanticsNode().boundsInRoot
-        assertTrue(up.bottom <= target.top && down.top >= target.bottom)
-        assertTrue(left.right <= target.left && right.left >= target.right)
-        assertEquals(target.center.x, up.center.x, 0.01f)
-        assertEquals(target.center.x, down.center.x, 0.01f)
-        assertEquals(target.center.y, left.center.y, 0.01f)
-        assertEquals(target.center.y, right.center.y, 0.01f)
+        val up = compose.onNodeWithContentDescription("向上").fetchSemanticsNode().boundsInRoot
+        val down = compose.onNodeWithContentDescription("向下").fetchSemanticsNode().boundsInRoot
+        val left = compose.onNodeWithContentDescription("向左").fetchSemanticsNode().boundsInRoot
+        val right = compose.onNodeWithContentDescription("向右").fetchSemanticsNode().boundsInRoot
+        val skip = compose.onNodeWithText("跳过").fetchSemanticsNode().boundsInRoot
+        // 所有作答键都在视标下方；四个方向键环绕中央的「看不清 / 跳过」。
+        assertTrue(listOf(up, down, left, right, skip).all { it.top >= target.bottom })
+        assertTrue(up.bottom <= skip.top && down.top >= skip.bottom)
+        assertTrue(left.right <= skip.left && right.left >= skip.right)
+        assertEquals(skip.center.x, up.center.x, 0.01f)
+        assertEquals(skip.center.x, down.center.x, 0.01f)
+        assertEquals(skip.center.y, left.center.y, 0.01f)
+        assertEquals(skip.center.y, right.center.y, 0.01f)
+        assertEquals(target.center.x, skip.center.x, 0.01f)
         assertEquals(120f, target.width, 0.01f)
         compose.onNodeWithContentDescription("向上").performClick()
         compose.onNodeWithContentDescription("向左").performClick()
         compose.onNodeWithContentDescription("向右").performClick()
         compose.onNodeWithContentDescription("向下").performClick()
-        compose.onNodeWithText("看不清 / 跳过").performClick()
+        compose.onNodeWithText("跳过").performClick()
         assertEquals(listOf(3, 2, 0, 1, -1), answers)
         capture("direction-pad")
     }
@@ -329,9 +337,10 @@ class ServiceVisualTest {
             }
         }
         compose.onNodeWithTag("answer-optotype").assertDoesNotExist()
-        for (arrow in listOf("↑", "↓", "←", "→", "看不清 / 跳过")) {
-            compose.onNodeWithText(arrow).assertIsNotEnabled()
+        for (arrow in listOf("向上", "向下", "向左", "向右")) {
+            compose.onNodeWithContentDescription(arrow).assertIsNotEnabled()
         }
+        compose.onNodeWithText("跳过").assertIsNotEnabled()
     }
 
     /** 逐组渲染全部演示场景，供人工检查卡通画面。 */
@@ -380,12 +389,83 @@ class ServiceVisualTest {
             }
         }
         compose.onNodeWithText("持续睁眼").assertExists()
-        compose.onNodeWithText("↑").performClick()
+        compose.onNodeWithContentDescription("向上").performClick()
         assertEquals(3, answered)
         capture("dry-eye-open")
         page = 1
         compose.onNodeWithText("下一步：移开遮盖，双眼注视").assertExists()
         capture("cover-coach")
+    }
+
+    /** 渲染真实的干眼页面（非单独组件），确认任务中常驻距离横幅。 */
+    @Test fun dryEyeScreenKeepsDistanceBannerDuringTrials() {
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val vm = DryEyeTestViewModel(context, com.zkyjss.eyeproject.core.camera.CameraController(context),
+            com.zkyjss.eyeproject.core.camera.CameraIntrinsicsProvider(context))
+        @Suppress("UNCHECKED_CAST")
+        val state = DryEyeEngine::class.java.getDeclaredField("_uiState").apply { isAccessible = true }
+            .get(vm.engine) as kotlinx.coroutines.flow.MutableStateFlow<DryEyeTestUiState>
+        state.value = DryEyeTestUiState(phase = DryEyePhase.Open, trialVisible = true, trialId = 1, direction = 2,
+            optotypePx = 40f, remainingSeconds = 12, progressFraction = 0.4f, faceDetected = true, distanceCm = 40f, gateReady = true)
+        compose.setContent { EyeProjectTheme { DryEyeScreen(onBack = {}, viewModel = vm) } }
+        compose.onNodeWithText("距离合适").assertIsDisplayed()
+        compose.onNodeWithText("持续睁眼").assertIsDisplayed()
+        capture("dry-eye-screen-open-ok")
+        state.value = state.value.copy(distanceCm = 30f)
+        compose.onNodeWithText("太近了").assertIsDisplayed()
+        capture("dry-eye-screen-open-close")
+        state.value = state.value.copy(distanceCm = 52f)
+        compose.onNodeWithText("太远了").assertIsDisplayed()
+        capture("dry-eye-screen-open-far")
+        state.value = state.value.copy(phase = DryEyePhase.Natural, distanceCm = 41f)
+        compose.onNodeWithText("距离合适").assertIsDisplayed()
+        capture("dry-eye-screen-natural")
+    }
+
+    @Test fun calibrationCoversNineWidePoints() {
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val vm = ScreeningTestViewModel(context,
+            com.zkyjss.eyeproject.core.camera.CameraController(context),
+            com.zkyjss.eyeproject.core.camera.CameraIntrinsicsProvider(context))
+        var index by androidx.compose.runtime.mutableIntStateOf(0)
+        compose.setContent {
+            EyeProjectTheme {
+                TestSessionLayout("眼位自测", {}, {}, true, reflexStimulus = true,
+                    progress = screeningProgress(ScreeningState(kind = ScreeningKind.STRABISMUS,
+                        step = ScreeningStep.GAZE_CALIBRATION, gazeCalibrationIndex = index)),
+                    status = { DistanceBanner(distanceStatus(33f, true, 33f, 5f), compact = true) }) {
+                    GazeCalibrationContent(ScreeningState(kind = ScreeningKind.STRABISMUS,
+                        step = ScreeningStep.GAZE_CALIBRATION, gazeCalibrationIndex = index), vm)
+                }
+            }
+        }
+        for (i in StrabismusGaze.calibrationTargets.indices) {
+            index = i
+            compose.onNodeWithText("注视校准 · ${i + 1}/9").assertExists()
+            capture("calibration-9-$i")
+        }
+    }
+
+    @Test fun countdownAndRestUseTimerRings() {
+        var rest by androidx.compose.runtime.mutableStateOf(false)
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            EyeProjectTheme {
+                Column(Modifier.fillMaxSize().background(LocalEyeColors.current.appBackground).padding(20.dp),
+                    verticalArrangement = Arrangement.Center) {
+                    DryEyeTimerForTest(if (rest) DryEyeTestUiState(phase = DryEyePhase.Rest, remainingSeconds = 42, progressFraction = 0.3f)
+                        else DryEyeTestUiState(phase = DryEyePhase.Countdown, remainingSeconds = 2, instruction = "建议佩戴最佳矫正眼镜，保持约 40 cm"))
+                }
+            }
+        }
+        compose.mainClock.advanceTimeBy(50)
+        compose.onNodeWithText("2").assertExists()
+        capture("dry-eye-countdown")
+        compose.mainClock.autoAdvance = true
+        rest = true
+        compose.waitForIdle()
+        compose.onNodeWithText("42").assertExists()
+        capture("dry-eye-rest")
     }
 
     @Test fun distanceBannersUseRedForNearAndBlueForFar() {
@@ -490,7 +570,7 @@ class ServiceVisualTest {
                 }
             }
         }
-        compose.onNodeWithText("注视校准 · 4/5").assertIsDisplayed()
+        compose.onNodeWithText("注视校准 · 4/9").assertIsDisplayed()
         compose.onNodeWithText("重试注视校准").assertIsDisplayed().assertIsEnabled()
         capture("gaze-calibration")
     }

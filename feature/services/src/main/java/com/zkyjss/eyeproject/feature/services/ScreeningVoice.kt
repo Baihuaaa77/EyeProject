@@ -5,9 +5,15 @@ import android.os.Handler
 import android.os.Looper
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import kotlinx.coroutines.delay
 import java.util.Locale
 
 /** 测试页使用系统中文语音合成；离开页面时释放引擎。 */
@@ -40,19 +46,22 @@ internal class ScreeningVoice(context: Context) : TextToSpeech.OnInitListener {
             available = status == TextToSpeech.SUCCESS &&
                 tts.setLanguage(Locale.SIMPLIFIED_CHINESE) >= TextToSpeech.LANG_AVAILABLE
             if (available == true) {
-                // 三个测试固定使用同一引擎的同一中文发声人；优先沿用系统当前中文声音。
+                // 三个测试固定使用同一引擎的同一中文发声人：选音质最高、已安装、离线可用的声音，
+                // 网络声音只在没有可用离线声音时使用。键名带版本，旧版本保存的低音质选择会重新挑选一次。
                 runCatching {
-                    val key = "voice_${tts.defaultEngine}"
+                    val key = "voice_v2_${tts.defaultEngine}"
                     val voices = tts.voices.orEmpty().filter { it.locale.language in setOf("zh", "cmn") &&
-                        it.locale.country in setOf("CN", "") }
+                        it.locale.country in setOf("CN", "") &&
+                        TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED !in it.features.orEmpty() }
                     val chosen = voices.firstOrNull { it.name == preferences.getString(key, null) }
-                        ?: tts.voice?.takeIf { voice -> voices.any { it.name == voice.name } }
                         ?: voices.sortedWith(compareBy<android.speech.tts.Voice> { it.isNetworkConnectionRequired }
-                            .thenByDescending { it.quality }.thenBy { it.name }).firstOrNull()
+                            .thenByDescending { it.quality }.thenBy { it.latency }
+                            .thenByDescending { it.name == tts.voice?.name }.thenBy { it.name }).firstOrNull()
                     if (chosen != null && tts.setVoice(chosen) == TextToSpeech.SUCCESS)
                         preferences.edit().putString(key, chosen.name).apply()
                 }
-                tts.setSpeechRate(1.08f)
+                // 常速、原音高最接近真人讲解；略快的语速会让中文听起来急促机械。
+                tts.setSpeechRate(1f)
                 tts.setPitch(1f)
             }
             tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
@@ -96,40 +105,35 @@ internal class ScreeningVoice(context: Context) : TextToSpeech.OnInitListener {
     fun close() { stop(); feedbackGeneration++; feedbackPlaying = false; feedbackHandler.removeCallbacksAndMessages(null); engine?.shutdown(); engine = null }
 }
 
-/** 仅改变送给 TTS 的文本，屏幕上的医学与测量数据保持原样。 */
-internal fun screeningSpeechText(text: String): String {
-    val tolerance = Regex("""(\d+(?:\.\d+)?)\s*±\s*(\d+(?:\.\d+)?)\s*(?:cm|厘米)""")
-    val range = Regex("""(\d+(?:\.\d+)?)\s*[-–—~～]\s*(\d+(?:\.\d+)?)""")
-    val number = Regex("""\d+(?:\.\d+)?""")
-    return text
-        .replace(tolerance) { "${it.groupValues[1]}厘米，上下浮动${it.groupValues[2]}厘米" }
-        .replace(range) {
-            val start = if (it.groupValues[1] == "2") "两" else spokenNumber(it.groupValues[1])
-            val end = if (it.groupValues[2] == "2") "两" else spokenNumber(it.groupValues[2])
-            "$start 到 $end"
-        }
-        .replace("cm", "厘米", ignoreCase = true)
-        .replace("lux", "勒克斯", ignoreCase = true)
-        .replace(number) { spokenNumber(it.value) }
-        .replace('：', '，')
-        .replace(Regex("""\s+"""), "")
-        .replace("厘米约", "厘米，约")
-}
+private class SpokenMemory { var lastWasDistance = false; var lastBase = "" }
 
-private fun spokenNumber(value: String): String {
-    val parts = value.split('.')
-    val integer = parts[0].toIntOrNull() ?: return value
-    if (integer > 999) return value
-    val digits = "零一二三四五六七八九"
-    fun underHundred(number: Int): String = when {
-        number < 10 -> digits[number].toString()
-        number < 20 -> "十" + if (number % 10 == 0) "" else digits[number % 10]
-        else -> digits[number / 10].toString() + "十" + if (number % 10 == 0) "" else digits[number % 10]
+/**
+ * 播报当前提示。距离偏离时优先提醒，持续偏离每 6 秒换一种说法再提醒；回到合适距离先说一句肯定，
+ * 期间若主提示有变化再接着播报。状态稳定 650 ms 后才开口，避免测距波动不断打断；切到后台不播报。
+ */
+@Composable
+internal fun SpeakTestPrompts(voice: ScreeningVoice, enabled: Boolean, base: String, offDistance: DistanceStatus?) {
+    val owner = LocalLifecycleOwner.current
+    val memory = remember { SpokenMemory() }
+    val prompt = offDistance?.spoken ?: base
+    LaunchedEffect(prompt, enabled) {
+        if (!enabled || prompt.isBlank()) { voice.stop(); return@LaunchedEffect }
+        delay(650)
+        val foreground = { owner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) }
+        val text = when {
+            offDistance != null -> prompt
+            memory.lastWasDistance -> SpokenPrompts.DISTANCE_OK + if (base != memory.lastBase) base else ""
+            else -> base
+        }
+        if (foreground()) {
+            voice.speak(text)
+            memory.lastWasDistance = offDistance != null
+            if (offDistance == null) memory.lastBase = base
+        }
+        var repeat = 1
+        while (offDistance != null) {
+            delay(6_000)
+            if (foreground()) voice.speak(offDistance.spoken(repeat++) ?: prompt)
+        }
     }
-    val whole = if (integer < 100) underHundred(integer) else {
-        digits[integer / 100].toString() + "百" +
-            if (integer % 100 == 0) "" else if (integer % 100 < 10) "零${digits[integer % 10]}" else
-                if (integer % 100 < 20) "一${underHundred(integer % 100)}" else underHundred(integer % 100)
-    }
-    return if (parts.size == 1) whole else whole + "点" + parts[1].map { digits[it - '0'] }.joinToString("")
 }

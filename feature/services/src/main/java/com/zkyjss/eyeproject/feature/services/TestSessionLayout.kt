@@ -2,7 +2,23 @@ package com.zkyjss.eyeproject.feature.services
 
 import android.content.Context
 import android.content.SharedPreferences
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Canvas
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
+import kotlin.math.abs
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -73,6 +89,7 @@ internal fun TestSessionLayout(
     modifier: Modifier = Modifier,
     reflexStimulus: Boolean = false,
     scroll: ScrollState = rememberScrollState(),
+    progress: TestProgress? = null,
     status: @Composable () -> Unit = {},
     content: @Composable ColumnScope.() -> Unit,
 ) {
@@ -86,16 +103,70 @@ internal fun TestSessionLayout(
                     null, Modifier.size(24.dp), tint = colors.primary)
             }
         }
+        TestProgressBar(progress)
         if (reflexStimulus) {
-            Canvas(Modifier.fillMaxWidth().height(20.dp).clip(EyeShapes.small).background(colors.black)) {
+            Canvas(Modifier.padding(bottom = 6.dp).fillMaxWidth().height(20.dp).clip(EyeShapes.small).background(colors.black)) {
                 drawCircle(colors.white, radius = 4.dp.toPx(), center = center)
             }
         }
         status()
-        BoxWithConstraints(Modifier.weight(1f)) {
+        BoxWithConstraints(Modifier.weight(1f).testTag("test-content")) {
+            val density = LocalDensity.current
+            val available = maxHeight - 16.dp
+            val flex = remember { StageFlex() }
             Column(Modifier.fillMaxWidth().verticalScroll(scroll).heightIn(min = maxHeight).padding(vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp, if (centered) Alignment.CenterVertically else Alignment.Top),
-                content = content)
+                verticalArrangement = Arrangement.spacedBy(8.dp, if (centered) Alignment.CenterVertically else Alignment.Top)) {
+                // 进行中的任务：把内容区剩余高度交给舞台里可伸展的刺激区，避免卡片上下大片留白；
+                // 内容放不下时不再伸展，仍可滚动。
+                CompositionLocalProvider(LocalStageFlex provides flex.takeIf { centered }) {
+                    Column(Modifier.fillMaxWidth().onSizeChanged { size ->
+                        val natural = with(density) { size.height.toDp() }
+                        val base = natural - if (flex.consumers > 0) flex.extra else 0.dp
+                        val target = (available - base).coerceAtLeast(0.dp)
+                        if (abs((target - flex.extra).value) > 1f) flex.extra = target
+                    }, verticalArrangement = Arrangement.spacedBy(8.dp), content = content)
+                }
+            }
+        }
+    }
+}
+
+/** 内容区留给舞台伸展的高度；伸展元素登记后才计入，避免没有伸展元素时反复累加。 */
+@Stable
+internal class StageFlex {
+    var extra by mutableStateOf(0.dp)
+    var consumers = 0
+}
+
+internal val LocalStageFlex = staticCompositionLocalOf<StageFlex?> { null }
+
+/** 舞台中可伸展的元素（刺激区、注视画布）调用：返回应额外增加的高度。每屏只应有一个伸展元素。 */
+@Composable
+internal fun rememberStageExtra(): Dp {
+    val flex = LocalStageFlex.current ?: return 0.dp
+    DisposableEffect(flex) { flex.consumers++; onDispose { flex.consumers-- } }
+    return flex.extra
+}
+
+/** 测试开始后在顶栏下显示整体进度与剩余时间：细条加一行小字，不抢视标的注意力。 */
+@Composable
+private fun TestProgressBar(progress: TestProgress?) {
+    val colors = LocalEyeColors.current
+    AnimatedVisibility(progress != null, enter = fadeIn(tween(EyeMotion.MEDIUM)) + expandVertically(),
+        exit = fadeOut(tween(EyeMotion.SHORT)) + shrinkVertically()) {
+        // 收起动画期间保留最后一次读数。
+        var last by remember { mutableStateOf(progress ?: TestProgress(0f, 0)) }
+        if (progress != null) last = progress
+        val fraction by animateFloatAsState(last.fraction, tween(EyeMotion.LONG, easing = EyeMotion.Standard), label = "测试进度")
+        Row(Modifier.fillMaxWidth().padding(bottom = 8.dp).testTag("test-progress")
+            .semantics(mergeDescendants = true) { progressBarRangeInfo = ProgressBarRangeInfo(last.fraction, 0f..1f) },
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Canvas(Modifier.weight(1f).height(4.dp)) {
+                val radius = CornerRadius(size.height / 2f)
+                drawRoundRect(colors.neutralSoft, cornerRadius = radius)
+                drawRoundRect(colors.primary, size = Size(size.width * fraction.coerceIn(0f, 1f), size.height), cornerRadius = radius)
+            }
+            EyeText(last.remainingText, style = LocalEyeTypography.current.bodySecondary, color = colors.textSecondary)
         }
     }
 }

@@ -53,11 +53,21 @@ final class EyeVoice: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
         stopListening()
         synthesizer.stopSpeaking(at: .immediate)
         let utterance = AVSpeechUtterance(string: text)
-        utterance.voice = AVSpeechSynthesisVoice(language: "zh-CN")
-        utterance.rate = AVSpeechUtteranceDefaultSpeechRate
+        utterance.voice = Self.bestVoice
+        // 略低于默认语速、原音高，开口前留一点气口，听起来更像真人讲解。
+        utterance.rate = AVSpeechUtteranceDefaultSpeechRate * 0.96
         utterance.pitchMultiplier = 1
+        utterance.preUtteranceDelay = 0.05
         synthesizer.speak(utterance)
     }
+    /// 优先使用用户已下载的高品质（Premium / 增强）普通话声音，其次系统默认中文声音。
+    private static let bestVoice: AVSpeechSynthesisVoice? = {
+        let rank: (AVSpeechSynthesisVoiceQuality) -> Int = { quality in
+            switch quality { case .premium: return 3; case .enhanced: return 2; default: return 1 }
+        }
+        let chinese = AVSpeechSynthesisVoice.speechVoices().filter { $0.language == "zh-CN" }
+        return chinese.max { rank($0.quality) < rank($1.quality) } ?? AVSpeechSynthesisVoice(language: "zh-CN")
+    }()
     func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) { cooldown = Date().addingTimeInterval(0.6) }
     func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) { cooldown = Date().addingTimeInterval(0.6) }
     func setListening(_ value: Bool) {

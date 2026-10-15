@@ -5,6 +5,24 @@ import android.app.Activity
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.unit.sp
+import com.zkyjss.eyeproject.core.designsystem.theme.EyeMotion
+import com.zkyjss.eyeproject.core.designsystem.theme.rememberReducedMotion
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
@@ -97,8 +115,9 @@ fun DryEyeScreen(
     }
     LaunchedEffect(state.phase) { if (state.phase != DryEyePhase.Profile) ensureCamera() }
     val distance = distanceStatus(state.distanceCm, state.faceDetected, DryEyeProtocol.TARGET_DISTANCE_CM, DryEyeProtocol.DISTANCE_TOLERANCE_CM)
-    val distanceMatters = state.phase in setOf(DryEyePhase.Setup, DryEyePhase.FormalGuide, DryEyePhase.Practice, DryEyePhase.Natural, DryEyePhase.Open)
-    val distanceHint = if (distanceMatters && distance.clearlyOff()) distance.spoken else null
+    // 与共用反馈门控一致：倒计时期间同样要求固定距离，光边和语音不能缺席。
+    val distanceMatters = state.phase in setOf(DryEyePhase.Setup, DryEyePhase.FormalGuide, DryEyePhase.Countdown,
+        DryEyePhase.Practice, DryEyePhase.Natural, DryEyePhase.Open)
     val voiceAnswer = rememberVoiceAnswer(
         active = !settingsOpen && state.phase in setOf(DryEyePhase.Practice, DryEyePhase.Natural, DryEyePhase.Open),
         voice = voice,
@@ -120,18 +139,7 @@ fun DryEyeScreen(
         DryEyePhase.Result -> "测试完成"
         else -> state.qualityWarning ?: state.instruction
     }
-    // 距离提示优先；距离持续偏离时每 6 秒重复一次，回到合适区间立即停止
-    val prompt = distanceHint ?: basePrompt
-    LaunchedEffect(prompt, voiceEnabled, settingsOpen) {
-        if (voiceEnabled && !settingsOpen) {
-            kotlinx.coroutines.delay(650)
-            if (lifecycleOwner.lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)) voice.speak(prompt)
-            while (distanceHint != null && prompt == distanceHint) {
-                kotlinx.coroutines.delay(6_000)
-                voice.speak(prompt)
-            }
-        } else voice.stop()
-    }
+    SpeakTestPrompts(voice, voiceEnabled && !settingsOpen, basePrompt, distance.takeIf { distanceMatters && it.clearlyOff() })
     DisposableEffect(viewModel, voice) { onDispose { viewModel.stopMonitoring(); voice.close() } }
     // 测试期间窗口亮度固定为最高，保证视标对比度一致（原文要求记录屏幕亮度）
     DisposableEffect(context) {
@@ -155,7 +163,7 @@ fun DryEyeScreen(
     }
     val running = state.phase in setOf(DryEyePhase.Practice, DryEyePhase.Countdown, DryEyePhase.Natural, DryEyePhase.Open, DryEyePhase.Rest)
     Box(modifier.fillMaxSize()) {
-        TestSessionLayout("干眼自测", onBack, { settingsOpen = true }, running,
+        TestSessionLayout("干眼自测", onBack, { settingsOpen = true }, running, progress = dryEyeProgress(state),
             status = {
                 if (running && state.phase != DryEyePhase.Rest) DistanceBanner(distance, compact = true)
             }) {
@@ -238,11 +246,45 @@ private fun FormalGuideContent(state: DryEyeTestUiState, onStart: () -> Unit) {
 private fun CountdownContent(instruction: String, seconds: Int) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
-    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-        Spacer(Modifier.height(24.dp))
-        EyeText(text = "$seconds", style = typography.headline, color = colors.primary)
-        Spacer(Modifier.height(12.dp))
+    // 每一秒环从满到空走一圈，数字缩放淡入；系统移除动画时保持静止。
+    val reduced = rememberReducedMotion()
+    val sweep = remember { Animatable(1f) }
+    LaunchedEffect(seconds) {
+        if (reduced) sweep.snapTo(1f) else {
+            sweep.snapTo(1f)
+            sweep.animateTo(0f, tween(1_000, easing = LinearEasing))
+        }
+    }
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(20.dp)) {
+        TimerRing(progress = { sweep.value }, Modifier.size(168.dp)) {
+            AnimatedContent(
+                targetState = seconds,
+                transitionSpec = {
+                    if (reduced) EnterTransition.None togetherWith ExitTransition.None
+                    else (scaleIn(tween(EyeMotion.MEDIUM, easing = EyeMotion.Standard), initialScale = 0.6f) + fadeIn(tween(EyeMotion.SHORT))) togetherWith
+                        (scaleOut(tween(EyeMotion.SHORT), targetScale = 1.3f) + fadeOut(tween(EyeMotion.SHORT)))
+                },
+                label = "倒计时数字",
+            ) { value -> EyeText(text = "$value", style = typography.headline.copy(fontSize = 64.sp), color = colors.primary) }
+        }
         EyeText(text = instruction, style = typography.subtitle, color = colors.textPrimary, textAlign = TextAlign.Center)
+    }
+}
+
+/** 圆环计时：浅色底环 + 主色进度弧，中间放读数。 */
+@Composable
+private fun TimerRing(progress: () -> Float, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    val colors = LocalEyeColors.current
+    Box(modifier, contentAlignment = Alignment.Center) {
+        Canvas(Modifier.fillMaxSize()) {
+            val stroke = 8.dp.toPx()
+            val inset = stroke / 2f
+            val arcSize = Size(size.width - stroke, size.height - stroke)
+            drawArc(colors.neutralSoft, 0f, 360f, false, Offset(inset, inset), arcSize, style = Stroke(stroke))
+            drawArc(colors.primary, -90f, 360f * progress().coerceIn(0f, 1f), false, Offset(inset, inset), arcSize,
+                style = Stroke(stroke, cap = StrokeCap.Round))
+        }
+        content()
     }
 }
 
@@ -263,9 +305,9 @@ internal fun TrialContent(state: DryEyeTestUiState, onAnswer: (Int) -> Unit) {
                 EyeText("剩余 ${state.remainingSeconds} 秒", style = typography.subtitle, color = colors.textPrimary)
             }
             val size = with(LocalDensity.current) { state.optotypePx.toDp() }
-            OptotypeAnswerPad(state.direction, size, state.trialVisible, onAnswer)
-            TrialTimer(state.trialId, state.trialVisible)
-            state.qualityWarning?.let { EyeText(it, style = typography.title, color = colors.warning) }
+            OptotypeAnswerPad(state.direction, size, state.trialVisible,
+                belowStimulus = { TrialTimer(state.trialId, state.trialVisible) }, onAnswer = onAnswer)
+            TestNotice(state.qualityWarning)
         }
     }
 }
@@ -293,10 +335,12 @@ private fun TrialTimer(trialId: Int, visible: Boolean) {
 private fun RestContent(state: DryEyeTestUiState) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
-    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Spacer(Modifier.height(24.dp))
+    val remaining by animateFloatAsState(1f - state.progressFraction, tween(250, easing = LinearEasing), label = "休息剩余")
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(20.dp)) {
         EyeText("闭眼休息", style = typography.title, color = colors.textPrimary)
-        EyeText("${state.remainingSeconds}", style = typography.headline, color = colors.primary)
+        TimerRing(progress = { remaining }, Modifier.size(184.dp)) {
+            EyeText("${state.remainingSeconds}", style = typography.headline.copy(fontSize = 56.sp), color = colors.primary)
+        }
     }
 }
 
@@ -329,10 +373,10 @@ private fun ResultContent(
             ReportFindings("需要关注", report.abnormal, colors.warning)
         }
         state.previousReport?.let { previous -> ComparisonCard(previous, report) }
-        if (report.valid && (report.borderline || report.riskLevel == ScreeningRiskLevel.MEDIUM) && state.naturalSeconds == DryEyeProtocol.NATURAL_SECONDS) {
+        if (state.canExtend) {
             EyeButton("延长测试（3 分钟）", EyeButtonRole.PRIMARY, onExtend, Modifier.fillMaxWidth())
         }
-        if (report.valid && !state.afterRest) {
+        if (state.canRestRetest) {
             EyeButton("闭眼休息 1 分钟后再测", EyeButtonRole.SECONDARY, onRest, Modifier.fillMaxWidth())
         }
         EyeButton("重新检测", EyeButtonRole.SECONDARY, onRestart, Modifier.fillMaxWidth())
@@ -455,3 +499,8 @@ private fun DistanceChart(samples: List<DryEyeDistanceSample>) {
 /** 供本地界面检查渲染干眼报告（无按钮回调）。 */
 @Composable
 internal fun DryEyeResultForTest(state: DryEyeTestUiState) = ResultContent(state, onExtend = {}, onRest = {}, onRestart = {})
+
+/** 供本地界面检查渲染倒计时与闭眼休息计时环。 */
+@Composable
+internal fun DryEyeTimerForTest(state: DryEyeTestUiState) =
+    if (state.phase == DryEyePhase.Rest) RestContent(state) else CountdownContent(state.instruction, state.remainingSeconds)

@@ -27,9 +27,43 @@ class StrabismusGazeTest {
         assertFalse(StrabismusGaze.onTarget(GazePoint(1.5f, 0.5f), GazePoint(1.3f, 0.5f)))
     }
 
+    @Test fun nineWidePointsCoverTheCanvasAndRejectOneLookAway() {
+        val targets = StrabismusGaze.calibrationTargets
+        assertEquals(9, targets.size)
+        assertTrue(targets.minOf { it.x } <= 0.1f && targets.maxOf { it.x } >= 0.9f)
+        assertTrue(targets.minOf { it.y } <= 0.1f && targets.maxOf { it.y } >= 0.9f)
+        // 第 6 个点期间看向别处：剔除离群点后映射仍应准确。
+        val glanced = calibration().map { if (it.index == 5) it.copy(left = GazePoint(0.2f, -0.3f), right = GazePoint(0.2f, -0.3f)) else it }
+        val model = StrabismusGaze.calibrate(glanced)!!
+        val target = GazePoint(0.1f + 0.5f * 0.8f, 0.3f + 0.5f * 0.4f)
+        val eye = GazePoint((target.x - 0.5f) / 5f, (target.y - 0.5f) / 3f + 0.1f)
+        val estimate = model.estimate(eye, eye).first!!
+        assertEquals(target.x, estimate.x, 0.01f)
+        assertEquals(target.y, estimate.y, 0.01f)
+    }
+
+    @Test fun headTiltCrossTalkIsAbsorbedByTheAffineMapping() {
+        // 头部轻微翻滚：水平眼动混入一部分垂直分量，反之亦然。
+        val samples = StrabismusGaze.calibrationTargets.flatMapIndexed { index, p ->
+            val hx = (p.x - 0.5f) / 5f; val vy = (p.y - 0.5f) / 3f
+            val eye = GazePoint(hx + 0.15f * vy, vy - 0.2f * hx)
+            List(6) { GazeCalibrationSample(index, p, eye, eye) }
+        }
+        val model = StrabismusGaze.calibrate(samples)!!
+        val p = GazePoint(0.8f, 0.2f)
+        val hx = (p.x - 0.5f) / 5f; val vy = (p.y - 0.5f) / 3f
+        val estimate = model.estimate(GazePoint(hx + 0.15f * vy, vy - 0.2f * hx), null).first!!
+        assertEquals(p.x, estimate.x, 0.005f)
+        assertEquals(p.y, estimate.y, 0.005f)
+    }
+
     @Test fun stationaryMissingAndNonFiniteCalibrationCannotPass() {
         assertNull(StrabismusGaze.calibrate(calibration().map { it.copy(left = GazePoint(0f, 0f), right = GazePoint(0f, 0f)) }))
-        assertNull(StrabismusGaze.calibrate(calibration().filter { it.index != 4 }))
+        // 允许缺少个别点，但缺掉整列后边缘只能外推，必须拒绝。
+        assertNotNull(StrabismusGaze.calibrate(calibration().filter { it.index != 4 }))
+        val leftColumn = StrabismusGaze.calibrationTargets.indices.filter { StrabismusGaze.calibrationTargets[it].x < 0.3f }
+        assertNull(StrabismusGaze.calibrate(calibration().filter { it.index !in leftColumn }))
+        assertNull(StrabismusGaze.calibrate(calibration().filter { it.index !in listOf(1, 2, 3) }))
         assertNull(StrabismusGaze.calibrate(calibration().map { it.copy(left = GazePoint(Float.NaN, 0f), right = null) }))
     }
 

@@ -97,11 +97,13 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
     }
 
     /** 结果页：延长自然眨眼至 3 分钟（不重复练习，沿用本次基线）。 */
-    fun startExtended() = restartFormal(DryEyeProtocol.EXTENDED_NATURAL_SECONDS, afterRest = false)
+    fun startExtended() {
+        if (_uiState.value.canExtend) restartFormal(DryEyeProtocol.EXTENDED_NATURAL_SECONDS, afterRest = false)
+    }
 
     /** 结果页：闭眼休息 1 分钟后，以同样流程复测并与本次结果对比。 */
     fun startRestRetest() {
-        if (testJob != null) return
+        if (testJob != null || !_uiState.value.canRestRetest) return
         _uiState.update { it.copy(previousReport = it.report, report = null, afterRest = true, error = null) }
         testJob = scope.launch {
             try {
@@ -149,7 +151,9 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
 
     private suspend fun runPractice() {
         staircase = DryEyeStaircase()
-        _uiState.update { it.copy(phase = DryEyePhase.Practice, instruction = "练习：2 秒内点选 E 的开口方向", error = null) }
+        gateLostSinceMs = 0L
+        _uiState.update { it.copy(phase = DryEyePhase.Practice, instruction = "练习：2 秒内点选 E 的开口方向", error = null,
+            progressFraction = 0f, remainingSeconds = DryEyeProtocol.PRACTICE_SECONDS) }
         val start = platform.nowMs()
         val trials = mutableListOf<DryEyeTrial>()
         coroutineScope {
@@ -176,7 +180,8 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
     }
 
     private suspend fun runRest() {
-        _uiState.update { it.copy(phase = DryEyePhase.Rest, instruction = "请闭上眼睛休息，听到提示后再睁开") }
+        _uiState.update { it.copy(phase = DryEyePhase.Rest, instruction = "请闭上眼睛休息，听到提示后再睁开",
+            progressFraction = 0f, remainingSeconds = DryEyeProtocol.REST_SECONDS) }
         val start = platform.nowMs()
         while (true) {
             val elapsed = platform.nowMs() - start
@@ -195,6 +200,9 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
             delay(1000)
         }
         staircase = DryEyeStaircase(DryEyeProtocol.LEVELS.indexOf(baselineLevel).coerceAtLeast(0))
+        // 上一段遗留的丢失计时与像素封顶标记不能带入本次正式测试。
+        gateLostSinceMs = 0L
+        resolutionLimited = false
         val start = platform.nowMs()
         val totalMs = (naturalSeconds + DryEyeProtocol.OPEN_SECONDS) * 1000L
         val trials = mutableListOf<DryEyeTrial>()
@@ -207,7 +215,9 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
         var lastDistanceSampleMs = 0L
         blinkEvents.clear()
         _uiState.update {
+            // 进入新阶段先清零阶段进度，避免沿用上一阶段的满值。
             it.copy(phase = DryEyePhase.Natural, instruction = "看 E 选方向，同时像平时一样自然眨眼",
+                progressFraction = 0f, remainingSeconds = naturalSeconds,
                 phase1Blinks = emptyList(), phase2Blinks = emptyList(), phase1BlinkCount = 0, phase2BlinkCount = 0,
                 trialCount = 0, distanceSamples = emptyList(), error = null)
         }

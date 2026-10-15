@@ -78,7 +78,7 @@ class ScreeningFeedbackTest {
         val feedback = ScreeningFeedbackSession()
         val countdown = ScreeningFeedbackFrame("Countdown", true, countdown = 3)
         feedback.poll(ScreeningFeedbackFrame("FormalGuide"), 0, true)
-        assertEquals(listOf(ScreeningFeedbackCue.START), feedback.poll(countdown, 1000, true))
+        assertEquals(listOf(ScreeningFeedbackCue.TICK), feedback.poll(countdown, 1000, true))
         assertEquals(listOf(ScreeningFeedbackCue.TICK), feedback.poll(countdown.copy(countdown = 2), 2000, true))
         assertTrue(feedback.poll(countdown.copy(countdown = 2), 2500, true).isEmpty())
         assertEquals(listOf(ScreeningFeedbackCue.TICK), feedback.poll(countdown.copy(countdown = 1), 3000, true))

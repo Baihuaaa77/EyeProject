@@ -1,43 +1,26 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-  品牌标志 v2：白色「小瞳」团子头像 + 双叶嫩芽 + 豆豆眼 + 腮红与微笑。
-  几何与 core:ui EyeBrand.kt 的 drawBrandMark 一致（108dp 视口，可见区 18..90），全部位于 66dp 安全区内。
--->
+<!-- 由 scripts/generate_app_icon.py 生成：吉祥物「小瞳」（几何同 EyeBrand.drawBrandMark，放大 1.1 倍），全部位于 66dp 安全区内 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- 嫩芽：茎 + 两片叶 -->
-    <path
-        android:pathData="M54,38 Q54.5,33 55,29"
-        android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="2.2"
-        android:strokeLineCap="round"
-        android:fillColor="#00000000" />
-    <group android:pivotX="50" android:pivotY="28" android:rotation="25">
-        <path android:pathData="M45.5,28 a4.5,2.4 0 1,0 9,0 a4.5,2.4 0 1,0 -9,0" android:fillColor="#FFFFFFFF" />
+    <group android:pivotX="54" android:pivotY="52" android:scaleX="1.1" android:scaleY="1.1" android:translateY="2">
+        <path android:pathData="M49,40.5 H59 A20,20 0 0 1 79,60.5 V62.5 A20,20 0 0 1 59,82.5 H49 A20,20 0 0 1 29,62.5 V60.5 A20,20 0 0 1 49,40.5 Z" android:fillColor="#401B4F9E" />
+        <path android:pathData="M54,38 Q54.5,33 55,29" android:strokeColor="#FFFFFFFF" android:strokeWidth="2.2" android:strokeLineCap="round" android:fillColor="#00000000" />
+        <group android:pivotX="50" android:pivotY="28" android:rotation="25">
+            <path android:pathData="M45.5,28 a4.5,2.4 0 1,0 9,0 a4.5,2.4 0 1,0 -9,0" android:fillColor="#FFFFFFFF" />
+        </group>
+        <group android:pivotX="59.5" android:pivotY="26.5" android:rotation="-30">
+            <path android:pathData="M54.5,26.5 a5,2.6 0 1,0 10,0 a5,2.6 0 1,0 -10,0" android:fillColor="#FFFFFFFF" />
+        </group>
+        <path android:pathData="M49,38 H59 A20,20 0 0 1 79,58 V60 A20,20 0 0 1 59,80 H49 A20,20 0 0 1 29,60 V58 A20,20 0 0 1 49,38 Z" android:fillColor="#FFFFFFFF" />
+        <path android:pathData="M41.75,58 a2.75,3.75 0 1,0 5.5,0 a2.75,3.75 0 1,0 -5.5,0" android:fillColor="#FF13201F" />
+        <path android:pathData="M44.35,56.25 a1.25,1.25 0 1,0 2.5,0 a1.25,1.25 0 1,0 -2.5,0" android:fillColor="#FFFFFFFF" />
+        <path android:pathData="M60.75,58 a2.75,3.75 0 1,0 5.5,0 a2.75,3.75 0 1,0 -5.5,0" android:fillColor="#FF13201F" />
+        <path android:pathData="M63.35,56.25 a1.25,1.25 0 1,0 2.5,0 a1.25,1.25 0 1,0 -2.5,0" android:fillColor="#FFFFFFFF" />
+        <path android:pathData="M35.9,64.5 a2.6,1.6 0 1,0 5.2,0 a2.6,1.6 0 1,0 -5.2,0" android:fillColor="#BFFF9E7A" />
+        <path android:pathData="M66.9,64.5 a2.6,1.6 0 1,0 5.2,0 a2.6,1.6 0 1,0 -5.2,0" android:fillColor="#BFFF9E7A" />
+        <path android:pathData="M49,64.5 Q54,68.5 59,64.5" android:strokeColor="#FF12A39A" android:strokeWidth="1.8" android:strokeLineCap="round" android:fillColor="#00000000" />
     </group>
-    <group android:pivotX="59.5" android:pivotY="26.5" android:rotation="-30">
-        <path android:pathData="M54.5,26.5 a5,2.6 0 1,0 10,0 a5,2.6 0 1,0 -10,0" android:fillColor="#FFFFFFFF" />
-    </group>
-    <!-- 团子头 -->
-    <path
-        android:pathData="M49,38 H59 A20,20 0 0 1 79,58 V60 A20,20 0 0 1 59,80 H49 A20,20 0 0 1 29,60 V58 A20,20 0 0 1 49,38 Z"
-        android:fillColor="#FFFFFFFF" />
-    <!-- 豆豆眼 -->
-    <path android:pathData="M41.75,58 a2.75,3.75 0 1,0 5.5,0 a2.75,3.75 0 1,0 -5.5,0" android:fillColor="#FF13201F" />
-    <path android:pathData="M60.75,58 a2.75,3.75 0 1,0 5.5,0 a2.75,3.75 0 1,0 -5.5,0" android:fillColor="#FF13201F" />
-    <path android:pathData="M44.35,56.25 a1.25,1.25 0 1,0 2.5,0 a1.25,1.25 0 1,0 -2.5,0" android:fillColor="#FFFFFFFF" />
-    <path android:pathData="M63.35,56.25 a1.25,1.25 0 1,0 2.5,0 a1.25,1.25 0 1,0 -2.5,0" android:fillColor="#FFFFFFFF" />
-    <!-- 腮红 -->
-    <path android:pathData="M35.9,64.5 a2.6,1.6 0 1,0 5.2,0 a2.6,1.6 0 1,0 -5.2,0" android:fillColor="#B3F2A33A" />
-    <path android:pathData="M66.9,64.5 a2.6,1.6 0 1,0 5.2,0 a2.6,1.6 0 1,0 -5.2,0" android:fillColor="#B3F2A33A" />
-    <!-- 微笑 -->
-    <path
-        android:pathData="M49,64.5 Q54,68.5 59,64.5"
-        android:strokeColor="#FF12A39A"
-        android:strokeWidth="1.8"
-        android:strokeLineCap="round"
-        android:fillColor="#00000000" />
 </vector>

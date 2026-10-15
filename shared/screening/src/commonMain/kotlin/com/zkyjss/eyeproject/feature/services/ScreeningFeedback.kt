@@ -89,7 +89,9 @@ class ScreeningFeedbackSession {
             when {
                 frame.complete && !old.complete -> cues += ScreeningFeedbackCue.COMPLETE
                 frame.calibrationFailed && !old.calibrationFailed -> cues += ScreeningFeedbackCue.RETRY
-                frame.taskActive && (!old.taskActive || old.calibrationFailed && !frame.calibrationFailed || old.countdown > 0 && frame.countdown == 0) -> cues += ScreeningFeedbackCue.START
+                // 倒计时 3、2、1 只用节拍音，归零进入任务时才给开始音。
+                frame.countdown > 0 -> Unit
+                frame.taskActive && (!old.taskActive || old.calibrationFailed && !frame.calibrationFailed || old.countdown > 0) -> cues += ScreeningFeedbackCue.START
                 frame.calibrationPoint >= 0 && frame.calibrationPoint != old.calibrationPoint -> cues += ScreeningFeedbackCue.TARGET
                 frame.coverReady && !old.coverReady -> cues += ScreeningFeedbackCue.PHASE
                 frame.stage != old.stage && (frame.taskActive || old.taskActive) -> cues += ScreeningFeedbackCue.PHASE

@@ -134,13 +134,51 @@ class SharedParityTest {
         engine.answer(0); engine.markCover()
         assertEquals(listOf(ScreeningFeedbackCue.START), platform.feedbackEvents, "非作答与遮盖阶段不确认输入")
         assertEquals(ScreeningStep.GAZE_CALIBRATION,engine.state.value.step)
-        advanceTimeBy(15_000); runCurrent()
+        advanceTimeBy(StrabismusGaze.calibrationTargets.size * StrabismusGaze.CALIBRATION_POINT_MS); runCurrent()
         assertTrue(engine.state.value.gazeCalibrationFailed)
         engine.retryGazeCalibration(); runCurrent(); engine.interruptTest()
         advanceTimeBy(30_000); runCurrent()
         assertEquals(ScreeningStep.ENVIRONMENT,engine.state.value.step)
         assertFalse(engine.state.value.gazeCalibrated)
         engine.close()
+    }
+    @Test fun backgroundingDuringEnvironmentCheckOnlyReleasesTheCamera() = runTest {
+        val platform = TestPlatform { 1_000 + testScheduler.currentTime }
+        val engine = ScreeningEngine(platform,backgroundScope)
+        engine.configure(ScreeningKind.STRABISMUS); engine.setField("年龄","6"); engine.nextFromProfile(); engine.startCamera()
+        engine.interruptTest(); runCurrent()
+        assertEquals(ScreeningStep.ENVIRONMENT,engine.state.value.step)
+        assertNull(engine.state.value.warning, "尚未开始的环境检查不应提示测试已中断")
+        assertNull(platform.onFrame)
+        engine.close()
+    }
+    @Test fun dryEyeFollowUpsOnlyStartFromEligibleResults() = runTest {
+        val report = DryEyeReport(true,emptyList(),ScreeningRiskLevel.MEDIUM,emptyList(),emptyList(),"",false,
+            null,null,null,null,null,null,null,emptyMap())
+        val result = DryEyeTestUiState(phase = DryEyePhase.Result,report = report)
+        assertTrue(result.canExtend); assertTrue(result.canRestRetest)
+        assertFalse(result.copy(naturalSeconds = DryEyeProtocol.EXTENDED_NATURAL_SECONDS).canExtend, "已延长过不再延长")
+        assertFalse(result.copy(afterRest = true).canRestRetest, "休息复测只做一次")
+        assertFalse(result.copy(report = report.copy(valid = false)).canExtend)
+        assertFalse(result.copy(phase = DryEyePhase.Setup).canRestRetest)
+        val engine = DryEyeEngine(TestPlatform { testScheduler.currentTime },backgroundScope)
+        engine.startExtended(); engine.startRestRetest(); runCurrent()
+        assertEquals(DryEyePhase.Profile,engine.uiState.value.phase, "没有结果时不能进入延长或复测")
+        engine.close()
+    }
+    @Test fun mobileBridgeKeepsQuestionnaireWhenBackgrounded() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val events = mutableListOf<String>()
+        val controller = MobileScreeningController({ events += it }, { _, _ -> })
+        try {
+            controller.configureDisplay(1170,2532,18f)
+            controller.selectTest("DRY_EYE")
+            controller.setField("年龄","40")
+            controller.interrupt(); controller.resume()
+            val state = Json.parseToJsonElement(controller.snapshotJson()).jsonObject
+            assertEquals("Profile",state["phase"]!!.jsonPrimitive.content, "问卷阶段切后台不能跳到准备页")
+            assertFalse("camera:start" in events, "问卷阶段回到前台不启动相机")
+        } finally { controller.close(); Dispatchers.resetMain() }
     }
     private class TestPlatform(private val time: () -> Long) : ScreeningPlatform {
         val feedbackEvents = mutableListOf<ScreeningFeedbackCue>()

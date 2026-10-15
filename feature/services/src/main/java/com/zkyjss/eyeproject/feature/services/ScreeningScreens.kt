@@ -142,22 +142,11 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, modifier: M
             command == VoiceCommand.Unsure -> viewModel.answer(-1, byVoice = true)
         }
     }
-    val spokenPrompt = if (s.guidePending) guideCue(s.step) else s.gazeWarning ?: s.warning
-        ?: distance?.takeIf { it.clearlyOff() }?.spoken
-        ?: guidance?.takeUnless { it == "保持稳定" || it.startsWith("太近") || it.startsWith("太远") || it == "请正对屏幕" }
+    // 引导与告警优先于距离提醒，距离提醒优先于其余提示。
+    val urgent = if (s.guidePending) guideCue(s.step) else s.gazeWarning ?: s.warning
+    val basePrompt = urgent ?: guidance?.takeUnless { it == "保持稳定" || it.startsWith("太近") || it.startsWith("太远") || it == "请正对屏幕" }
         ?: voicePrompt
-    val distanceSpoken = distance?.takeIf { it.clearlyOff() }?.spoken
-    LaunchedEffect(voiceEnabled, spokenPrompt, settingsOpen) {
-        if (voiceEnabled && !settingsOpen && spokenPrompt.isNotBlank()) {
-            delay(650) // 状态稳定后再播报，避免测距波动不断打断语音。
-            if (owner.lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)) voice.speak(spokenPrompt)
-            // 距离持续偏离时每 6 秒重复提醒
-            while (distanceSpoken != null && spokenPrompt == distanceSpoken) {
-                delay(6_000)
-                voice.speak(spokenPrompt)
-            }
-        } else voice.stop()
-    }
+    SpeakTestPrompts(voice, voiceEnabled && !settingsOpen, basePrompt, distance?.takeIf { urgent == null && it.clearlyOff() })
     DisposableEffect(viewModel, voice) { onDispose { viewModel.stopCamera(); voice.close() } }
     DisposableEffect(kind, context) {
         val window = (context as? Activity)?.window
@@ -190,14 +179,14 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, modifier: M
         TestSessionLayout(
             title = if (kind == ScreeningKind.PRESBYOPIA) "老视自测" else "眼位自测",
             onBack = { viewModel.stopCamera(); onBack() }, onSettings = { settingsOpen = true },
-            centered = activeTest, scroll = pageScroll,
+            centered = activeTest, scroll = pageScroll, progress = screeningProgress(s),
             reflexStimulus = kind == ScreeningKind.STRABISMUS && s.step != ScreeningStep.PROFILE && s.step != ScreeningStep.RESULT,
             status = { distance?.let { DistanceBanner(it, compact = true) } },
         ) {
             val notice = s.gazeWarning ?: s.warning ?: guidance?.takeUnless {
                 it == "保持稳定" || it == "慢慢移近" || it.startsWith("太近") || it.startsWith("太远") || (distance != null && it == "请正对屏幕")
             }
-            if (!s.guidePending && notice != null) EyeText(notice, typography.body, colors.warning)
+            TestNotice(notice.takeIf { !s.guidePending })
             if (s.guidePending) {
                 TestGuide(guideMotion(s.step), stepTitle(s.step), guideCue(s.step), viewModel::confirmGuide)
             } else when (s.step) {
@@ -366,7 +355,7 @@ private fun FixationTarget(diameterMm: Float, bright: Boolean, vm: ScreeningTest
     val dpi = LocalContext.current.resources.displayMetrics.xdpi
     val sizePx = diameterMm / 25.4f * dpi
     var origin by remember { mutableStateOf(Offset.Zero) }
-    Canvas(Modifier.fillMaxWidth().height(240.dp).clip(EyeShapes.medium).background(colors.white)
+    Canvas(Modifier.fillMaxWidth().height(240.dp + rememberStageExtra()).clip(EyeShapes.medium).background(colors.white)
         .onGloballyPositioned { origin = it.positionInWindow() }) {
         val s = sizePx.coerceAtMost(minOf(size.width, size.height) * 0.6f)
         drawContext.canvas.saveLayer(Rect(Offset.Zero, size), Paint().apply { alpha = if (bright) 1f else 0.3f })
@@ -380,13 +369,25 @@ private fun FixationTarget(diameterMm: Float, bright: Boolean, vm: ScreeningTest
 internal fun GazeCalibrationContent(s: ScreeningState, vm: ScreeningTestViewModel) {
     val colors = LocalEyeColors.current
     var origin by remember { mutableStateOf(Offset.Zero) }
-    TestStageCard(title = "注视校准 · ${s.gazeCalibrationIndex + 1}/5") {
+    // 换点时外圈从大收拢，帮助视线找到新位置；圆点中心即上报位置，立即到位。
+    val reduced = com.zkyjss.eyeproject.core.designsystem.theme.rememberReducedMotion()
+    val halo = remember { androidx.compose.animation.core.Animatable(1f) }
+    LaunchedEffect(s.gazeCalibrationIndex, s.gazeCalibrationFailed) {
+        if (reduced || s.gazeCalibrationFailed) halo.snapTo(1f) else {
+            halo.snapTo(2.4f)
+            halo.animateTo(1f, com.zkyjss.eyeproject.core.designsystem.theme.EyeMotion.settleSpring())
+        }
+    }
+    TestStageCard(title = "注视校准 · ${s.gazeCalibrationIndex + 1}/${StrabismusGaze.calibrationTargets.size}") {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Canvas(Modifier.fillMaxWidth().height(240.dp).clip(EyeShapes.medium).background(colors.white)
+            // 与追踪画布同高（两屏卡片结构相同，伸展量也相同）：校准点覆盖追踪目标会到达的整个范围，避免边缘外推。
+            Canvas(Modifier.fillMaxWidth().height(PURSUIT_CANVAS_HEIGHT + rememberStageExtra()).clip(EyeShapes.medium).background(colors.white)
                 .onGloballyPositioned { origin = it.positionInWindow() }) {
                 val target = StrabismusGaze.calibrationTargets[s.gazeCalibrationIndex]
                 val point = Offset(size.width * target.x, size.height * target.y)
-                drawCircle(colors.primary, radius = 8.dp.toPx(), center = point)
+                drawCircle(StageAccent.copy(alpha = 0.18f), radius = 16.dp.toPx() * halo.value, center = point)
+                drawCircle(StageAccent, radius = 8.dp.toPx(), center = point)
+                drawCircle(colors.white, radius = 2.5.dp.toPx(), center = point)
                 vm.reportGazeTarget(origin.x + point.x, origin.y + point.y)
             }
             if (s.gazeCalibrationFailed) EyeButton("重试注视校准", EyeButtonRole.PRIMARY, vm::retryGazeCalibration, Modifier.fillMaxWidth())
@@ -456,7 +457,7 @@ private fun PursuitContent(s: ScreeningState, vm: ScreeningTestViewModel) {
     var origin by remember { mutableStateOf(Offset.Zero) }
     TestStageCard(title = "剩余 ${s.secondsLeft} 秒") {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Canvas(Modifier.fillMaxWidth().height(360.dp).clip(EyeShapes.medium).background(colors.white)
+            Canvas(Modifier.fillMaxWidth().height(PURSUIT_CANVAS_HEIGHT + rememberStageExtra()).clip(EyeShapes.medium).background(colors.white)
                 .onGloballyPositioned { origin = it.positionInWindow() }) {
                 val halfW = size.width / 2f - radiusPx
                 val halfH = size.height / 2f - radiusPx
@@ -539,6 +540,9 @@ internal fun ScreeningResultContent(s: ScreeningState, vm: ScreeningTestViewMode
     }
 }
 
+/** 追踪与注视校准共用的画布高度。 */
+private val PURSUIT_CANVAS_HEIGHT = 360.dp
+
 @Composable
 private fun EyeText(text: String, style: TextStyle, color: Color) {
     BaseEyeText(text = text, style = style, color = color)
@@ -547,7 +551,8 @@ private fun EyeText(text: String, style: TextStyle, color: Color) {
 /** 测试刺激固定黑白对比，独立于应用深浅主题。 */
 @Composable
 internal fun OptotypeSurface(direction: Int, size: androidx.compose.ui.unit.Dp) {
-    Box(Modifier.fillMaxWidth().background(LocalEyeColors.current.white).padding(24.dp), contentAlignment = Alignment.Center) {
+    Box(Modifier.fillMaxWidth().height(ringDiameter(size) + 48.dp + rememberStageExtra()).clip(EyeShapes.large)
+        .background(LocalEyeColors.current.white), contentAlignment = Alignment.Center) {
         FramedOptotype(direction, size)
     }
 }

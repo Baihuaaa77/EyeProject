@@ -9,34 +9,37 @@ struct EyeTestView: View {
     @State private var brightness: CGFloat?
     @State private var previousIdleDisabled = false
     @State private var settingsOpen = false
+    @State private var suspended = false
     init(kind: String) { _runtime = StateObject(wrappedValue: EyeRuntime(kind: kind)) }
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
+                if let progress = runtime.state["overallProgress"] as? NSNumber, pixelsPerMm > 0 {
+                    TestProgressBar(fraction: progress.doubleValue, text: runtime.string("remainingText"))
+                        .padding(.horizontal, 16).padding(.bottom, 8)
+                        .transition(.opacity)
+                }
                 if hasReflexStimulus {
                     ZStack { Color.black; Circle().fill(.white).frame(width: 8, height: 8) }.frame(height: 20).clipShape(RoundedRectangle(cornerRadius: 8))
                 }
                 if pixelsPerMm > 0 && runtime.number("targetDistanceCm") > 0 && !runtime.bool("guidePending") {
-                    TestDistanceBanner(runtime: runtime).padding(.horizontal, 16)
+                    TestDistanceBanner(runtime: runtime).padding(.horizontal, 16).padding(.top, 4)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
                 }
                 GeometryReader { viewport in
-                    ScrollView {
-                        VStack(spacing: EyeStyle.spacing) {
-                            if pixelsPerMm <= 0 {
-                                ScreenCalibrationView { value in
-                                    pixelsPerMm = value; UserDefaults.standard.set(value, forKey: "eye.pixelsPerMm")
-                                    runtime.prepare(pixelsPerMm: value)
-                                }
-                            } else {
-                                if let error = runtime.error { Text(error).foregroundStyle(EyeStyle.warning) }
-                                if !warningText.isEmpty {
-                                    Text(warningText).foregroundStyle(EyeStyle.warning)
-                                }
-                                if isProfile { QuestionnaireView(runtime: runtime) }
-                                else if isRunning { VStack(spacing: EyeStyle.spacing) { testContent }.modifier(TestStagePanel()) }
-                                else { testContent }
+                    if isRunning {
+                        // 进行中的任务：放得下时舞台伸展占满剩余高度，避免卡片上下大片留白；放不下时滚动。
+                        ViewThatFits(in: .vertical) {
+                            pageContent.environment(\.stageFill, true).padding()
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            ScrollView {
+                                pageContent.padding().frame(maxWidth: .infinity, minHeight: viewport.size.height)
                             }
-                        }.padding().frame(maxWidth: .infinity, minHeight: viewport.size.height, alignment: isRunning ? .center : .top)
+                        }
+                    } else {
+                        ScrollView {
+                            pageContent.padding().frame(maxWidth: .infinity, minHeight: viewport.size.height, alignment: .top)
+                        }
                     }
                 }
             }.background(EyeStyle.background).navigationTitle(runtime.string("title").isEmpty ? "眼健康自测" : runtime.string("title"))
@@ -60,10 +63,31 @@ struct EyeTestView: View {
                     if let value = brightness { UIScreen.main.brightness = value }
                 }
                 .onChange(of: scenePhase) { phase in
-                    if phase != .active { runtime.interrupt(); if let value = brightness { UIScreen.main.brightness = value } }
-                    else { UIScreen.main.brightness = 1; runtime.resume() }
+                    // 只在真正进入后台时中断；权限弹窗、控制中心等短暂失焦（inactive）不打断测试。
+                    if phase == .background {
+                        if !suspended { suspended = true; runtime.interrupt() }
+                        if let value = brightness { UIScreen.main.brightness = value }
+                    } else if phase == .active {
+                        UIScreen.main.brightness = 1
+                        if suspended { suspended = false; runtime.resume() }
+                    }
                 }
         }
+    }
+    private var pageContent: some View {
+        VStack(spacing: EyeStyle.spacing) {
+            if pixelsPerMm <= 0 {
+                ScreenCalibrationView { value in
+                    pixelsPerMm = value; UserDefaults.standard.set(value, forKey: "eye.pixelsPerMm")
+                    runtime.prepare(pixelsPerMm: value)
+                }
+            } else {
+                TestNotice(text: runtime.error ?? warningText)
+                if isProfile { QuestionnaireView(runtime: runtime) }
+                else if isRunning { VStack(spacing: EyeStyle.spacing) { testContent }.modifier(TestStagePanel()) }
+                else { testContent }
+            }
+        }.animation(.easeInOut(duration: 0.28), value: runtime.error ?? warningText)
     }
     private var phase: String { runtime.string("phase") }
     private var warningText: String {
@@ -84,7 +108,7 @@ struct EyeTestView: View {
         if phase == "Setup" || phase == "ENVIRONMENT" {
             Text(runtime.kind == "STRABISMUS" ? "保持约 33 cm，后续遮眼由协助者完成。" : "保持约 40 cm，建议佩戴最佳矫正眼镜。")
             Button("开始测试") { runtime.act("begin") }.buttonStyle(EyeButtonStyle())
-            Button("重试相机") { runtime.act("retryCamera") }
+            Button("重试相机") { runtime.act("retryCamera") }.buttonStyle(EyeSecondaryButtonStyle())
             DisclosureGroup("测距校准") {
                 Text("用尺确认眼睛到手机为 40 cm，正对手机且距离读数稳定后点按。")
                 Button("此刻实际为 40 cm，校准测距") {
@@ -109,13 +133,12 @@ struct EyeTestView: View {
             if !runtime.string("savedFile").isEmpty {
                 ShareLink(item: EyeRuntime.recordsDirectory.appendingPathComponent(runtime.string("savedFile"))) { Label("导出本次记录", systemImage: "square.and.arrow.up") }
             }
-            if runtime.kind == "DRY_EYE" {
-                Button("延长测试至 3 分钟") { runtime.act("extended") }
-                Button("闭眼休息 1 分钟后复测") { runtime.act("rest") }
-            }
+            if runtime.bool("canExtend") { Button("延长测试至 3 分钟") { runtime.act("extended") }.buttonStyle(EyeButtonStyle()) }
+            if runtime.bool("canRest") { Button("闭眼休息 1 分钟后复测") { runtime.act("rest") }.buttonStyle(EyeSecondaryButtonStyle()) }
+            Button("重新测试") { runtime.act("restart") }.buttonStyle(EyeSecondaryButtonStyle())
         } else if phase == "GAZE_CALIBRATION" || phase == "FIXATION" || phase == "COVER" || phase == "PURSUIT" {
             if phase == "GAZE_CALIBRATION" {
-                Text("注视校准 · \(Int(runtime.number("gazeCalibrationIndex")) + 1)/5").font(EyeStyle.title)
+                Text("注视校准 · \(Int(runtime.number("gazeCalibrationIndex")) + 1)/\(Int(runtime.number("calibrationCount")))").font(EyeStyle.title)
             } else if phase != "COVER" { Text("剩余 \(Int(runtime.number("secondsLeft"))) 秒").monospacedDigit() }
             GazeTargetView(runtime: runtime, pixelsPerMm: pixelsPerMm)
             if runtime.bool("gazeCalibrationFailed") { Button("重试注视校准") { runtime.act("calibrate") }.buttonStyle(EyeButtonStyle()) }
@@ -124,10 +147,13 @@ struct EyeTestView: View {
                 Button("执行「\(runtime.string("coverNext"))」时点按") { runtime.act("cover") }.buttonStyle(EyeButtonStyle())
             }
         } else if phase == "Countdown" {
-            Text("\(Int(runtime.number("secondsLeft")))").font(.largeTitle).monospacedDigit()
+            CountdownRing(seconds: Int(runtime.number("secondsLeft")))
         } else if phase == "Rest" {
-            Text("闭眼休息")
-            Text("\(Int(runtime.number("secondsLeft"))) 秒").font(.largeTitle).monospacedDigit()
+            Text("闭眼休息").font(EyeStyle.title)
+            TimerRing(progress: 1 - runtime.number("progress")) {
+                Text("\(Int(runtime.number("secondsLeft")))").font(.system(size: 56, weight: .semibold, design: .rounded))
+                    .monospacedDigit().foregroundStyle(EyeStyle.primary)
+            }.frame(width: 184, height: 184).animation(.linear(duration: 0.25), value: runtime.number("progress"))
         } else {
             if phase == "Natural" || phase == "Open" || phase == "Practice" {
                 HStack {
@@ -152,7 +178,7 @@ struct EyeTestView: View {
             } else {
                 if phase == "PUSH_UP" {
                     Text("缓慢移近")
-                    TumblingEView(runtime: runtime).frame(height: max(180, CGFloat(runtime.number("optotypePx")) / UIScreen.main.scale + 30))
+                    TumblingEView(runtime: runtime).stageHeight(max(180, ringDiameter(CGFloat(runtime.number("optotypePx")) / UIScreen.main.scale) + 24))
                     Button("开始持续模糊了") { runtime.act("blur") }.buttonStyle(EyeButtonStyle())
                 } else {
                     OptotypeAnswerPad(runtime: runtime)
@@ -229,32 +255,35 @@ private struct QuestionnaireView: View {
     }
 }
 
+/// 视标单独位于上方白色刺激区；下方十字作答键：「跳过」居中，上下左右四键环绕。
+/// 留白环按视标对角线取径，大视标的四角也完整落在环内。
+private func ringDiameter(_ edge: CGFloat) -> CGFloat { max(96, edge * 1.42 + 16) }
+
 private struct OptotypeAnswerPad: View {
     @ObservedObject var runtime: EyeRuntime
     var body: some View {
-        VStack(spacing: EyeStyle.spacing) {
-            ZStack {
-                TumblingEView(runtime: runtime)
-                VStack { arrow("arrow.up", "向上", 3); Spacer(); arrow("arrow.down", "向下", 1) }
-                HStack { arrow("arrow.left", "向左", 2); Spacer(); arrow("arrow.right", "向右", 0) }
-            }.frame(height: max(256, CGFloat(runtime.number("optotypePx")) / UIScreen.main.scale + 168))
-            Button("看不清 / 跳过") { runtime.answer(-1) }
-        }.buttonStyle(DirectionAnswerButtonStyle()).disabled(!runtime.bool("trialVisible"))
+        VStack(spacing: 14) {
+            TumblingEView(runtime: runtime)
+                .stageHeight(max(152, ringDiameter(CGFloat(runtime.number("optotypePx")) / UIScreen.main.scale) + 24))
+                .background(EyeStyle.panel, in: RoundedRectangle(cornerRadius: 16))
+                .overlay { RoundedRectangle(cornerRadius: 16).stroke(EyeStyle.surfaceVariant, lineWidth: 1) }
+            VStack(spacing: 10) {
+                arrow("向上", 3)
+                HStack(spacing: 10) {
+                    arrow("向左", 2)
+                    Button { runtime.answer(-1) } label: { Text("跳过").font(.body) }
+                        .buttonStyle(SkipKeyStyle()).accessibilityHint("看不清时跳过本题")
+                    arrow("向右", 0)
+                }
+                arrow("向下", 1)
+            }
+        }.disabled(!runtime.bool("trialVisible"))
     }
-    private func arrow(_ symbol: String, _ label: String, _ direction: Int) -> some View {
-        Button { runtime.answer(direction) } label: { Image(systemName: symbol).font(.system(size: 22, weight: .semibold)) }
-            .frame(width: 56, height: 56).accessibilityLabel(label)
-    }
-}
-
-private struct DirectionAnswerButtonStyle: ButtonStyle {
-    @Environment(\.isEnabled) private var enabled
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label.frame(maxWidth: .infinity, minHeight: 56).foregroundStyle(EyeStyle.text)
-            .background(EyeStyle.surfaceVariant, in: RoundedRectangle(cornerRadius: 14))
-            .overlay { RoundedRectangle(cornerRadius: 14).stroke(EyeStyle.primary.opacity(0.2), lineWidth: 1) }
-            .shadow(color: EyeStyle.primary.opacity(0.06), radius: 2, x: 0, y: 1)
-            .opacity(enabled ? (configuration.isPressed ? 0.7 : 1) : 0.5)
+    /// 基准箭头朝右，按视标方向编码旋转：0=右 1=下 2=左 3=上。
+    private func arrow(_ label: String, _ direction: Int) -> some View {
+        Button { runtime.answer(direction) } label: {
+            Image(systemName: "arrow.right").font(.system(size: 22, weight: .bold)).rotationEffect(.degrees(Double(direction) * 90))
+        }.buttonStyle(DirectionKeyStyle()).accessibilityLabel(label)
     }
 }
 
@@ -270,11 +299,12 @@ private struct TumblingEView: View {
             let bar = edge / 5
             context.fill(Path(CGRect(x: -edge / 2, y: -edge / 2, width: bar, height: edge)), with: .color(.black))
             for row in [0, 2, 4] { context.fill(Path(CGRect(x: -edge / 2, y: -edge / 2 + CGFloat(row) * bar, width: edge, height: bar)), with: .color(.black)) }
-        }.background(EyeStyle.panel, in: RoundedRectangle(cornerRadius: EyeStyle.radius))
+        }
             .overlay {
-                let diameter = max(96, CGFloat(runtime.number("optotypePx")) / UIScreen.main.scale + 40)
-                Circle().stroke(EyeStyle.primary.opacity(0.72), lineWidth: 2).frame(width: diameter, height: diameter)
-                    .allowsHitTesting(false)
+                let diameter = ringDiameter(CGFloat(runtime.number("optotypePx")) / UIScreen.main.scale)
+                Circle().stroke(EyeStyle.primary.opacity(runtime.bool("trialVisible") ? 0.72 : 0.2), lineWidth: 2)
+                    .frame(width: diameter, height: diameter).allowsHitTesting(false)
+                    .animation(.easeOut(duration: 0.16), value: runtime.bool("trialVisible"))
             }
             .onChange(of: runtime.number("trialId")) { id in
                 runtime.schedulePresented(Int32(id))
@@ -294,7 +324,7 @@ private struct GazeTargetView: View {
             ZStack(alignment: .topLeading) {
                 EyeStyle.panel
                 if phase == "GAZE_CALIBRATION" {
-                    Circle().fill(EyeStyle.primary).frame(width: 16, height: 16).position(point)
+                    CalibrationDot(index: Int(runtime.number("gazeCalibrationIndex"))).position(point)
                 } else {
                     let width = phase == "PURSUIT" ? CGFloat(5 * pixelsPerMm / 0.65) / UIScreen.main.scale : CGFloat(runtime.number("targetDiameterMm") * Double(pixelsPerMm)) / UIScreen.main.scale
                     MascotView().frame(width: width, height: width * 1.22)
@@ -304,13 +334,12 @@ private struct GazeTargetView: View {
                 .onAppear { report(geometry, point) }
                 .onChange(of: runtime.stateKeyForTarget) { _ in report(geometry, point) }
                 .onChange(of: geometry.frame(in: .global).origin) { _ in report(geometry, point) }
-        }.frame(height: runtime.string("phase") == "PURSUIT" ? 360 : 240)
+        }.stageHeight(["PURSUIT", "GAZE_CALIBRATION"].contains(runtime.string("phase")) ? 360 : 240)
     }
     private func target(in size: CGSize) -> CGPoint {
         if runtime.string("phase") == "GAZE_CALIBRATION" {
-            let positions = [(0.5,0.5),(0.15,0.5),(0.85,0.5),(0.5,0.15),(0.5,0.85)]
-            let p = positions[min(4,Int(runtime.number("gazeCalibrationIndex")))]
-            return CGPoint(x: size.width * p.0,y: size.height * p.1)
+            // 点位由共用核心给出，两端一致。
+            return CGPoint(x: size.width * runtime.number("calibrationX"), y: size.height * runtime.number("calibrationY"))
         }
         if runtime.string("phase") == "PURSUIT" {
             let ppm = Double(pixelsPerMm) / Double(UIScreen.main.scale)
@@ -337,4 +366,26 @@ private struct GazeTargetView: View {
 
 private extension EyeRuntime {
     var stateKeyForTarget: String { "\(string("phase"))-\(number("targetX"))-\(number("targetY"))-\(number("gazeCalibrationIndex"))" }
+}
+
+/// 换点时外圈从大收拢，帮助视线找到新位置；圆点中心即上报位置，立即到位。
+private struct CalibrationDot: View {
+    let index: Int
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var halo: CGFloat = 1
+    var body: some View {
+        ZStack {
+            Circle().fill(EyeStyle.primary.opacity(0.18)).frame(width: 32, height: 32).scaleEffect(halo)
+            Circle().fill(EyeStyle.primary).frame(width: 16, height: 16)
+            Circle().fill(EyeStyle.panel).frame(width: 5, height: 5)
+        }.frame(width: 80, height: 80)
+            .onAppear { pop() }
+            .onChange(of: index) { _ in pop() }
+    }
+    private func pop() {
+        guard !reduceMotion else { halo = 1; return }
+        var snap = Transaction(); snap.disablesAnimations = true
+        withTransaction(snap) { halo = 2.4 }
+        DispatchQueue.main.async { withAnimation(.spring(response: 0.45, dampingFraction: 0.65)) { halo = 1 } }
+    }
 }

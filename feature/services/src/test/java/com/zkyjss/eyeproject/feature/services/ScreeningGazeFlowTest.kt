@@ -32,7 +32,8 @@ class ScreeningGazeFlowTest {
         val vm = viewModel()
         vm.confirmGuide()
         assertEquals(ScreeningStep.GAZE_CALIBRATION, vm.state.value.step)
-        ShadowLooper.idleMainLooper(14, TimeUnit.SECONDS)
+        val calibrationSeconds = StrabismusGaze.calibrationTargets.size * StrabismusGaze.CALIBRATION_POINT_MS / 1000
+        ShadowLooper.idleMainLooper(calibrationSeconds - 1, TimeUnit.SECONDS)
         assertFalse(vm.state.value.gazeCalibrationFailed)
         assertEquals(ScreeningStep.GAZE_CALIBRATION, vm.state.value.step)
         ShadowLooper.idleMainLooper(1, TimeUnit.SECONDS)
@@ -60,7 +61,7 @@ class ScreeningGazeFlowTest {
                     GazePoint((target.x - 0.5f) / 5f, (target.y - 0.5f) / 3f), null))
             }
         }
-        ShadowLooper.idleMainLooper(15, TimeUnit.SECONDS)
+        ShadowLooper.idleMainLooper(StrabismusGaze.calibrationTargets.size * StrabismusGaze.CALIBRATION_POINT_MS / 1000, TimeUnit.SECONDS)
         assertTrue(vm.state.value.gazeCalibrated)
         assertEquals(ScreeningStep.FIXATION, vm.state.value.step)
         ShadowLooper.idleMainLooper(11, TimeUnit.SECONDS)

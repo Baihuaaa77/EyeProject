@@ -17,6 +17,10 @@ final class EyeRuntime: ObservableObject {
     private var lastSnapshot = ""
     private var lastQuestionnaire = ""
     private var lastPrompt = ""
+    private var lastBase = ""
+    private var lastWasDistance = false
+    private var distanceRepeat = 0
+    private var lastDistanceAt = Date.distantPast
     private var promptWork: DispatchWorkItem?
     private var prepared = false
     private var closed = false
@@ -91,21 +95,8 @@ final class EyeRuntime: ObservableObject {
         if snapshot != lastSnapshot {
             lastSnapshot = snapshot
             state = Self.object(snapshot)
-            let phase = string("phase")
-            let prompt: String
-            if phase == "Profile" || phase == "PROFILE" { prompt = "请先填写基本信息。" }
-            else if phase == "Setup" || phase == "ENVIRONMENT" {
-                prompt = kind == "STRABISMUS" ? "请正对屏幕，保持三十三厘米。" : "请正对屏幕，保持四十厘米。"
-            } else { prompt = string("instruction") }
-            if !prompt.isEmpty && prompt != lastPrompt {
-                lastPrompt = prompt; promptWork?.cancel()
-                let work = DispatchWorkItem { [weak self] in
-                    guard let self = self, self.isForeground, !self.closed, !self.settingsPresented else { return }
-                    self.voice.speak(prompt)
-                }
-                promptWork = work; DispatchQueue.main.asyncAfter(deadline: .now() + 0.65, execute: work)
-            }
         }
+        speakPrompts()
         let questionnaire = controller.questionnaireJson()
         if questionnaire != lastQuestionnaire {
             lastQuestionnaire = questionnaire
@@ -114,6 +105,43 @@ final class EyeRuntime: ObservableObject {
             fields = data["fields"] as? [String: String] ?? [:]
         }
         voice.setListening(isForeground && !settingsPresented && bool("voiceActive"))
+    }
+    /// 与安卓同一套播报：距离偏离优先，持续偏离每 6 秒换一种说法；回到合适距离先肯定一句，主提示有变化再接着说。
+    private func speakPrompts() {
+        let phase = string("phase")
+        let base: String
+        if phase == "Profile" || phase == "PROFILE" { base = "请先填写基本信息。" }
+        else if phase == "Setup" || phase == "ENVIRONMENT" {
+            base = kind == "STRABISMUS" ? "请正对屏幕，保持三十三厘米。" : "请正对屏幕，保持四十厘米。"
+        } else { base = string("instruction") }
+        let zone = (state["distanceZone"] as? NSNumber)?.int32Value ?? 0
+        let distanceText = zone != 0 ? controller.distancePrompt(zone: zone, count: 0) : nil
+        let prompt = distanceText ?? base
+        if !prompt.isEmpty && prompt != lastPrompt {
+            lastPrompt = prompt; promptWork?.cancel()
+            let isDistance = distanceText != nil
+            let text = isDistance ? prompt
+                : lastWasDistance ? controller.distanceOkPrompt + (base != lastBase ? base : "") : base
+            schedule(text) { [weak self] in
+                guard let self = self else { return }
+                self.lastWasDistance = isDistance
+                if isDistance { self.distanceRepeat = 1; self.lastDistanceAt = Date() } else { self.lastBase = base }
+            }
+        } else if distanceText != nil && lastWasDistance && Date().timeIntervalSince(lastDistanceAt) >= 6 {
+            lastDistanceAt = Date()
+            if let again = controller.distancePrompt(zone: zone, count: Int32(distanceRepeat)) {
+                distanceRepeat += 1; schedule(again, delay: 0) {}
+            }
+        }
+    }
+    /// 状态稳定 650 ms 后才开口，避免测距波动不断打断；后台、设置菜单期间不播报。
+    private func schedule(_ text: String, delay: Double = 0.65, spoken: @escaping () -> Void) {
+        promptWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self = self, self.isForeground, !self.closed, !self.settingsPresented else { return }
+            self.voice.speak(self.controller.speechText(text: text)); spoken()
+        }
+        promptWork = work; DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
     func string(_ key: String) -> String { state[key] as? String ?? "" }
     func bool(_ key: String) -> Bool { state[key] as? Bool ?? false }
@@ -131,7 +159,10 @@ final class EyeRuntime: ObservableObject {
         feedback.stop(); _ = controller.feedbackJson(enabled: false)
         promptWork?.cancel(); presentation.cancel(); voice.stop(); camera.stop(); controller.interrupt(); refresh()
     }
-    func resume() { isForeground = true; _ = controller.feedbackJson(enabled: false); lastPrompt = ""; refresh() }
+    func resume() {
+        isForeground = true; _ = controller.feedbackJson(enabled: false); lastPrompt = ""
+        feedback.prepare(); controller.resume(); refresh()
+    }
     func setSettingsPresented(_ value: Bool) {
         settingsPresented = value
         if value { promptWork?.cancel(); voice.stop(); feedback.stop() }

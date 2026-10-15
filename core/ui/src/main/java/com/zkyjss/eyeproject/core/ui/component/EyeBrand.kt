@@ -33,7 +33,8 @@ import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
  * - 吉祥物「小瞳」：圆润的「团子」脸 + 豆豆眼（没有眼白和写实瞳孔，只留一点高光）+ 头顶双叶嫩芽 + 腮红与小微笑。
  *   刻意卡通化、低细节：写实的眼睛会带来「被盯着看」的不适感，豆豆眼更亲和，也更适合儿童。
  * - 标志：品牌渐变圆角底上的白色小瞳头像——标志即吉祥物，品牌只有一个形象。
- * 启动图标（app/src/main/res/drawable/ic_launcher_*）与 [drawBrandMark] 使用同一组 108dp 视口坐标（可见区 18..90）。
+ * 启动图标（app/src/main/res/drawable/ic_launcher_*，由 scripts/generate_app_icon.py 生成）与 [drawBrandMark] 使用同一组
+ * 108dp 视口坐标，图标内放大 1.1 倍并另配更明亮的底色。
  */
 
 /** 叶形眼轮廓（用于眼位类图标）：左右尖端 + 上下两段三次曲线，[halfHeight] 为最大半高。 */

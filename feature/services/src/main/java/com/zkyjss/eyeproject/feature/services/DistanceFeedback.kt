@@ -74,13 +74,15 @@ internal data class DistanceStatus(
         DistanceZone.UNKNOWN -> "露出双眼，让摄像头看到你"
     }
 
-    /** 语音提示（合适时不说话，避免打扰）。 */
-    val spoken: String? get() = when (zone) {
-        DistanceZone.TOO_CLOSE -> "太近了，请把手机往远处移"
-        DistanceZone.TOO_FAR -> "太远了，请把手机靠近一点"
-        DistanceZone.UNKNOWN -> "请正对屏幕"
-        DistanceZone.OK -> null
-    }
+    /** 语音提示（合适时不说话，避免打扰）；[repeat] 次重复时换一种说法。 */
+    fun spoken(repeat: Int = 0): String? = SpokenPrompts.distance(when (zone) {
+        DistanceZone.TOO_CLOSE -> -1
+        DistanceZone.TOO_FAR -> 1
+        DistanceZone.UNKNOWN -> 2
+        DistanceZone.OK -> 0
+    }, repeat)
+
+    val spoken: String? get() = spoken(0)
 }
 
 internal fun distanceStatus(distanceCm: Float, faceVisible: Boolean, targetCm: Float, toleranceCm: Float): DistanceStatus {

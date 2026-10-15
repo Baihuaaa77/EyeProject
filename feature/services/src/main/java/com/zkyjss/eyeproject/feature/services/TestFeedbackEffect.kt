@@ -75,7 +75,7 @@ internal class AndroidTestFeedback(context: Context) {
     private val loaded = ConcurrentHashMap.newKeySet<Int>()
     private val pool = runCatching { SoundPool.Builder().setMaxStreams(1).setAudioAttributes(audioAttributes).build() }.getOrNull()
     private var stream = 0
-    private data class PendingSound(val id: Int, val expiresAt: Long, val beforeSound: () -> Unit)
+    private data class PendingSound(val id: Int, val volume: Float, val expiresAt: Long, val beforeSound: () -> Unit)
     private var pending: PendingSound? = null
     private var closed = false
     private val sounds: Map<String, Int>
@@ -92,12 +92,7 @@ internal class AndroidTestFeedback(context: Context) {
         if (closed) return
         pending = null
         if (haptics && vibrator?.hasVibrator() == true) runCatching {
-            val effect = if (Build.VERSION.SDK_INT >= 29) {
-                VibrationEffect.createPredefined(when (cue) {
-                    ScreeningFeedbackCue.WARNING, ScreeningFeedbackCue.RETRY, ScreeningFeedbackCue.COMPLETE -> VibrationEffect.EFFECT_DOUBLE_CLICK
-                    else -> VibrationEffect.EFFECT_CLICK
-                })
-            } else VibrationEffect.createOneShot(25, VibrationEffect.DEFAULT_AMPLITUDE)
+            val effect = hapticEffect(cue)
             if (Build.VERSION.SDK_INT >= 33) {
                 vibrator.vibrate(effect, VibrationAttributes.createForUsage(VibrationAttributes.USAGE_MEDIA))
             } else {
@@ -108,7 +103,7 @@ internal class AndroidTestFeedback(context: Context) {
         val id = sounds[cue.sound] ?: return
         if (sound && id != 0) {
             // 首次点按可能早于异步载入完成；只等待很短时间，不延后重播过期事件。
-            pending = PendingSound(id, SystemClock.elapsedRealtime() + 300, beforeSound)
+            pending = PendingSound(id, cue.volume, SystemClock.elapsedRealtime() + 300, beforeSound)
             playLoadedSound()
         }
     }
@@ -119,8 +114,52 @@ internal class AndroidTestFeedback(context: Context) {
         pending = null
         next.beforeSound()
         if (stream != 0) pool?.stop(stream)
-        stream = pool?.play(next.id, 0.65f, 0.65f, 1, 0, 1f) ?: 0
+        stream = pool?.play(next.id, next.volume, next.volume, 1, 0, 1f) ?: 0
+    }
+    /**
+     * 分级触觉：高频的作答、节拍最轻，阶段切换次之，提醒为两下，完成为渐强三下。
+     * 支持原语的设备用组合效果，其余回落到系统预定义效果或短脉冲。
+     */
+    private fun hapticEffect(cue: ScreeningFeedbackCue): VibrationEffect {
+        val v = vibrator
+        if (Build.VERSION.SDK_INT >= 30 && v != null && v.areAllPrimitivesSupported(
+                VibrationEffect.Composition.PRIMITIVE_CLICK, VibrationEffect.Composition.PRIMITIVE_TICK)) {
+            val click = VibrationEffect.Composition.PRIMITIVE_CLICK
+            val tick = VibrationEffect.Composition.PRIMITIVE_TICK
+            return VibrationEffect.startComposition().apply {
+                when (cue) {
+                    ScreeningFeedbackCue.TICK -> addPrimitive(tick, 0.6f)
+                    ScreeningFeedbackCue.ANSWER -> addPrimitive(click, 0.45f)
+                    ScreeningFeedbackCue.TARGET -> addPrimitive(tick, 0.75f)
+                    ScreeningFeedbackCue.PHASE -> { addPrimitive(click, 0.6f); addPrimitive(tick, 0.6f, 60) }
+                    ScreeningFeedbackCue.RECOVER -> { addPrimitive(tick, 0.5f); addPrimitive(click, 0.7f, 50) }
+                    ScreeningFeedbackCue.START -> addPrimitive(click, 0.9f)
+                    ScreeningFeedbackCue.WARNING, ScreeningFeedbackCue.RETRY -> { addPrimitive(click, 0.8f); addPrimitive(click, 0.8f, 100) }
+                    ScreeningFeedbackCue.COMPLETE -> { addPrimitive(tick, 0.5f); addPrimitive(tick, 0.75f, 60); addPrimitive(click, 1f, 60) }
+                }
+            }.compose()
+        }
+        if (Build.VERSION.SDK_INT >= 29) return VibrationEffect.createPredefined(when (cue) {
+            ScreeningFeedbackCue.TICK, ScreeningFeedbackCue.ANSWER, ScreeningFeedbackCue.TARGET -> VibrationEffect.EFFECT_TICK
+            ScreeningFeedbackCue.WARNING, ScreeningFeedbackCue.RETRY -> VibrationEffect.EFFECT_DOUBLE_CLICK
+            ScreeningFeedbackCue.COMPLETE -> VibrationEffect.EFFECT_HEAVY_CLICK
+            else -> VibrationEffect.EFFECT_CLICK
+        })
+        return when (cue) {
+            ScreeningFeedbackCue.WARNING, ScreeningFeedbackCue.RETRY, ScreeningFeedbackCue.COMPLETE ->
+                VibrationEffect.createWaveform(longArrayOf(0, 25, 90, 25), -1)
+            else -> VibrationEffect.createOneShot(25, VibrationEffect.DEFAULT_AMPLITUDE)
+        }
     }
     fun stop() { pending = null; if (stream != 0) pool?.stop(stream); stream = 0; runCatching { vibrator?.cancel() } }
     fun close() { if (closed) return; closed = true; stop(); pool?.release(); loaded.clear() }
+}
+
+/** 高频的作答与节拍放轻，提醒和完成稍响，整体仍低于媒体满音量。 */
+private val ScreeningFeedbackCue.volume: Float get() = when (this) {
+    ScreeningFeedbackCue.ANSWER, ScreeningFeedbackCue.TICK -> 0.5f
+    ScreeningFeedbackCue.TARGET -> 0.55f
+    ScreeningFeedbackCue.PHASE, ScreeningFeedbackCue.RECOVER -> 0.6f
+    ScreeningFeedbackCue.START -> 0.65f
+    ScreeningFeedbackCue.WARNING, ScreeningFeedbackCue.RETRY, ScreeningFeedbackCue.COMPLETE -> 0.7f
 }

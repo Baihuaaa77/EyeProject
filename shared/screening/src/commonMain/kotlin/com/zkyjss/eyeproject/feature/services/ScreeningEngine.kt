@@ -696,8 +696,10 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
         samples.clear()
         gaze = null; gazeCalibration.clear(); renderedTargets.clear(); resetGazeWindow()
         distanceTracker.clear()
+        // 环境检查尚未开始计时，切后台只需释放相机，不提示「测试已中断」。
         _state.value = ScreeningState(kind = current.kind, fields = current.fields, mode = current.mode,
-            step = ScreeningStep.ENVIRONMENT, warning = "测试已中断，请重新开始")
+            step = ScreeningStep.ENVIRONMENT,
+            warning = if (current.step == ScreeningStep.ENVIRONMENT) null else "测试已中断，请重新开始")
     }
 
     fun restart() {
