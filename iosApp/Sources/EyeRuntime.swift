@@ -32,7 +32,6 @@ final class EyeRuntime: ObservableObject {
             if event == "camera:start" { self.camera.start() }
             else if event == "camera:stop" { self.camera.stop() }
         }
-        return KotlinUnit()
     }, recordSaved: { [weak self] name, text in
         do {
             let directory = Self.recordsDirectory
@@ -45,7 +44,6 @@ final class EyeRuntime: ObservableObject {
             let data = try JSONSerialization.data(withJSONObject: record, options: [.sortedKeys])
             try data.write(to: directory.appendingPathComponent(name), options: .atomic)
         } catch { DispatchQueue.main.async { self?.error = "保存记录失败：\(error.localizedDescription)" } }
-        return KotlinUnit()
     })
     static var recordsDirectory: URL {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("Screening", isDirectory: true)

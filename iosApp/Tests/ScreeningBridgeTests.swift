@@ -5,7 +5,7 @@ import CoreVideo
 
 final class ScreeningBridgeTests: XCTestCase {
     func testAllThreeTasksUseTheSharedProfileAndCommands() {
-        let controller = MobileScreeningController(systemEvent: { _ in KotlinUnit() }, recordSaved: { _, _ in KotlinUnit() })
+        let controller = MobileScreeningController(systemEvent: { _ in }, recordSaved: { _, _ in })
         controller.configureDisplay(widthPixels: 1170, heightPixels: 2532, pixelsPerMm: 18)
         for kind in ["DRY_EYE", "PRESBYOPIA", "STRABISMUS"] {
             controller.selectTest(name: kind)

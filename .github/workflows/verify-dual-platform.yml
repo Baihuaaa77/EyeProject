@@ -60,3 +60,4 @@ jobs:
             iosApp/build/*.xcresult
             shared/screening/build/reports/tests/
             shared/domain/build/reports/tests/
+            shared/screening/build/bin/iosSimulatorArm64/debugFramework/EyeScreening.framework/Headers/
