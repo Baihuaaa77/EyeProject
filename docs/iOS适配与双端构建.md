@@ -22,6 +22,7 @@ iOS 已提供本机记录保存与分享，但尚未接入安卓已有的历史�
 | .github/workflows/package-ios.yml | 配好签名 Secrets 后手动导出 IPA，不自动发布 |
 | scripts/ios/verify.sh | 无签名构建和模拟器测试 |
 | scripts/ios/archive.sh | 有签名环境下生成 archive 和 IPA |
+| scripts/ios/unsigned-ipa.sh | 生成未签名真机 IPA，供个人 Apple ID 免费签名安装 |
 
 同一个 `core/camera/src/main/assets/face_landmarker.task` 被两端打包，SHA256：`64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff`。CI 检查模型、SDK 版本、主题令牌和平台边界，发现漂移即失败。
 
@@ -45,6 +46,17 @@ chmod +x gradlew scripts/ios/*.sh
 ```
 
 模拟器不能验证真实前摄、测距、角膜反光和中文麦克风效果，仍须 iPhone 实测。
+
+## 免费真机测试（无 Mac、无开发者账号）
+
+每次推送到 `master` 或 `codex/**`，「双端回归与 iOS 编译」在模拟器测试通过后，用 Release 配置编译未签名的真机版本，上传为 artifact `ios-unsigned-ipa`（保留 14 天）。安装由 Windows 上的 Sideloadly 用个人 Apple ID 重新签名完成：
+
+1. 安装苹果官网版 iTunes 与 iCloud（不要用微软商店版），再安装 Sideloadly（sideloadly.io）。
+2. 在 GitHub 该次运行页面底部下载 `ios-unsigned-ipa`，解压得到 `EyeProject-unsigned.ipa`。
+3. iPhone 用数据线连接电脑并点「信任此电脑」；Sideloadly 选中设备、拖入 IPA、填 Apple ID 后点 Start。建议使用单独的测试用 Apple ID。
+4. iPhone「设置 → 通用 → VPN 与设备管理」信任该 Apple ID；iOS 16 起还要在「设置 → 隐私与安全性 → 开发者模式」开启并重启。
+
+免费签名 7 天后失效，重新用 Sideloadly 安装即可，本机测试记录在覆盖安装时保留；同一 Apple ID 最多同时 3 个此类应用。应用只用相机、麦克风、语音识别，不需要付费账号才有的权限。
 
 ## 生成 iPhone 可安装包
 

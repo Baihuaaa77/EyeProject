@@ -61,3 +61,11 @@ jobs:
             shared/screening/build/reports/tests/
             shared/domain/build/reports/tests/
             shared/screening/build/bin/iosSimulatorArm64/debugFramework/EyeScreening.framework/Headers/
+      - name: 生成未签名真机安装包（个人 Apple ID 免费签名安装用）
+        run: chmod +x scripts/ios/unsigned-ipa.sh && ./scripts/ios/unsigned-ipa.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios-unsigned-ipa
+          path: iosApp/build/unsigned/EyeProject-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 14
