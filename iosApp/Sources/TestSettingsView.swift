@@ -11,6 +11,9 @@ struct TestSettingsView: View {
             Form {
                 Toggle("音效反馈", isOn: $feedback.soundEnabled)
                 Toggle("震动反馈", isOn: $feedback.hapticsEnabled)
+                Button("试一下反馈") {
+                    feedback.play(name: "START", sound: "eye_start", microphonePauseMs: 310, voice: voice)
+                }.disabled(!feedback.soundEnabled && !feedback.hapticsEnabled)
                 Toggle("语音播报", isOn: $voice.enabled)
                 Toggle("语音作答", isOn: $voice.answersEnabled)
                     .onChange(of: voice.answersEnabled) { enabled in if enabled { voice.requestPermission() } }

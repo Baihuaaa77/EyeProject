@@ -112,6 +112,8 @@ internal fun TestSettingsSheet(
 ) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
+    val preview = rememberTestFeedbackOutput()
+    LaunchedEffect(settings.soundEnabled, settings.hapticsEnabled) { preview.stop() }
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = colors.panelBackground) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             EyeText("系统设置", style = typography.title, color = colors.textPrimary)
@@ -123,6 +125,9 @@ internal fun TestSettingsSheet(
                 EyeText("震动反馈", style = typography.body, color = colors.textPrimary)
                 EyeSwitch(settings.hapticsEnabled, null)
             }
+            EyeButton("试一下反馈", EyeButtonRole.SECONDARY, {
+                preview.play(ScreeningFeedbackCue.START, settings.soundEnabled, settings.hapticsEnabled) {}
+            }, Modifier.fillMaxWidth(), enabled = settings.soundEnabled || settings.hapticsEnabled)
             Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).toggleable(settings.speechEnabled, role = Role.Switch, onValueChange = settings::setSpeech), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                 EyeText("语音播报", style = typography.body, color = colors.textPrimary)
                 EyeSwitch(settings.speechEnabled, null)

@@ -37,6 +37,37 @@ import java.io.File
 class ServiceVisualTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
+    @Test fun feedbackEventsReachTheDeviceOnlyWhileTheTestIsActive() {
+        val context = compose.activity
+        val preferences = context.getSharedPreferences("screening_feedback_effect_test", android.content.Context.MODE_PRIVATE)
+        preferences.edit().clear().commit()
+        val settings = TestSettings(preferences).apply { setSound(false) }
+        val voice = ScreeningVoice(context)
+        val events = ScreeningFeedbackSession()
+        var menuOpen by androidx.compose.runtime.mutableStateOf(false)
+        val vibration = org.robolectric.Shadows.shadowOf(context.getSystemService(android.os.Vibrator::class.java))
+        vibration.setHasVibrator(true)
+        try {
+            compose.setContent {
+                TestFeedbackEffect(settings, voice, menuOpen) { enabled ->
+                    events.poll(ScreeningFeedbackFrame("NEAR_VISION", true), android.os.SystemClock.elapsedRealtime(), enabled)
+                }
+            }
+            compose.runOnIdle { events.offer(ScreeningFeedbackCue.ANSWER) }
+            compose.mainClock.advanceTimeBy(100)
+            compose.waitForIdle()
+            assertEquals(android.os.VibrationEffect.EFFECT_CLICK, vibration.effectId)
+            compose.runOnIdle { menuOpen = true }
+            compose.mainClock.advanceTimeBy(100)
+            compose.runOnIdle { events.offer(ScreeningFeedbackCue.WARNING) }
+            compose.mainClock.advanceTimeBy(100)
+            compose.runOnIdle { menuOpen = false }
+            compose.mainClock.advanceTimeBy(200)
+            compose.waitForIdle()
+            assertEquals("菜单期间不应播放或补播双震动告警", android.os.VibrationEffect.EFFECT_CLICK, vibration.effectId)
+        } finally { voice.close() }
+    }
+
     @Test fun servicesNavigation() {
         var destination = ""
         compose.setContent { EyeProjectTheme { ServicesScreen({ destination = "dry" }, { destination = "near" }, { destination = "cover" }) } }
@@ -219,10 +250,15 @@ class ServiceVisualTest {
         compose.onNodeWithText("语音作答").assertDoesNotExist()
         compose.onNodeWithContentDescription("系统设置").performClick()
         compose.onNodeWithText("听到：左").assertExists()
+        val vibration = org.robolectric.Shadows.shadowOf(context.getSystemService(android.os.Vibrator::class.java))
+        vibration.setHasVibrator(true)
+        compose.onNodeWithText("试一下反馈").performClick()
+        assertEquals(android.os.VibrationEffect.EFFECT_CLICK, vibration.effectId)
         compose.onNodeWithText("音效反馈").performClick()
         compose.onNodeWithText("震动反馈").performClick()
         assertEquals(false, TestSettings(preferences).soundEnabled)
         assertEquals(false, TestSettings(preferences).hapticsEnabled)
+        compose.onNodeWithText("试一下反馈").assertIsNotEnabled()
         compose.onNodeWithText("语音播报").performClick()
         compose.onNodeWithText("语音作答").performClick()
         assertEquals(false, TestSettings(preferences).speechEnabled)
