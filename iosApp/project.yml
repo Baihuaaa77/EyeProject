@@ -60,3 +60,6 @@ targets:
       base:
         GENERATE_INFOPLIST_FILE: YES
         PRODUCT_BUNDLE_IDENTIFIER: com.zkyjss.eyeproject.tests
+        # 静态 MediaPipe 图只由宿主应用加载；测试不能继承 Pods 的 -force_load，
+        # 否则 XCTest 注入时重复注册 Calculator 并在运行测试前崩溃。
+        OTHER_LDFLAGS: ""
