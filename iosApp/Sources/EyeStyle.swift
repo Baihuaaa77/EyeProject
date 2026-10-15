@@ -13,6 +13,8 @@ enum EyeStyle {
     static let accent = Color(rgb: 0xF2A33A)
     static let warning = Color(rgb: 0x986000)
     static let success = Color(rgb: 0x2E7D4F)
+    static let tooClose = Color(rgb: 0xD7372C)
+    static let tooFar = Color(rgb: 0x2563EB)
     static let radius: CGFloat = 20
     static let spacing: CGFloat = 12
     static let title = Font.system(size: 22, weight: .semibold)

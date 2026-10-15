@@ -12,7 +12,8 @@ light = colors.split('val LightEyeColors = EyeColors(', 1)[1].split('val DarkEye
 palette = dict(re.findall(r'(\w+)\s*=\s*Color\(0xFF([0-9A-Fa-f]{6})\)', light))
 swift = (root / 'iosApp/Sources/EyeStyle.swift').read_text(encoding='utf-8')
 mapping = {'background':'appBackground','panel':'panelBackground','text':'textPrimary','secondary':'textSecondary',
-    'surfaceVariant':'surfaceVariant','primary':'primary','brandStart':'brandStart','brandEnd':'brandEnd','accent':'accent','warning':'warning','success':'success'}
+    'surfaceVariant':'surfaceVariant','primary':'primary','brandStart':'brandStart','brandEnd':'brandEnd','accent':'accent','warning':'warning','success':'success',
+    'tooClose':'tooClose','tooFar':'tooFar'}
 for key, value in mapping.items():
     match = re.search(rf'static let {key} = Color\(rgb: 0x([0-9A-Fa-f]{{6}})\)', swift)
     if match is None or match.group(1).upper() != palette[value].upper():

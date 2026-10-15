@@ -16,6 +16,9 @@ struct EyeTestView: View {
                 if hasReflexStimulus {
                     ZStack { Color.black; Circle().fill(.white).frame(width: 8, height: 8) }.frame(height: 20).clipShape(RoundedRectangle(cornerRadius: 8))
                 }
+                if pixelsPerMm > 0 && runtime.number("targetDistanceCm") > 0 && !runtime.bool("guidePending") {
+                    TestDistanceBanner(runtime: runtime).padding(.horizontal, 16)
+                }
                 GeometryReader { viewport in
                     ScrollView {
                         VStack(spacing: EyeStyle.spacing) {
@@ -25,14 +28,12 @@ struct EyeTestView: View {
                                     runtime.prepare(pixelsPerMm: value)
                                 }
                             } else {
-                                if !isRunning && runtime.number("distanceCm") > 0 && !isProfile {
-                                    Text(String(format: "约 %.1f cm", runtime.number("distanceCm"))).foregroundStyle(EyeStyle.secondary)
-                                }
                                 if let error = runtime.error { Text(error).foregroundStyle(EyeStyle.warning) }
-                                if !runtime.string("warning").isEmpty && runtime.string("warning") != "慢慢移近" {
-                                    Text(runtime.string("warning")).foregroundStyle(EyeStyle.warning)
+                                if !warningText.isEmpty {
+                                    Text(warningText).foregroundStyle(EyeStyle.warning)
                                 }
                                 if isProfile { QuestionnaireView(runtime: runtime) }
+                                else if isRunning { VStack(spacing: EyeStyle.spacing) { testContent }.modifier(TestStagePanel()) }
                                 else { testContent }
                             }
                         }.padding().frame(maxWidth: .infinity, minHeight: viewport.size.height, alignment: isRunning ? .center : .top)
@@ -43,7 +44,7 @@ struct EyeTestView: View {
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) { Button("返回") { runtime.close(); dismiss() } }
                     ToolbarItem(placement: .navigationBarTrailing) {
-                        Button { settingsOpen = true } label: { Image(systemName: "gearshape") }.accessibilityLabel("系统设置")
+                        Button { settingsOpen = true } label: { Image(systemName: "gearshape.fill").foregroundStyle(EyeStyle.primary) }.accessibilityLabel("系统设置")
                     }
                 }
                 .sheet(isPresented: $settingsOpen) { TestSettingsView(voice: runtime.voice, status: runtime.speechStatus) }
@@ -65,6 +66,12 @@ struct EyeTestView: View {
         }
     }
     private var phase: String { runtime.string("phase") }
+    private var warningText: String {
+        let text = runtime.string("warning")
+        if text == "慢慢移近" { return "" }
+        if runtime.number("targetDistanceCm") > 0 && (text.hasPrefix("太近") || text.hasPrefix("太远") || text == "请正对屏幕") { return "" }
+        return text
+    }
     private var isProfile: Bool { phase == "Profile" || phase == "PROFILE" }
     private var hasReflexStimulus: Bool {
         pixelsPerMm > 0 && runtime.kind == "STRABISMUS" && !isProfile && !phase.isEmpty && phase != "RESULT"
@@ -230,7 +237,7 @@ private struct OptotypeAnswerPad: View {
                 TumblingEView(runtime: runtime)
                 VStack { arrow("arrow.up", "向上", 3); Spacer(); arrow("arrow.down", "向下", 1) }
                 HStack { arrow("arrow.left", "向左", 2); Spacer(); arrow("arrow.right", "向右", 0) }
-            }.frame(height: max(240, CGFloat(runtime.number("optotypePx")) / UIScreen.main.scale + 136))
+            }.frame(height: max(256, CGFloat(runtime.number("optotypePx")) / UIScreen.main.scale + 168))
             Button("看不清 / 跳过") { runtime.answer(-1) }
         }.buttonStyle(DirectionAnswerButtonStyle()).disabled(!runtime.bool("trialVisible"))
     }
@@ -245,6 +252,8 @@ private struct DirectionAnswerButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label.frame(maxWidth: .infinity, minHeight: 56).foregroundStyle(EyeStyle.text)
             .background(EyeStyle.surfaceVariant, in: RoundedRectangle(cornerRadius: 14))
+            .overlay { RoundedRectangle(cornerRadius: 14).stroke(EyeStyle.primary.opacity(0.2), lineWidth: 1) }
+            .shadow(color: EyeStyle.primary.opacity(0.06), radius: 2, x: 0, y: 1)
             .opacity(enabled ? (configuration.isPressed ? 0.7 : 1) : 0.5)
     }
 }
@@ -262,6 +271,11 @@ private struct TumblingEView: View {
             context.fill(Path(CGRect(x: -edge / 2, y: -edge / 2, width: bar, height: edge)), with: .color(.black))
             for row in [0, 2, 4] { context.fill(Path(CGRect(x: -edge / 2, y: -edge / 2 + CGFloat(row) * bar, width: edge, height: bar)), with: .color(.black)) }
         }.background(EyeStyle.panel, in: RoundedRectangle(cornerRadius: EyeStyle.radius))
+            .overlay {
+                let diameter = max(96, CGFloat(runtime.number("optotypePx")) / UIScreen.main.scale + 40)
+                Circle().stroke(EyeStyle.primary.opacity(0.72), lineWidth: 2).frame(width: diameter, height: diameter)
+                    .allowsHitTesting(false)
+            }
             .onChange(of: runtime.number("trialId")) { id in
                 runtime.schedulePresented(Int32(id))
             }

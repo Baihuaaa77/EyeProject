@@ -57,7 +57,6 @@ import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
 import com.zkyjss.eyeproject.core.designsystem.util.screenHorizontalPaddingLarge
 import com.zkyjss.eyeproject.core.ui.component.EyeButton
 import com.zkyjss.eyeproject.core.ui.component.EyeButtonRole
-import com.zkyjss.eyeproject.core.ui.component.EyeSectionCard
 import com.zkyjss.eyeproject.core.ui.component.EyeText as BaseEyeText
 import com.zkyjss.eyeproject.core.ui.component.drawMascot
 
@@ -192,10 +191,8 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, modifier: M
             onBack = { viewModel.stopCamera(); onBack() }, onSettings = { settingsOpen = true },
             centered = activeTest, scroll = pageScroll,
             reflexStimulus = kind == ScreeningKind.STRABISMUS && s.step != ScreeningStep.PROFILE && s.step != ScreeningStep.RESULT,
+            status = { distance?.let { DistanceBanner(it, compact = true) } },
         ) {
-            if (distance != null && (!activeTest || distance.zone != DistanceZone.OK)) {
-                DistanceBanner(distance, compact = activeTest, singleLine = activeTest)
-            }
             val notice = s.gazeWarning ?: s.warning ?: guidance?.takeUnless {
                 it == "保持稳定" || it == "慢慢移近" || it.startsWith("太近") || it.startsWith("太远") || (distance != null && it == "请正对屏幕")
             }
@@ -287,7 +284,7 @@ private fun EnvironmentContent(kind: ScreeningKind, s: ScreeningState, vm: Scree
 @Composable
 internal fun VisionContent(s: ScreeningState, vm: ScreeningTestViewModel) {
     val size = with(LocalDensity.current) { s.trialOptotypePx.toDp() }
-    EyeSectionCard(title = "${s.visionEye.label} · ${s.trialIndex + 1} / 4") {
+    TestStageCard(title = "${s.visionEye.label} · ${s.trialIndex + 1} / 4") {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
             if (s.nearAwaitingEyeReady) {
                 EyeText(s.instruction, LocalEyeTypography.current.body, LocalEyeColors.current.textPrimary)
@@ -306,7 +303,7 @@ internal fun PushUpContent(s: ScreeningState, vm: ScreeningTestViewModel) {
     val size = with(LocalDensity.current) { s.trialOptotypePx.toDp() }
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
-    EyeSectionCard(title = "第 ${(s.nearPoints.size + 1).coerceAtMost(PresbyopiaProtocol.PUSH_REPEATS)}/${PresbyopiaProtocol.PUSH_REPEATS} 次") {
+    TestStageCard(title = "第 ${(s.nearPoints.size + 1).coerceAtMost(PresbyopiaProtocol.PUSH_REPEATS)}/${PresbyopiaProtocol.PUSH_REPEATS} 次") {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
             if (s.pushStage == PushStage.READY) {
                 EyeText("先把手机移到 45 cm 以外，再点开始", typography.body, colors.textPrimary)
@@ -327,7 +324,7 @@ internal fun PushUpContent(s: ScreeningState, vm: ScreeningTestViewModel) {
 private fun CurveContent(s: ScreeningState, vm: ScreeningTestViewModel) {
     val size = with(LocalDensity.current) { s.trialOptotypePx.toDp() }
     val target = PresbyopiaProtocol.CURVE_DISTANCES.getOrElse(s.curveIndex) { 40f }
-    EyeSectionCard(title = "${target.toInt()} cm · ${s.curveIndex + 1}/${PresbyopiaProtocol.CURVE_DISTANCES.size}") {
+    TestStageCard(title = "${target.toInt()} cm · ${s.curveIndex + 1}/${PresbyopiaProtocol.CURVE_DISTANCES.size}") {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
             if (!s.trialVisible) EyeText("移到 ${target.toInt()} cm 并停稳", LocalEyeTypography.current.body, LocalEyeColors.current.textPrimary)
             OptotypeAnswerPad(s.direction, size, s.trialVisible) { vm.answer(it) }
@@ -339,7 +336,7 @@ private fun CurveContent(s: ScreeningState, vm: ScreeningTestViewModel) {
 @Composable
 internal fun FlipperContent(s: ScreeningState, vm: ScreeningTestViewModel) {
     val size = with(LocalDensity.current) { s.trialOptotypePx.toDp() }
-    EyeSectionCard(title = "${if (s.trialIndex % 2 == 0) 50 else 25} cm · ${s.secondsLeft} 秒") {
+    TestStageCard(title = "${if (s.trialIndex % 2 == 0) 50 else 25} cm · ${s.secondsLeft} 秒") {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
             if (!s.trialVisible) EyeText("停稳后开始", LocalEyeTypography.current.subtitle, LocalEyeColors.current.textSecondary)
             OptotypeAnswerPad(s.direction, size, s.trialVisible) { vm.answer(it) }
@@ -351,7 +348,7 @@ internal fun FlipperContent(s: ScreeningState, vm: ScreeningTestViewModel) {
 @Composable
 private fun FixationContent(s: ScreeningState, vm: ScreeningTestViewModel) {
     val age = s.fields["年龄"]?.toIntOrNull()
-    EyeSectionCard(title = "剩余 ${s.secondsLeft} 秒") {
+    TestStageCard(title = "剩余 ${s.secondsLeft} 秒") {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             FixationTarget(StrabismusProtocol.targetDiameterMm(age), bright = s.targetX > 0f, vm = vm)
         }
@@ -382,7 +379,7 @@ private fun FixationTarget(diameterMm: Float, bright: Boolean, vm: ScreeningTest
 internal fun GazeCalibrationContent(s: ScreeningState, vm: ScreeningTestViewModel) {
     val colors = LocalEyeColors.current
     var origin by remember { mutableStateOf(Offset.Zero) }
-    EyeSectionCard(title = "注视校准 · ${s.gazeCalibrationIndex + 1}/5") {
+    TestStageCard(title = "注视校准 · ${s.gazeCalibrationIndex + 1}/5") {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Canvas(Modifier.fillMaxWidth().height(240.dp).clip(EyeShapes.medium).background(colors.white)
                 .onGloballyPositioned { origin = it.positionInWindow() }) {
@@ -404,7 +401,7 @@ internal fun CoverContent(s: ScreeningState, vm: ScreeningTestViewModel) {
     val done = s.coverMarks.size
     val next = sequence.getOrNull(done)
     val current = sequence.getOrNull(done - 1)
-    EyeSectionCard(title = "交替遮盖 · ${done}/${sequence.size}") {
+    TestStageCard(title = "交替遮盖 · ${done}/${sequence.size}") {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             FixationTarget(StrabismusProtocol.targetDiameterMm(s.fields["年龄"]?.toIntOrNull()), bright = true, vm = vm)
             if (current != null && current.holdMs > 0) HoldTimer(done, current.holdMs, "保持：${current.label}")
@@ -456,7 +453,7 @@ private fun PursuitContent(s: ScreeningState, vm: ScreeningTestViewModel) {
     val distanceMm = (if (s.distanceCm > 0f) s.distanceCm else StrabismusProtocol.DISTANCE_CM) * 10f
     val radiusPx = 10f / 2f * pxPerMm // 保持原有 1 cm 目标包络和轨迹边界。
     var origin by remember { mutableStateOf(Offset.Zero) }
-    EyeSectionCard(title = "剩余 ${s.secondsLeft} 秒") {
+    TestStageCard(title = "剩余 ${s.secondsLeft} 秒") {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Canvas(Modifier.fillMaxWidth().height(360.dp).clip(EyeShapes.medium).background(colors.white)
                 .onGloballyPositioned { origin = it.positionInWindow() }) {
@@ -550,6 +547,6 @@ private fun EyeText(text: String, style: TextStyle, color: Color) {
 @Composable
 internal fun OptotypeSurface(direction: Int, size: androidx.compose.ui.unit.Dp) {
     Box(Modifier.fillMaxWidth().background(LocalEyeColors.current.white).padding(24.dp), contentAlignment = Alignment.Center) {
-        TumblingE(direction, size, LocalEyeColors.current.black)
+        FramedOptotype(direction, size)
     }
 }

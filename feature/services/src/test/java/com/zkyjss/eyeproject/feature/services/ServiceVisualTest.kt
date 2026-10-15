@@ -168,7 +168,9 @@ class ServiceVisualTest {
         compose.setContent {
             EyeProjectTheme {
                 TestSessionLayout(if (task == 0) "老视自测" else if (task == 1) "干眼自测" else "眼位自测", {}, {}, true,
-                    modifier = Modifier.testTag("test-session"), reflexStimulus = task == 2) {
+                    modifier = Modifier.testTag("test-session"), reflexStimulus = task == 2,
+                    status = { DistanceBanner(distanceStatus(if (task == 0) 50f else if (task == 1) 40f else 33f,
+                        true, if (task == 0) 50f else if (task == 1) 40f else 33f, 5f), compact = true) }) {
                     when (task) {
                         0 -> FlipperContent(ScreeningState(step = ScreeningStep.FLIPPER, secondsLeft = 38,
                             trialVisible = true, trialOptotypePx = 12f, faceDetected = true, distanceCm = 50f), vm)
@@ -186,6 +188,7 @@ class ServiceVisualTest {
             assertTrue("视标应靠近屏幕中心", kotlin.math.abs(target.center.y - viewport.center.y) < viewport.height * 0.1f)
         }
         assertCentered()
+        compose.onNodeWithText("距离合适").assertIsDisplayed()
         compose.onNodeWithText("点选 E 的开口方向").assertDoesNotExist()
         compose.onNodeWithText("调节灵敏度（远近切换）").assertDoesNotExist()
         compose.onNodeWithText("语音").assertDoesNotExist()
@@ -231,8 +234,8 @@ class ServiceVisualTest {
             EyeProjectTheme {
                 CompositionLocalProvider(LocalDensity provides Density(1f, 1.5f)) {
                     Box(Modifier.size(320.dp, 640.dp)) {
-                        TestSessionLayout("干眼自测", {}, {}, true) {
-                            DistanceBanner(distanceStatus(25f, true, 40f, 5f), compact = true, singleLine = true)
+                        TestSessionLayout("干眼自测", {}, {}, true,
+                            status = { DistanceBanner(distanceStatus(25f, true, 40f, 5f), compact = true) }) {
                             TrialContent(DryEyeTestUiState(phase = DryEyePhase.Open, trialVisible = true,
                                 optotypePx = 24f, remainingSeconds = 12)) {}
                         }
@@ -241,6 +244,7 @@ class ServiceVisualTest {
             }
         }
         compose.onNodeWithText("把手机往远处移约 10 cm").assertIsDisplayed()
+        compose.onNodeWithText("太近了").assertIsDisplayed()
         compose.onNodeWithText("看不清 / 跳过").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("↓").assertIsDisplayed()
         capture("session-small-large-text")

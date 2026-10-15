@@ -15,11 +15,9 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -27,8 +25,6 @@ import androidx.compose.ui.unit.dp
 import com.zkyjss.eyeproject.core.designsystem.theme.*
 import com.zkyjss.eyeproject.core.designsystem.util.screenHorizontalPaddingLarge
 import com.zkyjss.eyeproject.core.ui.component.*
-import kotlin.math.cos
-import kotlin.math.sin
 
 /** 三项测试共用语音偏好；切换测试与重启应用后沿用同一设置。 */
 @Stable
@@ -69,6 +65,7 @@ internal fun TestSessionLayout(
     modifier: Modifier = Modifier,
     reflexStimulus: Boolean = false,
     scroll: ScrollState = rememberScrollState(),
+    status: @Composable () -> Unit = {},
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val colors = LocalEyeColors.current
@@ -77,17 +74,8 @@ internal fun TestSessionLayout(
             TopBackBar(title = title, noText = true, onBackClick = onBack)
             Box(Modifier.align(Alignment.BottomEnd).size(48.dp).semantics { contentDescription = "系统设置" }
                 .clickable(role = Role.Button, onClick = onSettings), contentAlignment = Alignment.Center) {
-                Canvas(Modifier.size(22.dp)) {
-                    val radius = size.minDimension / 2
-                    repeat(8) { index ->
-                        val angle = index * kotlin.math.PI / 4
-                        val axis = Offset(cos(angle).toFloat(), sin(angle).toFloat())
-                        drawLine(colors.textSecondary, center + axis * radius * 0.7f, center + axis * radius,
-                            radius * 0.25f, StrokeCap.Round)
-                    }
-                    drawCircle(colors.textSecondary, radius * 0.7f, style = Stroke(radius * 0.18f))
-                    drawCircle(colors.textSecondary, radius * 0.25f, style = Stroke(radius * 0.18f))
-                }
+                EyeIcon(painterResource(com.zkyjss.eyeproject.core.designsystem.R.drawable.ic_settings_gear),
+                    null, Modifier.size(24.dp), tint = colors.primary)
             }
         }
         if (reflexStimulus) {
@@ -95,6 +83,7 @@ internal fun TestSessionLayout(
                 drawCircle(colors.white, radius = 4.dp.toPx(), center = center)
             }
         }
+        status()
         BoxWithConstraints(Modifier.weight(1f)) {
             Column(Modifier.fillMaxWidth().verticalScroll(scroll).heightIn(min = maxHeight).padding(vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp, if (centered) Alignment.CenterVertically else Alignment.Top),

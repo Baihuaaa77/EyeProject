@@ -140,6 +140,11 @@ class MobileScreeningController(
             result.apply {
                 put("phase",s.phase.name); put("title","干眼自测"); put("instruction",s.instruction)
                 put("distanceCm",s.distanceCm); put("gateReady",s.gateReady); put("warning",s.error ?: s.qualityWarning)
+                put("faceDetected",s.faceDetected)
+                val distanceVisible = s.phase in setOf(DryEyePhase.Setup, DryEyePhase.FormalGuide, DryEyePhase.Countdown,
+                    DryEyePhase.Practice, DryEyePhase.Natural, DryEyePhase.Open)
+                put("targetDistanceCm",if (distanceVisible) DryEyeProtocol.TARGET_DISTANCE_CM else null)
+                put("distanceToleranceCm",if (distanceVisible) DryEyeProtocol.DISTANCE_TOLERANCE_CM else null)
                 put("secondsLeft",s.remainingSeconds); put("trialVisible",s.trialVisible); put("trialId",s.trialId)
                 put("direction",s.direction); put("optotypePx",s.optotypePx); put("savedFile",s.savedFile)
                 put("risk",s.report?.riskLevel?.name); put("findings",RecordArray(s.report?.indicators.orEmpty() + s.report?.abnormal.orEmpty()))
@@ -154,6 +159,7 @@ class MobileScreeningController(
                 put("distanceCm",s.distanceCm); put("faceDetected",s.faceDetected); put("warning",s.gazeWarning ?: s.warning ?: screeningGuidance(s)?.takeUnless { it == "保持稳定" })
                 put("secondsLeft",s.secondsLeft); put("trialVisible",s.trialVisible); put("trialId",s.trialId)
                 put("targetDistanceCm",screeningDistanceTarget(s)?.first)
+                put("distanceToleranceCm",screeningDistanceTarget(s)?.second)
                 put("direction",s.direction); put("optotypePx",s.trialOptotypePx); put("eye",s.visionEye.name)
                 put("nearAwaitingEyeReady",s.nearAwaitingEyeReady); put("pushStage",s.pushStage.name)
                 put("targetX",s.targetX); put("targetY",s.targetY); put("savedFile",s.savedFile)

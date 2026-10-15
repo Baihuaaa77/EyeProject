@@ -154,7 +154,10 @@ fun DryEyeScreen(
     }
     val running = state.phase in setOf(DryEyePhase.Practice, DryEyePhase.Countdown, DryEyePhase.Natural, DryEyePhase.Open, DryEyePhase.Rest)
     Box(modifier.fillMaxSize()) {
-        TestSessionLayout("干眼自测", onBack, { settingsOpen = true }, running) {
+        TestSessionLayout("干眼自测", onBack, { settingsOpen = true }, running,
+            status = {
+                if (running && state.phase != DryEyePhase.Rest) DistanceBanner(distance, compact = true)
+            }) {
             when (state.phase) {
                 DryEyePhase.Profile -> QuestionnaireContent(dryEyeQuestions, state.fields, viewModel::setField, viewModel::finishProfile, stateKey = "dryeye")
                 DryEyePhase.Setup -> {
@@ -165,7 +168,6 @@ fun DryEyeScreen(
                 DryEyePhase.FormalGuide -> FormalGuideContent(state, viewModel::confirmFormalGuide)
                 DryEyePhase.Countdown -> CountdownContent(state.instruction, state.remainingSeconds)
                 DryEyePhase.Practice, DryEyePhase.Natural, DryEyePhase.Open -> {
-                    if (distance.zone != DistanceZone.OK) DistanceBanner(distance, compact = true, singleLine = true)
                     TrialContent(state) { viewModel.answer(it) }
                 }
                 DryEyePhase.Rest -> RestContent(state)
@@ -253,16 +255,17 @@ internal fun TrialContent(state: DryEyeTestUiState, onAnswer: (Int) -> Unit) {
         DryEyePhase.Natural -> "自然眨眼"
         else -> "持续睁眼"
     }
-    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            EyeText(stageLabel, style = typography.subtitle, color = if (state.phase == DryEyePhase.Open) colors.warning else colors.primary)
-            EyeText("剩余 ${state.remainingSeconds} 秒", style = typography.subtitle, color = colors.textPrimary)
+    TestStageCard {
+        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                EyeText(stageLabel, style = typography.subtitle, color = if (state.phase == DryEyePhase.Open) colors.warning else colors.primary)
+                EyeText("剩余 ${state.remainingSeconds} 秒", style = typography.subtitle, color = colors.textPrimary)
+            }
+            val size = with(LocalDensity.current) { state.optotypePx.toDp() }
+            OptotypeAnswerPad(state.direction, size, state.trialVisible, onAnswer)
+            TrialTimer(state.trialId, state.trialVisible)
+            state.qualityWarning?.let { EyeText(it, style = typography.title, color = colors.warning) }
         }
-        val size = with(LocalDensity.current) { state.optotypePx.toDp() }
-        OptotypeAnswerPad(state.direction, size, state.trialVisible, onAnswer)
-        TrialTimer(state.trialId, state.trialVisible)
-        state.qualityWarning?.let { EyeText(it, style = typography.title, color = colors.warning) }
-
     }
 }
 
