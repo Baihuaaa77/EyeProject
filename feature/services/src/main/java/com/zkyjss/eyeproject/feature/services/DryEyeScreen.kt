@@ -65,9 +65,7 @@ import com.zkyjss.eyeproject.core.ui.component.EyeButton
 import com.zkyjss.eyeproject.core.ui.component.EyeButtonRole
 import com.zkyjss.eyeproject.core.ui.component.EyeDisclosure
 import com.zkyjss.eyeproject.core.ui.component.EyeSectionCard
-import com.zkyjss.eyeproject.core.ui.component.EyeSwitch
 import com.zkyjss.eyeproject.core.ui.component.EyeText
-import com.zkyjss.eyeproject.core.ui.component.TopBackBar
 
 /**
  * 干眼自测页：问卷 → 40 cm 准备 → 视标练习 → 60 秒自然眨眼 + 紧接 20 秒持续睁眼（全程辨认视标）→ 结果。
@@ -83,7 +81,9 @@ fun DryEyeScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     val context = LocalContext.current
     val voice = remember(context) { ScreeningVoice(context) }
-    var voiceEnabled by rememberSaveable { mutableStateOf(true) }
+    val settings = rememberTestSettings()
+    val voiceEnabled = settings.speechEnabled
+    var settingsOpen by rememberSaveable { mutableStateOf(false) }
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         if (it) viewModel.startMonitoring(lifecycleOwner) else viewModel.permissionDenied()
     }
@@ -99,8 +99,9 @@ fun DryEyeScreen(
     val distanceMatters = state.phase in setOf(DryEyePhase.Setup, DryEyePhase.FormalGuide, DryEyePhase.Practice, DryEyePhase.Natural, DryEyePhase.Open)
     val distanceHint = if (distanceMatters && distance.clearlyOff()) distance.spoken else null
     val voiceAnswer = rememberVoiceAnswer(
-        active = state.phase in setOf(DryEyePhase.Practice, DryEyePhase.Natural, DryEyePhase.Open),
+        active = !settingsOpen && state.phase in setOf(DryEyePhase.Practice, DryEyePhase.Natural, DryEyePhase.Open),
         voice = voice,
+        enabled = settings.answersEnabled,
     ) { command ->
         when (command) {
             is VoiceCommand.Direction -> viewModel.answer(command.direction, byVoice = true)
@@ -120,8 +121,8 @@ fun DryEyeScreen(
     }
     // 距离提示优先；距离持续偏离时每 6 秒重复一次，回到合适区间立即停止
     val prompt = distanceHint ?: basePrompt
-    LaunchedEffect(prompt, voiceEnabled) {
-        if (voiceEnabled) {
+    LaunchedEffect(prompt, voiceEnabled, settingsOpen) {
+        if (voiceEnabled && !settingsOpen) {
             kotlinx.coroutines.delay(650)
             if (lifecycleOwner.lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)) voice.speak(prompt)
             while (distanceHint != null && prompt == distanceHint) {
@@ -153,20 +154,7 @@ fun DryEyeScreen(
     }
     val running = state.phase in setOf(DryEyePhase.Practice, DryEyePhase.Countdown, DryEyePhase.Natural, DryEyePhase.Open, DryEyePhase.Rest)
     Box(modifier.fillMaxSize()) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(LocalEyeColors.current.appBackground)
-            .navigationBarsPadding()
-            .imePadding()
-            .screenHorizontalPaddingLarge()
-    ) {
-        TopBackBar(title = "干眼自测", onBackClick = onBack)
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
-                EyeText("语音", style = LocalEyeTypography.current.bodySecondary, color = LocalEyeColors.current.textSecondary)
-                EyeSwitch(voiceEnabled, { voiceEnabled = it })
-            }
+        TestSessionLayout("干眼自测", onBack, { settingsOpen = true }, running) {
             when (state.phase) {
                 DryEyePhase.Profile -> QuestionnaireContent(dryEyeQuestions, state.fields, viewModel::setField, viewModel::finishProfile, stateKey = "dryeye")
                 DryEyePhase.Setup -> {
@@ -177,25 +165,24 @@ fun DryEyeScreen(
                 DryEyePhase.FormalGuide -> FormalGuideContent(state, viewModel::confirmFormalGuide)
                 DryEyePhase.Countdown -> CountdownContent(state.instruction, state.remainingSeconds)
                 DryEyePhase.Practice, DryEyePhase.Natural, DryEyePhase.Open -> {
-                    if (distance.zone != DistanceZone.OK) DistanceBanner(distance, compact = true)
-                    VoiceAnswerBar(voiceAnswer)
+                    if (distance.zone != DistanceZone.OK) DistanceBanner(distance, compact = true, singleLine = true)
                     TrialContent(state) { viewModel.answer(it) }
                 }
                 DryEyePhase.Rest -> RestContent(state)
-                DryEyePhase.Result -> ResultContent(
-                    state,
-                    onExtend = viewModel::startExtended,
-                    onRest = viewModel::startRestRetest,
-                    onRestart = viewModel::restartAll,
-                )
+                DryEyePhase.Result -> ResultContent(state, viewModel::startExtended, viewModel::startRestRetest, viewModel::restartAll)
             }
-            if (running) {
-                EyeButton("停止测试", EyeButtonRole.SECONDARY, { viewModel.backToSetup("已停止，本次结果不计入") }, Modifier.fillMaxWidth())
-            }
-            Spacer(Modifier.height(24.dp))
         }
+        if (distanceMatters) DistanceEdgeGlow(distance.zone)
     }
-    if (distanceMatters) DistanceEdgeGlow(distance.zone)
+    if (settingsOpen) TestSettingsSheet(settings, voiceAnswer, { settingsOpen = false },
+        speechAvailable = voice.available,
+        onStop = if (running) { { viewModel.backToSetup("已停止，本次结果不计入") } } else null,
+    ) {
+        EyeDisclosure("测量详情") {
+            EyeText("距离 ${formatDistanceCm(state.distanceCm)}", style = LocalEyeTypography.current.bodySecondary)
+            EyeText("环境光 ${state.lux?.let { "%.0f lux".format(it) } ?: "无传感器读数"}", style = LocalEyeTypography.current.bodySecondary)
+            EyeText("已答 ${state.trialCount} 题 · 自然眨眼 ${state.phase1BlinkCount} 次 · 睁眼阶段眨眼 ${state.phase2BlinkCount} 次", style = LocalEyeTypography.current.bodySecondary)
+        }
     }
 }
 
@@ -212,7 +199,6 @@ internal fun SetupGate(
     NoticeCard("建议佩戴最佳矫正视力眼镜进行测试")
     TestGuide(GuideMotion.POSTURE, "调整姿势 · 约 40 cm", "正对屏幕，手机距离眼睛约 40 厘米，光线均匀")
     DistanceBanner(distanceStatus(state.distanceCm, state.faceDetected, DryEyeProtocol.TARGET_DISTANCE_CM, DryEyeProtocol.DISTANCE_TOLERANCE_CM))
-    EyeText("测试中可以直接说出 E 的开口方向作答，手机不用离手。", style = typography.bodySecondary, color = colors.textSecondary)
     EyeButton("开始测试", EyeButtonRole.PRIMARY, onStart, Modifier.fillMaxWidth(), state.gateReady)
     EyeDisclosure("测量详情") {
         EyeText("距离 ${formatDistanceCm(state.distanceCm)}（目标 40±5 cm）", style = typography.bodySecondary, color = colors.textSecondary)
@@ -263,7 +249,7 @@ internal fun TrialContent(state: DryEyeTestUiState, onAnswer: (Int) -> Unit) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
     val stageLabel = when (state.phase) {
-        DryEyePhase.Practice -> "练习（不计入结果）"
+        DryEyePhase.Practice -> "练习"
         DryEyePhase.Natural -> "自然眨眼"
         else -> "持续睁眼"
     }
@@ -272,23 +258,11 @@ internal fun TrialContent(state: DryEyeTestUiState, onAnswer: (Int) -> Unit) {
             EyeText(stageLabel, style = typography.subtitle, color = if (state.phase == DryEyePhase.Open) colors.warning else colors.primary)
             EyeText("剩余 ${state.remainingSeconds} 秒", style = typography.subtitle, color = colors.textPrimary)
         }
-        LinearProgressIndicator(
-            progress = { state.progressFraction },
-            modifier = Modifier.fillMaxWidth().height(8.dp).clip(EyeShapes.small),
-            color = colors.primary,
-            trackColor = colors.neutralSoft,
-        )
-        EyeText(state.instruction, style = typography.body, color = colors.textSecondary)
         val size = with(LocalDensity.current) { state.optotypePx.toDp() }
         OptotypeAnswerPad(state.direction, size, state.trialVisible, onAnswer)
         TrialTimer(state.trialId, state.trialVisible)
         state.qualityWarning?.let { EyeText(it, style = typography.title, color = colors.warning) }
-        if (state.phase != DryEyePhase.Practice) {
-            EyeText(
-                "已记录眨眼 ${if (state.phase == DryEyePhase.Natural) state.phase1BlinkCount else state.phase2BlinkCount} 次 · 已答 ${state.trialCount} 题",
-                style = typography.bodySecondary, color = colors.textSecondary
-            )
-        }
+
     }
 }
 
@@ -319,7 +293,6 @@ private fun RestContent(state: DryEyeTestUiState) {
         Spacer(Modifier.height(24.dp))
         EyeText("闭眼休息", style = typography.title, color = colors.textPrimary)
         EyeText("${state.remainingSeconds}", style = typography.headline, color = colors.primary)
-        EyeText("请闭上眼睛放松，倒计时结束会有语音提示", style = typography.body, color = colors.textSecondary, textAlign = TextAlign.Center)
     }
 }
 

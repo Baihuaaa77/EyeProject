@@ -32,7 +32,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import com.zkyjss.eyeproject.core.ui.component.EyeDisclosure
-import com.zkyjss.eyeproject.core.ui.component.EyeSwitch
 import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -60,7 +59,6 @@ import com.zkyjss.eyeproject.core.ui.component.EyeButton
 import com.zkyjss.eyeproject.core.ui.component.EyeButtonRole
 import com.zkyjss.eyeproject.core.ui.component.EyeSectionCard
 import com.zkyjss.eyeproject.core.ui.component.EyeText as BaseEyeText
-import com.zkyjss.eyeproject.core.ui.component.TopBackBar
 import com.zkyjss.eyeproject.core.ui.component.drawMascot
 
 @Composable
@@ -81,7 +79,9 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, modifier: M
     val pageScroll = rememberScrollState()
     LaunchedEffect(s.step, s.guidePending) { pageScroll.scrollTo(0) }
     val voice = remember(context) { ScreeningVoice(context) }
-    var voiceEnabled by rememberSaveable { mutableStateOf(true) }
+    val settings = rememberTestSettings()
+    val voiceEnabled = settings.speechEnabled
+    var settingsOpen by rememberSaveable { mutableStateOf(false) }
     val cameraPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) viewModel.startCamera(owner) else viewModel.cameraPermissionDenied()
     }
@@ -128,7 +128,7 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, modifier: M
     val distance = distanceTarget?.let { (target, tolerance) -> distanceStatus(s.distanceCm, faceVisible, target, tolerance) }
     val voiceActive = !s.guidePending && s.step in setOf(
         ScreeningStep.NEAR_VISION, ScreeningStep.FLIPPER, ScreeningStep.DISTANCE_CURVE, ScreeningStep.PUSH_UP)
-    val voiceAnswer = rememberVoiceAnswer(voiceActive, voice) { command ->
+    val voiceAnswer = rememberVoiceAnswer(voiceActive && !settingsOpen, voice, settings.answersEnabled) { command ->
         val st = viewModel.state.value
         when {
             st.step == ScreeningStep.PUSH_UP -> when (command) {
@@ -147,8 +147,8 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, modifier: M
         ?: guidance?.takeUnless { it == "保持稳定" || it.startsWith("太近") || it.startsWith("太远") || it == "请正对屏幕" }
         ?: voicePrompt
     val distanceSpoken = distance?.takeIf { it.clearlyOff() }?.spoken
-    LaunchedEffect(voiceEnabled, spokenPrompt) {
-        if (voiceEnabled && spokenPrompt.isNotBlank()) {
+    LaunchedEffect(voiceEnabled, spokenPrompt, settingsOpen) {
+        if (voiceEnabled && !settingsOpen && spokenPrompt.isNotBlank()) {
             delay(650) // 状态稳定后再播报，避免测距波动不断打断语音。
             if (owner.lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)) voice.speak(spokenPrompt)
             // 距离持续偏离时每 6 秒重复提醒
@@ -183,46 +183,26 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, modifier: M
         owner.lifecycle.addObserver(observer)
         onDispose { owner.lifecycle.removeObserver(observer) }
     }
+    val activeTest = !s.guidePending && s.step !in setOf(ScreeningStep.PROFILE, ScreeningStep.ENVIRONMENT, ScreeningStep.RESULT)
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
     Box(modifier.fillMaxSize()) {
-    Column(Modifier.fillMaxSize().background(colors.appBackground).navigationBarsPadding().imePadding().screenHorizontalPaddingLarge()) {
-        TopBackBar(onBackClick = { viewModel.stopCamera(); onBack() })
-        if (kind == ScreeningKind.STRABISMUS && s.step != ScreeningStep.PROFILE && s.step != ScreeningStep.RESULT) {
-            val stimulusColors = LocalEyeColors.current
-            Canvas(Modifier.fillMaxWidth().height(20.dp).clip(EyeShapes.small).background(stimulusColors.black)) {
-                drawCircle(stimulusColors.white, radius = 4.dp.toPx(), center = Offset(size.width / 2f, size.height / 2f))
+        TestSessionLayout(
+            title = if (kind == ScreeningKind.PRESBYOPIA) "老视自测" else "眼位自测",
+            onBack = { viewModel.stopCamera(); onBack() }, onSettings = { settingsOpen = true },
+            centered = activeTest, scroll = pageScroll,
+            reflexStimulus = kind == ScreeningKind.STRABISMUS && s.step != ScreeningStep.PROFILE && s.step != ScreeningStep.RESULT,
+        ) {
+            if (distance != null && (!activeTest || distance.zone != DistanceZone.OK)) {
+                DistanceBanner(distance, compact = activeTest, singleLine = activeTest)
             }
-        }
-        Column(Modifier.fillMaxSize().verticalScroll(pageScroll), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                EyeText(if (kind == ScreeningKind.PRESBYOPIA) "老视自测" else "眼位自测", typography.title, colors.textPrimary)
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    EyeText("语音", typography.bodySecondary, colors.textSecondary)
-                    EyeSwitch(checked = voiceEnabled, onCheckedChange = { voiceEnabled = it })
-                }
+            val notice = s.gazeWarning ?: s.warning ?: guidance?.takeUnless {
+                it == "保持稳定" || it == "慢慢移近" || it.startsWith("太近") || it.startsWith("太远") || (distance != null && it == "请正对屏幕")
             }
-            EyeText(stepTitle(s.step), typography.bodySecondary, colors.textSecondary)
-            if (voice.available == false && voiceEnabled) EyeText("语音不可用，请看屏幕提示", typography.bodySecondary, colors.warning)
-            // 距离：太近红 / 太远蓝 / 合适绿的醒目横幅；其他提示（光照、头姿、移近速度）用文字卡
-            if (distance != null && s.step != ScreeningStep.PROFILE) DistanceBanner(distance, compact = s.step != ScreeningStep.ENVIRONMENT)
-            val otherGuidance = guidance?.takeUnless { it == "保持稳定" || it.startsWith("太近") || it.startsWith("太远") || (distance != null && it == "请正对屏幕") }
-            if (!s.guidePending && otherGuidance != null) {
-                EyeSectionCard { EyeText(otherGuidance, typography.title, colors.warning) }
-            }
-            if (voiceActive) VoiceAnswerBar(
-                voiceAnswer,
-                hint = when {
-                    s.step == ScreeningStep.PUSH_UP -> "说「开始」开始移近，E 一模糊就说「模糊」"
-                    s.step == ScreeningStep.NEAR_VISION && s.nearAwaitingEyeReady -> "准备好后说「好了」"
-                    else -> "说「上、下、左、右」作答，看不清就说「看不清」"
-                }
-            )
-            s.warning?.let { EyeText(it, typography.body, colors.warning) }
+            if (!s.guidePending && notice != null) EyeText(notice, typography.body, colors.warning)
             if (s.guidePending) {
                 TestGuide(guideMotion(s.step), stepTitle(s.step), guideCue(s.step), viewModel::confirmGuide)
             } else when (s.step) {
-
                 ScreeningStep.PROFILE -> ProfileContent(kind, s, viewModel)
                 ScreeningStep.ENVIRONMENT -> EnvironmentContent(kind, s, viewModel, retryCamera)
                 ScreeningStep.NEAR_VISION -> VisionContent(s, viewModel)
@@ -235,19 +215,17 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, modifier: M
                 ScreeningStep.PURSUIT -> PursuitContent(s, viewModel)
                 ScreeningStep.RESULT -> ScreeningResultContent(s, viewModel)
             }
-            s.gazeWarning?.let { EyeText(it, typography.body, colors.warning) }
-            if (s.step != ScreeningStep.PROFILE && s.step != ScreeningStep.RESULT) {
-                EyeDisclosure("测量详情") {
-                    EyeText(s.trackingStatus, typography.bodySecondary, colors.textSecondary)
-                    EyeText("距离 ${if (s.distanceCm > 0f) "%.1f cm".format(s.distanceCm) else "—"} · 光照 ${lightingLabel(s)}", typography.bodySecondary, colors.textSecondary)
-                    s.headPose?.let { EyeText("头姿 偏航 %.0f° · 俯仰 %.0f° · 翻滚 %.0f°".format(it.yawDeg, it.pitchDeg, it.rollDeg), typography.bodySecondary, colors.textSecondary) }
-                    if (kind == ScreeningKind.STRABISMUS) EyeText(s.opticalStatus, typography.bodySecondary, colors.textSecondary)
-                }
-            }
-            Spacer(Modifier.height(24.dp))
         }
+        distance?.let { DistanceEdgeGlow(it.zone) }
     }
-    distance?.let { DistanceEdgeGlow(it.zone) }
+    if (settingsOpen) TestSettingsSheet(settings, voiceAnswer, { settingsOpen = false }, speechAvailable = voice.available) {
+        EyeDisclosure("测量详情") {
+            EyeText(s.trackingStatus, typography.bodySecondary, colors.textSecondary)
+            EyeText("距离 ${if (s.distanceCm > 0f) "%.1f cm".format(s.distanceCm) else "—"} · 光照 ${lightingLabel(s)}", typography.bodySecondary, colors.textSecondary)
+            s.headPose?.let { EyeText("头姿 偏航 %.0f° · 俯仰 %.0f° · 翻滚 %.0f°".format(it.yawDeg, it.pitchDeg, it.rollDeg), typography.bodySecondary, colors.textSecondary) }
+            if (kind == ScreeningKind.STRABISMUS) EyeText(s.opticalStatus, typography.bodySecondary, colors.textSecondary)
+            if (s.step == ScreeningStep.PUSH_UP) EyeText("已记录：${s.nearPoints.joinToString("、") { "%.1f cm".format(it.distanceCm) }.ifEmpty { "—" }}", typography.bodySecondary, colors.textSecondary)
+        }
     }
 }
 
@@ -311,8 +289,8 @@ internal fun VisionContent(s: ScreeningState, vm: ScreeningTestViewModel) {
     val size = with(LocalDensity.current) { s.trialOptotypePx.toDp() }
     EyeSectionCard(title = "${s.visionEye.label} · ${s.trialIndex + 1} / 4") {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-            EyeText(if (s.nearAwaitingEyeReady) s.instruction else "点选 E 的开口方向", LocalEyeTypography.current.body, LocalEyeColors.current.textPrimary)
             if (s.nearAwaitingEyeReady) {
+                EyeText(s.instruction, LocalEyeTypography.current.body, LocalEyeColors.current.textPrimary)
                 EyeButton("${s.visionEye.label}已准备好", EyeButtonRole.PRIMARY, vm::readyForNearEye)
             } else {
                 if (!s.trialVisible) EyeText("停稳后视标会自动出现", LocalEyeTypography.current.subtitle, LocalEyeColors.current.textSecondary)
@@ -328,25 +306,18 @@ internal fun PushUpContent(s: ScreeningState, vm: ScreeningTestViewModel) {
     val size = with(LocalDensity.current) { s.trialOptotypePx.toDp() }
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
-    EyeSectionCard(title = "移近法 · 第 ${(s.nearPoints.size + 1).coerceAtMost(PresbyopiaProtocol.PUSH_REPEATS)}/${PresbyopiaProtocol.PUSH_REPEATS} 次") {
+    EyeSectionCard(title = "第 ${(s.nearPoints.size + 1).coerceAtMost(PresbyopiaProtocol.PUSH_REPEATS)}/${PresbyopiaProtocol.PUSH_REPEATS} 次") {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
             if (s.pushStage == PushStage.READY) {
                 EyeText("先把手机移到 45 cm 以外，再点开始", typography.body, colors.textPrimary)
                 EyeButton("开始第 ${s.nearPoints.size + 1} 次", EyeButtonRole.PRIMARY, vm::startPushTrial,
                     enabled = s.distanceCm >= PresbyopiaProtocol.PUSH_START_MIN_CM)
             } else {
-                EyeText("看着 E，慢慢把手机移近", typography.body, colors.textPrimary)
+                EyeText("缓慢移近", typography.body, colors.textPrimary)
                 if (s.trialVisible) OptotypeSurface(0, size)
-                val speed = s.pushSpeedCmPerSec
-                EyeText(
-                    "距离 ${"%.1f".format(s.distanceCm)} cm · 速度 ${speed?.let { "%.1f".format(it) } ?: "—"} cm/秒",
-                    typography.subtitle,
-                    if (speed != null && speed > PresbyopiaProtocol.PUSH_MAX_SPEED_CM_S) colors.warning else colors.textSecondary
-                )
                 EyeButton("开始持续模糊", EyeButtonRole.PRIMARY, vm::markPushBlur, Modifier.fillMaxWidth())
             }
-            EyeText("已记录：${s.nearPoints.joinToString("、") { if (it.censored) "< ${PresbyopiaProtocol.PUSH_MIN_CM.toInt()} cm" else "%.1f cm".format(it.distanceCm) }.ifEmpty { "—" }}",
-                typography.body, colors.textSecondary)
+
         }
     }
 }
@@ -356,25 +327,20 @@ internal fun PushUpContent(s: ScreeningState, vm: ScreeningTestViewModel) {
 private fun CurveContent(s: ScreeningState, vm: ScreeningTestViewModel) {
     val size = with(LocalDensity.current) { s.trialOptotypePx.toDp() }
     val target = PresbyopiaProtocol.CURVE_DISTANCES.getOrElse(s.curveIndex) { 40f }
-    EyeSectionCard(title = "多距离视力 · ${target.toInt()} cm（${s.curveIndex + 1}/${PresbyopiaProtocol.CURVE_DISTANCES.size}）") {
+    EyeSectionCard(title = "${target.toInt()} cm · ${s.curveIndex + 1}/${PresbyopiaProtocol.CURVE_DISTANCES.size}") {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-            EyeText(if (s.trialVisible) "点选 E 的开口方向" else "移到 ${target.toInt()} cm 并停稳", LocalEyeTypography.current.body, LocalEyeColors.current.textPrimary)
+            if (!s.trialVisible) EyeText("移到 ${target.toInt()} cm 并停稳", LocalEyeTypography.current.body, LocalEyeColors.current.textPrimary)
             OptotypeAnswerPad(s.direction, size, s.trialVisible) { vm.answer(it) }
-            if (s.curvePoints.isNotEmpty()) {
-                EyeText("已完成：" + s.curvePoints.joinToString("、") { "${it.distanceCm.toInt()} cm ${it.thresholdDecimal ?: "—"}" },
-                    LocalEyeTypography.current.bodySecondary, LocalEyeColors.current.textSecondary)
-            }
             s.nearStopReason?.let { EyeText(it, LocalEyeTypography.current.bodySecondary, LocalEyeColors.current.textSecondary) }
         }
     }
 }
 
 @Composable
-private fun FlipperContent(s: ScreeningState, vm: ScreeningTestViewModel) {
+internal fun FlipperContent(s: ScreeningState, vm: ScreeningTestViewModel) {
     val size = with(LocalDensity.current) { s.trialOptotypePx.toDp() }
-    EyeSectionCard(title = "远近切换 · ${s.secondsLeft} 秒") {
+    EyeSectionCard(title = "${if (s.trialIndex % 2 == 0) 50 else 25} cm · ${s.secondsLeft} 秒") {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-            EyeText("点选 E 的开口方向", LocalEyeTypography.current.body, LocalEyeColors.current.textPrimary)
             if (!s.trialVisible) EyeText("停稳后开始", LocalEyeTypography.current.subtitle, LocalEyeColors.current.textSecondary)
             OptotypeAnswerPad(s.direction, size, s.trialVisible) { vm.answer(it) }
 
@@ -385,9 +351,8 @@ private fun FlipperContent(s: ScreeningState, vm: ScreeningTestViewModel) {
 @Composable
 private fun FixationContent(s: ScreeningState, vm: ScreeningTestViewModel) {
     val age = s.fields["年龄"]?.toIntOrNull()
-    EyeSectionCard(title = "注视 · 剩余 ${s.secondsLeft} 秒") {
+    EyeSectionCard(title = "剩余 ${s.secondsLeft} 秒") {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            EyeText(s.instruction, LocalEyeTypography.current.title, LocalEyeColors.current.textPrimary)
             FixationTarget(StrabismusProtocol.targetDiameterMm(age), bright = s.targetX > 0f, vm = vm)
         }
     }
@@ -419,7 +384,6 @@ internal fun GazeCalibrationContent(s: ScreeningState, vm: ScreeningTestViewMode
     var origin by remember { mutableStateOf(Offset.Zero) }
     EyeSectionCard(title = "注视校准 · ${s.gazeCalibrationIndex + 1}/5") {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            EyeText("只用眼睛看着圆点，头和手机保持不动。", LocalEyeTypography.current.body, colors.textPrimary)
             Canvas(Modifier.fillMaxWidth().height(240.dp).clip(EyeShapes.medium).background(colors.white)
                 .onGloballyPositioned { origin = it.positionInWindow() }) {
                 val target = StrabismusGaze.calibrationTargets[s.gazeCalibrationIndex]
@@ -492,9 +456,8 @@ private fun PursuitContent(s: ScreeningState, vm: ScreeningTestViewModel) {
     val distanceMm = (if (s.distanceCm > 0f) s.distanceCm else StrabismusProtocol.DISTANCE_CM) * 10f
     val radiusPx = 10f / 2f * pxPerMm // 保持原有 1 cm 目标包络和轨迹边界。
     var origin by remember { mutableStateOf(Offset.Zero) }
-    EyeSectionCard(title = "跟随小瞳 · 剩余 ${s.secondsLeft} 秒") {
+    EyeSectionCard(title = "剩余 ${s.secondsLeft} 秒") {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            EyeText(s.instruction, LocalEyeTypography.current.body, colors.textPrimary)
             Canvas(Modifier.fillMaxWidth().height(360.dp).clip(EyeShapes.medium).background(colors.white)
                 .onGloballyPositioned { origin = it.positionInWindow() }) {
                 val halfW = size.width / 2f - radiusPx

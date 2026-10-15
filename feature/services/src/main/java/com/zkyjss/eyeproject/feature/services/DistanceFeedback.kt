@@ -101,7 +101,7 @@ internal fun distanceStatus(distanceCm: Float, faceVisible: Boolean, targetCm: F
  * 右侧示意标尺（中间绿色带为目标区间，圆点为当前位置）。进入异常区间时轻震一次。
  */
 @Composable
-internal fun DistanceBanner(status: DistanceStatus, modifier: Modifier = Modifier, compact: Boolean = false) {
+internal fun DistanceBanner(status: DistanceStatus, modifier: Modifier = Modifier, compact: Boolean = false, singleLine: Boolean = false) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
     val haptics = LocalHapticFeedback.current
@@ -126,16 +126,19 @@ internal fun DistanceBanner(status: DistanceStatus, modifier: Modifier = Modifie
             .clip(EyeShapes.large)
             .background(bg)
             .semantics { liveRegion = LiveRegionMode.Polite }
-            .padding(horizontal = 16.dp, vertical = if (compact) 10.dp else 14.dp),
+            .padding(horizontal = 16.dp, vertical = if (singleLine) 6.dp else if (compact) 10.dp else 14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         DirectionGlyph(status.zone, fg, Modifier.size(if (compact) 28.dp else 36.dp))
         Column(Modifier.weight(1f)) {
-            EyeText(status.title, style = if (compact) typography.subtitle else typography.title, color = fg)
-            EyeText(status.detail, style = typography.bodySecondary, color = fg)
+            if (singleLine) EyeText(status.detail, style = typography.body, color = fg)
+            else {
+                EyeText(status.title, style = if (compact) typography.subtitle else typography.title, color = fg)
+                EyeText(status.detail, style = typography.bodySecondary, color = fg)
+            }
         }
-        if (status.zone != DistanceZone.UNKNOWN) DistanceRuler(status, fg, Modifier.size(width = 72.dp, height = 28.dp))
+        if (!singleLine && status.zone != DistanceZone.UNKNOWN) DistanceRuler(status, fg, Modifier.size(width = 72.dp, height = 28.dp))
     }
 }
 

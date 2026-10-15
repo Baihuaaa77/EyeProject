@@ -13,19 +13,6 @@ import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -36,25 +23,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
-import com.zkyjss.eyeproject.core.designsystem.theme.EyeShapes
-import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
-import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
-import com.zkyjss.eyeproject.core.designsystem.theme.rememberReducedMotion
-import com.zkyjss.eyeproject.core.ui.component.EyeButton
-import com.zkyjss.eyeproject.core.ui.component.EyeButtonRole
-import com.zkyjss.eyeproject.core.ui.component.EyeSwitch
-import com.zkyjss.eyeproject.core.ui.component.EyeText
 
 /*
  * 语音作答：测试中手持手机点按方向键会带动手机，破坏距离与头姿，
@@ -234,8 +204,6 @@ internal class VoiceAnswerState {
     var heard by mutableStateOf("")
     var unavailableReason by mutableStateOf<String?>(null)
     var requestPermission: () -> Unit = {}
-    /** 界面开关回调（由 [rememberVoiceAnswer] 注入，写入可保存状态）。 */
-    var onToggle: (Boolean) -> Unit = {}
 }
 
 /**
@@ -243,11 +211,10 @@ internal class VoiceAnswerState {
  * 「左眼」「右眼」当成作答）。首次需要时请求麦克风权限；不可用时界面回退到按钮。
  */
 @Composable
-internal fun rememberVoiceAnswer(active: Boolean, voice: ScreeningVoice?, onCommand: (VoiceCommand) -> Unit): VoiceAnswerState {
+internal fun rememberVoiceAnswer(active: Boolean, voice: ScreeningVoice?, enabled: Boolean = true, onCommand: (VoiceCommand) -> Unit): VoiceAnswerState {
     val context = LocalContext.current
     val state = remember { VoiceAnswerState() }
-    var enabledSaved by rememberSaveable { mutableStateOf(true) }
-    state.enabled = enabledSaved
+    state.enabled = enabled
     var askedPermission by rememberSaveable { mutableStateOf(false) }
     val latestOnCommand by rememberUpdatedState(onCommand)
     val latestVoice by rememberUpdatedState(voice)
@@ -277,61 +244,5 @@ internal fun rememberVoiceAnswer(active: Boolean, voice: ScreeningVoice?, onComm
         } else recognizer.stop()
     }
     DisposableEffect(recognizer) { onDispose { recognizer.destroy() } }
-    state.onToggle = { enabledSaved = it }
     return state
-}
-
-/** 语音作答状态条：麦克风动效 + 提示词 + 刚听到的内容；不可用时说明原因并提示用按钮。 */
-@Composable
-internal fun VoiceAnswerBar(state: VoiceAnswerState, hint: String = "说「上、下、左、右」作答，看不清就说「看不清」") {
-    val colors = LocalEyeColors.current
-    val typography = LocalEyeTypography.current
-    Row(
-        Modifier.fillMaxWidth().clip(EyeShapes.medium).background(colors.primarySoft).padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        MicGlyph(active = state.enabled && state.listening, modifier = Modifier.size(28.dp))
-        Column(Modifier.weight(1f)) {
-            when {
-                !state.enabled -> EyeText("语音作答已关闭，请点按钮", style = typography.body, color = colors.textSecondary)
-                state.preparing -> EyeText("正在准备离线语音，请稍候", style = typography.body, color = colors.textSecondary)
-                state.available == false || state.unavailableReason != null ->
-                    EyeText("${state.unavailableReason ?: "本机不支持语音识别"}，请点按钮作答", style = typography.body, color = colors.textSecondary)
-                !state.permissionGranted -> EyeText("需要麦克风权限才能语音作答", style = typography.body, color = colors.textPrimary)
-                else -> {
-                    EyeText(when {
-                        state.listening -> "正在听：$hint"
-                        state.pausedForSpeech -> "播报结束后可语音作答"
-                        else -> "正在启动语音作答，请稍候"
-                    }, style = typography.body, color = colors.primary)
-                    if (state.heard.isNotBlank()) EyeText("听到：${state.heard}", style = typography.bodySecondary, color = colors.textSecondary)
-                }
-            }
-        }
-        if (state.enabled && state.available == true && !state.permissionGranted) {
-            EyeButton("允许", EyeButtonRole.PRIMARY, state.requestPermission)
-        } else {
-            EyeSwitch(checked = state.enabled, onCheckedChange = { state.onToggle(it) })
-        }
-    }
-}
-
-/** 麦克风图标；收听中带呼吸光圈。 */
-@Composable
-private fun MicGlyph(active: Boolean, modifier: Modifier) {
-    val colors = LocalEyeColors.current
-    val reduced = rememberReducedMotion()
-    val pulse = if (active && !reduced) rememberInfiniteTransition(label = "收听").animateFloat(
-        0f, 1f, infiniteRepeatable(tween(1100), RepeatMode.Restart), label = "收听光圈"
-    ) else null
-    val tint = if (active) colors.primary else colors.textSecondary
-    Canvas(modifier) {
-        val w = size.width
-        val h = size.height
-        pulse?.let { drawCircle(tint, w * (0.3f + 0.25f * it.value), center, alpha = 0.3f * (1f - it.value)) }
-        drawRoundRect(tint, Offset(w * 0.36f, h * 0.1f), Size(w * 0.28f, h * 0.48f), CornerRadius(w * 0.14f))
-        drawArc(tint, 0f, 180f, false, Offset(w * 0.24f, h * 0.28f), Size(w * 0.52f, h * 0.44f), style = Stroke(w * 0.07f, cap = StrokeCap.Round))
-        drawLine(tint, Offset(w * 0.5f, h * 0.72f), Offset(w * 0.5f, h * 0.88f), w * 0.07f, StrokeCap.Round)
-    }
 }

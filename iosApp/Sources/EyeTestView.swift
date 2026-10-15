@@ -8,39 +8,46 @@ struct EyeTestView: View {
     @State private var pixelsPerMm = UserDefaults.standard.float(forKey: "eye.pixelsPerMm")
     @State private var brightness: CGFloat?
     @State private var previousIdleDisabled = false
+    @State private var settingsOpen = false
     init(kind: String) { _runtime = StateObject(wrappedValue: EyeRuntime(kind: kind)) }
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: EyeStyle.spacing) {
-                    if pixelsPerMm <= 0 {
-                        ScreenCalibrationView { value in
-                            pixelsPerMm = value; UserDefaults.standard.set(value, forKey: "eye.pixelsPerMm")
-                            runtime.prepare(pixelsPerMm: value)
-                        }
-                    } else {
-                        if runtime.kind == "STRABISMUS" && !isProfile && runtime.string("phase") != "RESULT" {
-                            ZStack { Color.black; Circle().fill(.white).frame(width: 8, height: 8) }
-                                .frame(height: 20).clipShape(RoundedRectangle(cornerRadius: 8))
-                        }
-                        Toggle("语音播报", isOn: $runtime.voice.enabled)
-                            .onChange(of: runtime.voice.enabled) { value in if !value { runtime.voice.stop() } }
-                        Toggle("语音作答", isOn: $runtime.voice.answersEnabled)
-                            .onChange(of: runtime.voice.answersEnabled) { value in if value { runtime.voice.requestPermission() } else { runtime.voice.stopListening() } }
-                        if !runtime.speechStatus.isEmpty { Text(runtime.speechStatus).font(.subheadline).foregroundStyle(EyeStyle.secondary) }
-                        if runtime.number("distanceCm") > 0 && !isProfile {
-                            Text(String(format: "约 %.1f cm · 请保持姿势", runtime.number("distanceCm")))
-                                .frame(maxWidth: .infinity).padding().background(EyeStyle.panel, in: RoundedRectangle(cornerRadius: EyeStyle.radius))
-                        }
-                        if let error = runtime.error { Text(error).foregroundStyle(EyeStyle.warning) }
-                        if !runtime.string("warning").isEmpty { Text(runtime.string("warning")).foregroundStyle(EyeStyle.warning) }
-                        if isProfile { QuestionnaireView(runtime: runtime) }
-                        else { testContent }
+            VStack(spacing: 0) {
+                if hasReflexStimulus {
+                    ZStack { Color.black; Circle().fill(.white).frame(width: 8, height: 8) }.frame(height: 20).clipShape(RoundedRectangle(cornerRadius: 8))
+                }
+                GeometryReader { viewport in
+                    ScrollView {
+                        VStack(spacing: EyeStyle.spacing) {
+                            if pixelsPerMm <= 0 {
+                                ScreenCalibrationView { value in
+                                    pixelsPerMm = value; UserDefaults.standard.set(value, forKey: "eye.pixelsPerMm")
+                                    runtime.prepare(pixelsPerMm: value)
+                                }
+                            } else {
+                                if !isRunning && runtime.number("distanceCm") > 0 && !isProfile {
+                                    Text(String(format: "约 %.1f cm", runtime.number("distanceCm"))).foregroundStyle(EyeStyle.secondary)
+                                }
+                                if let error = runtime.error { Text(error).foregroundStyle(EyeStyle.warning) }
+                                if !runtime.string("warning").isEmpty && runtime.string("warning") != "慢慢移近" {
+                                    Text(runtime.string("warning")).foregroundStyle(EyeStyle.warning)
+                                }
+                                if isProfile { QuestionnaireView(runtime: runtime) }
+                                else { testContent }
+                            }
+                        }.padding().frame(maxWidth: .infinity, minHeight: viewport.size.height, alignment: isRunning ? .center : .top)
                     }
-                }.padding()
+                }
             }.background(EyeStyle.background).navigationTitle(runtime.string("title").isEmpty ? "眼健康自测" : runtime.string("title"))
                 .navigationBarTitleDisplayMode(.inline)
-                .toolbar { ToolbarItem(placement: .cancellationAction) { Button("返回") { runtime.close(); dismiss() } } }
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) { Button("返回") { runtime.close(); dismiss() } }
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button { settingsOpen = true } label: { Image(systemName: "gearshape") }.accessibilityLabel("系统设置")
+                    }
+                }
+                .sheet(isPresented: $settingsOpen) { TestSettingsView(voice: runtime.voice, status: runtime.speechStatus) }
+                .onChange(of: settingsOpen) { runtime.setSettingsPresented($0) }
                 .onAppear {
                     brightness = UIScreen.main.brightness; UIScreen.main.brightness = 1
                     previousIdleDisabled = UIApplication.shared.isIdleTimerDisabled
@@ -59,6 +66,13 @@ struct EyeTestView: View {
     }
     private var phase: String { runtime.string("phase") }
     private var isProfile: Bool { phase == "Profile" || phase == "PROFILE" }
+    private var hasReflexStimulus: Bool {
+        pixelsPerMm > 0 && runtime.kind == "STRABISMUS" && !isProfile && !phase.isEmpty && phase != "RESULT"
+    }
+    private var isRunning: Bool {
+        pixelsPerMm > 0 && !runtime.bool("guidePending") && ["Practice","Natural","Open","Countdown","Rest",
+            "NEAR_VISION","PUSH_UP","DISTANCE_CURVE","FLIPPER","GAZE_CALIBRATION","FIXATION","COVER","PURSUIT"].contains(phase)
+    }
     @ViewBuilder private var testContent: some View {
         if phase == "Setup" || phase == "ENVIRONMENT" {
             Text(runtime.kind == "STRABISMUS" ? "保持约 33 cm，后续遮眼由协助者完成。" : "保持约 40 cm，建议佩戴最佳矫正眼镜。")
@@ -95,29 +109,46 @@ struct EyeTestView: View {
         } else if phase == "GAZE_CALIBRATION" || phase == "FIXATION" || phase == "COVER" || phase == "PURSUIT" {
             if phase == "GAZE_CALIBRATION" {
                 Text("注视校准 · \(Int(runtime.number("gazeCalibrationIndex")) + 1)/5").font(EyeStyle.title)
-                Text("只用眼睛看着圆点，头和手机保持不动。")
-            } else { Text(runtime.string("instruction")) }
+            } else if phase != "COVER" { Text("剩余 \(Int(runtime.number("secondsLeft"))) 秒").monospacedDigit() }
             GazeTargetView(runtime: runtime, pixelsPerMm: pixelsPerMm)
             if runtime.bool("gazeCalibrationFailed") { Button("重试注视校准") { runtime.act("calibrate") }.buttonStyle(EyeButtonStyle()) }
             if phase == "COVER", !runtime.string("coverNext").isEmpty {
                 Text(runtime.number("coverRemainingMs") > 0 ? "保持：剩余 \(Int(ceil(runtime.number("coverRemainingMs") / 1000))) 秒" : "可以执行下一步：\(runtime.string("coverNext"))")
                 Button("执行「\(runtime.string("coverNext"))」时点按") { runtime.act("cover") }.buttonStyle(EyeButtonStyle())
             }
+        } else if phase == "Countdown" {
+            Text("\(Int(runtime.number("secondsLeft")))").font(.largeTitle).monospacedDigit()
+        } else if phase == "Rest" {
+            Text("闭眼休息")
+            Text("\(Int(runtime.number("secondsLeft"))) 秒").font(.largeTitle).monospacedDigit()
         } else {
-            Text(runtime.string("instruction"))
-            if runtime.number("secondsLeft") > 0 { Text("剩余 \(Int(runtime.number("secondsLeft"))) 秒").monospacedDigit() }
+            if phase == "Natural" || phase == "Open" || phase == "Practice" {
+                HStack {
+                    Text(phase == "Natural" ? "自然眨眼" : phase == "Open" ? "持续睁眼" : "练习")
+                    Spacer(); Text("\(Int(runtime.number("secondsLeft"))) 秒").monospacedDigit()
+                }
+            } else if phase == "NEAR_VISION" {
+                Text(["RIGHT": "右眼", "LEFT": "左眼", "BOTH": "双眼"][runtime.string("eye")] ?? "")
+            } else if phase == "FLIPPER" || phase == "DISTANCE_CURVE" {
+                HStack {
+                    Text("\(Int(runtime.number("targetDistanceCm"))) cm")
+                    Spacer()
+                    if runtime.number("secondsLeft") > 0 { Text("\(Int(runtime.number("secondsLeft"))) 秒").monospacedDigit() }
+                }
+            }
             if runtime.bool("nearAwaitingEyeReady") {
+                Text(runtime.string("instruction"))
                 Button("遮盖准备好了") { runtime.act("eyeReady") }.buttonStyle(EyeButtonStyle())
             } else if phase == "PUSH_UP" && runtime.string("pushStage") == "READY" {
+                Text("先移到 45 cm 以外")
                 Button("开始移近") { runtime.act("pushStart") }.buttonStyle(EyeButtonStyle())
             } else {
                 if phase == "PUSH_UP" {
+                    Text("缓慢移近")
                     TumblingEView(runtime: runtime).frame(height: max(180, CGFloat(runtime.number("optotypePx")) / UIScreen.main.scale + 30))
                     Button("开始持续模糊了") { runtime.act("blur") }.buttonStyle(EyeButtonStyle())
-                } else if phase != "Rest" && phase != "Countdown" {
-                    OptotypeAnswerPad(runtime: runtime)
                 } else {
-                    TumblingEView(runtime: runtime).frame(height: 180)
+                    OptotypeAnswerPad(runtime: runtime)
                 }
             }
         }

@@ -4,8 +4,12 @@ import Speech
 
 /// 三项测试使用同一发声人；播报期间与结束后 600 ms 停止收听，丢弃旧识别会话。
 final class EyeVoice: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
-    @Published var enabled = true
-    @Published var answersEnabled = false
+    @Published var enabled = UserDefaults.standard.object(forKey: "eye.speechEnabled") as? Bool ?? true {
+        didSet { UserDefaults.standard.set(enabled, forKey: "eye.speechEnabled"); if !enabled { stop() } }
+    }
+    @Published var answersEnabled = UserDefaults.standard.object(forKey: "eye.answersEnabled") as? Bool ?? false {
+        didSet { UserDefaults.standard.set(answersEnabled, forKey: "eye.answersEnabled"); if !answersEnabled { stopListening() } }
+    }
     var onAnswer: ((String) -> Bool)?
     var onStatus: ((String) -> Void)?
     private let synthesizer = AVSpeechSynthesizer()
@@ -19,7 +23,11 @@ final class EyeVoice: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
     private var generation = 0
     private var cooldown = Date.distantPast
     private var retryAfter = Date.distantPast
-    override init() { super.init(); synthesizer.delegate = self }
+    override init() {
+        super.init(); synthesizer.delegate = self
+        authorized = SFSpeechRecognizer.authorizationStatus() == .authorized && AVAudioSession.sharedInstance().recordPermission == .granted
+            && recognizer?.supportsOnDeviceRecognition == true
+    }
     func requestPermission() {
         SFSpeechRecognizer.requestAuthorization { [weak self] status in
             AVAudioSession.sharedInstance().requestRecordPermission { microphone in

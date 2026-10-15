@@ -153,6 +153,7 @@ class MobileScreeningController(
                 put("guideText",guideCue(s.step))
                 put("distanceCm",s.distanceCm); put("faceDetected",s.faceDetected); put("warning",s.gazeWarning ?: s.warning ?: screeningGuidance(s)?.takeUnless { it == "保持稳定" })
                 put("secondsLeft",s.secondsLeft); put("trialVisible",s.trialVisible); put("trialId",s.trialId)
+                put("targetDistanceCm",screeningDistanceTarget(s)?.first)
                 put("direction",s.direction); put("optotypePx",s.trialOptotypePx); put("eye",s.visionEye.name)
                 put("nearAwaitingEyeReady",s.nearAwaitingEyeReady); put("pushStage",s.pushStage.name)
                 put("targetX",s.targetX); put("targetY",s.targetY); put("savedFile",s.savedFile)

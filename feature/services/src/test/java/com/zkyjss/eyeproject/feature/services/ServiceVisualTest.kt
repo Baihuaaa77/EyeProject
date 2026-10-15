@@ -12,6 +12,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.activity.ComponentActivity
@@ -158,6 +159,93 @@ class ServiceVisualTest {
         capture("near-vision-dark")
     }
 
+    @Test fun liveTasksCenterStimuliWithoutExplanatoryRows() {
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val vm = ScreeningTestViewModel(context,
+            com.zkyjss.eyeproject.core.camera.CameraController(context),
+            com.zkyjss.eyeproject.core.camera.CameraIntrinsicsProvider(context))
+        var task by androidx.compose.runtime.mutableIntStateOf(0)
+        compose.setContent {
+            EyeProjectTheme {
+                TestSessionLayout(if (task == 0) "老视自测" else if (task == 1) "干眼自测" else "眼位自测", {}, {}, true,
+                    modifier = Modifier.testTag("test-session"), reflexStimulus = task == 2) {
+                    when (task) {
+                        0 -> FlipperContent(ScreeningState(step = ScreeningStep.FLIPPER, secondsLeft = 38,
+                            trialVisible = true, trialOptotypePx = 12f, faceDetected = true, distanceCm = 50f), vm)
+                        1 -> TrialContent(DryEyeTestUiState(phase = DryEyePhase.Natural, trialVisible = true,
+                            optotypePx = 24f, remainingSeconds = 48, instruction = "请持续看 E 并选择方向")) {}
+                        else -> GazeCalibrationContent(ScreeningState(kind = ScreeningKind.STRABISMUS,
+                            step = ScreeningStep.GAZE_CALIBRATION), vm)
+                    }
+                }
+            }
+        }
+        fun assertCentered() {
+            val viewport = compose.onNodeWithTag("test-session").fetchSemanticsNode().boundsInRoot
+            val target = compose.onNodeWithTag("answer-optotype").fetchSemanticsNode().boundsInRoot
+            assertTrue("视标应靠近屏幕中心", kotlin.math.abs(target.center.y - viewport.center.y) < viewport.height * 0.1f)
+        }
+        assertCentered()
+        compose.onNodeWithText("点选 E 的开口方向").assertDoesNotExist()
+        compose.onNodeWithText("调节灵敏度（远近切换）").assertDoesNotExist()
+        compose.onNodeWithText("语音").assertDoesNotExist()
+        capture("session-presbyopia")
+        task = 1
+        assertCentered()
+        compose.onNodeWithText("请持续看 E 并选择方向").assertDoesNotExist()
+        capture("session-dry-eye")
+        task = 2
+        compose.onNodeWithText("只用眼睛看着圆点，头和手机保持不动。").assertDoesNotExist()
+        capture("session-calibration")
+    }
+
+    @Test fun voiceSettingsAreInTheGearMenuAndPersistAcrossTests() {
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val preferences = context.getSharedPreferences("screening_settings_test", android.content.Context.MODE_PRIVATE)
+        preferences.edit().clear().commit()
+        val settings = TestSettings(preferences)
+        val voice = VoiceAnswerState().apply { permissionGranted = true; available = true; heard = "左" }
+        var open by androidx.compose.runtime.mutableStateOf(false)
+        compose.setContent {
+            EyeProjectTheme {
+                TestSessionLayout("老视自测", {}, { open = true }, true) { OptotypeAnswerPad(0, 40.dp, true) {} }
+                if (open) TestSettingsSheet(settings, voice, { open = false })
+            }
+        }
+        compose.onNodeWithText("语音播报").assertDoesNotExist()
+        compose.onNodeWithText("语音作答").assertDoesNotExist()
+        compose.onNodeWithContentDescription("系统设置").performClick()
+        compose.onNodeWithText("听到：左").assertExists()
+        compose.onNodeWithText("语音播报").performClick()
+        compose.onNodeWithText("语音作答").performClick()
+        assertEquals(false, TestSettings(preferences).speechEnabled)
+        assertEquals(false, TestSettings(preferences).answersEnabled)
+        capture("test-settings")
+        compose.onNodeWithText("完成").performClick()
+        compose.onNodeWithText("语音播报").assertDoesNotExist()
+        compose.onNodeWithText("语音作答").assertDoesNotExist()
+    }
+
+    @Test fun smallScreenKeepsWarningsAndArrowActionsVisible() {
+        compose.setContent {
+            EyeProjectTheme {
+                CompositionLocalProvider(LocalDensity provides Density(1f, 1.5f)) {
+                    Box(Modifier.size(320.dp, 640.dp)) {
+                        TestSessionLayout("干眼自测", {}, {}, true) {
+                            DistanceBanner(distanceStatus(25f, true, 40f, 5f), compact = true, singleLine = true)
+                            TrialContent(DryEyeTestUiState(phase = DryEyePhase.Open, trialVisible = true,
+                                optotypePx = 24f, remainingSeconds = 12)) {}
+                        }
+                    }
+                }
+            }
+        }
+        compose.onNodeWithText("把手机往远处移约 10 cm").assertIsDisplayed()
+        compose.onNodeWithText("看不清 / 跳过").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("↓").assertIsDisplayed()
+        capture("session-small-large-text")
+    }
+
     @Test fun arrowsSurroundTheOptotypeAndKeepAnswerMapping() {
         val answers = mutableListOf<Int>()
         compose.setContent {
@@ -265,14 +353,12 @@ class ServiceVisualTest {
                     DistanceBanner(distanceStatus(53f, true, 40f, 5f))
                     DistanceBanner(distanceStatus(41f, true, 40f, 5f))
                     DistanceBanner(distanceStatus(0f, false, 40f, 5f), compact = true)
-                    VoiceAnswerBar(VoiceAnswerState().apply { available = true; permissionGranted = true; heard = "左" })
                     Box(Modifier.fillMaxWidth().height(220.dp)) { DistanceEdgeGlow(DistanceZone.TOO_CLOSE) }
                 }
             }
         }
         compose.onNodeWithText("把手机往远处移约 7 cm").assertExists()
         compose.onNodeWithText("把手机往近处移约 8 cm").assertExists()
-        compose.onNodeWithText("听到：左").assertExists()
         capture("distance-feedback")
     }
 
@@ -368,7 +454,8 @@ class ServiceVisualTest {
     private fun capture(name: String) {
         compose.mainClock.advanceTimeBy(700)
         val bitmap = compose.runOnIdle {
-            val view = compose.activity.window.decorView
+            val view = if (name == "test-settings") android.view.inspector.WindowInspector.getGlobalWindowViews().last()
+                else compose.activity.window.decorView
             Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888).also {
                 view.draw(android.graphics.Canvas(it))
             }

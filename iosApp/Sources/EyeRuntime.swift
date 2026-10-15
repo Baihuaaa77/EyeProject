@@ -20,6 +20,7 @@ final class EyeRuntime: ObservableObject {
     private var prepared = false
     private var closed = false
     private var isForeground = true
+    private var settingsPresented = false
     private lazy var presentation = FramePresentationMarker { [weak self] id in
         guard let self = self, !self.closed, self.isForeground else { return }
         self.controller.markPresented(trialId: id)
@@ -91,7 +92,7 @@ final class EyeRuntime: ObservableObject {
             if !prompt.isEmpty && prompt != lastPrompt {
                 lastPrompt = prompt; promptWork?.cancel()
                 let work = DispatchWorkItem { [weak self] in
-                    guard let self = self, self.isForeground, !self.closed else { return }
+                    guard let self = self, self.isForeground, !self.closed, !self.settingsPresented else { return }
                     self.voice.speak(prompt)
                 }
                 promptWork = work; DispatchQueue.main.asyncAfter(deadline: .now() + 0.65, execute: work)
@@ -104,7 +105,7 @@ final class EyeRuntime: ObservableObject {
             questions = data["questions"] as? [[String: Any]] ?? []
             fields = data["fields"] as? [String: String] ?? [:]
         }
-        voice.setListening(isForeground && bool("voiceActive"))
+        voice.setListening(isForeground && !settingsPresented && bool("voiceActive"))
     }
     func string(_ key: String) -> String { state[key] as? String ?? "" }
     func bool(_ key: String) -> Bool { state[key] as? Bool ?? false }
@@ -122,6 +123,12 @@ final class EyeRuntime: ObservableObject {
         promptWork?.cancel(); presentation.cancel(); voice.stop(); camera.stop(); controller.interrupt(); refresh()
     }
     func resume() { isForeground = true; lastPrompt = ""; refresh() }
+    func setSettingsPresented(_ value: Bool) {
+        settingsPresented = value
+        if value { promptWork?.cancel(); voice.stop() }
+        else { lastPrompt = ""; lastSnapshot = "" }
+        refresh()
+    }
     func close() {
         guard !closed else { return }
         closed = true; timer?.invalidate(); promptWork?.cancel(); presentation.cancel(); voice.close(); camera.stop(); controller.close()
