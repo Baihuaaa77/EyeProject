@@ -8,6 +8,7 @@ import com.zkyjss.eyeproject.core.data.account.AccountResult
 import com.zkyjss.eyeproject.core.data.record.RecordSyncStatus
 import com.zkyjss.eyeproject.core.data.record.ScreeningRecordRepository
 import com.zkyjss.eyeproject.core.sync.ConsentType
+import com.zkyjss.eyeproject.feature.services.LocalRecordEntry
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -51,6 +52,15 @@ class MineViewModel @Inject constructor(
                     account.researchUse, status, working || status.syncing, note ?: status.lastMessage)
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), CloudSyncUiState.Loading)
+
+    /** 本机测试记录（最新在前）。 */
+    val localRecords: StateFlow<List<LocalRecordEntry>> =
+        records.localRecords.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** 导出一条本机记录到用户选择的位置；[done] 在主线程回报是否成功。 */
+    fun exportRecord(fileName: String, target: Uri, done: (Boolean) -> Unit) {
+        viewModelScope.launch { done(records.exportRecord(fileName, target)) }
+    }
 
     fun signIn(email: String, password: String) = run("已登录") { accounts.signIn(email, password) }
 

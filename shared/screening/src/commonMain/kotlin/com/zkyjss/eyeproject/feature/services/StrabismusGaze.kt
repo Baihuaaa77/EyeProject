@@ -40,8 +40,9 @@ class StrabismusGaze private constructor(private val left: Mapping?, private val
         )
         const val CALIBRATION_POINT_MS = 3_000L
         const val SETTLE_MS = 1_200L
-        const val TOLERANCE_X = 0.25f
-        const val TOLERANCE_Y = 0.20f
+        /** 注视容差（屏幕比例）：只判断「大致在看目标」，手机前置相机的眼动估计误差不小，宁宽勿严。 */
+        const val TOLERANCE_X = 0.30f
+        const val TOLERANCE_Y = 0.25f
         /** 每点至少的有效帧数；允许最多 3 个点缺失或被剔除为离群点（剩余点仍须覆盖三行三列）。 */
         private const val MIN_SAMPLES_PER_POINT = 4
         private const val MAX_DROPPED_POINTS = 3
@@ -197,7 +198,7 @@ object PursuitGazeCheck {
                 val r = StrabismusMeasures.correlation(eye, target) ?: continue
                 val positionRate = pairs.count { abs(it.first - it.second) <=
                     if (horizontal) StrabismusGaze.TOLERANCE_X else StrabismusGaze.TOLERANCE_Y }.toDouble() / pairs.size
-                if (r >= 0.30 && positionRate >= 0.60) return true
+                if (r >= 0.30 && positionRate >= 0.50) return true
             }
             return false
         }
@@ -209,15 +210,23 @@ object PursuitGazeCheck {
         return eye(true) || eye(false)
     }
 
+    /**
+     * 只用「能判断」的帧计算注视比例：遮盖眼、刚动过遮盖、只有被遮眼完成校准等无法判断的帧（gazeOnTarget 为空）
+     * 不算作未注视。遮盖阶段可判断的帧太少时不据此判失败（眼位由映光与再注视指标评估）。
+     */
     fun qualityReasons(samples: List<EyeMotionSample>, calibrated: Boolean): List<String> = buildList {
         if (!calibrated) { add("注视校准未完成，请重新测试"); return@buildList }
         for (step in listOf(ScreeningStep.FIXATION, ScreeningStep.COVER, ScreeningStep.PURSUIT)) {
-            val points = samples.filter { it.step == step }
-            val accepted = points.count { it.gazeOnTarget == true }
-            if (points.isEmpty() || accepted.toDouble() / points.size < 0.60)
+            val judged = samples.filter { it.step == step && it.gazeOnTarget != null }
+            if (step == ScreeningStep.COVER && judged.size < MIN_JUDGED_FRAMES) continue
+            val accepted = judged.count { it.gazeOnTarget == true }
+            if (judged.size < MIN_JUDGED_FRAMES || accepted.toDouble() / judged.size < MIN_ON_TARGET_RATIO)
                 add("${stepTitle(step)}未获得足够的有效注视，请看着屏幕目标重新测试")
         }
         for (segment in 0..2) if (follows(samples, segment) != true)
             add("${listOf("水平", "垂直", "斜向")[segment]}跟随未获得有效轨迹，请跟随小瞳重新测试")
     }
+
+    private const val MIN_JUDGED_FRAMES = 10
+    private const val MIN_ON_TARGET_RATIO = 0.5
 }

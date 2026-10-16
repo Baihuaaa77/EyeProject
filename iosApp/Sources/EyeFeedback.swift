@@ -70,8 +70,8 @@ final class EyeFeedback: ObservableObject {
 
     func play(name: String, sound: String, microphonePauseMs: Int, voice: EyeVoice) {
         if hapticsEnabled { haptic(name) }
+        // 音效期间不再暂停收听：停止再启动会丢掉这段时间说的话
         guard soundEnabled, let player = player(sound) else { return }
-        voice.pauseForFeedback(milliseconds: microphonePauseMs)
         player.volume = Float((name == "ANSWER" || name == "TICK" ? 0.5 : 0.7) * soundVolume)
         player.currentTime = 0
         player.play()

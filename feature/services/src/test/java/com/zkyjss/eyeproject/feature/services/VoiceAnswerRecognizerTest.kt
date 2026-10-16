@@ -43,7 +43,7 @@ class VoiceAnswerRecognizerTest {
     @Test fun chineseFallbackAllowsSystemNetworkRecognitionAndDirectionsReachCallback() {
         ShadowSpeechRecognizer.setIsOnDeviceRecognitionAvailable(true)
         val callbacks = Callbacks()
-        val recognizer = VoiceAnswerRecognizer(context, callbacks)
+        val recognizer = VoiceAnswerRecognizer(context, callbacks, preferOffline = false)
         recognizer.start(); ShadowLooper.idleMainLooper()
         val device = shadowOf(ShadowSpeechRecognizer.getLatestSpeechRecognizer())
         assertTrue(device.lastRecognizerIntent.getBooleanExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, false))
@@ -61,7 +61,7 @@ class VoiceAnswerRecognizerTest {
     @Test fun cancelledSessionsCannotAnswerAfterListeningRestarts() {
         ShadowSpeechRecognizer.setIsOnDeviceRecognitionAvailable(true)
         val callbacks = Callbacks()
-        val recognizer = VoiceAnswerRecognizer(context, callbacks)
+        val recognizer = VoiceAnswerRecognizer(context, callbacks, preferOffline = false)
         recognizer.start(); ShadowLooper.idleMainLooper()
         val old = shadowOf(ShadowSpeechRecognizer.getLatestSpeechRecognizer())
         recognizer.stop(); recognizer.start(); ShadowLooper.idleMainLooper()
@@ -82,7 +82,21 @@ class VoiceAnswerRecognizerTest {
         results.accept("""{"text":"[unk]"}""", true)
         results.accept("bad json", true)
         results.accept("""{"text":"看 不 清"}""", true)
-        assertEquals(listOf(VoiceCommand.Direction(2), VoiceCommand.Direction(2), VoiceCommand.Unsure), commands)
+        // 噪声识别成的 [unk] 夹在指令前不再让整句作废
+        results.accept("""{"partial":"[unk] 右"}""", false)
+        assertEquals(listOf(VoiceCommand.Direction(2), VoiceCommand.Direction(2), VoiceCommand.Unsure, VoiceCommand.Direction(0)), commands)
+    }
+
+    @Test fun echoSwallowsTheWholeUtteranceEvenIfItsFinalResultArrivesAfterSpeech() {
+        val commands = mutableListOf<VoiceCommand>()
+        var speaking = true
+        val results = OfflineVoiceResults({}, commands::add) { speaking && it == VoiceCommand.Direction(0) }
+        results.accept("""{"partial":"右"}""", false)
+        speaking = false
+        results.accept("""{"text":"右"}""", true)
+        assertTrue(commands.isEmpty())
+        results.accept("""{"text":"右"}""", true)
+        assertEquals(listOf(VoiceCommand.Direction(0)), commands)
     }
 
     private fun initializedVoice(): ScreeningVoice {
@@ -118,6 +132,17 @@ class VoiceAnswerRecognizerTest {
         assertEquals("chinese-default", shadowOf(engine).currentVoice.name)
         assertTrue(second.speaking)
         second.close()
+    }
+
+    @Test fun duringSpeechOnlyCommandsMentionedByThePromptAreTreatedAsEcho() {
+        ShadowTextToSpeech.addLanguageAvailability(Locale.SIMPLIFIED_CHINESE)
+        val voice = initializedVoice()
+        voice.speak("右眼测试")
+        assertTrue(voice.echoes(VoiceCommand.Direction(0)))
+        assertFalse(voice.echoes(VoiceCommand.Direction(2)))
+        voice.stop()
+        assertFalse(voice.echoes(VoiceCommand.Direction(0)))
+        voice.close()
     }
 
     @Test fun playbackGuardTracksNewUtteranceAndEndsAfterCooldown() {

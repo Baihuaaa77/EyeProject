@@ -24,6 +24,8 @@ data class ScreeningFeedbackFrame(
     val coverReady: Boolean = false,
     /** -1 过近、1 过远、0 合适、2 未知、3 当前任务不要求固定距离。 */
     val distanceZone: Int = 3,
+    /** 正在移动到新的目标距离（见 [ScreeningState.distanceMoveToCm]）。 */
+    val movingToTarget: Boolean = false,
 )
 
 fun screeningFeedbackFrame(s: ScreeningState, coverRemainingMs: Long = -1): ScreeningFeedbackFrame {
@@ -42,7 +44,8 @@ fun screeningFeedbackFrame(s: ScreeningState, coverRemainingMs: Long = -1): Scre
         coverReady = s.step == ScreeningStep.COVER && !s.guidePending && s.coverMarks.isNotEmpty() &&
             s.coverMarks.size < StrabismusProtocol.COVER_SEQUENCE.size && coverRemainingMs == 0L,
         distanceZone = feedbackDistanceZone(s.distanceCm,
-            s.faceDetected || (s.step == ScreeningStep.NEAR_VISION && s.distanceCm > 0f), target))
+            s.faceDetected || (s.step == ScreeningStep.NEAR_VISION && s.distanceCm > 0f), target),
+        movingToTarget = !s.guidePending && s.distanceMoveToCm != null)
 }
 
 fun screeningFeedbackFrame(s: DryEyeTestUiState): ScreeningFeedbackFrame {
@@ -95,6 +98,8 @@ class ScreeningFeedbackSession {
                 frame.taskActive && (!old.taskActive || old.calibrationFailed && !frame.calibrationFailed || old.countdown > 0) -> cues += ScreeningFeedbackCue.START
                 frame.calibrationPoint >= 0 && frame.calibrationPoint != old.calibrationPoint -> cues += ScreeningFeedbackCue.TARGET
                 frame.coverReady && !old.coverReady -> cues += ScreeningFeedbackCue.PHASE
+                // 到达新的目标距离：一声提示音代替「好，就保持这个距离」，远近切换时不必每题都说话
+                old.movingToTarget && !frame.movingToTarget && frame.taskActive -> cues += ScreeningFeedbackCue.RECOVER
                 frame.stage != old.stage && (frame.taskActive || old.taskActive) -> cues += ScreeningFeedbackCue.PHASE
             }
             if (frame.countdown in 1..3 && frame.countdown != old.countdown) cues += ScreeningFeedbackCue.TICK

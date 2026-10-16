@@ -284,7 +284,7 @@ private struct MinePage: View {
     var body: some View {
         PageScroll {
             Text("我的").font(EyeStyle.headline).foregroundStyle(EyeStyle.text).padding(.vertical, 16)
-            SelectCard(title: "本机测试记录", subtitle: "查看与分享保存在这台手机上的记录") {
+            SelectCard(title: "本机测试记录", subtitle: "查看与导出保存在这台手机上的记录") {
                 Image(systemName: "doc.text").font(.system(size: 22)).foregroundStyle(EyeStyle.primary)
             } action: { showRecords = true }
             SelectCard(title: "权限与通知", subtitle: "相机、麦克风、语音识别与通知") {

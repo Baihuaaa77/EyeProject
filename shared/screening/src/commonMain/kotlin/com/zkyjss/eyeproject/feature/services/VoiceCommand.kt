@@ -53,4 +53,19 @@ object VoiceCommandParser {
         if (readyWords.any { it in text }) return VoiceCommand.Ready
         return null
     }
+
+    /**
+     * 播报回声过滤：边播报边收听时，麦克风会收到提示语本身。只丢弃提示语里也出现的那个指令
+     * （如播报「右眼测试」时听到「右」），其余指令照常作答，用户不必等播报说完。
+     */
+    fun mentions(spoken: String, command: VoiceCommand): Boolean {
+        val text = spoken.lowercase()
+        return when (command) {
+            is VoiceCommand.Direction -> directionChars[command.direction].orEmpty().any { it in text } ||
+                englishDirections.any { (word, dir) -> dir == command.direction && word in text }
+            VoiceCommand.Unsure -> unsureWords.any { it in text }
+            VoiceCommand.Blur -> blurWords.any { it in text }
+            VoiceCommand.Ready -> readyWords.any { it in text }
+        }
+    }
 }

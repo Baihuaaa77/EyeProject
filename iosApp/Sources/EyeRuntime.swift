@@ -18,6 +18,7 @@ final class EyeRuntime: ObservableObject {
     private var lastPrompt = ""
     private var lastBase = ""
     private var lastWasDistance = false
+    private var lastWasMove = false
     private var distanceRepeat = 0
     private var lastDistanceAt = Date.distantPast
     private var promptWork: DispatchWorkItem?
@@ -65,7 +66,7 @@ final class EyeRuntime: ObservableObject {
         camera.onError = { [weak self] message in
             DispatchQueue.main.async { self?.error = message; self?.controller.cameraFailed(message: message) }
         }
-        voice.onAnswer = { [weak self] text in self?.controller.voiceAnswer(text: text) ?? false }
+        voice.onAnswer = { [weak self] text, echo in Int(self?.controller.voiceAnswer(text: text, echoOf: echo) ?? 0) }
     }
     func prepare(pixelsPerMm: Float) {
         guard !prepared else { return }
@@ -117,7 +118,7 @@ final class EyeRuntime: ObservableObject {
             base = string("coverPrompt")
         } else { base = string("instruction") }
         let zone = (state["distanceZone"] as? NSNumber)?.int32Value ?? 0
-        // 换目标距离途中：播报「请移动到 xx 厘米处」，到位后与距离提醒一样接一句肯定
+        // 换目标距离途中：播报「请移动到 xx 厘米处」（持续未到位每 6 秒重复），到位后由提示音代替肯定
         let moveTo = (state["distanceMoveToCm"] as? NSNumber)?.intValue
         let distanceText = moveTo.map { "请移动到 \($0) 厘米处。" }
             ?? (zone != 0 ? controller.distancePrompt(zone: zone, count: 0) : nil)
@@ -125,16 +126,20 @@ final class EyeRuntime: ObservableObject {
         if !prompt.isEmpty && prompt != lastPrompt {
             lastPrompt = prompt; promptWork?.cancel()
             let isDistance = distanceText != nil
+            let isMove = moveTo != nil
+            // 「请移动到 xx 厘米处」到位后不说肯定（提示音代替），主提示没变也不重读：远近切换每题都换距离
+            if !isDistance && lastWasMove && base == lastBase { lastWasMove = false; return }
             let text = isDistance ? prompt
                 : lastWasDistance ? controller.distanceOkPrompt + (base != lastBase ? base : "") : base
             schedule(text, interrupt: isDistance) { [weak self] in
                 guard let self = self else { return }
-                self.lastWasDistance = isDistance
+                self.lastWasDistance = isDistance && !isMove
+                self.lastWasMove = isMove
                 if isDistance { self.distanceRepeat = 1; self.lastDistanceAt = Date() } else { self.lastBase = base }
             }
-        } else if distanceText != nil && lastWasDistance && Date().timeIntervalSince(lastDistanceAt) >= 6 {
+        } else if let current = distanceText, lastWasDistance || lastWasMove, Date().timeIntervalSince(lastDistanceAt) >= 6 {
             lastDistanceAt = Date()
-            if let again = controller.distancePrompt(zone: zone, count: Int32(distanceRepeat)) {
+            if let again = moveTo != nil ? Optional(current) : controller.distancePrompt(zone: zone, count: Int32(distanceRepeat)) {
                 distanceRepeat += 1; schedule(again, delay: 0) {}
             }
         }

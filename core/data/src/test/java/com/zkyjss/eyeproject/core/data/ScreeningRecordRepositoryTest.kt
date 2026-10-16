@@ -108,6 +108,21 @@ class ScreeningRecordRepositoryTest {
     }
 
     @Test
+    fun localRecordsListNewestFirstAndRefreshAfterSaving() = runTest {
+        File(directory, "presbyopia_1750000000000.json").writeText(
+            """{"kind":"PRESBYOPIA","assessment":{"riskLevel":"LOW"},"summary":["近点 20 cm"]}""")
+        File(directory, "notes.json").writeText("{}")
+        val repo = repository()
+        assertEquals(listOf("老视自测"), repo.localRecords.first().map { it.title })
+        repo.saveRecord("dryeye_1760000000000.json", """{"kind":"DRY_EYE","valid":false,"riskLevel":"UNKNOWN","validityReasons":["距离不稳"]}""")
+        val records = repo.localRecords.first()
+        assertEquals(listOf("dryeye_1760000000000.json", "presbyopia_1750000000000.json"), records.map { it.fileName })
+        assertEquals("需要重测", records.first().badge)
+        assertEquals(listOf("距离不稳"), records.first().lines)
+        assertEquals("老视低风险", records.last().badge)
+    }
+
+    @Test
     fun uploadsSavedAndPreexistingRecordsOnceConsented() = runTest {
         File(directory, "presbyopia_1750000000000.json").writeText("""{"kind":"PRESBYOPIA"}""")
         File(directory, "notes.json").writeText("{}")

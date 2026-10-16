@@ -890,7 +890,10 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
                 gazeCalibration.add(GazeCalibrationSample(rendered.index, rendered.point, gazeLeft, gazeRight))
         }
         val estimates = if (valid) gaze?.estimate(gazeLeft, gazeRight) else null
-        val gazeOnTarget = rendered?.let { target -> estimates?.let { (l, r) ->
+        // 遮盖动作前后 0.8 秒：手在脸前移动、眼睛正在再注视，不判断是否注视目标
+        val coverSettling = step == ScreeningStep.COVER &&
+            _state.value.coverMarks.lastOrNull()?.let { time - it.timeMs < COVER_SETTLE_MS } == true
+        val gazeOnTarget = if (coverSettling) null else rendered?.let { target -> estimates?.let { (l, r) ->
             if (l == null && r == null) null else StrabismusGaze.onTarget(l, target.point) || StrabismusGaze.onTarget(r, target.point)
         } }
         if (!_state.value.guidePending && step == _state.value.step && time >= stepStartMs && step != ScreeningStep.PROFILE && step != ScreeningStep.ENVIRONMENT && step != ScreeningStep.RESULT && step != ScreeningStep.GAZE_CALIBRATION) {
@@ -945,9 +948,11 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
                 if (offTarget) {
                     if (gazeBadSinceMs == null) gazeBadSinceMs = time
                 } else gazeBadSinceMs = null
+                // 遮盖阶段家长的手在脸前，判断不了注视很正常：只在确实看偏时提醒；其余阶段也放宽等待时间
                 val gazeWarning = when {
-                    gazeOnTarget == null && gazeBadSinceMs?.let { time - it >= 2_000L } == true -> "暂时无法确认注视，请保持头部稳定并看着屏幕目标"
-                    gazeOnTarget != null && gazeBadSinceMs?.let { time - it >= 1_500L } == true ->
+                    gazeOnTarget == null && step != ScreeningStep.COVER &&
+                        gazeBadSinceMs?.let { time - it >= 3_000L } == true -> "暂时无法确认注视，请保持头部稳定并看着屏幕目标"
+                    gazeOnTarget != null && gazeBadSinceMs?.let { time - it >= 2_500L } == true ->
                         if (step == ScreeningStep.PURSUIT) "未检测到有效跟随，请只用眼睛跟随移动的小瞳" else "注视明显偏离，请看着屏幕上的小瞳"
                     else -> null
                 }
@@ -1006,3 +1011,6 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
         timer?.cancel(); stopCamera(); frames.close()
     }
 }
+
+/** 遮盖动作前后不判断注视的时长。 */
+private const val COVER_SETTLE_MS = 800L

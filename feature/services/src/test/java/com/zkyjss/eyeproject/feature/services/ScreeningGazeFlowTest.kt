@@ -104,7 +104,7 @@ class ScreeningGazeFlowTest {
                 eye("RIGHT", 300f, rightX, rightY), headPose = HeadPoseEstimate(0f, 0f, 0f))
             process.invoke(vm.engine, now, ScreeningStep.COVER, FaceLandmarkFrame(listOf(face), 400, 400, now, 0L, 10f))
         }
-        repeat(25) { feed(0.09f, 0.15f) }
+        repeat(30) { feed(0.09f, 0.15f) }  // 看偏持续 2.5 秒以上才提醒
         assertTrue(vm.state.value.gazeWarning!!.contains("偏离"))
         @Suppress("UNCHECKED_CAST")
         val samples = field("samples").get(vm.engine) as List<EyeMotionSample>

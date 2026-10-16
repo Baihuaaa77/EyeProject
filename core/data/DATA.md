@@ -10,7 +10,7 @@
 | `account/AccountRepository` | 接口 + `DefaultAccountRepository`：`accountState: Flow<AccountState>`；注册、登录、退出、分项同意、导出云端数据到用户选择的文件、注销云端账号 |
 | `account/SessionStore` | 会话（令牌 + 同意缓存）整体以 Android Keystore 中不可导出的 AES-GCM 密钥加密后存 SharedPreferences；已排除出自动备份 |
 | `account/AuthorizedCaller` | 带令牌调用：快过期先刷新、401 刷新后重试一次；刷新被拒清会话，离线则返回不可达以便稍后重试 |
-| `record/ScreeningRecordRepository` | 接口 + `OfflineFirstScreeningRecordRepository`：`saveRecord` 先写本机文件（文件名与位置不变），再登记发件箱 `screening_outbox.json`；`syncStatus: Flow`；`syncNow` 使用共享 `RecordSyncEngine` 推送，首次同步时把升级前的历史记录补登为待上传；发件箱记录归属账号，换账号（含注销后重新注册）时全部换新编号重传；`requestSync` 供应用启动时补传积压记录 |
+| `record/ScreeningRecordRepository` | 接口 + `OfflineFirstScreeningRecordRepository`：`saveRecord` 先写本机文件（文件名与位置不变），再登记发件箱 `screening_outbox.json`；`syncStatus: Flow`；`syncNow` 使用共享 `RecordSyncEngine` 推送，首次同步时把升级前的历史记录补登为待上传；发件箱记录归属账号，换账号（含注销后重新注册）时全部换新编号重传；`requestSync` 供应用启动时补传积压记录；`localRecords: Flow` 为本机记录摘要（共享 `LocalRecordCatalog` 解析，保存后自动刷新），`exportRecord` 把一条记录写到用户选择的位置 |
 | `sync/SyncWorker` | WorkManager 一次性任务（需联网、指数退避、同名任务串接）；通过 Hilt EntryPoint 取仓库 |
 | `di/DataModule` | Hilt 绑定（仓库与 `SyncScheduler`） |
 
@@ -21,7 +21,7 @@
 
 ## 依赖
 
-`api(core:network)`（含 `shared:sync` 契约）、WorkManager；被 app、feature:services、feature:mine 使用。
+`api(core:network)`（含 `shared:sync` 契约）、`api(shared:screening)`（记录摘要解析）、WorkManager；被 app、feature:services、feature:mine 使用。
 NIA 差异：同步 Worker 暂放本模块 `sync/`，出现第二个同步仓库时再拆 `sync:work`。
 
 ## 测试

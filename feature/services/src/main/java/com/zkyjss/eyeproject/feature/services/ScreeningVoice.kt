@@ -148,6 +148,8 @@ internal class ScreeningVoice(context: Context) {
     private var pending: String? = null
     private var utteranceNumber = 0L
     private var currentUtterance: String? = null
+    /** 最近一句播报的文本（送给 TTS 的读法），用于回声过滤。 */
+    private var lastSpoken = ""
     private var closed = false
     var speaking by mutableStateOf(false)
         private set
@@ -187,7 +189,8 @@ internal class ScreeningVoice(context: Context) {
                 val id = "screening_instruction_${System.identityHashCode(this)}_${++utteranceNumber}"
                 currentUtterance = id
                 speaking = true
-                if (!SharedSpeech.speak(this, screeningSpeechText(phrase), id, volume)) {
+                lastSpoken = screeningSpeechText(phrase)
+                if (!SharedSpeech.speak(this, lastSpoken, id, volume)) {
                     currentUtterance = null
                     speaking = false
                 }
@@ -201,8 +204,12 @@ internal class ScreeningVoice(context: Context) {
         mainHandler.postDelayed({ if (id == currentUtterance) { currentUtterance = null; speaking = false } }, 600L)
     }
 
-    /** 正在播报或刚播报完 0.6 秒内：语音作答应忽略此时的识别结果，避免把提示语当作答案。 */
-    fun busy(): Boolean = speaking || feedbackPlaying || SharedSpeech.talking()
+    /**
+     * 正在播报或刚播报完 0.6 秒内，且提示语里也出现了 [command]：可能是麦克风收到的提示语回声，不作答。
+     * 其余指令照常作答——收听不再因播报或音效暂停，用户不必等播报说完。
+     */
+    fun echoes(command: VoiceCommand): Boolean =
+        (speaking || SharedSpeech.talking()) && VoiceCommandParser.mentions(lastSpoken, command)
 
     fun stop() {
         val wasMine = currentUtterance != null
@@ -219,11 +226,13 @@ internal class ScreeningVoice(context: Context) {
     }
 }
 
-private class SpokenMemory { var lastWasDistance = false; var lastBase = "" }
+private class SpokenMemory { var lastWasDistance = false; var lastWasMove = false; var lastBase = "" }
 
 /**
  * 播报当前提示。距离偏离时优先提醒，持续偏离每 6 秒换一种说法再提醒；回到合适距离先说一句肯定，
  * 期间若主提示有变化再接着播报。状态稳定 650 ms 后才开口，避免测距波动不断打断；切到后台不播报。
+ * 「请移动到 xx 厘米处」到位后不说肯定（由提示音代替），主提示没变也不重读——远近切换每题都换距离，
+ * 否则会反复听到「好，就保持这个距离」。
  */
 @Composable
 internal fun SpeakTestPrompts(voice: ScreeningVoice, enabled: Boolean, base: String, offDistance: DistanceStatus?) {
@@ -237,16 +246,17 @@ internal fun SpeakTestPrompts(voice: ScreeningVoice, enabled: Boolean, base: Str
         // 距离提醒除外，需要及时。
         if (offDistance == null) withTimeoutOrNull(6_000) { while (voice.talking()) delay(100) }
         val foreground = { owner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) }
+        val moving = offDistance?.zone == DistanceZone.MOVE_TO
         val text = when {
             offDistance != null -> prompt
             memory.lastWasDistance -> SpokenPrompts.DISTANCE_OK + if (base != memory.lastBase) base else ""
+            memory.lastWasMove && base == memory.lastBase -> ""
             else -> base
         }
-        if (foreground()) {
-            voice.speak(text)
-            memory.lastWasDistance = offDistance != null
-            if (offDistance == null) memory.lastBase = base
-        }
+        if (foreground() && text.isNotEmpty()) voice.speak(text)
+        memory.lastWasDistance = offDistance != null && !moving
+        memory.lastWasMove = moving
+        if (offDistance == null) memory.lastBase = base
         var repeat = 1
         while (offDistance != null) {
             delay(6_000)

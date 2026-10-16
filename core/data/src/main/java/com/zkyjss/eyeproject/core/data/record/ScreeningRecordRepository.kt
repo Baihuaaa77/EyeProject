@@ -1,6 +1,8 @@
 package com.zkyjss.eyeproject.core.data.record
 
+import android.content.ContentResolver
 import android.content.Context
+import android.net.Uri
 import com.zkyjss.eyeproject.core.data.account.AuthorizedCaller
 import com.zkyjss.eyeproject.core.data.account.SessionStore
 import com.zkyjss.eyeproject.core.data.sync.SyncScheduler
@@ -18,11 +20,15 @@ import com.zkyjss.eyeproject.core.sync.SyncReport
 import com.zkyjss.eyeproject.core.sync.SyncState
 import com.zkyjss.eyeproject.core.sync.SyncStopReason
 import com.zkyjss.eyeproject.core.sync.UploadResult
+import com.zkyjss.eyeproject.feature.services.LocalRecordCatalog
+import com.zkyjss.eyeproject.feature.services.LocalRecordEntry
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -51,6 +57,10 @@ data class RecordSyncStatus(
  */
 interface ScreeningRecordRepository {
     val syncStatus: Flow<RecordSyncStatus>
+    /** 本机保存的全部测试记录摘要，最新在前；保存新记录后自动更新。 */
+    val localRecords: Flow<List<LocalRecordEntry>>
+    /** 把一条本机记录（完整 JSON）写到用户选择的位置；成功返回 true。 */
+    suspend fun exportRecord(fileName: String, target: Uri): Boolean
     /** 写入本机记录（文件名与内容格式由 shared/screening 决定），并按条件排队上传。 */
     suspend fun saveRecord(name: String, json: String)
     /** 立即推送待上传记录；不满足同步条件时返回 null。 */
@@ -73,6 +83,7 @@ internal class OfflineFirstScreeningRecordRepository(
     private val sessions: SessionStore,
     private val caller: AuthorizedCaller,
     private val scheduler: SyncScheduler,
+    private val resolver: ContentResolver? = null,
     private val clock: () -> Long,
 ) : ScreeningRecordRepository {
     @Inject constructor(
@@ -81,13 +92,29 @@ internal class OfflineFirstScreeningRecordRepository(
         sessions: SessionStore,
         caller: AuthorizedCaller,
         scheduler: SyncScheduler,
-    ) : this(context.filesDir, network, sessions, caller, scheduler, System::currentTimeMillis)
+    ) : this(context.filesDir, network, sessions, caller, scheduler, context.contentResolver, System::currentTimeMillis)
 
     private val outboxFile = File(directory, OUTBOX_FILE)
     private val lock = Mutex()
     private val syncLock = Mutex()
     private val outboxState = MutableStateFlow(readOutbox())
     private val progress = MutableStateFlow(RecordSyncStatus())
+    /** 本机记录文件变化的版本号：保存后加一，触发列表重新读取。 */
+    private val recordsVersion = MutableStateFlow(0)
+
+    override val localRecords: Flow<List<LocalRecordEntry>> = recordsVersion.map {
+        directory.listFiles { file -> RECORD_NAME.matches(file.name) }.orEmpty()
+            .mapNotNull { file -> runCatching { LocalRecordCatalog.entry(file.name, file.readText()) }.getOrNull() }
+            .sortedByDescending { it.testedAtMs ?: 0L }
+    }.flowOn(Dispatchers.IO)
+
+    override suspend fun exportRecord(fileName: String, target: Uri): Boolean = withContext(Dispatchers.IO) {
+        if (!RECORD_NAME.matches(fileName)) return@withContext false
+        runCatching {
+            val text = File(directory, fileName).readText()
+            resolver!!.openOutputStream(target, "wt")!!.use { it.write(text.toByteArray()) }
+        }.isSuccess
+    }
 
     override val syncStatus: Flow<RecordSyncStatus> = combine(outboxState, progress) { file, run ->
         val list = file.entries
@@ -102,6 +129,7 @@ internal class OfflineFirstScreeningRecordRepository(
     override suspend fun saveRecord(name: String, json: String) {
         require(RECORD_NAME.matches(name)) { "记录文件名不符合约定：$name" }
         withContext(Dispatchers.IO) { File(directory, name).writeText(json) }
+        recordsVersion.update { it + 1 }
         lock.withLock {
             mutate { it + OutboxEntry(UUID.randomUUID().toString(), name, testedAt(name)) }
         }

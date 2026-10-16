@@ -99,8 +99,14 @@ class MobileScreeningController(
     fun answer(direction: Int,byVoice: Boolean) {
         if (kind == "DRY_EYE") dry.answer(direction,byVoice) else screening.answer(direction,byVoice)
     }
-    fun voiceAnswer(text: String): Boolean {
-        when(val command = VoiceCommandParser.parse(text)) {
+    /**
+     * 语音作答。[echoOf] 为正在（或刚刚）播报的文本：提示语里也出现的指令视为回声，不作答。
+     * 返回 1 已作答、0 没有指令、-1 回声（苹果端据此丢弃本次识别会话里已累积的文字）。
+     */
+    fun voiceAnswer(text: String, echoOf: String?): Int {
+        val parsed = VoiceCommandParser.parse(text)
+        if (parsed != null && echoOf != null && VoiceCommandParser.mentions(echoOf, parsed)) return -1
+        when(val command = parsed) {
             is VoiceCommand.Direction -> answer(command.direction,true)
             VoiceCommand.Unsure -> answer(-1,true)
             VoiceCommand.Blur -> action("blur")
@@ -109,9 +115,9 @@ class MobileScreeningController(
                 if (s.step == ScreeningStep.PUSH_UP) action("pushStart")
                 else if (s.nearAwaitingEyeReady) action("eyeReady")
             }
-            null -> return false
+            null -> return 0
         }
-        return true
+        return 1
     }
     fun markPresented(trialId: Int) { if (kind != "DRY_EYE") screening.markTrialPresented(trialId,platform.nowMs()) }
     fun feedbackJson(enabled: Boolean): String {
@@ -191,7 +197,9 @@ class MobileScreeningController(
                 put("secondsLeft",s.remainingSeconds); put("trialVisible",s.trialVisible); put("trialId",s.trialId)
                 put("direction",s.direction); put("optotypePx",s.optotypePx); put("savedFile",s.savedFile)
                 put("risk",s.report?.riskLevel?.name); put("findings",RecordArray(s.report?.indicators.orEmpty() + s.report?.abnormal.orEmpty()))
-                put("advice",s.report?.advice); put("voiceActive",s.trialVisible)
+                put("advice",s.report?.advice)
+                // 干眼视标每 2 秒一题：整个作答阶段持续收听，只在视标显示时开关会来不及启动识别
+                put("voiceActive",s.phase in setOf(DryEyePhase.Practice, DryEyePhase.Natural, DryEyePhase.Open))
                 put("naturalSeconds",s.naturalSeconds); put("afterRest",s.afterRest); put("canExtend",s.canExtend); put("canRest",s.canRestRetest); put("progress",s.progressFraction)
                 dryEyeProgress(s).let { p -> put("overallProgress",p?.fraction); put("remainingText",p?.remainingText) }
                 ResultReports.dryEye(s)?.let { put("report",it.toRecordObject()) }

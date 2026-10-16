@@ -110,7 +110,7 @@ class SharedParityTest {
                 assertEquals(kind,state["kind"]!!.jsonPrimitive.content)
                 assertTrue(state["phase"]!!.jsonPrimitive.content in setOf("Profile","PROFILE"))
                 assertFalse(controller.profileComplete())
-                assertFalse(controller.voiceAnswer("无关内容"))
+                assertEquals(0, controller.voiceAnswer("无关内容", null))
             }
         } finally { controller.close(); Dispatchers.resetMain() }
     }

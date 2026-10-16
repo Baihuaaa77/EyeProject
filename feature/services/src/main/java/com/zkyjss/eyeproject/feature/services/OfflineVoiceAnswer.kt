@@ -22,7 +22,7 @@ internal class OfflineVoiceAnswer(private val context: Context, private val call
     private var active = false
     private var closed = false
     private var generation = 0
-    private val results = OfflineVoiceResults(callbacks::onHeard, callbacks::onCommand)
+    private val results = OfflineVoiceResults(callbacks::onHeard, callbacks::onCommand, callbacks::isEcho)
 
     fun start() {
         if (closed || active) return
@@ -101,14 +101,23 @@ internal class OfflineVoiceAnswer(private val context: Context, private val call
     }
 }
 
-/** 部分结果尽早响应，同一句的最终结果不重复作答；下一句话仍可重复同一个方向。 */
-internal class OfflineVoiceResults(private val heard: (String) -> Unit, private val command: (VoiceCommand) -> Unit) {
+/**
+ * 部分结果尽早响应，同一句的最终结果不重复作答；下一句话仍可重复同一个方向。
+ * 被判为播报回声的一句整句吞掉：播报结束后才到的最终结果也不作答。
+ */
+internal class OfflineVoiceResults(
+    private val heard: (String) -> Unit,
+    private val command: (VoiceCommand) -> Unit,
+    private val echo: (VoiceCommand) -> Boolean = { false },
+) {
     private var fired = false
     fun reset() { fired = false }
     fun accept(json: String, final: Boolean) {
-        val text = runCatching { JSONObject(json).optString(if (final) "text" else "partial") }.getOrDefault("")
+        val raw = runCatching { JSONObject(json).optString(if (final) "text" else "partial") }.getOrDefault("")
+        // 环境噪声常被识别为 [unk] 夹在指令前后：去掉它再解析，而不是整句丢弃
+        val text = raw.replace("[unk]", " ").trim()
         if (text.isNotBlank()) heard(text)
-        if (!fired && !text.contains("[unk]")) VoiceCommandParser.parse(text)?.let { fired = true; command(it) }
+        if (!fired) VoiceCommandParser.parse(text)?.let { fired = true; if (!echo(it)) command(it) }
         if (final) fired = false
     }
 }

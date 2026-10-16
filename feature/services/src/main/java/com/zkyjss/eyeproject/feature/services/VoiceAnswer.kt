@@ -32,13 +32,15 @@ import androidx.core.content.ContextCompat
  */
 
 /**
- * 连续识别循环：利用部分结果尽早识别指令（缩短反应时），识别到指令后立即重启下一轮。
- * 优先使用设备端识别；无设备端引擎时直接用内置离线模型，系统识别失败时也有离线后备。
+ * 连续识别：优先使用内置离线模型（Vosk，短指令词表）——它连续收听、不需每句重启，
+ * 系统识别服务每句话后都要重启一轮，重启间隙说的话会丢失，实测「不够灵敏」。
+ * 内置模型无法启动时退回系统识别服务（利用部分结果尽早识别指令，识别到指令后立即重启下一轮）。
  * Android 识别服务的调用均在主线程，离线模型加载在工作线程。
  */
 internal class VoiceAnswerRecognizer(
     private val context: Context,
     private val callbacks: Callbacks,
+    preferOffline: Boolean = true,
 ) : RecognitionListener {
     interface Callbacks {
         fun onListening(listening: Boolean)
@@ -46,6 +48,8 @@ internal class VoiceAnswerRecognizer(
         fun onCommand(command: VoiceCommand)
         fun onUnavailable(reason: String)
         fun onPreparing(preparing: Boolean) = Unit
+        /** 是否是播报的回声；回声会吞掉整句话（同一句后续的部分与最终结果也不再作答）。 */
+        fun isEcho(command: VoiceCommand): Boolean = false
     }
 
     val available: Boolean = true // APK 内置离线模型，不再由系统识别服务是否存在决定功能可用性。
@@ -57,9 +61,16 @@ internal class VoiceAnswerRecognizer(
     private var firedThisUtterance = false
     private var failures = 0
     private var recognitionGeneration = 0
-    // 没有设备端引擎时直接用内置模型，避免厂商系统服务看似可用却无法识别。
-    private var useOffline = !onDevice
-    private val offline by lazy { OfflineVoiceAnswer(context, callbacks) }
+    private var useOffline = preferOffline
+    /** 系统识别服务已失败过：内置模型再失败就只能报告不可用。 */
+    private var systemFailed = false
+    // 内置模型无法启动时先退回系统识别服务，而不是直接报告不可用
+    private val offlineCallbacks = object : Callbacks by callbacks {
+        override fun onUnavailable(reason: String) {
+            if (systemFailed) callbacks.onUnavailable(reason) else handler.post { useSystem() }
+        }
+    }
+    private val offline by lazy { OfflineVoiceAnswer(context, offlineCallbacks) }
     private var offlineCreated = false
 
     private val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
@@ -124,7 +135,15 @@ internal class VoiceAnswerRecognizer(
         }.onFailure { startOffline() }
     }
 
+    private fun useSystem() {
+        if (!active) return
+        if (offlineCreated) offline.stop()
+        useOffline = false; systemFailed = false
+        listen()
+    }
+
     private fun startOffline() {
+        systemFailed = true
         if (!active) return
         handler.removeCallbacksAndMessages(null)
         recognitionGeneration++
@@ -149,7 +168,7 @@ internal class VoiceAnswerRecognizer(
             val command = candidates.firstNotNullOfOrNull(VoiceCommandParser::parse)
             if (command != null) {
                 firedThisUtterance = true
-                callbacks.onCommand(command)
+                if (!callbacks.isEcho(command)) callbacks.onCommand(command)
                 if (!final) {
                     // 部分结果已拿到指令：立即结束本轮，准备听下一题
                     runCatching { recognizer?.cancel() }
@@ -200,15 +219,14 @@ internal class VoiceAnswerState {
     var permissionGranted by mutableStateOf(false)
     var listening by mutableStateOf(false)
     var preparing by mutableStateOf(false)
-    var pausedForSpeech by mutableStateOf(false)
     var heard by mutableStateOf("")
     var unavailableReason by mutableStateOf<String?>(null)
     var requestPermission: () -> Unit = {}
 }
 
 /**
- * 在 [active] 为 true 时持续收听语音指令。[voice] 正在播报时忽略识别结果（防止把提示语里的
- * 「左眼」「右眼」当成作答）。首次需要时请求麦克风权限；不可用时界面回退到按钮。
+ * 在 [active] 为 true 时持续收听语音指令，播报期间也不中断；[voice] 正在播报时只丢弃提示语里也出现的指令
+ * （防止把「左眼」「右眼」当成作答）。首次需要时请求麦克风权限；不可用时界面回退到按钮。
  */
 @Composable
 internal fun rememberVoiceAnswer(active: Boolean, voice: ScreeningVoice?, enabled: Boolean = true, onCommand: (VoiceCommand) -> Unit): VoiceAnswerState {
@@ -222,8 +240,9 @@ internal fun rememberVoiceAnswer(active: Boolean, voice: ScreeningVoice?, enable
         VoiceAnswerRecognizer(context.applicationContext, object : VoiceAnswerRecognizer.Callbacks {
             override fun onListening(listening: Boolean) { state.listening = listening }
             override fun onPreparing(preparing: Boolean) { state.preparing = preparing }
-            override fun onHeard(text: String) { if (latestVoice?.busy() != true) state.heard = text }
-            override fun onCommand(command: VoiceCommand) { if (latestVoice?.busy() != true) latestOnCommand(command) }
+            override fun onHeard(text: String) { state.heard = text }
+            override fun onCommand(command: VoiceCommand) = latestOnCommand(command)
+            override fun isEcho(command: VoiceCommand) = latestVoice?.echoes(command) == true
             override fun onUnavailable(reason: String) { state.unavailableReason = reason }
         })
     }
@@ -234,8 +253,8 @@ internal fun rememberVoiceAnswer(active: Boolean, voice: ScreeningVoice?, enable
     }
     state.permissionGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
     state.requestPermission = { askedPermission = true; launcher.launch(Manifest.permission.RECORD_AUDIO) }
-    state.pausedForSpeech = voice?.speaking == true || voice?.feedbackPlaying == true
-    val run = active && state.enabled && recognizer.available && !state.pausedForSpeech
+    // 播报与音效期间不再停止收听：每次停止再启动都会丢掉这段时间里说的话，回声由 [ScreeningVoice.echoes] 过滤
+    val run = active && state.enabled && recognizer.available
     LaunchedEffect(run, state.permissionGranted) {
         if (run && !state.permissionGranted && !askedPermission) state.requestPermission()
         if (run && state.permissionGranted) {

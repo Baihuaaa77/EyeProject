@@ -13,6 +13,8 @@ android {
 
 dependencies {
     api(project(":core:network"))
+    // 本机记录列表的摘要解析（LocalRecordCatalog）与苹果端共用；纯 Kotlin 共享库
+    api("com.zkyjss.eyeproject.shared:screening:1.0.0")
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.kotlinx.coroutines.android)

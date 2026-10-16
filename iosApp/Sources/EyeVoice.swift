@@ -3,7 +3,8 @@ import Combine
 import AVFoundation
 import Speech
 
-/// 三项测试使用同一发声人；播报期间与结束后 600 ms 停止收听，丢弃旧识别会话。
+/// 三项测试使用同一发声人。播报与音效期间不停止收听（每次停再启动都会丢掉这段时间说的话），
+/// 播报期间及结束后 600 ms 内只丢弃提示语里也出现的指令（回声），并丢弃该识别会话已累积的文字。
 final class EyeVoice: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
     @Published var enabled = UserDefaults.standard.object(forKey: "eye.speechEnabled") as? Bool ?? true {
         didSet { UserDefaults.standard.set(enabled, forKey: "eye.speechEnabled"); if !enabled { stop() } }
@@ -29,7 +30,9 @@ final class EyeVoice: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
     @Published private(set) var status = ""
     /// 正在说话时到来的非紧急提示：等这句说完再说最新的一条，避免逐句打断。
     private var queued: String?
-    var onAnswer: ((String) -> Bool)?
+    /// 识别到的文字与回声来源（正在或刚刚播报的文本）；返回 1 已作答、0 无指令、-1 回声。
+    var onAnswer: ((String, String?) -> Int)?
+    private var lastSpoken = ""
     private let synthesizer = AVSpeechSynthesizer()
     private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "zh-CN"))
     private let audio = AVAudioEngine()
@@ -39,7 +42,8 @@ final class EyeVoice: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
     private var authorized = false
     private var wanted = false
     private var generation = 0
-    private var cooldown = Date.distantPast
+    /// 播报结束后的回声保护截止时间。
+    private var echoUntil = Date.distantPast
     private var retryAfter = Date.distantPast
 
     override init() {
@@ -73,18 +77,13 @@ final class EyeVoice: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
             : "本机未下载离线中文识别，将使用苹果系统在线识别；也可以直接用方向按钮。"
     }
 
-    func pauseForFeedback(milliseconds: Int) {
-        stopListening()
-        cooldown = max(cooldown, Date().addingTimeInterval(Double(milliseconds) / 1000))
-    }
-
     /// [interrupt] 为 true 时（距离提醒）立即打断当前播报；否则等当前这句说完。
     func speak(_ text: String, interrupt: Bool = true) {
         guard enabled, !text.isEmpty else { return }
         if !interrupt && synthesizer.isSpeaking { queued = text; return }
         queued = nil
-        stopListening()
         synthesizer.stopSpeaking(at: .immediate)
+        lastSpoken = text
         let utterance = AVSpeechUtterance(string: text)
         utterance.voice = selectedVoice
         utterance.rate = min(AVSpeechUtteranceMaximumSpeechRate, AVSpeechUtteranceDefaultSpeechRate * Float(rate))
@@ -123,14 +122,14 @@ final class EyeVoice: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
     }
 
     func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
-        cooldown = Date().addingTimeInterval(0.6)
+        echoUntil = Date().addingTimeInterval(0.6)
         if let next = queued { queued = nil; DispatchQueue.main.async { self.speak(next) } }
     }
-    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) { cooldown = Date().addingTimeInterval(0.6) }
+    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) { echoUntil = Date().addingTimeInterval(0.6) }
 
     func setListening(_ value: Bool) {
         wanted = value
-        guard wanted, answersEnabled, authorized, !synthesizer.isSpeaking, Date() >= cooldown, Date() >= retryAfter else {
+        guard wanted, answersEnabled, authorized, Date() >= retryAfter else {
             if task != nil { stopListening() }; return
         }
         if task == nil { startListening() }
@@ -155,14 +154,21 @@ final class EyeVoice: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
             generation += 1; let ticket = generation
             task = recognizer.recognitionTask(with: next) { [weak self] result, error in
                 DispatchQueue.main.async {
-                    guard let self = self, ticket == self.generation, self.wanted, !self.synthesizer.isSpeaking else { return }
+                    guard let self = self, ticket == self.generation, self.wanted else { return }
                     if let result = result {
                         let text = result.bestTranscription.formattedString
-                        // 由共同解析器判断完整短指令，部分结果先完成一次作答，再启动新会话。
-                        if self.onAnswer?(text) == true {
-                            self.stopListening(); self.retryAfter = Date().addingTimeInterval(0.3)
+                        let echo: String? = self.synthesizer.isSpeaking || Date() < self.echoUntil ? self.lastSpoken : nil
+                        // 由共同解析器判断完整短指令，部分结果先完成一次作答，再启动新会话；
+                        // 回声同样重启会话，丢掉已累积的提示语文字，免得播报结束后被当成作答。
+                        switch self.onAnswer?(text, echo) ?? 0 {
+                        case 1:
+                            self.stopListening(); self.retryAfter = Date().addingTimeInterval(0.2)
                             self.status = "听到：\(text)"
                             return
+                        case -1:
+                            self.stopListening(); self.retryAfter = Date().addingTimeInterval(0.05)
+                            return
+                        default: break
                         }
                     }
                     if error != nil || result?.isFinal == true {
@@ -180,6 +186,6 @@ final class EyeVoice: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
         if audio.isRunning { audio.stop() }
         if hasTap { audio.inputNode.removeTap(onBus: 0); hasTap = false }
     }
-    func stop() { queued = nil; synthesizer.stopSpeaking(at: .immediate); stopListening(); cooldown = Date().addingTimeInterval(0.6) }
+    func stop() { queued = nil; synthesizer.stopSpeaking(at: .immediate); stopListening(); echoUntil = Date().addingTimeInterval(0.6) }
     func close() { wanted = false; stop(); EyeAudioSession.deactivate() }
 }

@@ -1,6 +1,8 @@
 # feature:mine
 
-「我的」页：云端同步与数据、系统权限入口、版本、品牌和自测免责声明。
+「我的」页：本机测试记录、云端同步与数据、系统权限入口、版本、品牌和自测免责声明（与苹果端同一顺序）。
+
+- `LocalRecordsSheet`：本机测试记录底板，数据来自 `ScreeningRecordRepository.localRecords`（摘要由共享 `LocalRecordCatalog` 解析，苹果端同一份）；每行测试名、时间、结论徽标，点开看要点并可「导出完整记录」（系统创建文件，`exportRecord` 写入）。
 
 - `MineScreen` 获取应用版本、收集 `MineViewModel.cloudState`，导出用系统「创建文件」选择保存位置。
 - `MineViewModel` 合并 `AccountRepository.accountState` 与 `ScreeningRecordRepository.syncStatus` 为 `CloudSyncUiState`（Loading / NotConfigured / SignedOut / SignedIn），操作结果以一句中文提示显示。

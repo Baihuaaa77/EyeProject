@@ -3,6 +3,7 @@ package com.zkyjss.eyeproject.feature.mine
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -17,7 +18,10 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Modifier
@@ -32,7 +36,7 @@ import com.zkyjss.eyeproject.core.ui.component.EyeSectionCard
 import com.zkyjss.eyeproject.core.ui.component.EyeSelectCard
 import com.zkyjss.eyeproject.core.ui.component.EyeText
 
-/** 「我的」页：云端同步与数据、系统权限入口、关于与免责声明。 */
+/** 「我的」页：本机测试记录、云端同步与数据、系统权限入口、关于与免责声明（与苹果端同一顺序）。 */
 @Composable
 fun MineScreen(
     modifier: Modifier = Modifier,
@@ -40,6 +44,17 @@ fun MineScreen(
 ) {
     val context = LocalContext.current
     val cloudState by viewModel.cloudState.collectAsStateWithLifecycle()
+    val records by viewModel.localRecords.collectAsStateWithLifecycle()
+    var recordsOpen by rememberSaveable { mutableStateOf(false) }
+    var exporting by rememberSaveable { mutableStateOf<String?>(null) }
+    val recordExport = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        val file = exporting
+        if (uri != null && file != null) viewModel.exportRecord(file, uri) { ok ->
+            Toast.makeText(context, if (ok) "已导出测试记录" else "导出失败，请换个位置再试", Toast.LENGTH_SHORT).show()
+        }
+    }
+    if (recordsOpen) LocalRecordsSheet(records, onExport = { exporting = it.fileName; recordExport.launch(it.fileName) },
+        onDismiss = { recordsOpen = false })
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         uri?.let(viewModel::exportTo)
     }
@@ -60,6 +75,7 @@ fun MineScreen(
             deleteCloudAccount = viewModel::deleteCloudAccount,
         ),
         modifier = modifier,
+        onOpenRecords = { recordsOpen = true },
         onOpenAppSettings = {
             context.startActivity(
                 Intent(
@@ -76,6 +92,7 @@ fun MineScreen(
 internal fun MineContent(
     versionName: String,
     onOpenAppSettings: () -> Unit,
+    onOpenRecords: () -> Unit = {},
     cloudState: CloudSyncUiState = CloudSyncUiState.NotConfigured,
     cloudActions: CloudSyncActions = CloudSyncActions(),
     modifier: Modifier = Modifier,
@@ -92,6 +109,8 @@ internal fun MineContent(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         EyeText("我的", style = typography.headline, color = colors.textPrimary, modifier = Modifier.padding(vertical = 16.dp))
+
+        EyeSelectCard(content = "本机测试记录", subtitle = "查看与导出保存在这台手机上的记录", onClick = onOpenRecords)
 
         CloudSyncSection(cloudState, cloudActions)
 
