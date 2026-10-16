@@ -142,15 +142,8 @@ struct EyeTestView: View {
                 runtime.act("guide")
             }
         } else if phase == "Result" || phase == "RESULT" {
-            Text(runtime.string("category").isEmpty ? riskLabel(runtime.string("risk")) : runtime.string("category")).font(EyeStyle.title)
-            ForEach(Array((runtime.state["findings"] as? [String] ?? []).enumerated()), id: \.offset) { _, line in Text(line).frame(maxWidth: .infinity, alignment: .leading) }
-            if !runtime.string("advice").isEmpty { Text(runtime.string("advice")) }
-            if !runtime.string("savedFile").isEmpty {
-                ShareLink(item: EyeRuntime.recordsDirectory.appendingPathComponent(runtime.string("savedFile"))) { Label("导出本次记录", systemImage: "square.and.arrow.up") }
-            }
-            if runtime.bool("canExtend") { Button("延长测试至 3 分钟") { runtime.act("extended") }.buttonStyle(EyeButtonStyle()) }
-            if runtime.bool("canRest") { Button("闭眼休息 1 分钟后复测") { runtime.act("rest") }.buttonStyle(EyeButtonStyle(role: .secondary)) }
-            Button("重新测试") { runtime.act("restart") }.buttonStyle(EyeButtonStyle(role: .secondary))
+            // 结论、关键指标、判断依据、本次数据与导出：与安卓共用 ResultReport 内容
+            ResultReportView(runtime: runtime)
         } else if phase == "GAZE_CALIBRATION" || phase == "FIXATION" || phase == "COVER" || phase == "PURSUIT" {
             if phase == "GAZE_CALIBRATION" {
                 Text("注视校准 · \(Int(runtime.number("gazeCalibrationIndex")) + 1)/\(Int(runtime.number("calibrationCount")))").font(EyeStyle.title)
@@ -197,9 +190,6 @@ struct EyeTestView: View {
                 }
             }
         }
-    }
-    private func riskLabel(_ value: String) -> String {
-        switch value { case "LOW": return "低风险"; case "MEDIUM": return "中风险"; case "HIGH": return "高风险"; default: return "数据不足，请重新测试" }
     }
 }
 

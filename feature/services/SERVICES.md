@@ -25,7 +25,8 @@
 | `DryEyeProtocol` | 干眼协议参数、阶梯 `DryEyeStaircase`、评估 `DryEyeAssessment`、问卷 `dryEyeQuestions` |
 | `Questionnaire` | 三病种共用的逐题问卷：`key` 存储字段（评估读取，保持稳定）与 `title` 大白话问题分离；整行选项、单选自动翻页、进度条、条件追问 |
 | `StrabismusGaze` | 斜视任务的九点注视校准与宽容监督：各眼独立以仿射映射（吸收头部轻微倾斜的轴间串扰）到屏幕坐标，留一预测误差剔除离群点（最多 2 点，剩余点须覆盖三行三列），允许单眼有效跟随；实际显示轨迹与眼动比较，避免同步静止或看别处被判为协调正常 |
-| `ReportComponents` | 三病种共用的报告排版：结论卡（等级徽标 + 一句话结论 + 建议 + 小瞳）→ 关键指标两列卡片（按正常 / 需关注着色）→ 需要关注 → 折叠的详细数据与问卷回答 |
+| `ReportComponents` | 三病种共用的结果页，渲染共享 `ResultReport`（与 iOS `ResultReportView.swift` 同一份内容）：结论卡（小瞳神情随等级变化 + 等级徽标 + 一句结论 + 一句建议）→ 关键指标 2×2 → 判断依据（每个证据族一行，点开看明细）→ 主操作 → 「查看本次数据」底板 / 「导出数据」→ 一行说明 |
+| `RecordExport` | 用系统「另存为」导出本次完整记录 JSON（问卷、逐题作答、逐帧数据、特征与判定依据），不需存储权限、不联网 |
 | `ScreeningHistory`（在 ScreeningMetrics.kt） | 读取本机上一次同病种记录，结果页「与上次对比」 |
 | `ScreeningOptotype` / `ScreeningVoice` | 按前摄眼屏距离和系统屏幕像素密度换算视标尺寸及显示门槛；系统中文语音播报 |
 | `navigation/ServicesNavigation` | 4 个路由：`ServicesRoute` / `DryEyeRoute` / `PresbyopiaRoute` / `StrabismusRoute` 及对应 navigate / NavGraphBuilder 扩展 |

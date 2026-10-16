@@ -6,7 +6,11 @@ import com.zkyjss.eyeproject.core.model.Point2f
 import kotlin.math.hypot
 import kotlin.math.roundToInt
 
-/** 眼区局部灰度分割基线。候选反光点必须通过对比度与面积检查，否则拒绝测量。 */
+/**
+ * 眼区局部灰度分割基线。候选反光点必须通过对比度与面积检查，否则拒绝测量。
+ * 瞳孔与虹膜灰度差不足时（可见光下深色虹膜很常见），改以 MediaPipe 虹膜中心（角膜缘中心）作参照：
+ * Hirschberg 法本可用「映光点相对角膜缘中心」，左右眼共同的瞳孔偏心在鼻侧差中相互抵消。
+ */
 object EyeOpticalAlgorithm {
     fun measure(bitmap: GrayImage, eye: EyeLandmarks?): OpticalEyeMeasurement? {
         eye ?: return null
@@ -83,12 +87,9 @@ object EyeOpticalAlgorithm {
                 bestScore = score; glint = candidate; glintContrast = contrast
             }
         }
-        val reason = when {
-            pupil == null -> "瞳孔对比度不足"
-            glint == null -> "未识别到可靠角膜反光点"
-            else -> null
-        }
-        return OpticalEyeMeasurement(pupil, glint, diameter, pupilContrast, glintContrast, reason)
+        val reason = if (glint == null) "未识别到可靠角膜反光点" else null
+        return OpticalEyeMeasurement(pupil ?: iris, glint, diameter, pupilContrast, glintContrast, reason,
+            referenceFromIris = pupil == null)
     }
 
     private fun rejected(diameter: Float, reason: String) =

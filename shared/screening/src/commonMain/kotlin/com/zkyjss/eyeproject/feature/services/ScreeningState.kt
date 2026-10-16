@@ -75,6 +75,8 @@ data class NearPoint(
     val speedCmPerSec: Float? = null,
     val startCm: Float? = null,
     val censored: Boolean = false,
+    /** 本次移近的距离轨迹：(相对开始移近的秒数, 平滑距离 cm)，约每 100 ms 一点，用于离线评估反应延迟。 */
+    val trace: List<Pair<Float, Float>> = emptyList(),
 )
 
 /** 距离—视觉表现曲线上的一点：该距离下双眼通过的最高小数视力。 */
@@ -154,5 +156,7 @@ data class ScreeningState(
     val findings: List<String> = emptyList(),
     val limitations: List<String> = emptyList(),
     val features: Map<String, Double?> = emptyMap(),
+    /** 判定依据（证据族），见 [Evidence]。 */
+    val evidence: List<Evidence> = emptyList(),
     val savedFile: String? = null,
 )

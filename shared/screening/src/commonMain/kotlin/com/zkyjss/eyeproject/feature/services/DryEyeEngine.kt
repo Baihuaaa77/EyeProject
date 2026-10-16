@@ -14,7 +14,8 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
     private val _uiState = MutableStateFlow(DryEyeTestUiState())
     val uiState: StateFlow<DryEyeTestUiState> = _uiState.asStateFlow()
 
-    private val blinkDetector = BlinkDetector()
+    /** 按时间判定眨眼（与帧率无关）+ 个人自适应阈值，见 [BlinkDetector]。 */
+    private val blinkDetector = BlinkDetector(minClosedMs = BLINK_MIN_CLOSED_MS, adaptive = true)
     private val distanceTracker = ScreeningDistanceTracker()
     private val blinkEvents = TimeEventQueue()
 
@@ -34,6 +35,15 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
     private var staircase = DryEyeStaircase()
     private var baselineLevel: Float = DryEyeProtocol.LEVELS[DryEyeProtocol.START_LEVEL_INDEX]
     private var lastSession: DryEyeSession? = null
+
+    /** 正式测试开始时刻（0 表示不在正式测试中）；期间记录每帧时间与 EAR，用于帧率门控和导出。 */
+    private var formalStartMs = 0L
+    private val formalFrameTimes = mutableListOf<Long>()
+    private val earTrace = mutableListOf<FloatArray>()
+
+    /** 最近一次保存的完整记录 JSON（含判定依据），供结果页导出。 */
+    var lastRecordJson: String? = null
+        private set
 
     private val frameObserver: (FaceLandmarkFrame) -> Unit = { frame -> scope.launch { handleFrame(frame) } }
     private val errorObserver: (Throwable) -> Unit = { error ->
@@ -137,6 +147,7 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
         testJob?.cancel()
         testJob = null
         pendingAnswer?.cancel()
+        formalStartMs = 0L
         monitoringGate = true
         _uiState.update {
             DryEyeTestUiState(phase = DryEyePhase.Setup, fields = it.fields, lux = it.lux, error = message)
@@ -209,6 +220,7 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
         gateLostSinceMs = 0L
         resolutionLimited = false
         val start = platform.nowMs()
+        formalStartMs = start; formalFrameTimes.clear(); earTrace.clear()
         val totalMs = (naturalSeconds + DryEyeProtocol.OPEN_SECONDS) * 1000L
         val trials = mutableListOf<DryEyeTrial>()
         val blinks = mutableListOf<Float>()
@@ -280,6 +292,7 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
         frames: Int, validFrames: Int, inRange: Int, turned: Int, completed: Boolean, afterRest: Boolean,
     ) {
         pendingAnswer?.cancel()
+        formalStartMs = 0L
         val session = DryEyeSession(
             naturalSeconds = naturalSeconds,
             baselineLevel = baselineLevel,
@@ -291,6 +304,7 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
             resolutionLimited = resolutionLimited,
             completed = completed,
             afterRest = afterRest,
+            analysisFps = medianFps(formalFrameTimes),
         )
         lastSession = session
         val report = DryEyeAssessment.evaluate(session, _uiState.value.fields)
@@ -384,8 +398,10 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
         val face = frame.faces.firstOrNull()
         val eyesDetected = face != null && face.leftEye != null && face.rightEye != null
         var distanceCm = 0f
+        val frameMs = frame.analysisElapsedRealtimeMs ?: lastFrameMs
+        if (formalStartMs > 0L && frameMs >= formalStartMs && formalFrameTimes.size < MAX_TRACE_FRAMES) formalFrameTimes += frameMs
         if (eyesDetected) {
-            blinkDetector.update(BlinkDetector.averageEar(face.leftEye, face.rightEye))
+            blinkDetector.update(BlinkDetector.averageEar(face.leftEye, face.rightEye), frameMs)
             val diameters = listOfNotNull(face.leftEye?.irisDiameterPx, face.rightEye?.irisDiameterPx)
             if (diameters.isNotEmpty()) {
                 distanceCm = DepthFromIris.distanceCm(
@@ -404,6 +420,11 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
         if (distanceCm > 0f) distanceTracker.add(now0, distanceCm)
         distanceCm = if (eyesDetected) distanceTracker.estimate(now0)?.distanceCm ?: distanceCm else 0f
         lastDistanceCm = distanceCm
+        if (formalStartMs > 0L && frameMs >= formalStartMs && earTrace.size < MAX_TRACE_FRAMES) {
+            earTrace += floatArrayOf((frameMs - formalStartMs) / 1000f,
+                face?.leftEye?.let { BlinkDetector.ear(it.earPoints) } ?: Float.NaN,
+                face?.rightEye?.let { BlinkDetector.ear(it.earPoints) } ?: Float.NaN, distanceCm)
+        }
 
         val gate = eyesDetected && abs(distanceCm - DryEyeProtocol.TARGET_DISTANCE_CM) <= DryEyeProtocol.DISTANCE_TOLERANCE_CM
         val now = platform.nowMs()
@@ -417,6 +438,7 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
 
     private fun save(session: DryEyeSession, report: DryEyeReport) {
         val fields = _uiState.value.fields
+        val trace = earTrace.toList()
         scope.launch(Dispatchers.IO) {
             runCatching {
                 val data = RecordObject().apply {
@@ -441,6 +463,10 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
                     put("valid", report.valid)
                     put("validityReasons", RecordArray(report.validityReasons))
                     put("abnormal", RecordArray(report.abnormal))
+                    put("evidence", report.evidence.toRecordArray())
+                    put("analysisFps", report.analysisFps ?: RecordObject.NULL)
+                    // 逐帧 [秒, 左眼 EAR, 右眼 EAR, 距离 cm]：可离线复算眨眼与数据质量
+                    put("earTrace", RecordArray(trace.map { f -> RecordArray(f.map { v -> v.toDouble() }) }))
                     put("features", RecordObject().apply {
                         report.features.forEach { (k, v) -> put(k, v?.takeIf(Double::isFinite) ?: RecordObject.NULL) }
                     })
@@ -456,7 +482,9 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
                     })
                 }
                 val name = "dryeye_${platform.epochMs()}.json"
-                platform.saveRecord(name, data.toString())
+                val json = data.toString()
+                lastRecordJson = json
+                platform.saveRecord(name, json)
                 name
             }.onSuccess { name -> _uiState.update { it.copy(savedFile = name) } }
         }
@@ -468,5 +496,19 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
         private const val EYES_GRACE_MS = 1_500L
         private const val DISTANCE_GRACE_MS = 3_000L
         private const val HEAD_LIMIT_DEG = 15f
+        /** 计时眨眼的最短闭眼时长：30 fps 需 2 帧、10 fps 1 帧即可，单帧关键点抖动不计。 */
+        private const val BLINK_MIN_CLOSED_MS = 60L
+        /** 逐帧轨迹上限（约 4 分钟 × 60 fps），防止异常情况下内存无限增长。 */
+        private const val MAX_TRACE_FRAMES = 15_000
+
+        /** 逐秒帧数的中位数：比「总帧数 / 时长」更不受个别卡顿影响。 */
+        internal fun medianFps(times: List<Long>): Double? {
+            if (times.size < 10) return null
+            val first = times.first()
+            val buckets = times.groupingBy { (it - first) / 1000L }.eachCount()
+            val last = buckets.keys.max()
+            val counts = (0 until last).map { (buckets[it] ?: 0).toDouble() } // 最后一秒不完整，不计
+            return ScreeningAssessmentModel.median(counts.ifEmpty { listOf(times.size.toDouble()) })
+        }
     }
 }

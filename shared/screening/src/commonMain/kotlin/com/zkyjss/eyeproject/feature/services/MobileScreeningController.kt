@@ -194,6 +194,7 @@ class MobileScreeningController(
                 put("advice",s.report?.advice); put("voiceActive",s.trialVisible)
                 put("naturalSeconds",s.naturalSeconds); put("afterRest",s.afterRest); put("canExtend",s.canExtend); put("canRest",s.canRestRetest); put("progress",s.progressFraction)
                 dryEyeProgress(s).let { p -> put("overallProgress",p?.fraction); put("remainingText",p?.remainingText) }
+                ResultReports.dryEye(s)?.let { put("report",it.toRecordObject()) }
             }
         } else {
             val s = screening.state.value
@@ -222,6 +223,7 @@ class MobileScreeningController(
                 screeningProgress(s).let { p -> put("overallProgress",p?.fraction); put("remainingText",p?.remainingText) }
                 StrabismusGaze.calibrationTargets.getOrNull(s.gazeCalibrationIndex)?.let { put("calibrationX",it.x); put("calibrationY",it.y) }
                 put("calibrationCount",StrabismusGaze.calibrationTargets.size)
+                ResultReports.screening(s)?.let { put("report",it.toRecordObject()) }
             }
         }
         return result.toString()

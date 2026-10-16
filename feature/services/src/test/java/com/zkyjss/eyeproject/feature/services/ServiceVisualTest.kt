@@ -170,7 +170,7 @@ class ServiceVisualTest {
         compose.onNodeWithText("关键数据不足，请改善测试条件并重新完成测试。").assertIsDisplayed()
         compose.onNodeWithText("有效数据不足").assertDoesNotExist()
         capture("result-insufficient-data")
-        compose.onNodeWithText("完整报告").performClick()
+        compose.onNodeWithText("查看本次数据").performClick()
         compose.onNodeWithText("有效数据不足").assertExists()
     }
 
@@ -513,7 +513,7 @@ class ServiceVisualTest {
             }
         }
         compose.onNodeWithText("调节功能较同龄人偏低").assertExists()
-        compose.onNodeWithText("关键指标").assertExists()
+        compose.onNodeWithText("查看本次数据").assertExists()
         capture("report-presbyopia")
         kind = ScreeningKind.STRABISMUS
         compose.onNodeWithText("高度疑似斜视").assertExists()
@@ -533,7 +533,7 @@ class ServiceVisualTest {
                 }
             }
         }
-        compose.onNodeWithText("需要关注").assertExists()
+        compose.onNodeWithText("判断依据").assertExists()
         capture("report-dry-eye")
     }
 

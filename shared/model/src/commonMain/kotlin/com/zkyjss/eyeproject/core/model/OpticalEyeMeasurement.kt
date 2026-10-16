@@ -8,6 +8,8 @@ data class OpticalEyeMeasurement(
     val pupilContrast: Float,
     val reflexContrast: Float,
     val rejectionReason: String?,
+    /** true：瞳孔对比度不足（可见光下深色虹膜常见），改以虹膜（角膜缘）中心作映光参照。 */
+    val referenceFromIris: Boolean = false,
 ) {
     val usable: Boolean get() = pupilCenter != null && cornealReflex != null && rejectionReason == null
     val horizontalIrisUnits: Float?

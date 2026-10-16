@@ -52,7 +52,16 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
     private var cachedCalibrationVersion = 0L
     private var cameraWatchdog: Job? = null
     private var opticalValidFrames = 0
+    /** 瞳孔对比度不足、改用虹膜中心作映光参照的帧数（两眼合计）。 */
+    private var opticalIrisReferenceFrames = 0
     private val opticalRejectionCounts = mutableMapOf<String, Int>()
+    /** 当前一次移近的距离轨迹（相对开始移近的秒数, cm）。 */
+    private val pushTrace = mutableListOf<Pair<Float, Float>>()
+    private var pushTraceStartMs = 0L
+
+    /** 最近一次保存的完整记录 JSON（含判定依据），供结果页导出。 */
+    var lastRecordJson: String? = null
+        private set
     /** 斜视测试期间每帧的瞳孔对比度与虹膜像素直径（双眼），写入记录用于排查光学测量为何不可用。 */
     private val opticalContrasts = mutableListOf<Float>()
     private val opticalIrisPx = mutableListOf<Float>()
@@ -81,6 +90,7 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
         cameraAttached = true
         cameraFrameCount = 0; lastCameraFrameMs = 0L
         distanceTracker.clear(); opticalRejectionCounts.clear(); opticalContrasts.clear(); opticalIrisPx.clear()
+        opticalIrisReferenceFrames = 0
         val light = platform.startLight { lux -> _state.update { it.copy(lux = lux) } }
         _state.update { it.copy(lightSensorAvailable = light, trackingStatus = "等待相机帧") }
         platform.startCamera(frameObserver, cameraErrorObserver)
@@ -320,6 +330,7 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
         questionStartMs = 0L
         _state.update { it.copy(pushStage = PushStage.APPROACH, trialVisible = true, trialId = nextTrialId,
             trialOptotypePx = spec.sizePx, trialDistanceCm = distance, pushStartCm = distance, direction = 0, warning = null) }
+        pushTrace.clear(); pushTraceStartMs = now
         platform.feedback(ScreeningFeedbackCue.START)
     }
 
@@ -351,7 +362,7 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
     private fun recentApproachSpeed(now: Long): Float? = distanceTracker.velocityCmPerSec(now)?.let { -it }
 
     private fun finishPushTrial(point: NearPoint) {
-        val points = _state.value.nearPoints + point
+        val points = _state.value.nearPoints + point.copy(trace = pushTrace.toList())
         _state.update { it.copy(nearPoints = points, trialIndex = points.size,
             pushStage = PushStage.READY, trialVisible = false, pushSpeedCmPerSec = null,
             warning = if (point.censored) "移近到 ${PresbyopiaProtocol.PUSH_MIN_CM.toInt()} cm 仍未模糊，已记为「近点 < ${PresbyopiaProtocol.PUSH_MIN_CM.toInt()} cm」" else null) }
@@ -587,7 +598,7 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
         _state.update { it.copy(step = ScreeningStep.RESULT, result = result,
             riskLevel = assessment.riskLevel, riskScope = assessment.riskScope, secondsLeft = 0,
             category = assessment.category, findings = assessment.findings, limitations = assessment.limitations,
-            features = assessment.features) }
+            features = assessment.features, evidence = assessment.evidence) }
         stopCamera()
         scope.launch(Dispatchers.IO) {
             runCatching {
@@ -613,6 +624,7 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
                         } })
                         put("findings", RecordArray(assessment.findings))
                         put("limitations", RecordArray(assessment.limitations))
+                        put("evidence", assessment.evidence.toRecordArray())
                     })
                     put("mode", s.mode)
                     put("profile", RecordObject(s.fields))
@@ -622,6 +634,7 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
                     put("cameraBrightness", s.cameraBrightness?.toDouble() ?: RecordObject.NULL)
                     put("cameraFrames", s.cameraFrames)
                     put("opticalValidFrames", s.opticalValidFrames)
+                    put("opticalIrisReferenceFrames", opticalIrisReferenceFrames)
                     put("opticalRejectionCounts", RecordObject(s.opticalRejectionCounts))
                     // 排查用：瞳孔对比度门槛为 12（灰度级），虹膜直径不足 12 像素时直接拒绝。
                     put("opticalPupilContrastMedian", ScreeningAssessmentModel.median(opticalContrasts.map(Float::toDouble)) ?: RecordObject.NULL)
@@ -657,6 +670,7 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
                         put("speedCmPerSec", p.speedCmPerSec?.toDouble() ?: RecordObject.NULL)
                         put("startCm", p.startCm?.toDouble() ?: RecordObject.NULL)
                         put("censored", p.censored)
+                        put("trace", RecordArray(p.trace.map { (t, d) -> RecordArray(listOf(t.toDouble(), d.toDouble())) }))
                     }) } })
                     put("curvePoints", RecordArray().apply { s.curvePoints.forEach { c -> put(RecordObject().apply {
                         put("distanceCm", c.distanceCm.toDouble())
@@ -707,7 +721,9 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
                 val history = platform.compareHistory(s, assessment)
                 _state.update { it.copy(history = history) }
                 val name = "${s.kind.name.lowercase()}_${platform.epochMs()}.json"
-                platform.saveRecord(name, data.toString())
+                val json = data.toString()
+                lastRecordJson = json
+                platform.saveRecord(name, json)
                 name
             }.onSuccess { name -> _state.update { it.copy(savedFile = name) } }
                 .onFailure { error -> _state.update { it.copy(warning = "保存测试记录失败：${error.message}") } }
@@ -791,8 +807,18 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
             else -> "双眼光学测量可用"
         }
         if (_state.value.kind == ScreeningKind.STRABISMUS && opticalStatus != "双眼光学测量可用") {
-            opticalRejectionCounts[opticalStatus] = (opticalRejectionCounts[opticalStatus] ?: 0) + 1
+            // 两只眼分别计数：原先只记先失败的左眼，右眼是否可用无从得知
+            val reasons = buildList {
+                if (face == null || pose == null || !poseStable) add(opticalStatus)
+                else {
+                    if (leftOptical?.usable != true) add("左眼：${leftOptical?.rejectionReason ?: "眼区不可用"}")
+                    if (rightOptical?.usable != true) add("右眼：${rightOptical?.rejectionReason ?: "眼区不可用"}")
+                }
+            }
+            reasons.forEach { opticalRejectionCounts[it] = (opticalRejectionCounts[it] ?: 0) + 1 }
         }
+        if (_state.value.kind == ScreeningKind.STRABISMUS)
+            opticalIrisReferenceFrames += listOfNotNull(leftOptical, rightOptical).count { it.usable && it.referenceFromIris }
         if (_state.value.kind == ScreeningKind.STRABISMUS && opticalContrasts.size < 20_000) {
             listOfNotNull(leftOptical, rightOptical).forEach {
                 opticalContrasts += it.pupilContrast; opticalIrisPx += it.irisDiameterPx
@@ -930,6 +956,9 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
         if (step == ScreeningStep.PUSH_UP && st.pushStage == PushStage.APPROACH) {
             if (questionStartMs == 0L && st.trialVisible) questionStartMs = time
             if (lastUiFrameMs == time) _state.update { it.copy(pushSpeedCmPerSec = recentApproachSpeed(time)) }
+            val traceSec = (time - pushTraceStartMs) / 1000f
+            if (smoothedDistance > 0f && (pushTrace.isEmpty() || traceSec - pushTrace.last().first >= 0.1f) && pushTrace.size < 1_200)
+                pushTrace += traceSec to smoothedDistance
             if (smoothedDistance in 1f..PresbyopiaProtocol.PUSH_MIN_CM) {
                 finishPushTrial(NearPoint(smoothedDistance, recentApproachSpeed(time), st.pushStartCm, censored = true))
             }

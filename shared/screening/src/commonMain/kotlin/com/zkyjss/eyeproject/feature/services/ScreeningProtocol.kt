@@ -38,6 +38,22 @@ object PresbyopiaProtocol {
     /** Hofstetter 平均调节幅度：18.5 − 0.3 × 年龄（用于「调节年龄」参考反推）。 */
     fun averageAmplitude(age: Double) = 18.5 - 0.3 * age
     fun amplitudeAge(amplitudeD: Double) = ((18.5 - amplitudeD) / 0.3).coerceIn(10.0, 80.0)
+
+    /**
+     * 虹膜测距的相对误差（候选）：虹膜直径个体差异约 ±4%，加上关键点抖动，未做实物标定时取 6%。
+     * A = 1/d 对距离误差的敏感度为 δA ≈ δd/d²，近点越近误差越大。
+     */
+    const val DISTANCE_REL_ERROR = 0.06
+    /** 调节幅度区间上限（近点 < 12 cm 时上界不可测）。 */
+    const val MAX_AMPLITUDE_D = 100.0 / PUSH_MIN_CM
+
+    /** 由各次近点（cm）给出调节幅度的约 95% 范围：取最远/最近一次并叠加测距误差；有删失（< 12 cm）时上界不可测。 */
+    fun amplitudeRange(nearPointsCm: List<Double>, censored: Boolean): Pair<Double, Double> {
+        val far = (nearPointsCm.maxOrNull() ?: PUSH_MIN_CM.toDouble()) * (1 + DISTANCE_REL_ERROR)
+        val near = (nearPointsCm.minOrNull() ?: PUSH_MIN_CM.toDouble()) * (1 - DISTANCE_REL_ERROR)
+        val high = if (censored || nearPointsCm.isEmpty()) MAX_AMPLITUDE_D else minOf(100.0 / near, MAX_AMPLITUDE_D)
+        return 100.0 / far to high
+    }
 }
 
 object StrabismusProtocol {
@@ -64,9 +80,16 @@ object StrabismusProtocol {
     /** 原文：遮盖解除后再注视偏移 ≥ 6Δ → 可疑阳性。 */
     const val REFIX_PRISM = 6.0
     const val REFIX_WINDOW_MS = 500L
+    /**
+     * 实际计算窗口（rules-2）：遮盖时刻由协助者点按，通常比真实动作晚 0.2–0.5 秒，
+     * 原文 0.5 秒窗口会错过再注视运动；放宽到点按后 0.8 秒，并用同长度的无遮盖窗口估计噪声底。
+     */
+    const val REFIX_SEARCH_MS = 800L
     /** 原文 BSI 初版界值。 */
     const val BSI_SUSPECT = 0.7
     const val BSI_ABNORMAL = 0.5
+    /** 候选：追踪幅度（水平与垂直的较小者）低于此值时双眼速度相关被噪声主导，不评估 BSI。 */
+    const val BSI_MIN_AMPLITUDE_DEG = 5f
 
     /** 原文：注视点闪烁 1–2 Hz；视标直径 3–5 岁约 2.0 cm（≈3.5°），6–12 岁约 1.5 cm（≈2.6°）。 */
     const val FLASH_HZ = 1.5f

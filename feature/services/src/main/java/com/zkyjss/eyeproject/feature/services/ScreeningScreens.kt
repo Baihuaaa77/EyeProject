@@ -482,64 +482,15 @@ private fun PursuitContent(s: ScreeningState, vm: ScreeningTestViewModel) {
 
 @Composable
 internal fun ScreeningResultContent(s: ScreeningState, vm: ScreeningTestViewModel) {
-    val colors = LocalEyeColors.current
-    val typography = LocalEyeTypography.current
-    val valid = s.riskLevel != ScreeningRiskLevel.UNKNOWN
-    val strabismus = s.kind == ScreeningKind.STRABISMUS
-    val badge = when {
-        !valid -> "需要重测"
-        strabismus -> when (s.riskLevel) {
-            ScreeningRiskLevel.LOW -> "未见异常"
-            ScreeningRiskLevel.MEDIUM -> "可疑"
-            else -> "高度疑似"
+    val report = ResultReports.screening(s) ?: return
+    val export = rememberRecordExport(s.savedFile) { vm.engine.lastRecordJson }
+    ResultReportView(report, export, actions = {
+        EyeButton("重新测试", if (report.level == ScreeningRiskLevel.UNCERTAIN || !report.valid) EyeButtonRole.PRIMARY else EyeButtonRole.SECONDARY,
+            vm::restart, Modifier.fillMaxWidth())
+    }) {
+        DataPanel("测试环境") {
+            EyeText("光照 ${lightingLabel(s)}", LocalEyeTypography.current.body, LocalEyeColors.current.textSecondary)
         }
-        else -> "老视${s.riskLevel.label}"
-    }
-    val title = when {
-        !valid -> "数据不足，暂时无法判断"
-        strabismus -> when (s.riskLevel) {
-            ScreeningRiskLevel.LOW -> "眼位未见明显异常"
-            ScreeningRiskLevel.MEDIUM -> "眼位有可疑表现"
-            else -> "高度疑似斜视"
-        }
-        else -> s.category.ifBlank { s.riskLevel.label }
-    }
-    val advice = when {
-        !valid -> "关键数据不足，请改善测试条件并重新完成测试。"
-        strabismus && s.riskLevel == ScreeningRiskLevel.HIGH -> "建议尽快到斜视专科就诊，做遮盖试验与三棱镜检查。"
-        strabismus && s.riskLevel == ScreeningRiskLevel.MEDIUM -> "建议近期到眼科复查眼位；平时留意孩子是否歪头、眯眼或一只眼往外飘。"
-        strabismus -> "本次未见明显眼位异常，建议每半年复测一次。"
-        s.riskLevel == ScreeningRiskLevel.HIGH -> "建议到眼科验光并检查调节功能，评估是否需要配老花镜。"
-        s.riskLevel == ScreeningRiskLevel.MEDIUM -> "建议用同样的眼镜再测一次；看近处吃力时请到眼科检查。"
-        else -> "调节能力与年龄基本相符；如果看近处不舒服，仍建议到眼科检查。"
-    }
-    // 关键指标卡已展示的测量汇总不再重复列出，只保留需要关注的结论性条目
-    val summaryPrefixes = listOf("注视眼位", "遮盖解除后再注视", "双眼对称性指数", "40 cm 阅读需调节", "调节年龄参考")
-    val attention = s.findings.drop(if (!strabismus && valid) 1 else 0).filterNot { f -> summaryPrefixes.any(f::startsWith) }
-    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        ReportHero(s.riskLevel, badge, title, advice)
-        if (!valid) {
-            ReportFindings("没测好的原因", s.findings, colors.textSecondary)
-        } else {
-            ReportMetricGrid(if (strabismus) strabismusMetrics(s.features) else presbyopiaMetrics(s.features))
-            ReportFindings("需要关注", attention, colors.warning)
-            if (!strabismus) s.features["amplitude_age_years"]?.let {
-                EyeText("你的调节能力大约相当于 ${it.toInt()} 岁人群的平均水平（参考）。", typography.body, colors.textSecondary)
-            }
-        }
-        EyeButton("重新测试", EyeButtonRole.SECONDARY, vm::restart, Modifier.fillMaxWidth())
-        if (s.history.isNotEmpty()) {
-            EyeDisclosure("与上次对比") { s.history.forEach { EyeText(it, typography.bodySecondary, colors.textSecondary) } }
-        }
-        EyeDisclosure("完整报告") {
-            s.result.forEach { EyeText(it, typography.bodySecondary, colors.textSecondary) }
-            EyeText("光照 ${lightingLabel(s)}", typography.bodySecondary, colors.textSecondary)
-        }
-        EyeDisclosure(if (strabismus) "孩子的基本信息" else "我的问卷回答") {
-            ProfileAnswers(if (strabismus) strabismusQuestions else presbyopiaQuestions, s.fields)
-            if (!strabismus && s.mode.isNotBlank()) EyeText("测试戴镜：${if (s.mode.startsWith("标准")) "看远的眼镜或不戴镜" else "看近用的眼镜"}", typography.body, colors.textPrimary)
-        }
-        ReportFootnote()
     }
 }
 

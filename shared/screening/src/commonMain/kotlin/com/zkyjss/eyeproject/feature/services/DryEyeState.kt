@@ -47,7 +47,8 @@ data class DryEyeTestUiState(
 ) {
     /** 临界或中风险的标准时长结果才可延长自然眨眼；两端按钮与引擎共用同一判定。 */
     val canExtend: Boolean get() = phase == DryEyePhase.Result && report?.valid == true &&
-        (report.borderline || report.riskLevel == ScreeningRiskLevel.MEDIUM) && naturalSeconds == DryEyeProtocol.NATURAL_SECONDS
+        (report.borderline || report.riskLevel == ScreeningRiskLevel.MEDIUM ||
+            report.riskLevel == ScreeningRiskLevel.UNCERTAIN) && naturalSeconds == DryEyeProtocol.NATURAL_SECONDS
     /** 有效结果且尚未做过休息复测。 */
     val canRestRetest: Boolean get() = phase == DryEyePhase.Result && report?.valid == true && !afterRest
 }

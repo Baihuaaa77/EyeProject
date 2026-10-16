@@ -57,12 +57,15 @@ class DryEyeProtocolTest {
 
     @Test fun frequentBlinkingShortOpenAndDeclineAreHighRisk() {
         val blinks = (1..25).map { it * 2.4f } + listOf(63f, 67f, 71f, 75f)
-        // 睁眼阶段视标逐渐放大到低 3 档
-        val report = DryEyeAssessment.evaluate(session(blinks, openLevel = { t -> if (t < 66f) 0.5f else 0.25f }), emptyMap())
+        // 眨眼偏多与最长睁眼过短来自同一检测器，按一个证据族计；再叠加「经常」有症状才是高风险
+        val frequent = mapOf("干眼症状" to "眼睛发干、发涩", "症状频率" to "经常")
+        val report = DryEyeAssessment.evaluate(session(blinks, openLevel = { t -> if (t < 66f) 0.5f else 0.25f }), frequent)
         assertEquals(ScreeningRiskLevel.HIGH, report.riskLevel)
-        assertTrue(report.abnormal.any { it.contains("眨眼") })
-        assertTrue(report.abnormal.any { it.contains("坚持睁眼约") })
+        assertTrue(report.abnormal.any { it.contains("睁眼") })
+        assertEquals(EvidenceStatus.ABNORMAL, report.evidence.first { it.key == "blink" }.status)
         assertTrue(report.declineSec != null)
+        // 没有症状时只有一个异常族 → 中风险（旧规则把同源的两项算成两项异常）
+        assertEquals(ScreeningRiskLevel.MEDIUM, DryEyeAssessment.evaluate(session(blinks), emptyMap()).riskLevel)
     }
 
     @Test fun incompleteSessionIsInvalid() {
