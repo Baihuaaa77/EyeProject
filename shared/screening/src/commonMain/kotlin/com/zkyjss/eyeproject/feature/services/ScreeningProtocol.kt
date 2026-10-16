@@ -13,6 +13,13 @@ object PresbyopiaProtocol {
 
     /** 近视力固定约 40 cm。 */
     const val NEAR_DISTANCE_CM = 40f
+    /** 距离提示容差：横幅变色、语音提醒与视标呈现都按它判断。 */
+    const val DISTANCE_TOLERANCE_CM = 4f
+    /**
+     * 作答容差：在提示容差外再留 2 cm。人往往一进入「距离合适」就停下，停在容差边缘，
+     * 测距的正常抖动会把作答判成越界；视标角大小按每题实测距离换算，多出的 2 cm 不影响视力读数。
+     */
+    const val ANSWER_TOLERANCE_CM = DISTANCE_TOLERANCE_CM + 2f
 
     /** 移近法：起点须在 45 cm 以外，由远向近缓慢连续移动。 */
     const val PUSH_START_MIN_CM = 45f
@@ -58,7 +65,13 @@ object PresbyopiaProtocol {
 
 object StrabismusProtocol {
     const val DISTANCE_CM = 33f
+    /** 原文：33 cm，超出 ±5 cm 时提醒。 */
     const val DISTANCE_TOLERANCE_CM = 5f
+    /**
+     * 采样容差：提醒仍在 ±5 cm，采样放宽到 ±7 cm。人一进入「距离合适」就停下，常停在 ±5 cm 边缘，
+     * 测距抖动会让大段画面作废、校准采不到点；未经实物校准的前置测距本身也有约 6% 误差。
+     */
+    const val DISTANCE_GATE_CM = DISTANCE_TOLERANCE_CM + 2f
     const val FIXATION_SECONDS = 12
     const val PURSUIT_SECONDS = 22
 

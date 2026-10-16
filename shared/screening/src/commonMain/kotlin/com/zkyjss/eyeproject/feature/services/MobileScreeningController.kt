@@ -202,10 +202,12 @@ class MobileScreeningController(
                 put("phase",s.step.name); put("title",if (s.kind == ScreeningKind.PRESBYOPIA) "老视自测" else "眼位自测")
                 put("instruction",s.instruction); put("stepTitle",stepTitle(s.step)); put("guidePending",s.guidePending)
                 put("guideText",guideCue(s.step))
-                put("distanceCm",s.distanceCm); put("faceDetected",s.faceDetected); put("warning",s.gazeWarning ?: s.warning ?: screeningGuidance(s)?.takeUnless { it == "保持稳定" })
+                put("distanceCm",s.distanceCm); put("faceDetected",s.faceDetected); put("warning",s.gazeWarning ?: s.warning ?: screeningGuidance(s)?.takeUnless { it == "保持稳定" || it.startsWith("请移动到") })
                 put("secondsLeft",s.secondsLeft); put("trialVisible",s.trialVisible); put("trialId",s.trialId)
                 put("targetDistanceCm",screeningDistanceTarget(s)?.first)
-                put("distanceZone",if (s.guidePending || s.gazeWarning != null || s.warning != null) null else spokenDistanceZone(s.distanceCm,
+                put("distanceMoveToCm",s.distanceMoveToCm)
+                // 移动到新目标距离途中由主提示播报「请移动到 xx 厘米处」，不播报太近 / 太远
+                put("distanceZone",if (s.guidePending || s.gazeWarning != null || s.warning != null || s.distanceMoveToCm != null) null else spokenDistanceZone(s.distanceCm,
                     s.faceDetected || (s.step == ScreeningStep.NEAR_VISION && s.distanceCm > 0f),screeningDistanceTarget(s)))
                 put("distanceToleranceCm",screeningDistanceTarget(s)?.second)
                 put("direction",s.direction); put("optotypePx",s.trialOptotypePx); put("eye",s.visionEye.name)

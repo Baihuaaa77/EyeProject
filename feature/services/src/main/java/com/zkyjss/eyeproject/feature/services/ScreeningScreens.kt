@@ -114,8 +114,8 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, modifier: M
         ScreeningStep.ENVIRONMENT -> if (kind == ScreeningKind.PRESBYOPIA) "请正对屏幕，保持约四十厘米，检查光照和距离。" else "请正对屏幕，保持三十三厘米，由家长协助后续遮眼任务。"
         ScreeningStep.NEAR_VISION -> if (s.nearAwaitingEyeReady) s.instruction else "${s.visionEye.label}测试。保持四十厘米，停稳后显示视标。"
         ScreeningStep.PUSH_UP -> if (s.pushStage == PushStage.READY) "第${s.nearPoints.size + 1}次移近。先移到四十五厘米以外。" else "看着E，慢慢移近。一开始持续模糊就点按。"
-        ScreeningStep.DISTANCE_CURVE -> "请移动到${PresbyopiaProtocol.CURVE_DISTANCES.getOrElse(s.curveIndex) { 40f }.toInt()}厘米并停稳，视标会自动出现。"
-        ScreeningStep.FLIPPER -> "请移动到${if (s.trialIndex % 2 == 0) "五十" else "二十五"}厘米。停稳后视标自动出现，再选择开口方向。"
+        // 换距离的「请移动到 xx 厘米处」由距离提示播报，到位后不再重复
+        ScreeningStep.DISTANCE_CURVE, ScreeningStep.FLIPPER -> "停稳后视标会自动出现，请选择开口方向。"
         ScreeningStep.FIXATION -> "请保持三十三厘米，看着中间闪烁的小瞳，头和手机都不要动。"
         ScreeningStep.GAZE_CALIBRATION -> "请只用眼睛依次看着圆点，头和手机都不要动。"
         ScreeningStep.COVER -> coverSpokenPrompt(s)
@@ -126,7 +126,8 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, modifier: M
     val distanceTarget = if (s.guidePending) null else screeningDistanceTarget(s)
     // 单眼近视力时另一只眼被遮，双眼关键点可能不全：有测距即视为可见
     val faceVisible = s.faceDetected || (s.step == ScreeningStep.NEAR_VISION && s.distanceCm > 0f)
-    val distance = distanceTarget?.let { (target, tolerance) -> distanceStatus(s.distanceCm, faceVisible, target, tolerance) }
+    val distance = distanceTarget?.let { (target, tolerance) ->
+        distanceStatus(s.distanceCm, faceVisible, target, tolerance, moving = s.distanceMoveToCm != null) }
     val voiceActive = !s.guidePending && s.step in setOf(
         ScreeningStep.NEAR_VISION, ScreeningStep.FLIPPER, ScreeningStep.DISTANCE_CURVE, ScreeningStep.PUSH_UP)
     val voiceAnswer = rememberVoiceAnswer(voiceActive && !settingsOpen, voice, settings.answersEnabled) { command ->
@@ -145,7 +146,7 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, modifier: M
     }
     // 引导与告警优先于距离提醒，距离提醒优先于其余提示。
     val urgent = if (s.guidePending) guideCue(s.step) else s.gazeWarning ?: s.warning
-    val basePrompt = urgent ?: guidance?.takeUnless { it == "保持稳定" || it.startsWith("太近") || it.startsWith("太远") || it == "请正对屏幕" }
+    val basePrompt = urgent ?: guidance?.takeUnless { it == "保持稳定" || it.startsWith("太近") || it.startsWith("太远") || it.startsWith("请移动到") || it == "请正对屏幕" }
         ?: voicePrompt
     SpeakTestPrompts(voice, voiceEnabled && !settingsOpen, basePrompt, distance?.takeIf { urgent == null && it.clearlyOff() })
     DisposableEffect(viewModel, voice) { onDispose { viewModel.stopCamera(); voice.close() } }
@@ -185,7 +186,8 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, modifier: M
             status = { distance?.let { DistanceBanner(it, compact = true) } },
         ) {
             val notice = s.gazeWarning ?: s.warning ?: guidance?.takeUnless {
-                it == "保持稳定" || it == "慢慢移近" || it.startsWith("太近") || it.startsWith("太远") || (distance != null && it == "请正对屏幕")
+                it == "保持稳定" || it == "慢慢移近" || it.startsWith("太近") || it.startsWith("太远") || it.startsWith("请移动到") ||
+                    (distance != null && it == "请正对屏幕")
             }
             TestNotice(notice.takeIf { !s.guidePending })
             if (s.guidePending) {

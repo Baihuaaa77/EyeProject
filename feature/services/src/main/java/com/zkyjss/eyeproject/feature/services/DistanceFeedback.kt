@@ -44,8 +44,11 @@ import com.zkyjss.eyeproject.core.ui.component.EyeText
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
-/** 眼—屏距离所处区间。颜色约定：太近 = 红、太远 = 蓝、合适 = 绿、未知 = 灰。 */
-internal enum class DistanceZone { UNKNOWN, TOO_CLOSE, OK, TOO_FAR }
+/**
+ * 眼—屏距离所处区间。颜色约定：太近 = 红、太远 = 蓝、合适 = 绿、未知 = 灰；
+ * MOVE_TO = 刚换了目标距离、还在移过去的路上（主色），提示「请移动到 xx 厘米处」而不是太近 / 太远。
+ */
+internal enum class DistanceZone { UNKNOWN, TOO_CLOSE, OK, TOO_FAR, MOVE_TO }
 
 internal data class DistanceStatus(
     val zone: DistanceZone,
@@ -63,6 +66,7 @@ internal data class DistanceStatus(
     val title: String get() = when (zone) {
         DistanceZone.TOO_CLOSE -> "太近了"
         DistanceZone.TOO_FAR -> "太远了"
+        DistanceZone.MOVE_TO -> moveToPrompt(targetCm)
         DistanceZone.OK -> "距离合适"
         DistanceZone.UNKNOWN -> "请正对屏幕"
     }
@@ -71,22 +75,25 @@ internal data class DistanceStatus(
         DistanceZone.TOO_CLOSE -> "把手机往远处移约 $moveCm cm"
         DistanceZone.TOO_FAR -> "把手机往近处移约 $moveCm cm"
         DistanceZone.OK -> "约 ${distanceCm.roundToInt()} cm，保持住"
+        DistanceZone.MOVE_TO -> if (distanceCm.isFinite() && distanceCm > 0f) "当前约 ${distanceCm.roundToInt()} cm，到位后视标自动出现"
+            else "露出双眼，让摄像头看到你"
         DistanceZone.UNKNOWN -> "露出双眼，让摄像头看到你"
     }
 
     /** 语音提示（合适时不说话，避免打扰）；[repeat] 次重复时换一种说法。 */
-    fun spoken(repeat: Int = 0): String? = SpokenPrompts.distance(when (zone) {
+    fun spoken(repeat: Int = 0): String? = if (zone == DistanceZone.MOVE_TO) moveToPrompt(targetCm) + "。" else SpokenPrompts.distance(when (zone) {
         DistanceZone.TOO_CLOSE -> -1
         DistanceZone.TOO_FAR -> 1
         DistanceZone.UNKNOWN -> 2
-        DistanceZone.OK -> 0
+        DistanceZone.OK, DistanceZone.MOVE_TO -> 0
     }, repeat)
 
     val spoken: String? get() = spoken(0)
 }
 
-internal fun distanceStatus(distanceCm: Float, faceVisible: Boolean, targetCm: Float, toleranceCm: Float): DistanceStatus {
+internal fun distanceStatus(distanceCm: Float, faceVisible: Boolean, targetCm: Float, toleranceCm: Float, moving: Boolean = false): DistanceStatus {
     val zone = when {
+        moving -> DistanceZone.MOVE_TO
         !faceVisible || !distanceCm.isFinite() || distanceCm <= 0f -> DistanceZone.UNKNOWN
         distanceCm < targetCm - toleranceCm -> DistanceZone.TOO_CLOSE
         distanceCm > targetCm + toleranceCm -> DistanceZone.TOO_FAR
@@ -108,6 +115,7 @@ internal fun DistanceBanner(status: DistanceStatus, modifier: Modifier = Modifie
             DistanceZone.TOO_CLOSE -> colors.tooClose
             DistanceZone.TOO_FAR -> colors.tooFar
             DistanceZone.OK -> colors.success
+            DistanceZone.MOVE_TO -> colors.primary
             DistanceZone.UNKNOWN -> colors.neutralSoft
         },
         tween(EyeMotion.MEDIUM), label = "距离状态色"
@@ -151,6 +159,8 @@ private fun DirectionGlyph(zone: DistanceZone, color: Color, modifier: Modifier)
         when (zone) {
             DistanceZone.TOO_CLOSE -> { chevron(w * 0.18f, false); chevron(w * 0.82f, true) }
             DistanceZone.TOO_FAR -> { chevron(w * 0.3f, true); chevron(w * 0.7f, false) }
+            // 移动到新距离：单个指向前方的箭头
+            DistanceZone.MOVE_TO -> chevron(w * 0.55f, true)
             DistanceZone.OK -> drawPath(Path().apply {
                 moveTo(w * 0.2f, h * 0.52f); lineTo(w * 0.42f, h * 0.72f); lineTo(w * 0.8f, h * 0.3f)
             }, color, style = stroke)
@@ -200,4 +210,4 @@ internal fun DistanceEdgeGlow(zone: DistanceZone, modifier: Modifier = Modifier)
 
 /** 距离偏差的「是否值得提醒」判定：避免在容差边缘来回抖动时反复播报。 */
 internal fun DistanceStatus.clearlyOff(): Boolean =
-    zone == DistanceZone.UNKNOWN || abs(distanceCm - targetCm) > toleranceCm + 1f
+    zone == DistanceZone.UNKNOWN || zone == DistanceZone.MOVE_TO || abs(distanceCm - targetCm) > toleranceCm + 1f

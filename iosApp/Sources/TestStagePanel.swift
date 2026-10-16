@@ -11,21 +11,27 @@ struct TestStagePanel: ViewModifier {
 }
 
 /// 使用共用核心给出的目标与容差，仅呈现距离状态，不改变采样门控。
+/// 刚换目标距离、还在移过去的路上时（共用核心给出 distanceMoveToCm），提示「请移动到 xx 厘米处」而不是太近 / 太远。
 struct TestDistanceBanner: View {
     @ObservedObject var runtime: EyeRuntime
     private var distance: Double { runtime.number("distanceCm") }
+    private var moveTo: Double { runtime.number("distanceMoveToCm") }
+    private var moving: Bool { moveTo > 0 }
     private var target: Double { runtime.number("targetDistanceCm") }
     private var tolerance: Double { runtime.number("distanceToleranceCm") }
     private var known: Bool {
         distance.isFinite && distance > 0 && (runtime.bool("faceDetected") || runtime.string("phase") == "NEAR_VISION")
     }
-    private var close: Bool { known && distance < target - tolerance }
-    private var far: Bool { known && distance > target + tolerance }
+    private var close: Bool { known && !moving && distance < target - tolerance }
+    private var far: Bool { known && !moving && distance > target + tolerance }
     private var background: Color {
-        !known ? EyeStyle.surfaceVariant : close ? EyeStyle.tooClose : far ? EyeStyle.tooFar : EyeStyle.success
+        moving ? EyeStyle.primary : !known ? EyeStyle.surfaceVariant : close ? EyeStyle.tooClose : far ? EyeStyle.tooFar : EyeStyle.success
     }
-    private var title: String { !known ? "请正对屏幕" : close ? "太近了" : far ? "太远了" : "距离合适" }
+    private var title: String {
+        moving ? "请移动到 \(Int(moveTo.rounded())) 厘米处" : !known ? "请正对屏幕" : close ? "太近了" : far ? "太远了" : "距离合适"
+    }
     private var detail: String {
+        if moving { return known ? "当前约 \(Int(distance.rounded())) cm，到位后视标自动出现" : "露出双眼，让摄像头看到你" }
         if !known { return "露出双眼，让摄像头看到你" }
         if close { return "把手机往远处移约 \(max(1, Int((target - tolerance - distance).rounded()))) cm" }
         if far { return "把手机往近处移约 \(max(1, Int((distance - target - tolerance).rounded()))) cm" }
@@ -33,7 +39,7 @@ struct TestDistanceBanner: View {
     }
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: !known ? "viewfinder" : close ? "arrow.up.right.and.arrow.down.left" : far ? "arrow.down.right.and.arrow.up.left" : "checkmark")
+            Image(systemName: moving ? "arrow.forward" : !known ? "viewfinder" : close ? "arrow.up.right.and.arrow.down.left" : far ? "arrow.down.right.and.arrow.up.left" : "checkmark")
                 .font(.system(size: 24, weight: .semibold)).frame(width: 28)
                 .contentTransition(.opacity)
             VStack(alignment: .leading, spacing: 2) {
@@ -41,7 +47,7 @@ struct TestDistanceBanner: View {
                 Text(detail).font(.subheadline).monospacedDigit()
             }.frame(maxWidth: .infinity, alignment: .leading)
             if known && tolerance > 0 { DistanceRuler(distance: distance, target: target, tolerance: tolerance) }
-        }.foregroundStyle(known ? EyeStyle.panel : EyeStyle.text).padding(.horizontal, 16).padding(.vertical, 10)
+        }.foregroundStyle(known || moving ? EyeStyle.panel : EyeStyle.text).padding(.horizontal, 16).padding(.vertical, 10)
             .background(background, in: RoundedRectangle(cornerRadius: 16))
             .animation(.easeInOut(duration: 0.28), value: background)
             .accessibilityElement(children: .combine)

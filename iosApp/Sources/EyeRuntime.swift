@@ -117,7 +117,10 @@ final class EyeRuntime: ObservableObject {
             base = string("coverPrompt")
         } else { base = string("instruction") }
         let zone = (state["distanceZone"] as? NSNumber)?.int32Value ?? 0
-        let distanceText = zone != 0 ? controller.distancePrompt(zone: zone, count: 0) : nil
+        // 换目标距离途中：播报「请移动到 xx 厘米处」，到位后与距离提醒一样接一句肯定
+        let moveTo = (state["distanceMoveToCm"] as? NSNumber)?.intValue
+        let distanceText = moveTo.map { "请移动到 \($0) 厘米处。" }
+            ?? (zone != 0 ? controller.distancePrompt(zone: zone, count: 0) : nil)
         let prompt = distanceText ?? base
         if !prompt.isEmpty && prompt != lastPrompt {
             lastPrompt = prompt; promptWork?.cancel()

@@ -34,7 +34,8 @@ fun screeningFeedbackFrame(s: ScreeningState, coverRemainingMs: Long = -1): Scre
         ScreeningStep.PUSH_UP -> ":${s.nearPoints.size}:${s.pushStage}"
         else -> ""
     }
-    val target = if (s.guidePending) null else screeningDistanceTarget(s)
+    // 移动到新目标距离途中不算偏离，不发距离警示音
+    val target = if (s.guidePending || s.distanceMoveToCm != null) null else screeningDistanceTarget(s)
     return ScreeningFeedbackFrame(s.step.name + suffix, active, s.step == ScreeningStep.RESULT,
         if (s.step == ScreeningStep.GAZE_CALIBRATION && !s.gazeCalibrationFailed) s.gazeCalibrationIndex else -1,
         s.step == ScreeningStep.GAZE_CALIBRATION && s.gazeCalibrationFailed,

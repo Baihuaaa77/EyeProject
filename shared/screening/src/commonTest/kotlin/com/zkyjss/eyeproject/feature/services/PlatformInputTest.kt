@@ -59,6 +59,30 @@ class PlatformInputTest {
         assertEquals(emptyList(), StrabismusGaze.pointsToRetake(calibration(skip = setOf(1, 2, 3, 4, 5))))
     }
 
+    /** iPhone 实测：屏幕窄、水平眼动信号弱，逐点固定偏差使水平均方根误差约 0.12 屏幕，仍应通过。 */
+    @Test fun weakHorizontalSignalStillCalibratesButFailureSaysWhy() {
+        val noisy = StrabismusGaze.calibrationTargets.flatMapIndexed { index, p ->
+            val bias = if (index % 2 == 0) 0.025f else -0.025f
+            List(6) {
+                val eye = GazePoint((p.x - 0.5f) / 5 + bias, (p.y - 0.5f) / 3)
+                GazeCalibrationSample(index, p, eye, eye)
+            }
+        }
+        assertTrue(StrabismusGaze.calibrate(noisy) != null)
+        val empty = calibration(skip = setOf(1, 2, 3, 4, 5))
+        assertTrue(StrabismusGaze.failureReason(empty).startsWith("有 5 个圆点没有采到有效画面"))
+    }
+
+    @Test fun changedTargetDistanceAsksToMoveThereInsteadOfTooCloseOrFar() {
+        val moving = ScreeningState(kind = ScreeningKind.PRESBYOPIA, step = ScreeningStep.FLIPPER, trialIndex = 1,
+            faceDetected = true, distanceCm = 50f, lux = 300f, distanceMoveToCm = 25f)
+        assertEquals("请移动到 25 厘米处", screeningGuidance(moving))
+        assertEquals("请移动到二十五厘米处。", screeningSpeechText(screeningGuidance(moving)!!))
+        // 移动途中不发距离警示音
+        assertEquals(3, screeningFeedbackFrame(moving).distanceZone)
+        assertEquals("太远了，请把手机靠近一点", screeningGuidance(moving.copy(distanceMoveToCm = null)))
+    }
+
     @Test fun coverPromptStaysSilentDuringHoldAndNamesOnlyTheNextAction() {
         val first = CoverMark("遮右眼", 0L, null, VisionEye.RIGHT)
         assertEquals("遮右眼", coverSpokenPrompt(ScreeningState(kind = ScreeningKind.STRABISMUS)))

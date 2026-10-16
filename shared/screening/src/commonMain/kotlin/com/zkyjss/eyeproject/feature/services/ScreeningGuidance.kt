@@ -17,6 +17,7 @@ fun screeningGuidance(s: ScreeningState): String? {
         val speed = s.pushSpeedCmPerSec ?: return "慢慢移近"
         return if (speed > PresbyopiaProtocol.PUSH_MAX_SPEED_CM_S) "慢一点" else "慢慢移近"
     }
+    s.distanceMoveToCm?.let { return moveToPrompt(it) }
     val (target, tolerance) = screeningDistanceTarget(s) ?: return "保持稳定"
     return when {
         s.distanceCm < target - tolerance -> "太近了，请把手机往远处移"
@@ -28,8 +29,11 @@ fun screeningGuidance(s: ScreeningState): String? {
 /** 当前步骤要求的（目标距离, 容差）；移近法、遮盖、问卷与结果页不做距离约束时返回 null。 */
 fun screeningDistanceTarget(s: ScreeningState): Pair<Float, Float>? = when (s.step) {
     ScreeningStep.PROFILE, ScreeningStep.RESULT, ScreeningStep.PUSH_UP, ScreeningStep.COVER -> null
-    ScreeningStep.FLIPPER -> (if (s.trialIndex % 2 == 0) 50f else 25f) to 4f
-    ScreeningStep.DISTANCE_CURVE -> PresbyopiaProtocol.CURVE_DISTANCES.getOrElse(s.curveIndex) { 40f } to 4f
+    ScreeningStep.FLIPPER -> (if (s.trialIndex % 2 == 0) 50f else 25f) to PresbyopiaProtocol.DISTANCE_TOLERANCE_CM
+    ScreeningStep.DISTANCE_CURVE -> PresbyopiaProtocol.CURVE_DISTANCES.getOrElse(s.curveIndex) { 40f } to PresbyopiaProtocol.DISTANCE_TOLERANCE_CM
     else -> if (s.kind == ScreeningKind.STRABISMUS) StrabismusProtocol.DISTANCE_CM to StrabismusProtocol.DISTANCE_TOLERANCE_CM
-        else PresbyopiaProtocol.NEAR_DISTANCE_CM to 4f
+        else PresbyopiaProtocol.NEAR_DISTANCE_CM to PresbyopiaProtocol.DISTANCE_TOLERANCE_CM
 }
+
+/** 换目标距离时的提示（屏幕与语音共用）。 */
+fun moveToPrompt(targetCm: Float) = "请移动到 ${targetCm.toInt()} 厘米处"

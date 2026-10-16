@@ -71,10 +71,17 @@ class ScreeningDistanceTracker {
             abs(value.trendCm) <= maxOf(2.5f, toleranceCm * 0.75f)
     }
 
+    /**
+     * 作答时的距离核对：距离仍在目标附近，且与呈现时相差不超过 12%（视标角大小按呈现距离换算）。
+     * 不再要求作答瞬间「稳定」：点按作答时手机轻晃很常见，呈现前已核对过稳定；
+     * 抬手点按挡住人脸等短暂丢失测距时，1.5 秒内沿用最后的估计。
+     */
     fun acceptableAnswer(targetCm: Float, presentedCm: Float, toleranceCm: Float, nowMs: Long): Boolean {
-        val value = estimate(nowMs) ?: return false
-        return stable(targetCm, toleranceCm + 0.5f, nowMs) &&
-            abs(value.distanceCm - presentedCm) <= maxOf(4f, toleranceCm + 1f)
+        val value = estimate(nowMs)
+            ?: samples.lastOrNull()?.takeIf { nowMs - it.timeMs <= ANSWER_GRACE_MS }?.let { estimate(it.timeMs) }
+            ?: return false
+        return abs(value.distanceCm - targetCm) <= toleranceCm &&
+            abs(value.distanceCm - presentedCm) <= maxOf(3f, presentedCm * 0.12f)
     }
 
     private fun median(values: List<Float>): Float {
@@ -90,5 +97,6 @@ class ScreeningDistanceTracker {
         const val MIN_SAMPLES = 4
         const val MIN_SPAN_MS = 400L
         const val MAX_MAD_CM = 3f
+        const val ANSWER_GRACE_MS = 1_500L
     }
 }

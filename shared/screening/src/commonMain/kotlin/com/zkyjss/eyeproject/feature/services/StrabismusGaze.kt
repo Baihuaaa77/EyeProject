@@ -65,6 +65,17 @@ class StrabismusGaze private constructor(private val left: Mapping?, private val
             return calibrationTargets.indices.filter { it !in usable }.takeIf { it.size <= MAX_RETAKE_POINTS }.orEmpty()
         }
 
+        /** 校准失败时给用户的原因：是采不到画面（距离、头位、光线），还是眼动对不上圆点。 */
+        fun failureReason(samples: List<GazeCalibrationSample>): String {
+            val missing = calibrationTargets.indices.count { index ->
+                samples.count { it.index == index && it.left != null } < MIN_SAMPLES_PER_POINT &&
+                    samples.count { it.index == index && it.right != null } < MIN_SAMPLES_PER_POINT
+            }
+            return if (missing > MAX_DROPPED_POINTS)
+                "有 $missing 个圆点没有采到有效画面。请保持约 33 cm、头部正对屏幕、光线均匀后重试。"
+            else "眼睛转动与圆点位置对不上。请只转动眼睛看每个圆点，头和手机保持不动后重试。"
+        }
+
         private fun fit(samples: List<GazeCalibrationSample>, useLeft: Boolean): EyeFit {
             fun median(values: List<Float>) = values.sorted().let { it[it.size / 2] }
             var anchors = calibrationTargets.indices.mapNotNull { index ->
@@ -131,20 +142,23 @@ class StrabismusGaze private constructor(private val left: Mapping?, private val
         }
 
         /**
-         * 每个轴的拟合值须与目标高度相关（水平 ≥ 0.8；垂直眼动幅度小、受眼睑影响更大，≥ 0.7），
-         * 且均方根误差不超过屏幕的 10%。
+         * 每个轴的拟合值须与目标明显相关（≥ 0.6），且均方根误差不超过该轴注视容差的 60%
+         * （水平 0.15、垂直 0.12 屏幕）。校准只用于宽容的注视监督（容差 0.25 / 0.20），不进入眼位度数；
+         * 手机屏幕窄，iPhone 实测水平眼动信号弱，均方根误差常在 0.14 左右，原先 0.10 的门槛几乎无法通过。
          */
         private fun quality(model: Mapping, anchors: List<Anchor>): Boolean {
             for (horizontal in listOf(true, false)) {
                 val fitted = anchors.map { (if (horizontal) model.x.estimate(it.eye) else model.y.estimate(it.eye)).toDouble() }
                 val target = anchors.map { (if (horizontal) it.target.x else it.target.y).toDouble() }
                 if (fitted.any { !it.isFinite() }) return false
-                if ((correlation(fitted, target) ?: return false) < if (horizontal) 0.8 else 0.7) return false
+                if ((correlation(fitted, target) ?: return false) < MIN_CORRELATION) return false
                 val rmse = sqrt(fitted.indices.map { (fitted[it] - target[it]).let { d -> d * d } }.average())
-                if (rmse > 0.10) return false
+                if (rmse > (if (horizontal) TOLERANCE_X else TOLERANCE_Y) * RMSE_OF_TOLERANCE) return false
             }
             return true
         }
+        private const val MIN_CORRELATION = 0.6
+        private const val RMSE_OF_TOLERANCE = 0.6
 
         private fun det3(m: Array<DoubleArray>) =
             m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) -

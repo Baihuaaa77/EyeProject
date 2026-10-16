@@ -32,7 +32,11 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
     private var nextTrialId = 0
     private var flipperMoveStartMs = 0L
     private val distanceTracker = ScreeningDistanceTracker()
-    private val nearDistanceToleranceCm = 4f
+    private val nearDistanceToleranceCm = PresbyopiaProtocol.DISTANCE_TOLERANCE_CM
+    /** 上一帧的目标距离；变化时进入「请移动到 xx 厘米处」。 */
+    private var lastDistanceTargetCm: Float? = null
+    /** 多距离视力：当前距离因屏幕像素不足改测过较大视标。 */
+    private var curveResolutionLimited = false
     private var stepStartMs = 0L
     private var totalFrames = 0
     private var validFrames = 0
@@ -139,7 +143,7 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
             _state.update { it.copy(warning = "请先让前置摄像头检测到双眼和距离") }; return
         }
         if (state.kind == ScreeningKind.PRESBYOPIA && !distanceStable(40f, nearDistanceToleranceCm)) {
-            _state.update { it.copy(warning = "请保持 40±4 cm 约 1 秒") }; return
+            _state.update { it.copy(warning = "请保持 40±${nearDistanceToleranceCm.toInt()} cm 约 1 秒") }; return
         }
         if (state.kind == ScreeningKind.STRABISMUS && !distanceOk(33f, 5f)) {
             _state.update { it.copy(warning = "斜视任务需保持 33±5 cm") }; return
@@ -197,7 +201,14 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
                     advanceNearEye()
                 }
             } else if (s.step == ScreeningStep.DISTANCE_CURVE) {
-                finishCurveDistance(resolutionLimited = true)
+                // 与近视力一致：起始档在这个距离画不出来时先改测较大视标，而不是整个距离记为空
+                val index = nearLevels.indexOf(s.visionLevel)
+                val passedLower = s.answers.any { it.step == ScreeningStep.DISTANCE_CURVE &&
+                    it.targetCm == target && it.level < s.visionLevel }
+                curveResolutionLimited = true
+                if (!passedLower && index > 0) _state.update { it.copy(visionLevel = nearLevels[index - 1],
+                    nearDescending = true, trialIndex = 0, nearStopReason = "本机无法呈现更小视标，改测较大视标", warning = null) }
+                else finishCurveDistance(limitedNow = true)
             } else _state.update { it.copy(warning = "当前距离下视标笔画像素不足，不能可靠测量") }
             return
         }
@@ -224,11 +235,9 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
         val now = platform.nowMs()
         if (byVoice && !voiceGuard.accept(now)) return
         val answerDistance = distanceTracker.estimate(now)?.distanceCm
-        if (!distanceTracker.acceptableAnswer(target, s.trialDistanceCm, nearDistanceToleranceCm, now)) {
-            _state.update { it.copy(warning = if (answerDistance == null ||
-                abs(answerDistance - target) <= nearDistanceToleranceCm + 0.5f)
-                "测距短时波动，请保持姿势约 1 秒后再次作答" else
-                "当前距离已偏离目标，请调回 ${target.toInt()} cm 附近后再次作答") }
+        if (!distanceTracker.acceptableAnswer(target, s.trialDistanceCm, PresbyopiaProtocol.ANSWER_TOLERANCE_CM, now)) {
+            _state.update { it.copy(warning = if (answerDistance == null) "暂时测不到距离，请正对屏幕后再次作答"
+                else "距离变化较大，请回到 ${target.toInt()} cm 附近后再次作答") }
             return
         }
         val latency = now - questionStartMs
@@ -374,6 +383,7 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
         stepStartMs = platform.nowMs()
         questionStartMs = 0L
         val start = bestBinocularLevel(_state.value.answers) ?: 0.3f
+        curveResolutionLimited = false
         _state.update { it.copy(step = ScreeningStep.DISTANCE_CURVE, guidePending = true, curveIndex = 0, curvePoints = emptyList(),
             trialIndex = 0, visionLevel = start, nearDescending = false, visionEye = VisionEye.BOTH, trialVisible = false,
             direction = Random.nextInt(4), nearStopReason = null,
@@ -397,13 +407,15 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
                 _state.update { it.copy(visionLevel = nearLevels[index + 1], trialIndex = 0, direction = Random.nextInt(4)) }
             !passed && !passedOther && index > 0 ->
                 _state.update { it.copy(visionLevel = nearLevels[index - 1], nearDescending = true, trialIndex = 0, direction = Random.nextInt(4)) }
-            else -> finishCurveDistance(resolutionLimited = false)
+            else -> finishCurveDistance(limitedNow = false)
         }
     }
 
-    private fun finishCurveDistance(resolutionLimited: Boolean) {
+    private fun finishCurveDistance(limitedNow: Boolean) {
         val s = _state.value
         val target = PresbyopiaProtocol.CURVE_DISTANCES.getOrNull(s.curveIndex) ?: return
+        val resolutionLimited = limitedNow || curveResolutionLimited
+        curveResolutionLimited = false
         val threshold = s.answers.filter { it.step == ScreeningStep.DISTANCE_CURVE && it.targetCm == target }
             .groupBy { it.level }
             .filterValues { g -> g.size >= PresbyopiaProtocol.CURVE_TRIALS_PER_LEVEL && g.count { it.correct } >= PresbyopiaProtocol.CURVE_PASS }
@@ -539,7 +551,7 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
             }
             if (gaze == null) {
                 _state.update { it.copy(gazeCalibrationFailed = true,
-                    warning = "未获得可靠注视校准。请看着每个圆点，保持头和手机不动后重试。") }
+                    warning = "未获得可靠注视校准。" + StrabismusGaze.failureReason(gazeCalibration)) }
             } else {
                 stepStartMs = platform.nowMs(); resetGazeWindow(); faceCenterBaseline = null
                 _state.update { it.copy(step = ScreeningStep.FIXATION, gazeCalibrated = true,
@@ -758,6 +770,21 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
         _state.value = ScreeningState(kind = _state.value.kind)
     }
 
+    /**
+     * 多距离视力与远近切换换目标距离时，先提示「请移动到 xx 厘米处」；到达提示容差内后清空，
+     * 恢复「太近了 / 太远了」监督。其余步骤目标不变，不进入移动提示。
+     */
+    private fun trackDistanceMove(distanceCm: Float) {
+        val s = _state.value
+        val target = if (s.step == ScreeningStep.DISTANCE_CURVE || s.step == ScreeningStep.FLIPPER) screeningDistanceTarget(s) else null
+        var moveTo = s.distanceMoveToCm
+        if (target == null) moveTo = null
+        else if (target.first != lastDistanceTargetCm) moveTo = target.first
+        lastDistanceTargetCm = target?.first
+        if (moveTo != null && target != null && distanceCm > 0f && abs(distanceCm - target.first) <= target.second) moveTo = null
+        if (moveTo != s.distanceMoveToCm) _state.update { it.copy(distanceMoveToCm = moveTo) }
+    }
+
     private fun distanceOk(target: Float, tolerance: Float) =
         distanceTracker.estimate(platform.nowMs())?.let { abs(it.distanceCm - target) <= tolerance } == true
 
@@ -845,7 +872,7 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
             (_state.value.kind != ScreeningKind.PRESBYOPIA || (left != null || right != null)) &&
             (_state.value.kind != ScreeningKind.STRABISMUS ||
                 ((if (step == ScreeningStep.COVER) left != null || right != null else left != null && right != null) &&
-                    abs(smoothedDistance - StrabismusProtocol.DISTANCE_CM) <= StrabismusProtocol.DISTANCE_TOLERANCE_CM && headStable && poseStable)) &&
+                    abs(smoothedDistance - StrabismusProtocol.DISTANCE_CM) <= StrabismusProtocol.DISTANCE_GATE_CM && headStable && poseStable)) &&
             (_state.value.lux == null || _state.value.lux!! >= 50f)
         val rendered = renderedTargets.lastOrNull { it.timeMs <= time && it.step == step }
         val covered = if (step == ScreeningStep.COVER) _state.value.coverMarks.lastOrNull()?.covered else null
@@ -946,6 +973,7 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
                     it.warning?.startsWith("相机错误") == true) null else it.warning,
             ) }
         }
+        trackDistanceMove(smoothedDistance)
         val st = _state.value
         // 停稳后视标自动出现：免去点按「显示视标」带动手机
         if ((step == ScreeningStep.FLIPPER && st.secondsLeft > 0 || step == ScreeningStep.DISTANCE_CURVE ||

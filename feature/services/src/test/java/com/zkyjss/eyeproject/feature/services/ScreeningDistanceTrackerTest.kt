@@ -26,6 +26,18 @@ class ScreeningDistanceTrackerTest {
         assertFalse(tracker.acceptableAnswer(40f, 40f, 4f, 1_800L))
     }
 
+    /** iPhone 实测：停在 40±4 的边缘（约 36.5 cm），测距抖到 35.6 cm 时作答不应被拒。 */
+    @Test fun answerAtTheEdgeOfTheBandSurvivesJitter() {
+        val tracker = ScreeningDistanceTracker()
+        listOf(36.5f, 36.2f, 35.4f, 36.8f, 35.6f, 35.2f, 36.0f, 35.5f).forEachIndexed { index, value ->
+            tracker.add(index * 100L, value)
+        }
+        assertTrue(tracker.acceptableAnswer(40f, 36.5f, PresbyopiaProtocol.ANSWER_TOLERANCE_CM, 700L))
+        // 点按时短暂丢失人脸：1.5 秒内沿用最后的估计，之后拒绝
+        assertTrue(tracker.acceptableAnswer(40f, 36.5f, PresbyopiaProtocol.ANSWER_TOLERANCE_CM, 1_500L))
+        assertFalse(tracker.acceptableAnswer(40f, 36.5f, PresbyopiaProtocol.ANSWER_TOLERANCE_CM, 2_300L))
+    }
+
     @Test fun staleDistanceCannotUnlockATrial() {
         val tracker = ScreeningDistanceTracker()
         repeat(8) { tracker.add(it * 100L, 40f) }

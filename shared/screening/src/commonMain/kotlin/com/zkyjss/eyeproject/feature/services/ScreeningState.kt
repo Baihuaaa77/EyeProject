@@ -132,6 +132,11 @@ data class ScreeningState(
     val nearPoints: List<NearPoint> = emptyList(),
     val curveIndex: Int = 0,
     val curvePoints: List<CurvePoint> = emptyList(),
+    /**
+     * 目标距离刚变化、还未到达时的新目标（cm）：此时提示「请移动到 xx 厘米处」，
+     * 到达容差范围后清空，恢复「太近了 / 太远了」监督。仅多距离视力与远近切换会换目标距离。
+     */
+    val distanceMoveToCm: Float? = null,
     val pursuitMaxDeg: Pair<Float, Float>? = null,
     val history: List<String> = emptyList(),
     val invalidTrialCount: Int = 0,
