@@ -13,8 +13,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -27,18 +32,33 @@ import com.zkyjss.eyeproject.core.ui.component.EyeSectionCard
 import com.zkyjss.eyeproject.core.ui.component.EyeSelectCard
 import com.zkyjss.eyeproject.core.ui.component.EyeText
 
-/** 「我的」页：系统权限入口、关于与免责声明。 */
+/** 「我的」页：云端同步与数据、系统权限入口、关于与免责声明。 */
 @Composable
 fun MineScreen(
     modifier: Modifier = Modifier,
+    viewModel: MineViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
+    val cloudState by viewModel.cloudState.collectAsStateWithLifecycle()
+    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        uri?.let(viewModel::exportTo)
+    }
     val versionName = remember {
         runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }
             .getOrNull().orEmpty()
     }
     MineContent(
         versionName = versionName,
+        cloudState = cloudState,
+        cloudActions = CloudSyncActions(
+            signIn = viewModel::signIn,
+            register = viewModel::register,
+            signOut = viewModel::signOut,
+            setConsent = viewModel::setConsent,
+            syncNow = viewModel::syncNow,
+            export = { exportLauncher.launch("eyeproject-cloud-export.json") },
+            deleteCloudAccount = viewModel::deleteCloudAccount,
+        ),
         modifier = modifier,
         onOpenAppSettings = {
             context.startActivity(
@@ -56,6 +76,8 @@ fun MineScreen(
 internal fun MineContent(
     versionName: String,
     onOpenAppSettings: () -> Unit,
+    cloudState: CloudSyncUiState = CloudSyncUiState.NotConfigured,
+    cloudActions: CloudSyncActions = CloudSyncActions(),
     modifier: Modifier = Modifier,
 ) {
     val colors = LocalEyeColors.current
@@ -70,6 +92,8 @@ internal fun MineContent(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         EyeText("我的", style = typography.headline, color = colors.textPrimary, modifier = Modifier.padding(vertical = 16.dp))
+
+        CloudSyncSection(cloudState, cloudActions)
 
         EyeSelectCard(content = "权限与通知", onClick = onOpenAppSettings)
 

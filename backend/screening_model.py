@@ -1,4 +1,4 @@
-"""用已标注会话训练两个独立的探索性筛查模型；仅依赖 Python 标准库。"""
+"""用已标注会话分别训练干眼、老视、斜视的探索性筛查模型；仅依赖 Python 标准库。"""
 
 from __future__ import annotations
 
@@ -7,40 +7,77 @@ import csv
 import json
 import math
 import random
+import sys
 from pathlib import Path
 
 
+# 每个病种的评估规则版本；与 shared/screening 中写入记录的版本常量逐一对应，规则或特征口径升版本时这里同步改。
+INPUT_VERSIONS = {
+    "DRY_EYE": "dryeye-9.18-rules-2",          # DryEyeAssessment.VERSION，写在记录顶层 assessmentVersion
+    "PRESBYOPIA": "protocol-9.18-rules-2",     # ScreeningAssessmentModel.VERSION，写在 assessment.modelVersion
+    "STRABISMUS": "protocol-9.18-rules-2",
+}
+
+# 特征键与顺序照搬 DryEyeAssessment.evaluate 与 ScreeningAssessmentModel 的 features 映射。
 FEATURES = {
+    "DRY_EYE": [
+        "natural_seconds", "baseline_decimal", "blink_rate_per_min", "open_longest_sec",
+        "fva_mean_logmar", "vmr", "accuracy_natural", "accuracy_open", "mean_rt_ms", "decline_sec",
+        "valid_frame_ratio", "distance_in_range_ratio", "head_turn_ratio",
+    ],
     "PRESBYOPIA": [
         "age_years", "near_right_decimal", "near_left_decimal", "near_both_decimal",
-        "near_point_cm", "near_point_demand_d", "near_point_mad_cm",
-        "flipper_near_accuracy", "flipper_far_accuracy", "flipper_correct_cycles",
-        "daily_correction_mode", "near_add_present", "prior_eye_surgery",
-        "resolution_limited", "invalid_trials",
+        "near_point_cm", "near_point_mad_cm", "amplitude_d", "push_speed_cm_s",
+        "hofstetter_min_d", "hofstetter_mean_d", "amplitude_age_years",
+        "flipper_cycles_per_min", "flipper_errors",
+        "curve_60_decimal", "curve_33_decimal", "curve_25_decimal",
+        "daily_correction_mode", "near_correction_in_use", "invalid_trials",
     ],
     "STRABISMUS": [
-        "age_years", "quality_rate", "fixed_optical_h_iris", "fixed_optical_v_iris",
-        "fixed_optical_h_mad_iris", "fixed_optical_v_mad_iris",
-        "cover_refix_median_iris", "cover_refix_events",
-        "pursuit_velocity_correlation", "fixed_optical_frames", "pursuit_optical_pairs",
+        "age_years", "quality_rate",
+        "fixation_hde_prism", "fixation_vde_prism", "fixation_hde_sd_prism", "fixation_vde_sd_prism",
+        "fixation_frames", "fixation_continuous_ms",
+        "cover_refix_median_prism", "cover_refix_events",
+        "bsi", "pursuit_r_h", "pursuit_r_v", "pursuit_d_norm",
+        "pursuit_max_x_deg", "pursuit_max_y_deg",
     ],
 }
+
+MODEL_FORMAT = "eyeproject-screening-logistic-v2"
+
+
+def record_parts(session: dict, kind: str) -> tuple[str | None, bool, object]:
+    """按 RecordSummary 的口径取（评估版本、质量是否合格、特征对象）：干眼在顶层，老视/斜视在 assessment 下。"""
+    if kind == "DRY_EYE":
+        valid = session.get("valid")
+        return session.get("assessmentVersion"), valid is True, session.get("features")
+    assessment = session.get("assessment")
+    if not isinstance(assessment, dict):
+        return None, False, None
+    quality = assessment.get("quality")
+    return assessment.get("modelVersion"), isinstance(quality, str) and quality != "不足", assessment.get("features")
 
 
 def session_features(path: Path, kind: str) -> dict[str, float | None]:
     session = json.loads(path.read_text(encoding="utf-8"))
     if session.get("kind") != kind:
         raise ValueError(f"病种不匹配：{path}")
-    assessment = session.get("assessment", {})
-    if assessment.get("quality") != "可用于探索性评估":
+    version, sufficient, raw = record_parts(session, kind)
+    if version != INPUT_VERSIONS[kind]:
+        raise ValueError(f"特征版本不兼容（{version}）：{path}")
+    if not sufficient:
         raise ValueError(f"质量不足，拒绝训练或推理：{path}")
-    if assessment.get("modelVersion") != "research-rules-2":
-        raise ValueError(f"特征版本不兼容：{path}")
-    raw = assessment.get("features", {})
+    if not isinstance(raw, dict):
+        raise ValueError(f"记录缺少 features 对象：{path}")
+    missing = [key for key in FEATURES[kind] if key not in raw]
+    if missing:
+        raise ValueError(f"特征键缺失，记录与训练程序版本不一致：{path} 缺 {', '.join(missing)}")
     result = {}
     for key in FEATURES[kind]:
-        value = raw.get(key)
-        result[key] = float(value) if isinstance(value, (int, float)) and math.isfinite(value) else None
+        value = raw[key]
+        # JSON 的 true/false 在 Python 中是 int 子类，不能当作数值特征
+        numeric = isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+        result[key] = float(value) if numeric else None
     return result
 
 
@@ -150,8 +187,8 @@ def train(sessions: Path, labels_path: Path, kind: str) -> dict:
     centers, scales = fit_transform([features for _, features in train_rows], names)
     x = [transform(features, names, centers, scales) for _, features in train_rows]
     weights, bias = fit_logistic(x, [label for label, _ in train_rows])
-    model = {"format": "eyeproject-screening-logistic-v1", "kind": kind,
-             "inputVersion": "research-rules-2", "featureNames": names,
+    model = {"format": MODEL_FORMAT, "kind": kind,
+             "inputVersion": INPUT_VERSIONS[kind], "featureNames": names,
              "centers": centers, "scales": scales, "weights": weights, "bias": bias,
              "trainingSubjects": len(subject_labels) - len(holdout),
              "holdoutSubjects": len(holdout),
@@ -159,6 +196,23 @@ def train(sessions: Path, labels_path: Path, kind: str) -> dict:
     model["holdoutMetrics"] = metrics([label for label, _ in test_rows],
                                       [score(model, features) for _, features in test_rows])
     return model
+
+
+def predict(model: dict, session: Path) -> dict:
+    if model.get("format") != MODEL_FORMAT:
+        raise ValueError("模型格式不兼容，请用当前版本重新训练")
+    kind = model.get("kind")
+    if kind not in FEATURES or model.get("inputVersion") != INPUT_VERSIONS[kind] \
+            or model.get("featureNames") != FEATURES[kind]:
+        raise ValueError("模型的输入版本或特征列表与当前记录格式不一致，请重新训练")
+    features = session_features(session, kind)
+    return {"kind": kind, "researchScore": score(model, features), "scoreMeaning": model["scoreMeaning"]}
+
+
+def emit(payload: dict) -> None:
+    # Windows 控制台为 GBK，直接 print 中文/符号可能抛 UnicodeEncodeError；统一按 UTF-8 写字节
+    sys.stdout.buffer.write((json.dumps(payload, ensure_ascii=False) + "\n").encode("utf-8"))
+    sys.stdout.flush()
 
 
 def main() -> None:
@@ -169,21 +223,16 @@ def main() -> None:
     fit.add_argument("--labels", type=Path, required=True)
     fit.add_argument("--kind", choices=FEATURES, required=True)
     fit.add_argument("--out", type=Path, required=True)
-    predict = sub.add_parser("predict")
-    predict.add_argument("--model", type=Path, required=True)
-    predict.add_argument("--session", type=Path, required=True)
+    run = sub.add_parser("predict")
+    run.add_argument("--model", type=Path, required=True)
+    run.add_argument("--session", type=Path, required=True)
     args = parser.parse_args()
     if args.command == "train":
         model = train(args.sessions, args.labels, args.kind)
         args.out.write_text(json.dumps(model, ensure_ascii=False, indent=2), encoding="utf-8")
-        print(json.dumps({"model": str(args.out), "holdoutMetrics": model["holdoutMetrics"]}, ensure_ascii=False))
+        emit({"model": str(args.out), "holdoutMetrics": model["holdoutMetrics"]})
     else:
-        model = json.loads(args.model.read_text(encoding="utf-8"))
-        if model.get("format") != "eyeproject-screening-logistic-v1":
-            raise ValueError("模型格式不兼容")
-        features = session_features(args.session, model["kind"])
-        print(json.dumps({"kind": model["kind"], "researchScore": score(model, features),
-                          "scoreMeaning": model["scoreMeaning"]}, ensure_ascii=False))
+        emit(predict(json.loads(args.model.read_text(encoding="utf-8")), args.session))
 
 
 if __name__ == "__main__":

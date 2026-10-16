@@ -9,6 +9,7 @@ import android.os.SystemClock
 import androidx.lifecycle.LifecycleOwner
 import com.zkyjss.eyeproject.core.camera.CameraController
 import com.zkyjss.eyeproject.core.camera.CameraIntrinsicsProvider
+import com.zkyjss.eyeproject.core.data.record.ScreeningRecordRepository
 import com.zkyjss.eyeproject.core.model.FaceLandmarkFrame
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -18,6 +19,7 @@ internal class AndroidScreeningPlatform(
     private val context: Context,
     private val camera: CameraController,
     private val intrinsics: CameraIntrinsicsProvider,
+    private val records: ScreeningRecordRepository,
 ) : ScreeningPlatform, SensorEventListener {
     val feedbackSession = ScreeningFeedbackSession()
     override fun feedback(cue: ScreeningFeedbackCue) = feedbackSession.offer(cue)
@@ -56,9 +58,8 @@ internal class AndroidScreeningPlatform(
         if (event.sensor.type == Sensor.TYPE_LIGHT) event.values.firstOrNull()?.let { lightObserver?.invoke(it) }
     }
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
-    override suspend fun saveRecord(name: String, json: String) = withContext(Dispatchers.IO) {
-        context.openFileOutput(name, Context.MODE_PRIVATE).bufferedWriter().use { it.write(json) }
-    }
+    /** 经仓库落盘（文件名与位置不变，「与上次对比」照旧读取）并按同意状态排队上传。 */
+    override suspend fun saveRecord(name: String, json: String) = records.saveRecord(name, json)
     override suspend fun compareHistory(state: ScreeningState, assessment: ScreeningAssessment) =
         withContext(Dispatchers.IO) { ScreeningHistory.compare(context, state, assessment) }
 }

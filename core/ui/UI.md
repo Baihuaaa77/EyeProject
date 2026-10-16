@@ -33,6 +33,7 @@
 |---|---|
 | `EyeSwitch` | 开关（Box + 动画），选中轨道主色；`onCheckedChange = null` 时仅展示（由外层整行切换） |
 | `EyeSegmentedRow` | 分段选择器，泛型 `SegmentedOption<T>`：浅色轨道 + 主色滑块弹簧滑动，RadioButton 语义 |
+| `EyeTextField` | 单行输入框（BasicTextField 自绘）：上方标签、浅底细边框、占位文字；`password` 遮挡输入 |
 | `EyeStatusChip` | 状态徽标，`StatusTone(NEUTRAL/SUCCESS/DANGER/WARNING)` 语义色；`live` 时带呼吸圆点 |
 
 ### 栏

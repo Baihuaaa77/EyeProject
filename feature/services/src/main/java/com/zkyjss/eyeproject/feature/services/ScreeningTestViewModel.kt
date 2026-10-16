@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.zkyjss.eyeproject.core.camera.CameraController
 import com.zkyjss.eyeproject.core.camera.CameraIntrinsicsProvider
+import com.zkyjss.eyeproject.core.data.record.ScreeningRecordRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -16,8 +17,9 @@ class ScreeningTestViewModel @Inject constructor(
     @param:ApplicationContext context: Context,
     camera: CameraController,
     intrinsics: CameraIntrinsicsProvider,
+    records: ScreeningRecordRepository,
 ) : ViewModel() {
-    private val platform = AndroidScreeningPlatform(context, camera, intrinsics)
+    private val platform = AndroidScreeningPlatform(context, camera, intrinsics, records)
     val engine = ScreeningEngine(platform, viewModelScope)
     val state get() = engine.state
     fun feedbackCues(enabled: Boolean) = platform.feedbackSession.poll(screeningFeedbackFrame(state.value, engine.coverRemainingMs()), platform.nowMs(), enabled)
