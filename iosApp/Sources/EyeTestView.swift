@@ -221,7 +221,7 @@ private struct QuestionnaireView: View {
                                 else if exclusive.contains(option) { chosen = [option] }
                                 else { chosen.removeAll { exclusive.contains($0) }; chosen.append(option) }
                                 runtime.setField(key, chosen.joined(separator: "、"))
-                            } else { runtime.setField(key, option); if index < runtime.questions.count - 1 { index += 1 } }
+                            } else { runtime.setField(key, option) }  // 选中后停在本题，由「下一题」确认
                         } label: {
                             HStack { Text(option); Spacer(); if selected { Image(systemName: "checkmark").foregroundStyle(EyeStyle.primary) } }
                         }.buttonStyle(EyeCardButtonStyle(selected: selected))
@@ -242,6 +242,11 @@ private struct QuestionnaireView: View {
                     if index < runtime.questions.count - 1 { index += 1 }
                     else { if runtime.kind == "PRESBYOPIA" { runtime.controller.setMode(mode: mode) }; runtime.finishProfile() }
                 }.buttonStyle(EyeButtonStyle()).disabled(q["valid"] as? Bool != true)
+                VStack(spacing: 2) {
+                    Button("跳过问卷，直接测试") { runtime.act("skipProfile") }
+                        .font(EyeStyle.body).foregroundStyle(EyeStyle.primary).frame(minHeight: 44)
+                    Text("跳过后，依赖年龄和症状的判断会注明无法评估。").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
+                }.frame(maxWidth: .infinity)
             }
         }
     }

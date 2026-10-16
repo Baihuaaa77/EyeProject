@@ -86,6 +86,8 @@ data class ScreeningState(
     val step: ScreeningStep = ScreeningStep.PROFILE,
     val guidePending: Boolean = false,
     val fields: Map<String, String> = emptyMap(),
+    /** 用户选择先跳过问卷；记录中注明，依赖问卷的评估（如同龄对照）会说明无法评估。 */
+    val profileSkipped: Boolean = false,
     val mode: String = "",
     val faceDetected: Boolean = false,
     val distanceCm: Float = 0f,

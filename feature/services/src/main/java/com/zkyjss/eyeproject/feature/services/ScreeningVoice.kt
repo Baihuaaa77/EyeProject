@@ -14,6 +14,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
 import java.util.Locale
 
 /** 测试页使用系统中文语音合成；离开页面时释放引擎。 */
@@ -61,7 +62,7 @@ internal class ScreeningVoice(context: Context) : TextToSpeech.OnInitListener {
                         preferences.edit().putString(key, chosen.name).apply()
                 }
                 // 常速、原音高最接近真人讲解；略快的语速会让中文听起来急促机械。
-                tts.setSpeechRate(1f)
+                tts.setSpeechRate(pendingRate)
                 tts.setPitch(1f)
             }
             tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
@@ -78,13 +79,27 @@ internal class ScreeningVoice(context: Context) : TextToSpeech.OnInitListener {
         }
     }
 
+    private var volume = 1f
+
+    /** 设置中的播报音量（0–1）与语速倍率。 */
+    fun configure(volume: Float, rate: Float) {
+        this.volume = volume.coerceIn(0f, 1f)
+        if (available == true) engine?.setSpeechRate(rate.coerceIn(0.5f, 2f))
+        pendingRate = rate
+    }
+    private var pendingRate = 1f
+
+    /** 引擎此刻是否正在出声（不含结束后的 600 ms 收听保护）。 */
+    fun talking(): Boolean = engine?.isSpeaking == true
+
     fun speak(phrase: String) {
         if (available == null) { pending = phrase; return }
         if (available == true) {
             val id = "screening_instruction_${++utteranceNumber}"
             currentUtterance = id
             speaking = true
-            if (engine?.speak(screeningSpeechText(phrase), TextToSpeech.QUEUE_FLUSH, null, id) != TextToSpeech.SUCCESS) {
+            val params = android.os.Bundle().apply { putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, volume) }
+            if (engine?.speak(screeningSpeechText(phrase), TextToSpeech.QUEUE_FLUSH, params, id) != TextToSpeech.SUCCESS) {
                 currentUtterance = null
                 speaking = false
             }
@@ -119,6 +134,9 @@ internal fun SpeakTestPrompts(voice: ScreeningVoice, enabled: Boolean, base: Str
     LaunchedEffect(prompt, enabled) {
         if (!enabled || prompt.isBlank()) { voice.stop(); return@LaunchedEffect }
         delay(650)
+        // 让正在说的一句说完再开口：提醒频繁变化时逐句打断，听起来断断续续、很不自然。
+        // 距离提醒除外，需要及时。
+        if (offDistance == null) withTimeoutOrNull(6_000) { while (voice.talking()) delay(100) }
         val foreground = { owner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) }
         val text = when {
             offDistance != null -> prompt

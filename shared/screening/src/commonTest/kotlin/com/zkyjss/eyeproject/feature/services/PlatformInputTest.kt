@@ -21,6 +21,17 @@ class PlatformInputTest {
         assertEquals("""[{"name":"ANSWER","microphonePauseMs":110}]""", json)
     }
 
+    @Test fun oneUtteranceAnswersOnlyOnce() {
+        val guard = VoiceRepeatGuard(900)
+        assertTrue(guard.accept(1_000))
+        assertFalse(guard.accept(1_400))
+        assertTrue(guard.accept(1_950))
+    }
+
+    @Test fun commonMishearingsOfRightAreAccepted() {
+        for (text in listOf("右", "有", "又", "you")) assertEquals(VoiceCommand.Direction(0), VoiceCommandParser.parse(text), text)
+    }
+
     @Test fun skipIsSpokenLikeTheSkipKey() {
         assertEquals(VoiceCommand.Unsure, VoiceCommandParser.parse("跳过"))
     }

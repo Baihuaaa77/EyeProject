@@ -12,6 +12,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -65,6 +66,8 @@ internal fun QuestionnaireContent(
     extraPage: (@Composable () -> Unit)? = null,
     extraPageComplete: Boolean = true,
     stateKey: Any = Unit,
+    /** 「跳过问卷」：先不填，直接进入测试。 */
+    onSkip: (() -> Unit)? = null,
 ) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
@@ -123,6 +126,15 @@ internal fun QuestionnaireContent(
                 Modifier.weight(1f),
                 canContinue
             )
+        }
+        if (onSkip != null) {
+            Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(Modifier.heightIn(min = 44.dp).clickable(role = Role.Button, onClick = onSkip).padding(horizontal = 12.dp),
+                    contentAlignment = Alignment.Center) {
+                    EyeText("跳过问卷，直接测试", style = typography.body, color = colors.primary)
+                }
+                EyeText("跳过后，依赖年龄和症状的判断会注明无法评估。", style = typography.bodySecondary, color = colors.textSecondary)
+            }
         }
     }
 }

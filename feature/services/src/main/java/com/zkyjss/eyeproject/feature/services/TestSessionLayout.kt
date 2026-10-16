@@ -14,6 +14,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import kotlin.math.abs
+import kotlin.math.roundToInt
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.platform.testTag
@@ -53,13 +54,33 @@ internal class TestSettings(private val preferences: SharedPreferences) {
         private set
     var hapticsEnabled by mutableStateOf(true)
         private set
+    /** 震动强度 0.1–1，默认 0.6 即原有分级；调高时按比例加强。 */
+    var hapticStrength by mutableFloatStateOf(DEFAULT_HAPTIC_STRENGTH)
+        private set
+    /** 音效音量 0–1，乘在按事件分级的音量上。 */
+    var soundVolume by mutableFloatStateOf(1f)
+        private set
+    var speechVolume by mutableFloatStateOf(1f)
+        private set
+    /** 播报语速倍率 0.7–1.4。 */
+    var speechRate by mutableFloatStateOf(1f)
+        private set
     init { refresh() }
     fun refresh() {
         speechEnabled = preferences.getBoolean("speech", true)
         answersEnabled = preferences.getBoolean("answers", true)
         soundEnabled = preferences.getBoolean("sound", true)
         hapticsEnabled = preferences.getBoolean("haptics", true)
+        hapticStrength = preferences.getFloat("hapticStrength", DEFAULT_HAPTIC_STRENGTH)
+        soundVolume = preferences.getFloat("soundVolume", 1f)
+        speechVolume = preferences.getFloat("speechVolume", 1f)
+        speechRate = preferences.getFloat("speechRate", 1f)
     }
+    fun saveHapticStrength(value: Float) { hapticStrength = value; preferences.edit().putFloat("hapticStrength", value).apply() }
+    fun saveSoundVolume(value: Float) { soundVolume = value; preferences.edit().putFloat("soundVolume", value).apply() }
+    fun saveSpeechVolume(value: Float) { speechVolume = value; preferences.edit().putFloat("speechVolume", value).apply() }
+    fun saveSpeechRate(value: Float) { speechRate = value; preferences.edit().putFloat("speechRate", value).apply() }
+    companion object { const val DEFAULT_HAPTIC_STRENGTH = 0.6f }
     fun setSpeech(enabled: Boolean) { speechEnabled = enabled; preferences.edit().putBoolean("speech", enabled).apply() }
     fun setAnswers(enabled: Boolean) { answersEnabled = enabled; preferences.edit().putBoolean("answers", enabled).apply() }
     fun setSound(enabled: Boolean) { soundEnabled = enabled; preferences.edit().putBoolean("sound", enabled).apply() }
@@ -196,14 +217,21 @@ internal fun TestSettingsSheet(
                 EyeText("震动反馈", style = typography.body, color = colors.textPrimary)
                 EyeSwitch(settings.hapticsEnabled, null)
             }
+            if (settings.soundEnabled) LevelSlider("音效音量", settings.soundVolume, 0f..1f, settings::saveSoundVolume)
+            if (settings.hapticsEnabled) LevelSlider("震动强度", settings.hapticStrength, 0.1f..1f, settings::saveHapticStrength)
             EyeButton("试一下反馈", EyeButtonRole.SECONDARY, {
-                preview.play(ScreeningFeedbackCue.START, settings.soundEnabled, settings.hapticsEnabled) {}
+                preview.play(ScreeningFeedbackCue.START, settings.soundEnabled, settings.hapticsEnabled,
+                    settings.soundVolume, settings.hapticStrength) {}
             }, Modifier.fillMaxWidth(), enabled = settings.soundEnabled || settings.hapticsEnabled)
             Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).toggleable(settings.speechEnabled, role = Role.Switch, onValueChange = settings::setSpeech), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                 EyeText("语音播报", style = typography.body, color = colors.textPrimary)
                 EyeSwitch(settings.speechEnabled, null)
             }
             if (settings.speechEnabled && speechAvailable == false) EyeText("语音播报不可用", style = typography.bodySecondary, color = colors.warning)
+            if (settings.speechEnabled) {
+                LevelSlider("播报音量", settings.speechVolume, 0.1f..1f, settings::saveSpeechVolume)
+                LevelSlider("播报语速", settings.speechRate, 0.7f..1.4f, settings::saveSpeechRate)
+            }
             Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).toggleable(settings.answersEnabled, role = Role.Switch, onValueChange = settings::setAnswers), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                 EyeText("语音作答", style = typography.body, color = colors.textPrimary)
                 EyeSwitch(settings.answersEnabled, null)
@@ -222,5 +250,25 @@ internal fun TestSettingsSheet(
             EyeButton("完成", EyeButtonRole.PRIMARY, onDismiss, Modifier.fillMaxWidth())
             Spacer(Modifier.height(12.dp))
         }
+    }
+}
+
+/** 设置中的滑块：标题 + 当前百分比 + 主色滑轨；松手时保存。 */
+@Composable
+private fun LevelSlider(title: String, value: Float, range: ClosedFloatingPointRange<Float>, onChange: (Float) -> Unit) {
+    val colors = LocalEyeColors.current
+    val typography = LocalEyeTypography.current
+    var current by remember(value) { mutableFloatStateOf(value) }
+    Column {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            EyeText(title, style = typography.body, color = colors.textPrimary)
+            EyeText("${(current * 100).roundToInt()}%", style = typography.bodySecondary, color = colors.textSecondary)
+        }
+        androidx.compose.material3.Slider(
+            value = current, onValueChange = { current = it }, valueRange = range,
+            onValueChangeFinished = { onChange(current) },
+            colors = androidx.compose.material3.SliderDefaults.colors(thumbColor = colors.primary,
+                activeTrackColor = colors.primary, inactiveTrackColor = colors.neutralSoft),
+        )
     }
 }

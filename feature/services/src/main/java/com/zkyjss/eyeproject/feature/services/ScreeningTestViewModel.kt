@@ -26,6 +26,7 @@ class ScreeningTestViewModel @Inject constructor(
     fun setMode(mode: String) = engine.setMode(mode)
     fun cameraPermissionDenied() = engine.cameraPermissionDenied()
     fun nextFromProfile() = engine.nextFromProfile()
+    fun skipProfile() = engine.skipProfile()
     fun begin() = engine.begin()
     fun readyForNearEye() = engine.readyForNearEye()
     fun showTrial() = engine.showTrial()

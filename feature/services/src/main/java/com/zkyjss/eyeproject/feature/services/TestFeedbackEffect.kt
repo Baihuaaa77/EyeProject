@@ -42,7 +42,7 @@ internal fun TestFeedbackEffect(settings: TestSettings, voice: ScreeningVoice, m
                 val active = !currentMenu && (settings.soundEnabled || settings.hapticsEnabled)
                 if ((!active && wasActive) || (hadSound && !settings.soundEnabled)) output.stop()
                 currentPoll(active).forEach { cue ->
-                    output.play(cue, settings.soundEnabled, settings.hapticsEnabled) {
+                    output.play(cue, settings.soundEnabled, settings.hapticsEnabled, settings.soundVolume, settings.hapticStrength) {
                         voice.pauseForFeedback(cue.microphonePauseMs.toLong())
                     }
                 }
@@ -76,6 +76,8 @@ internal class AndroidTestFeedback(context: Context) {
     private val pool = runCatching { SoundPool.Builder().setMaxStreams(1).setAudioAttributes(audioAttributes).build() }.getOrNull()
     private var stream = 0
     private data class PendingSound(val id: Int, val volume: Float, val expiresAt: Long, val beforeSound: () -> Unit)
+    /** 设置中的震动强度相对默认 0.6 的倍率。 */
+    private var strength = 1f
     private var pending: PendingSound? = null
     private var closed = false
     private val sounds: Map<String, Int>
@@ -88,9 +90,11 @@ internal class AndroidTestFeedback(context: Context) {
             "eye_warning" to R.raw.eye_warning, "eye_tick" to R.raw.eye_tick,
             "eye_complete" to R.raw.eye_complete).mapValues { (_, resource) -> pool?.load(context, resource, 1) ?: 0 }
     }
-    fun play(cue: ScreeningFeedbackCue, sound: Boolean, haptics: Boolean, beforeSound: () -> Unit) {
+    fun play(cue: ScreeningFeedbackCue, sound: Boolean, haptics: Boolean, soundVolume: Float = 1f,
+        hapticStrength: Float = TestSettings.DEFAULT_HAPTIC_STRENGTH, beforeSound: () -> Unit) {
         if (closed) return
         pending = null
+        strength = hapticStrength / TestSettings.DEFAULT_HAPTIC_STRENGTH
         if (haptics && vibrator?.hasVibrator() == true) runCatching {
             val effect = hapticEffect(cue)
             if (Build.VERSION.SDK_INT >= 33) {
@@ -103,7 +107,7 @@ internal class AndroidTestFeedback(context: Context) {
         val id = sounds[cue.sound] ?: return
         if (sound && id != 0) {
             // 首次点按可能早于异步载入完成；只等待很短时间，不延后重播过期事件。
-            pending = PendingSound(id, cue.volume, SystemClock.elapsedRealtime() + 300, beforeSound)
+            pending = PendingSound(id, (cue.volume * soundVolume).coerceIn(0f, 1f), SystemClock.elapsedRealtime() + 300, beforeSound)
             playLoadedSound()
         }
     }
@@ -126,16 +130,18 @@ internal class AndroidTestFeedback(context: Context) {
                 VibrationEffect.Composition.PRIMITIVE_CLICK, VibrationEffect.Composition.PRIMITIVE_TICK)) {
             val click = VibrationEffect.Composition.PRIMITIVE_CLICK
             val tick = VibrationEffect.Composition.PRIMITIVE_TICK
+            // 原语强度按设置倍率缩放（上限 1）；默认强度即原有分级。
+            fun s(base: Float) = (base * strength).coerceIn(0.05f, 1f)
             return VibrationEffect.startComposition().apply {
                 when (cue) {
-                    ScreeningFeedbackCue.TICK -> addPrimitive(tick, 0.6f)
-                    ScreeningFeedbackCue.ANSWER -> addPrimitive(click, 0.45f)
-                    ScreeningFeedbackCue.TARGET -> addPrimitive(tick, 0.75f)
-                    ScreeningFeedbackCue.PHASE -> { addPrimitive(click, 0.6f); addPrimitive(tick, 0.6f, 60) }
-                    ScreeningFeedbackCue.RECOVER -> { addPrimitive(tick, 0.5f); addPrimitive(click, 0.7f, 50) }
-                    ScreeningFeedbackCue.START -> addPrimitive(click, 0.9f)
-                    ScreeningFeedbackCue.WARNING, ScreeningFeedbackCue.RETRY -> { addPrimitive(click, 0.8f); addPrimitive(click, 0.8f, 100) }
-                    ScreeningFeedbackCue.COMPLETE -> { addPrimitive(tick, 0.5f); addPrimitive(tick, 0.75f, 60); addPrimitive(click, 1f, 60) }
+                    ScreeningFeedbackCue.TICK -> addPrimitive(tick, s(0.6f))
+                    ScreeningFeedbackCue.ANSWER -> addPrimitive(click, s(0.45f))
+                    ScreeningFeedbackCue.TARGET -> addPrimitive(tick, s(0.75f))
+                    ScreeningFeedbackCue.PHASE -> { addPrimitive(click, s(0.6f)); addPrimitive(tick, s(0.6f), 60) }
+                    ScreeningFeedbackCue.RECOVER -> { addPrimitive(tick, s(0.5f)); addPrimitive(click, s(0.7f), 50) }
+                    ScreeningFeedbackCue.START -> addPrimitive(click, s(0.9f))
+                    ScreeningFeedbackCue.WARNING, ScreeningFeedbackCue.RETRY -> { addPrimitive(click, s(0.8f)); addPrimitive(click, s(0.8f), 100) }
+                    ScreeningFeedbackCue.COMPLETE -> { addPrimitive(tick, s(0.5f)); addPrimitive(tick, s(0.75f), 60); addPrimitive(click, s(1f), 60) }
                 }
             }.compose()
         }
@@ -148,7 +154,7 @@ internal class AndroidTestFeedback(context: Context) {
         return when (cue) {
             ScreeningFeedbackCue.WARNING, ScreeningFeedbackCue.RETRY, ScreeningFeedbackCue.COMPLETE ->
                 VibrationEffect.createWaveform(longArrayOf(0, 25, 90, 25), -1)
-            else -> VibrationEffect.createOneShot(25, VibrationEffect.DEFAULT_AMPLITUDE)
+            else -> VibrationEffect.createOneShot(25, (strength * 150).toInt().coerceIn(1, 255))
         }
     }
     fun stop() { pending = null; if (stream != 0) pool?.stop(stream); stream = 0; runCatching { vibrator?.cancel() } }

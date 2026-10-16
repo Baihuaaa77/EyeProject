@@ -18,6 +18,7 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
     private var gaze: StrabismusGaze? = null
     private val gazeCalibration = mutableListOf<GazeCalibrationSample>()
     private var calibrationPointStartMs = 0L
+    private val voiceGuard = VoiceRepeatGuard()
     private data class RenderedTarget(val timeMs: Long, val step: ScreeningStep, val index: Int, val point: GazePoint)
     private val renderedTargets = ArrayDeque<RenderedTarget>()
     private var gazeBadSinceMs: Long? = null
@@ -52,6 +53,9 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
     private var cameraWatchdog: Job? = null
     private var opticalValidFrames = 0
     private val opticalRejectionCounts = mutableMapOf<String, Int>()
+    /** 斜视测试期间每帧的瞳孔对比度与虹膜像素直径（双眼），写入记录用于排查光学测量为何不可用。 */
+    private val opticalContrasts = mutableListOf<Float>()
+    private val opticalIrisPx = mutableListOf<Float>()
     private var cachedGeometry: CameraGeometry? = null
     private val frameObserver: (FaceLandmarkFrame) -> Unit = { frame ->
         frames.trySend(Triple(frame.analysisElapsedRealtimeMs ?: platform.nowMs(), _state.value.step, frame))
@@ -76,7 +80,7 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
         if (cameraAttached) return
         cameraAttached = true
         cameraFrameCount = 0; lastCameraFrameMs = 0L
-        distanceTracker.clear(); opticalRejectionCounts.clear()
+        distanceTracker.clear(); opticalRejectionCounts.clear(); opticalContrasts.clear(); opticalIrisPx.clear()
         val light = platform.startLight { lux -> _state.update { it.copy(lux = lux) } }
         _state.update { it.copy(lightSensorAvailable = light, trackingStatus = "等待相机帧") }
         platform.startCamera(frameObserver, cameraErrorObserver)
@@ -111,6 +115,12 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
             _state.update { it.copy(warning = "请选择平时戴的眼镜和这次测试戴哪副眼镜") }; return
         }
         _state.update { it.copy(step = ScreeningStep.ENVIRONMENT, warning = null) }
+    }
+
+    /** 先不填问卷直接测试：老视默认标准模式；年龄缺失时评估会如实说明无法与同龄对照。 */
+    fun skipProfile() {
+        _state.update { it.copy(step = ScreeningStep.ENVIRONMENT, profileSkipped = true, warning = null,
+            mode = if (it.kind == ScreeningKind.PRESBYOPIA && it.mode.isBlank()) "标准模式" else it.mode) }
     }
 
     fun begin() {
@@ -202,6 +212,7 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
             (s.step != ScreeningStep.NEAR_VISION && s.step != ScreeningStep.FLIPPER && s.step != ScreeningStep.DISTANCE_CURVE)) return
         val target = trialTargetCm(s) ?: return
         val now = platform.nowMs()
+        if (byVoice && !voiceGuard.accept(now)) return
         val answerDistance = distanceTracker.estimate(now)?.distanceCm
         if (!distanceTracker.acceptableAnswer(target, s.trialDistanceCm, nearDistanceToleranceCm, now)) {
             _state.update { it.copy(warning = if (answerDistance == null ||
@@ -605,12 +616,16 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
                     })
                     put("mode", s.mode)
                     put("profile", RecordObject(s.fields))
+                    put("profileSkipped", s.profileSkipped)
                     put("ambientLux", s.lux?.toDouble() ?: RecordObject.NULL)
                     put("lightSensorAvailable", s.lightSensorAvailable ?: RecordObject.NULL)
                     put("cameraBrightness", s.cameraBrightness?.toDouble() ?: RecordObject.NULL)
                     put("cameraFrames", s.cameraFrames)
                     put("opticalValidFrames", s.opticalValidFrames)
                     put("opticalRejectionCounts", RecordObject(s.opticalRejectionCounts))
+                    // 排查用：瞳孔对比度门槛为 12（灰度级），虹膜直径不足 12 像素时直接拒绝。
+                    put("opticalPupilContrastMedian", ScreeningAssessmentModel.median(opticalContrasts.map(Float::toDouble)) ?: RecordObject.NULL)
+                    put("opticalIrisDiameterMedianPx", ScreeningAssessmentModel.median(opticalIrisPx.map(Float::toDouble)) ?: RecordObject.NULL)
                     put("nearResolutionLimitedEyes", RecordArray(s.nearResolutionLimitedEyes.map { it.name }))
                     put("invalidTrialCount", s.invalidTrialCount)
                     put("lastDistanceCm", s.distanceCm.toDouble())
@@ -777,6 +792,11 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
         }
         if (_state.value.kind == ScreeningKind.STRABISMUS && opticalStatus != "双眼光学测量可用") {
             opticalRejectionCounts[opticalStatus] = (opticalRejectionCounts[opticalStatus] ?: 0) + 1
+        }
+        if (_state.value.kind == ScreeningKind.STRABISMUS && opticalContrasts.size < 20_000) {
+            listOfNotNull(leftOptical, rightOptical).forEach {
+                opticalContrasts += it.pupilContrast; opticalIrisPx += it.irisDiameterPx
+            }
         }
         val trackingStatus = when {
             face == null -> "相机已工作，未识别人脸"

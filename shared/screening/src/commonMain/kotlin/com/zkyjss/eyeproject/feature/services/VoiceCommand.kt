@@ -13,14 +13,23 @@ sealed interface VoiceCommand {
 }
 
 /** 中文口语指令解析：包含常见同音误识别字；同一句里取最后提到的方向（允许「上…不对，左」这类改口）。 */
+/**
+ * 同一句话只作答一次：识别器常对同一段语音先给部分结果、再给最终结果，
+ * 或下一题出现时仍带着上一题的尾音，导致一个字连跳两题。语音作答之间至少间隔 [windowMs]。
+ */
+class VoiceRepeatGuard(private val windowMs: Long = 900L) {
+    private var lastAcceptedMs = Long.MIN_VALUE / 2
+    fun accept(nowMs: Long): Boolean = (nowMs - lastAcceptedMs >= windowMs).also { if (it) lastAcceptedMs = nowMs }
+}
+
 object VoiceCommandParser {
     private val directionChars = mapOf(
-        0 to "右又幼佑",
-        1 to "下夏吓虾厦",
-        2 to "左做作坐座佐",
-        3 to "上尚晌",
+        0 to "右又幼佑有由油游优悠柚诱",
+        1 to "下夏吓虾厦霞",
+        2 to "左做作坐座佐昨",
+        3 to "上尚晌赏商伤",
     )
-    private val englishDirections = mapOf("right" to 0, "down" to 1, "left" to 2, "up" to 3)
+    private val englishDirections = mapOf("right" to 0, "down" to 1, "left" to 2, "up" to 3, "you" to 0, "yo" to 0)
     private val unsureWords = listOf("看不清", "看不见", "看不到", "不知道", "不清楚", "不确定", "没看清",
         "跳过", "跳锅", "条过", "挑过", "调过", "跳")
     private val blurWords = listOf("模糊", "糊了", "花了", "虚了")

@@ -23,6 +23,7 @@ class DryEyeTestViewModel @Inject constructor(
     fun feedbackCues(enabled: Boolean) = platform.feedbackSession.poll(screeningFeedbackFrame(uiState.value), platform.nowMs(), enabled)
     fun setField(key: String, value: String) = engine.setField(key, value)
     fun finishProfile() = engine.finishProfile()
+    fun skipProfile() = engine.skipProfile()
     fun permissionDenied() = engine.permissionDenied()
     fun startTest() = engine.startTest()
     fun confirmPracticeGuide() = engine.confirmPracticeGuide()

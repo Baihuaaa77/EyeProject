@@ -79,6 +79,7 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, modifier: M
     LaunchedEffect(s.step, s.guidePending) { pageScroll.scrollTo(0) }
     val voice = remember(context) { ScreeningVoice(context) }
     val settings = rememberTestSettings()
+    LaunchedEffect(settings.speechVolume, settings.speechRate) { voice.configure(settings.speechVolume, settings.speechRate) }
     val voiceEnabled = settings.speechEnabled
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
     TestFeedbackEffect(settings, voice, settingsOpen, viewModel::feedbackCues)
@@ -235,6 +236,7 @@ internal fun ProfileContent(kind: ScreeningKind, s: ScreeningState, vm: Screenin
         fields = s.fields,
         onSetField = vm::setField,
         onFinish = vm::nextFromProfile,
+        onSkip = vm::skipProfile,
         stateKey = kind,
         extraPageComplete = kind != ScreeningKind.PRESBYOPIA || s.mode.isNotBlank(),
         extraPage = if (kind == ScreeningKind.PRESBYOPIA) {

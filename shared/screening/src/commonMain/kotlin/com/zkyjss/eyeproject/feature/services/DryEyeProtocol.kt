@@ -126,6 +126,8 @@ data class DryEyeReport(
 )
 
 object DryEyeAssessment {
+    /** 规则版本；写入记录，服务端据此区分评估口径。改阈值或分级逻辑必须升版本。 */
+    const val VERSION = "dryeye-9.18-rules-1"
 
     fun evaluate(session: DryEyeSession, fields: Map<String, String>): DryEyeReport {
         val natural = session.trials.filter { it.stage == DryEyeStage.NATURAL }

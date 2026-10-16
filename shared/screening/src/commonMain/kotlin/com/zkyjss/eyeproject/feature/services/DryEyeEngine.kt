@@ -29,6 +29,7 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
     private var cameraAttached = false
     private var watchdog: Job? = null
     private var pendingAnswer: CompletableDeferred<Pair<Int, Boolean>>? = null
+    private val voiceGuard = VoiceRepeatGuard()
     private var nextTrialId = 0
     private var staircase = DryEyeStaircase()
     private var baselineLevel: Float = DryEyeProtocol.LEVELS[DryEyeProtocol.START_LEVEL_INDEX]
@@ -44,6 +45,9 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
     fun setField(key: String, value: String) = _uiState.update { it.copy(fields = it.fields + (key to value)) }
 
     fun finishProfile() = _uiState.update { it.copy(phase = DryEyePhase.Setup, error = null) }
+
+    /** 先不填问卷直接测试；症状相关的风险判断按「未报告症状」处理，记录中注明跳过。 */
+    fun skipProfile() = _uiState.update { it.copy(phase = DryEyePhase.Setup, profileSkipped = true, error = null) }
 
     // endregion
 
@@ -123,6 +127,7 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
 
     /** 回答当前视标；只接受每题第一次作答。[direction] 为 -1 表示「看不清」（记为错误）。 */
     fun answer(direction: Int, byVoice: Boolean = false) {
+        if (byVoice && !voiceGuard.accept(platform.nowMs())) return
         if (pendingAnswer?.takeIf { it.isActive }?.complete(direction to byVoice) == true)
             platform.feedback(ScreeningFeedbackCue.ANSWER)
     }
@@ -417,6 +422,7 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
                 val data = RecordObject().apply {
                     put("protocolVersion", 1)
                     put("kind", "DRY_EYE")
+                    put("assessmentVersion", DryEyeAssessment.VERSION)
                     put("platform", platform.platformName)
                     put("displaySizeSource", platform.displaySizeSource)
                     put("distanceSource", platform.distanceSource)
@@ -424,6 +430,7 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
                     put("displayWidthPx", platform.display.widthPixels)
                     put("displayHeightPx", platform.display.heightPixels)
                     put("profile", RecordObject(fields))
+                    put("profileSkipped", _uiState.value.profileSkipped)
                     put("naturalSeconds", session.naturalSeconds)
                     put("afterRest", session.afterRest)
                     put("completed", session.completed)

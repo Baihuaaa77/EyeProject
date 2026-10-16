@@ -3,6 +3,7 @@ package com.zkyjss.eyeproject.feature.services
 import com.zkyjss.eyeproject.core.camera.GrayImage
 import com.zkyjss.eyeproject.core.camera.LandmarkGeometry
 import com.zkyjss.eyeproject.core.model.FaceLandmarkFrame
+import com.zkyjss.eyeproject.core.model.FaceMetrics
 import kotlinx.coroutines.*
 import kotlinx.serialization.json.*
 
@@ -89,6 +90,9 @@ class MobileScreeningController(
             "extended" -> dry.startExtended()
             "rest" -> dry.startRestRetest()
             "restart" -> if (kind == "DRY_EYE") dry.restartAll() else screening.restart()
+            "skipProfile" -> if (display.xdpi > 0) {
+                if (kind == "DRY_EYE") { dry.skipProfile(); dry.startMonitoring() } else { screening.skipProfile(); screening.startCamera() }
+            }
             "retryCamera" -> if (kind == "DRY_EYE") { dry.stopMonitoring(); dry.startMonitoring() } else screening.retryCamera()
         }
     }
@@ -139,11 +143,17 @@ class MobileScreeningController(
     }
     fun close() { if (!closed) { closed = true; dry.close(); screening.close(); scope.cancel() } }
     fun cameraFailed(message: String) { cameraError?.invoke(IllegalStateException(message)) }
-    fun cameraSample(points: FloatArray,matrix: FloatArray,image: GrayImage,focalLengthPx: Float,timeMs: Long,brightness: Float) {
+    fun cameraSample(points: FloatArray,matrix: FloatArray,image: GrayImage,focalLengthPx: Float,timeMs: Long,brightness: Float) =
+        cameraFace(LandmarkGeometry.face(points,matrix,image),image.width,image.height,focalLengthPx,timeMs,brightness)
+
+    /**
+     * 已在相机线程算好关键点几何与光学测量的帧。苹果端在相机队列调用 [LandmarkGeometry.face]，
+     * 主线程只做状态更新，避免逐帧图像计算拖慢界面与分析帧率。
+     */
+    fun cameraFace(face: FaceMetrics?,imageWidth: Int,imageHeight: Int,focalLengthPx: Float,timeMs: Long,brightness: Float) {
         if (closed || cameraFrame == null || timeMs < captureStartedMs) return
         if (focalChanged(focalPx, focalLengthPx)) { focalPx = focalLengthPx; cameraVersion++ }
-        val face = LandmarkGeometry.face(points,matrix,image)
-        cameraFrame?.invoke(FaceLandmarkFrame(listOfNotNull(face),image.width,image.height,timeMs,0,15f,brightness,timeMs))
+        cameraFrame?.invoke(FaceLandmarkFrame(listOfNotNull(face),imageWidth,imageHeight,timeMs,0,30f,brightness,timeMs))
     }
     private fun questions(): List<Question> = when(kind) {
         "DRY_EYE" -> dryEyeQuestions

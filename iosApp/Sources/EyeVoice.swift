@@ -19,7 +19,16 @@ final class EyeVoice: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
     @Published var voiceIdentifier = UserDefaults.standard.string(forKey: "eye.voiceIdentifier") ?? "" {
         didSet { UserDefaults.standard.set(voiceIdentifier, forKey: "eye.voiceIdentifier") }
     }
+    @Published var volume = UserDefaults.standard.object(forKey: "eye.speechVolume") as? Double ?? 1 {
+        didSet { UserDefaults.standard.set(volume, forKey: "eye.speechVolume") }
+    }
+    /// 语速倍率 0.7–1.4，乘在系统默认语速上。
+    @Published var rate = UserDefaults.standard.object(forKey: "eye.speechRate") as? Double ?? 1.05 {
+        didSet { UserDefaults.standard.set(rate, forKey: "eye.speechRate") }
+    }
     @Published private(set) var status = ""
+    /// 正在说话时到来的非紧急提示：等这句说完再说最新的一条，避免逐句打断。
+    private var queued: String?
     var onAnswer: ((String) -> Bool)?
     private let synthesizer = AVSpeechSynthesizer()
     private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "zh-CN"))
@@ -69,14 +78,17 @@ final class EyeVoice: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
         cooldown = max(cooldown, Date().addingTimeInterval(Double(milliseconds) / 1000))
     }
 
-    func speak(_ text: String) {
+    /// [interrupt] 为 true 时（距离提醒）立即打断当前播报；否则等当前这句说完。
+    func speak(_ text: String, interrupt: Bool = true) {
         guard enabled, !text.isEmpty else { return }
+        if !interrupt && synthesizer.isSpeaking { queued = text; return }
+        queued = nil
         stopListening()
         synthesizer.stopSpeaking(at: .immediate)
         let utterance = AVSpeechUtterance(string: text)
         utterance.voice = selectedVoice
-        // 中文默认语速略快，放慢一点、原音高，开口前留一点气口，听起来更像真人讲解。
-        utterance.rate = AVSpeechUtteranceDefaultSpeechRate * 0.92
+        utterance.rate = min(AVSpeechUtteranceMaximumSpeechRate, AVSpeechUtteranceDefaultSpeechRate * Float(rate))
+        utterance.volume = Float(volume)
         utterance.pitchMultiplier = 1
         utterance.preUtteranceDelay = 0.05
         synthesizer.speak(utterance)
@@ -110,7 +122,10 @@ final class EyeVoice: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
         return false
     }
 
-    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) { cooldown = Date().addingTimeInterval(0.6) }
+    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        cooldown = Date().addingTimeInterval(0.6)
+        if let next = queued { queued = nil; DispatchQueue.main.async { self.speak(next) } }
+    }
     func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) { cooldown = Date().addingTimeInterval(0.6) }
 
     func setListening(_ value: Bool) {
@@ -165,6 +180,6 @@ final class EyeVoice: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
         if audio.isRunning { audio.stop() }
         if hasTap { audio.inputNode.removeTap(onBus: 0); hasTap = false }
     }
-    func stop() { synthesizer.stopSpeaking(at: .immediate); stopListening(); cooldown = Date().addingTimeInterval(0.6) }
+    func stop() { queued = nil; synthesizer.stopSpeaking(at: .immediate); stopListening(); cooldown = Date().addingTimeInterval(0.6) }
     func close() { wanted = false; stop(); EyeAudioSession.deactivate() }
 }

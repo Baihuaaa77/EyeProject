@@ -6,43 +6,31 @@ import EyeScreening
 import MediaPipeTasksVision
 
 /// PixelBuffer 保留到共用光学算法完成；显式使用 BGRA→RGB 灰度，不用 YUV 亮度代替。
+/// 像素由共用核心的 BgraPixels 一次读完（逐像素跨桥会把分析帧率拖到每秒几帧）。
 final class CameraGrayImage: NSObject, GrayImage {
     let buffer: CVPixelBuffer
     var width: Int32 { Int32(CVPixelBufferGetWidth(buffer)) }
     var height: Int32 { Int32(CVPixelBufferGetHeight(buffer)) }
     init(_ buffer: CVPixelBuffer) { self.buffer = buffer; super.init() }
-    func grayRegion(left: Int32, top: Int32, width: Int32, height: Int32) -> KotlinIntArray {
-        let values = KotlinIntArray(size: width * height)
+    private func withPixels<T>(_ fallback: T, _ body: (UnsafeMutablePointer<UInt8>, Int32) -> T) -> T {
         CVPixelBufferLockBaseAddress(buffer, .readOnly)
         defer { CVPixelBufferUnlockBaseAddress(buffer, .readOnly) }
-        guard let base = CVPixelBufferGetBaseAddress(buffer) else { return values }
-        let bytes = base.assumingMemoryBound(to: UInt8.self), stride = CVPixelBufferGetBytesPerRow(buffer)
-        for y in 0..<Int(height) { for x in 0..<Int(width) {
-            let i = (Int(top) + y) * stride + (Int(left) + x) * 4
-            let gray = (0.2126 * Float(bytes[i + 2]) + 0.7152 * Float(bytes[i + 1]) + 0.0722 * Float(bytes[i])).rounded()
-            values.set(index: Int32(y * Int(width) + x), value: Int32(gray))
-        }}
-        return values
+        guard let base = CVPixelBufferGetBaseAddress(buffer) else { return fallback }
+        return body(base.assumingMemoryBound(to: UInt8.self), Int32(CVPixelBufferGetBytesPerRow(buffer)))
+    }
+    func grayRegion(left: Int32, top: Int32, width: Int32, height: Int32) -> KotlinIntArray {
+        withPixels(KotlinIntArray(size: width * height)) { bytes, stride in
+            BgraPixels.shared.grayRegion(base: bytes, bytesPerRow: stride, left: left, top: top, width: width, height: height)
+        }
     }
     func brightness() -> Float {
-        CVPixelBufferLockBaseAddress(buffer, .readOnly)
-        defer { CVPixelBufferUnlockBaseAddress(buffer, .readOnly) }
-        guard let base = CVPixelBufferGetBaseAddress(buffer) else { return 0 }
-        let bytes = base.assumingMemoryBound(to: UInt8.self), stride = CVPixelBufferGetBytesPerRow(buffer)
-        var total: Float = 0, count: Float = 0
-        // 与安卓相同的 12×12 网格与 RGB 权重。
-        for row in 0..<12 { for column in 0..<12 {
-            let y = min(Int(height) - 1, Int((Float(row) + 0.5) * Float(height) / 12))
-            let x = min(Int(width) - 1, Int((Float(column) + 0.5) * Float(width) / 12))
-            let i = y * stride + x * 4
-            total += 0.2126 * Float(bytes[i + 2]) + 0.7152 * Float(bytes[i + 1]) + 0.0722 * Float(bytes[i]); count += 1
-        }}
-        return count > 0 ? total / count : 0
+        withPixels(Float(0)) { bytes, stride in BgraPixels.shared.brightness(base: bytes, bytesPerRow: stride, width: width, height: height) }
     }
 }
 
 final class EyeCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
-    var onFrame: ((KotlinFloatArray, KotlinFloatArray, CameraGrayImage, Float, Int64, Float) -> Void)?
+    /// 相机队列上已算好的一帧：关键点几何与光学测量、图像宽高、焦距、单调时间、亮度。
+    var onFrame: ((FaceMetrics?, Int32, Int32, Float, Int64, Float) -> Void)?
     var onError: ((String) -> Void)?
     private let queue = DispatchQueue(label: "eye.camera.analysis")
     private let session = AVCaptureSession()
@@ -116,7 +104,8 @@ final class EyeCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
     }
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
         let time = Int64(ProcessInfo.processInfo.systemUptime * 1000)
-        guard active, time - lastTime >= 66, let buffer = CMSampleBufferGetImageBuffer(sampleBuffer), let detector = detector else { return }
+        // 约 30 帧/秒：眨眼只持续 100–150 ms，帧率过低会漏检；追随速度相关也需要足够的相邻帧。
+        guard active, time - lastTime >= 30, let buffer = CMSampleBufferGetImageBuffer(sampleBuffer), let detector = detector else { return }
         lastTime = time
         do {
             let image = try MPImage(pixelBuffer: buffer, orientation: .up)
@@ -147,7 +136,9 @@ final class EyeCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
                 focal = Float(max(frame.width, frame.height)) / (2 * tan(fov / 2))
             }
             focal *= distanceScale
-            onFrame?(array, transform, frame, focal, time, frame.brightness())
+            // 关键点几何与光学测量在相机队列完成，主线程只接收结果。
+            let face = points.isEmpty ? nil : LandmarkGeometry.shared.face(points: array, matrix: transform, image: frame)
+            onFrame?(face, frame.width, frame.height, focal, time, frame.brightness())
         } catch { onError?("眼部检测失败：\(error.localizedDescription)") }
     }
 }

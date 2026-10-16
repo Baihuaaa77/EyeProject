@@ -40,6 +40,15 @@ final class EyeFeedback: ObservableObject {
     @Published var hapticsEnabled = UserDefaults.standard.object(forKey: "eye.hapticsEnabled") as? Bool ?? true {
         didSet { UserDefaults.standard.set(hapticsEnabled, forKey: "eye.hapticsEnabled"); if hapticsEnabled { prepare() } }
     }
+    /// 音效音量 0–1，乘在按事件分级的音量上。
+    @Published var soundVolume = UserDefaults.standard.object(forKey: "eye.soundVolume") as? Double ?? 1 {
+        didSet { UserDefaults.standard.set(soundVolume, forKey: "eye.soundVolume") }
+    }
+    /// 震动强度 0.1–1，默认 0.6 即原有分级；调高时按比例加强（上限 1）。
+    @Published var hapticStrength = UserDefaults.standard.object(forKey: "eye.hapticStrength") as? Double ?? EyeFeedback.defaultStrength {
+        didSet { UserDefaults.standard.set(hapticStrength, forKey: "eye.hapticStrength") }
+    }
+    static let defaultStrength = 0.6
     private var players: [String: AVAudioPlayer] = [:]
     private var engine: CHHapticEngine?
     private let fallback = UIImpactFeedbackGenerator(style: .medium)
@@ -63,7 +72,7 @@ final class EyeFeedback: ObservableObject {
         if hapticsEnabled { haptic(name) }
         guard soundEnabled, let player = player(sound) else { return }
         voice.pauseForFeedback(milliseconds: microphonePauseMs)
-        player.volume = name == "ANSWER" || name == "TICK" ? 0.5 : 0.7
+        player.volume = Float((name == "ANSWER" || name == "TICK" ? 0.5 : 0.7) * soundVolume)
         player.currentTime = 0
         player.play()
     }
@@ -93,7 +102,8 @@ final class EyeFeedback: ObservableObject {
     }
 
     private func haptic(_ name: String) {
-        let steps = Self.pattern(name)
+        let scale = Float(hapticStrength / Self.defaultStrength)
+        let steps = Self.pattern(name).map { ($0.0, min(1, max(0.05, $0.1 * scale)), $0.2) }
         guard let engine = engine else {
             fallback.impactOccurred(intensity: CGFloat(steps.map { $0.1 }.max() ?? 0.5)); fallback.prepare(); return
         }

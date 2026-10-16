@@ -54,11 +54,11 @@ final class EyeRuntime: ObservableObject {
     }
     init(kind: String) {
         self.kind = kind
-        camera.onFrame = { [weak self] points, matrix, image, focal, time, brightness in
+        camera.onFrame = { [weak self] face, width, height, focal, time, brightness in
             guard let self = self else { return }
             DispatchQueue.main.async {
                 guard !self.closed else { return }
-                self.controller.cameraSample(points: points, matrix: matrix, image: image,
+                self.controller.cameraFace(face: face, imageWidth: width, imageHeight: height,
                     focalLengthPx: focal, timeMs: time, brightness: brightness)
             }
         }
@@ -124,7 +124,7 @@ final class EyeRuntime: ObservableObject {
             let isDistance = distanceText != nil
             let text = isDistance ? prompt
                 : lastWasDistance ? controller.distanceOkPrompt + (base != lastBase ? base : "") : base
-            schedule(text) { [weak self] in
+            schedule(text, interrupt: isDistance) { [weak self] in
                 guard let self = self else { return }
                 self.lastWasDistance = isDistance
                 if isDistance { self.distanceRepeat = 1; self.lastDistanceAt = Date() } else { self.lastBase = base }
@@ -137,11 +137,11 @@ final class EyeRuntime: ObservableObject {
         }
     }
     /// 状态稳定 650 ms 后才开口，避免测距波动不断打断；后台、设置菜单期间不播报。
-    private func schedule(_ text: String, delay: Double = 0.65, spoken: @escaping () -> Void) {
+    private func schedule(_ text: String, delay: Double = 0.65, interrupt: Bool = true, spoken: @escaping () -> Void) {
         promptWork?.cancel()
         let work = DispatchWorkItem { [weak self] in
             guard let self = self, self.isForeground, !self.closed, !self.settingsPresented else { return }
-            self.voice.speak(self.controller.speechText(text: text)); spoken()
+            self.voice.speak(self.controller.speechText(text: text), interrupt: interrupt); spoken()
         }
         promptWork = work; DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }

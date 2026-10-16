@@ -100,6 +100,7 @@ fun DryEyeScreen(
     val context = LocalContext.current
     val voice = remember(context) { ScreeningVoice(context) }
     val settings = rememberTestSettings()
+    LaunchedEffect(settings.speechVolume, settings.speechRate) { voice.configure(settings.speechVolume, settings.speechRate) }
     val voiceEnabled = settings.speechEnabled
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
     TestFeedbackEffect(settings, voice, settingsOpen, viewModel::feedbackCues)
@@ -168,7 +169,8 @@ fun DryEyeScreen(
                 if (running && state.phase != DryEyePhase.Rest) DistanceBanner(distance, compact = true)
             }) {
             when (state.phase) {
-                DryEyePhase.Profile -> QuestionnaireContent(dryEyeQuestions, state.fields, viewModel::setField, viewModel::finishProfile, stateKey = "dryeye")
+                DryEyePhase.Profile -> QuestionnaireContent(dryEyeQuestions, state.fields, viewModel::setField, viewModel::finishProfile,
+                    stateKey = "dryeye", onSkip = viewModel::skipProfile)
                 DryEyePhase.Setup -> {
                     SetupGate(state, viewModel::startTest)
                     if (!state.faceDetected) EyeButton("重试相机", EyeButtonRole.SECONDARY, { viewModel.stopMonitoring(); ensureCamera() }, Modifier.fillMaxWidth())

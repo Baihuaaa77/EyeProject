@@ -12,6 +12,8 @@ data class DryEyeDistanceSample(val tSec: Float, val cm: Float)
 data class DryEyeTestUiState(
     val phase: DryEyePhase = DryEyePhase.Profile,
     val fields: Map<String, String> = emptyMap(),
+    /** 用户选择先跳过问卷；记录中注明。 */
+    val profileSkipped: Boolean = false,
     val instruction: String = "",
     val remainingSeconds: Int = 0,
     val progressFraction: Float = 0f,
