@@ -17,6 +17,7 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
     private val samples = mutableListOf<EyeMotionSample>()
     private var gaze: StrabismusGaze? = null
     private val gazeCalibration = mutableListOf<GazeCalibrationSample>()
+    private var calibrationPointStartMs = 0L
     private data class RenderedTarget(val timeMs: Long, val step: ScreeningStep, val index: Int, val point: GazePoint)
     private val renderedTargets = ArrayDeque<RenderedTarget>()
     private var gazeBadSinceMs: Long? = null
@@ -39,6 +40,7 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
     private var lastUiFrameMs = 0L
     private var coverIndex = 0
     private var coverStageStartMs = 0L
+    private var coverHoldJob: Job? = null
     private var headStep: ScreeningStep? = null
     private var faceCenterBaseline: Pair<Float, Float>? = null
     private var cameraAttached = false
@@ -420,7 +422,7 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
         coverIndex = 0
         coverStageStartMs = platform.nowMs()
         stepStartMs = platform.nowMs()
-        _state.update { it.copy(step = ScreeningStep.COVER, guidePending = true, coverMarks = emptyList(), instruction = "协助者真实遮盖单眼，不挡摄像头；按提示动作的同时点按：${coverSequence[0].label}", warning = null) }
+        _state.update { it.copy(step = ScreeningStep.COVER, guidePending = true, coverMarks = emptyList(), coverHolding = false, instruction = "协助者真实遮盖单眼，不挡摄像头；按提示动作的同时点按：${coverSequence[0].label}", warning = null) }
     }
 
     fun markCover() {
@@ -445,7 +447,14 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
                 if (_state.value.step == ScreeningStep.COVER) startPursuit()
             }
         } else {
-            _state.update { it.copy(coverMarks = marks, instruction = "保持 ${coverSequence[coverIndex - 1].holdMs / 1000} 秒后，执行并点按：${coverSequence[coverIndex].label}", warning = null) }
+            val next = coverSequence[coverIndex]
+            _state.update { it.copy(coverMarks = marks, coverHolding = action.holdMs > 0, instruction = "保持：${action.label}", warning = null) }
+            coverHoldJob?.cancel()
+            coverHoldJob = scope.launch {
+                delay(action.holdMs)
+                if (_state.value.step == ScreeningStep.COVER && _state.value.coverMarks.size == marks.size)
+                    _state.update { it.copy(coverHolding = false, instruction = "下一步：${next.label}") }
+            }
         }
     }
 
@@ -488,14 +497,24 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
         faceCenterBaseline = null
         stepStartMs = platform.nowMs()
         _state.update { it.copy(step = ScreeningStep.GAZE_CALIBRATION, guidePending = false,
-            gazeCalibrationIndex = 0, gazeCalibrationFailed = false, gazeCalibrated = false,
+            gazeCalibrationIndex = 0, gazeCalibrationRound = 0, gazeCalibrationFailed = false, gazeCalibrated = false,
             instruction = "只用眼睛依次看着圆点，头和手机保持不动。", warning = null) }
         timer = scope.launch {
-            for (index in StrabismusGaze.calibrationTargets.indices) {
+            suspend fun show(points: List<Int>) = points.forEach { index ->
+                calibrationPointStartMs = platform.nowMs()
                 _state.update { it.copy(gazeCalibrationIndex = index) }
                 delay(StrabismusGaze.CALIBRATION_POINT_MS)
             }
+            show(StrabismusGaze.calibrationTargets.indices.toList())
             gaze = StrabismusGaze.calibrate(gazeCalibration)
+            // 少数点没看稳（眨眼、看晚了）时只重看这几个点，而不是整轮 27 秒重来。
+            val retake = if (gaze == null) StrabismusGaze.pointsToRetake(gazeCalibration) else emptyList()
+            if (retake.isNotEmpty()) {
+                gazeCalibration.removeAll { it.index in retake }
+                _state.update { it.copy(gazeCalibrationRound = 1, instruction = "再看一次刚才没看稳的 ${retake.size} 个圆点。") }
+                show(retake)
+                gaze = StrabismusGaze.calibrate(gazeCalibration)
+            }
             if (gaze == null) {
                 _state.update { it.copy(gazeCalibrationFailed = true,
                     warning = "未获得可靠注视校准。请看着每个圆点，保持头和手机不动后重试。") }
@@ -791,8 +810,10 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
         val gazeRight = openEye(face?.rightEye, right, VisionEye.RIGHT)
         if (step == ScreeningStep.GAZE_CALIBRATION && !_state.value.gazeCalibrationFailed &&
             step == _state.value.step && valid && rendered != null && rendered.index == _state.value.gazeCalibrationIndex) {
-            val firstShown = renderedTargets.firstOrNull { it.step == step && it.index == rendered.index }?.timeMs ?: time
-            if (time - firstShown >= StrabismusGaze.SETTLE_MS)
+            // 从本次换点后的首次实际绘制起等待注视稳定；补测重看同一点时不沿用上一轮的绘制时刻。
+            val firstShown = renderedTargets.firstOrNull { it.step == step && it.index == rendered.index &&
+                it.timeMs >= calibrationPointStartMs }?.timeMs
+            if (firstShown != null && time - firstShown >= StrabismusGaze.SETTLE_MS)
                 gazeCalibration.add(GazeCalibrationSample(rendered.index, rendered.point, gazeLeft, gazeRight))
         }
         val estimates = if (valid) gaze?.estimate(gazeLeft, gazeRight) else null

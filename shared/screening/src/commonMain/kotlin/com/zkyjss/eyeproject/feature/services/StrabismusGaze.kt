@@ -42,42 +42,59 @@ class StrabismusGaze private constructor(private val left: Mapping?, private val
         const val SETTLE_MS = 1_200L
         const val TOLERANCE_X = 0.25f
         const val TOLERANCE_Y = 0.20f
-        /** 每点至少的有效帧数；允许最多 2 个点缺失或被剔除为离群点。 */
+        /** 每点至少的有效帧数；允许最多 3 个点缺失或被剔除为离群点（剩余点仍须覆盖三行三列）。 */
         private const val MIN_SAMPLES_PER_POINT = 4
-        private const val MAX_DROPPED_POINTS = 2
+        private const val MAX_DROPPED_POINTS = 3
+        /** 一次补测最多重看的点数；更多点不可用说明姿势或光线有问题，应整体重做。 */
+        const val MAX_RETAKE_POINTS = 4
+
+        /** 单眼拟合结果：[used] 为最终参与映射的点；失败时为空映射，[used] 仍给出可用点供补测判断。 */
+        private class EyeFit(val mapping: Mapping?, val used: Set<Int>)
 
         fun calibrate(samples: List<GazeCalibrationSample>): StrabismusGaze? {
-            fun mapping(useLeft: Boolean): Mapping? {
-                fun median(values: List<Float>) = values.sorted().let { it[it.size / 2] }
-                var anchors = calibrationTargets.indices.mapNotNull { index ->
-                    val group = samples.filter { it.index == index && (if (useLeft) it.left else it.right) != null }
-                    if (group.size < MIN_SAMPLES_PER_POINT) return@mapNotNull null
-                    val eyes = group.map { (if (useLeft) it.left else it.right)!! }
-                    Anchor(index, GazePoint(median(eyes.map { it.x }), median(eyes.map { it.y })),
-                        GazePoint(median(group.map { it.target.x }), median(group.map { it.target.y })))
-                }
-                if (anchors.size < calibrationTargets.size - MAX_DROPPED_POINTS || !covers(anchors)) return null
-                if (anchors.any { !it.eye.x.isFinite() || !it.eye.y.isFinite() || !it.target.x.isFinite() || !it.target.y.isFinite() }) return null
-                var model = fitMapping(anchors) ?: return null
-                // 剔除明显离群的点（如该点期间看向别处），每次一个，最多剔除到只剩 7 点。
-                // 用留一预测误差判定：远离其余点的离群值会把最小二乘拉向自己，样本内残差反而不大。
-                while (anchors.size > calibrationTargets.size - MAX_DROPPED_POINTS) {
-                    val errors = anchors.indices.map { i ->
-                        val others = anchors.filterIndexed { j, _ -> j != i }
-                        if (!covers(others)) 0.0 else fitMapping(others)?.let { residual(it, anchors[i]) } ?: 0.0
-                    }
-                    val worst = errors.indices.maxBy { errors[it] }
-                    val typical = errors.sorted()[errors.size / 2]
-                    if (errors[worst] <= maxOf(0.06, typical * 3)) break
-                    val reduced = anchors.filterIndexed { i, _ -> i != worst }
-                    model = fitMapping(reduced) ?: break
-                    anchors = reduced
-                }
-                if (anchors.size < calibrationTargets.size - MAX_DROPPED_POINTS || !covers(anchors)) return null
-                return model.takeIf { quality(it, anchors) }
-            }
-            val left = mapping(true); val right = mapping(false)
+            val left = fit(samples, true).mapping; val right = fit(samples, false).mapping
             return if (left == null && right == null) null else StrabismusGaze(left, right)
+        }
+
+        /**
+         * 校准失败时需要补测的点：两只眼都没用上（有效帧不足、被判为离群、或拟合质量不足时残差最大）的点。
+         * 超过 [MAX_RETAKE_POINTS] 个时返回空，交给整体重试。
+         */
+        fun pointsToRetake(samples: List<GazeCalibrationSample>): List<Int> {
+            val usable = fit(samples, true).used + fit(samples, false).used
+            return calibrationTargets.indices.filter { it !in usable }.takeIf { it.size <= MAX_RETAKE_POINTS }.orEmpty()
+        }
+
+        private fun fit(samples: List<GazeCalibrationSample>, useLeft: Boolean): EyeFit {
+            fun median(values: List<Float>) = values.sorted().let { it[it.size / 2] }
+            var anchors = calibrationTargets.indices.mapNotNull { index ->
+                val group = samples.filter { it.index == index && (if (useLeft) it.left else it.right) != null }
+                if (group.size < MIN_SAMPLES_PER_POINT) return@mapNotNull null
+                val eyes = group.map { (if (useLeft) it.left else it.right)!! }
+                Anchor(index, GazePoint(median(eyes.map { it.x }), median(eyes.map { it.y })),
+                    GazePoint(median(group.map { it.target.x }), median(group.map { it.target.y })))
+            }.filter { it.eye.x.isFinite() && it.eye.y.isFinite() && it.target.x.isFinite() && it.target.y.isFinite() }
+            fun failed() = EyeFit(null, anchors.map { it.index }.toSet())
+            if (anchors.size < calibrationTargets.size - MAX_DROPPED_POINTS || !covers(anchors)) return failed()
+            var model = fitMapping(anchors) ?: return failed()
+            // 剔除明显离群的点（如该点期间看向别处），每次一个，最多剔除到只剩 6 点。
+            // 用留一预测误差判定：远离其余点的离群值会把最小二乘拉向自己，样本内残差反而不大。
+            while (anchors.size > calibrationTargets.size - MAX_DROPPED_POINTS) {
+                val errors = anchors.indices.map { i ->
+                    val others = anchors.filterIndexed { j, _ -> j != i }
+                    if (!covers(others)) 0.0 else fitMapping(others)?.let { residual(it, anchors[i]) } ?: 0.0
+                }
+                val worst = errors.indices.maxBy { errors[it] }
+                val typical = errors.sorted()[errors.size / 2]
+                if (errors[worst] <= maxOf(0.06, typical * 3)) break
+                val reduced = anchors.filterIndexed { i, _ -> i != worst }
+                model = fitMapping(reduced) ?: break
+                anchors = reduced
+            }
+            if (quality(model, anchors)) return EyeFit(model, anchors.map { it.index }.toSet())
+            // 质量不足：残差最大的两个点留作补测，其余点保留。
+            val worst = anchors.sortedByDescending { residual(model, it) }.take(2).map { it.index }.toSet()
+            return EyeFit(null, anchors.map { it.index }.toSet() - worst)
         }
 
         /** 剩余点仍须覆盖左中右三列与上中下三行，否则边缘只能外推。 */
@@ -113,13 +130,16 @@ class StrabismusGaze private constructor(private val left: Mapping?, private val
                 axis(anchors.map { it.target.y.toDouble() }) ?: return null)
         }
 
-        /** 每个轴的拟合值须与目标高度相关，且均方根误差不超过屏幕的 10%。 */
+        /**
+         * 每个轴的拟合值须与目标高度相关（水平 ≥ 0.8；垂直眼动幅度小、受眼睑影响更大，≥ 0.7），
+         * 且均方根误差不超过屏幕的 10%。
+         */
         private fun quality(model: Mapping, anchors: List<Anchor>): Boolean {
             for (horizontal in listOf(true, false)) {
                 val fitted = anchors.map { (if (horizontal) model.x.estimate(it.eye) else model.y.estimate(it.eye)).toDouble() }
                 val target = anchors.map { (if (horizontal) it.target.x else it.target.y).toDouble() }
                 if (fitted.any { !it.isFinite() }) return false
-                if ((correlation(fitted, target) ?: return false) < 0.8) return false
+                if ((correlation(fitted, target) ?: return false) < if (horizontal) 0.8 else 0.7) return false
                 val rmse = sqrt(fitted.indices.map { (fitted[it] - target[it]).let { d -> d * d } }.average())
                 if (rmse > 0.10) return false
             }

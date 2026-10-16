@@ -138,10 +138,7 @@ struct EyeTestView: View {
             } else if phase != "COVER" { Text("剩余 \(Int(runtime.number("secondsLeft"))) 秒").monospacedDigit() }
             GazeTargetView(runtime: runtime, pixelsPerMm: pixelsPerMm)
             if runtime.bool("gazeCalibrationFailed") { Button("重试注视校准") { runtime.act("calibrate") }.buttonStyle(EyeButtonStyle()) }
-            if phase == "COVER", !runtime.string("coverNext").isEmpty {
-                Text(runtime.number("coverRemainingMs") > 0 ? "保持：剩余 \(Int(ceil(runtime.number("coverRemainingMs") / 1000))) 秒" : "可以执行下一步：\(runtime.string("coverNext"))")
-                Button("执行「\(runtime.string("coverNext"))」时点按") { runtime.act("cover") }.buttonStyle(EyeButtonStyle())
-            }
+            if phase == "COVER" { CoverPanel(runtime: runtime) }
         } else if phase == "Countdown" {
             CountdownRing(seconds: Int(runtime.number("secondsLeft")))
         } else if phase == "Rest" {
@@ -309,6 +306,78 @@ private struct TumblingEView: View {
     }
 }
 
+/// 与安卓 CoverContent 一致：当前动作的保持进度条 → 下一步 → 序列进度 → 点按键。
+/// 保持期间不播报，保持结束时由震动与音效提示，并只读出下一动作。
+private struct CoverPanel: View {
+    @ObservedObject var runtime: EyeRuntime
+    var body: some View {
+        let done = Int(runtime.number("coverDone"))
+        let next = runtime.string("coverNext")
+        VStack(alignment: .leading, spacing: 10) {
+            if done > 0, runtime.number("coverHoldMs") > 0 {
+                HoldProgress(key: done, holdMs: runtime.number("coverHoldMs"), label: "保持：\(runtime.string("coverCurrent"))")
+            }
+            Text(next.isEmpty ? "遮盖完成" : "下一步：\(next)").font(EyeStyle.title)
+            CoverSequenceStrip(done: done)
+            Button(next.isEmpty ? "已完成" : "执行「\(next)」时点按") { runtime.act("cover") }
+                .buttonStyle(EyeButtonStyle()).disabled(next.isEmpty)
+        }
+    }
+}
+
+/// 当前动作需保持的时长（原文 2 秒 / 交替 1 秒）：进度条走满后变为「可以进行下一步」。
+private struct HoldProgress: View {
+    let key: Int
+    let holdMs: Double
+    let label: String
+    @State private var progress = 0.0
+    @State private var finished = false
+    @State private var generation = 0
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(finished ? "可以进行下一步" : label).font(EyeStyle.body)
+                .foregroundStyle(finished ? EyeStyle.success : EyeStyle.secondary)
+            GeometryReader { geometry in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(EyeStyle.surfaceVariant)
+                    Capsule().fill(EyeStyle.primary).frame(width: geometry.size.width * progress)
+                }
+            }.frame(height: 6)
+        }
+        .onAppear(perform: restart)
+        .onChange(of: key) { _ in restart() }
+    }
+    private func restart() {
+        var snap = Transaction(); snap.disablesAnimations = true
+        withTransaction(snap) { progress = 0; finished = false }
+        generation += 1
+        let token = generation
+        DispatchQueue.main.async {
+            withAnimation(.linear(duration: holdMs / 1000)) { progress = 1 }
+            // 动画数值不会触发文字切换，到点后单独标记完成；期间换到下一动作则作废。
+            DispatchQueue.main.asyncAfter(deadline: .now() + holdMs / 1000) { if token == generation { finished = true } }
+        }
+    }
+}
+
+/// 遮盖序列一览：已完成主色、当前强调色、待做浅色；2 秒动作的色块是 1 秒动作的两倍宽。
+private struct CoverSequenceStrip: View {
+    let done: Int
+    private let weights: [CGFloat] = [2, 2, 2, 2, 1, 1, 1, 1, 1]
+    var body: some View {
+        GeometryReader { geometry in
+            let unit = (geometry.size.width - CGFloat(weights.count - 1) * 4) / weights.reduce(0, +)
+            HStack(spacing: 4) {
+                ForEach(weights.indices, id: \.self) { index in
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(index < done ? EyeStyle.primary : index == done ? EyeStyle.accent : EyeStyle.surfaceVariant)
+                        .frame(width: unit * weights[index], height: 8)
+                }
+            }
+        }.frame(height: 8)
+    }
+}
+
 private struct GazeTargetView: View {
     @ObservedObject var runtime: EyeRuntime
     let pixelsPerMm: Float
@@ -320,7 +389,8 @@ private struct GazeTargetView: View {
             ZStack(alignment: .topLeading) {
                 EyeStyle.panel
                 if phase == "GAZE_CALIBRATION" {
-                    CalibrationDot(index: Int(runtime.number("gazeCalibrationIndex"))).position(point)
+                    // 补测轮重看同一点时编号变化，外圈动效重播。
+                    CalibrationDot(index: Int(runtime.number("gazeCalibrationIndex") + runtime.number("gazeCalibrationRound") * 100)).position(point)
                 } else {
                     let width = phase == "PURSUIT" ? CGFloat(5 * pixelsPerMm / 0.65) / UIScreen.main.scale : CGFloat(runtime.number("targetDiameterMm") * Double(pixelsPerMm)) / UIScreen.main.scale
                     // 与安卓一致：头宽 = 目标半径 / 0.65，头部中心即上报的目标位置。
@@ -362,7 +432,9 @@ private struct GazeTargetView: View {
 }
 
 private extension EyeRuntime {
-    var stateKeyForTarget: String { "\(string("phase"))-\(number("targetX"))-\(number("targetY"))-\(number("gazeCalibrationIndex"))" }
+    var stateKeyForTarget: String {
+        "\(string("phase"))-\(number("targetX"))-\(number("targetY"))-\(number("gazeCalibrationIndex"))-\(number("gazeCalibrationRound"))"
+    }
 }
 
 /// 换点时外圈从大收拢，帮助视线找到新位置；圆点中心即上报位置，立即到位。

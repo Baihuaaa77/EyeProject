@@ -200,10 +200,13 @@ class MobileScreeningController(
                 put("direction",s.direction); put("optotypePx",s.trialOptotypePx); put("eye",s.visionEye.name)
                 put("nearAwaitingEyeReady",s.nearAwaitingEyeReady); put("pushStage",s.pushStage.name)
                 put("targetX",s.targetX); put("targetY",s.targetY); put("savedFile",s.savedFile)
-                put("gazeCalibrationIndex",s.gazeCalibrationIndex); put("gazeCalibrationFailed",s.gazeCalibrationFailed)
+                put("gazeCalibrationIndex",s.gazeCalibrationIndex); put("gazeCalibrationRound",s.gazeCalibrationRound)
+                put("gazeCalibrationFailed",s.gazeCalibrationFailed)
                 put("targetDiameterMm",StrabismusProtocol.targetDiameterMm(s.fields["年龄"]?.toIntOrNull()))
                 put("coverDone",s.coverMarks.size); put("coverNext",StrabismusProtocol.COVER_SEQUENCE.getOrNull(s.coverMarks.size)?.label)
                 put("coverRemainingMs",screening.coverRemainingMs())
+                StrabismusProtocol.COVER_SEQUENCE.getOrNull(s.coverMarks.size - 1)?.let { put("coverCurrent",it.label); put("coverHoldMs",it.holdMs) }
+                put("coverPrompt",coverSpokenPrompt(s))
                 put("risk",s.riskLevel.name); put("category",s.category); put("findings",RecordArray(s.findings + s.limitations))
                 put("voiceActive",s.trialVisible || s.nearAwaitingEyeReady || s.step == ScreeningStep.PUSH_UP)
                 screeningProgress(s).let { p -> put("overallProgress",p?.fraction); put("remainingText",p?.remainingText) }

@@ -112,6 +112,9 @@ final class EyeRuntime: ObservableObject {
         if phase == "Profile" || phase == "PROFILE" { base = "请先填写基本信息。" }
         else if phase == "Setup" || phase == "ENVIRONMENT" {
             base = kind == "STRABISMUS" ? "请正对屏幕，保持三十三厘米。" : "请正对屏幕，保持四十厘米。"
+        } else if phase == "COVER" && !bool("guidePending") {
+            // 与安卓同一读法：保持期间不重复播报，保持结束只读下一动作。
+            base = string("coverPrompt")
         } else { base = string("instruction") }
         let zone = (state["distanceZone"] as? NSNumber)?.int32Value ?? 0
         let distanceText = zone != 0 ? controller.distancePrompt(zone: zone, count: 0) : nil

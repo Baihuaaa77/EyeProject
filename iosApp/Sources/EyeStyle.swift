@@ -10,6 +10,8 @@ enum EyeStyle {
     static let ink = Color(rgb: 0x13201F)
     static let secondary = Color(rgb: 0x566664)
     static let primary = Color(rgb: 0x0B7A78)
+    static let primarySoft = Color(rgb: 0xE3F4F2)
+    static let neutralSoft = Color(rgb: 0xE9EFEE)
     static let brandStart = Color(rgb: 0x12A39A)
     static let brandEnd = Color(rgb: 0x2A5BD7)
     static let accent = Color(rgb: 0xF2A33A)
@@ -24,7 +26,9 @@ enum EyeStyle {
     static let radiusMedium: CGFloat = 14
     static let radiusLarge: CGFloat = 16
     static let spacing: CGFloat = 12
-    /// EyeTypography：title 22、subtitle 18、button 17、body 16、bodySecondary 13。
+    /// EyeTypography：headline 34、title 22、subtitle 18、button 17、body 16、bodySecondary 13、chip 12。
+    static let headline = Font.system(size: 34, weight: .semibold)
+    static let chip = Font.system(size: 12, weight: .semibold)
     static let title = Font.system(size: 22, weight: .semibold)
     static let subtitle = Font.system(size: 18, weight: .semibold)
     static let button = Font.system(size: 17, weight: .semibold)
@@ -77,10 +81,13 @@ struct EyeCardButtonStyle: ButtonStyle {
 }
 
 /// 吉祥物「小瞳」：逐项移植安卓 core:ui 的 drawMascot（双叶嫩芽、渐变团子头、顶部柔光、豆豆眼高光、腮红、微笑）。
-/// [scale] 为头宽占画布短边的比例，[centerY] 为头部中心的纵向位置（画布高度的比例）。
+/// [scale] 为头宽占画布短边的比例，[centerY] 为头部中心的纵向位置（画布高度的比例）；
+/// [gazeX] −1…1 为豆豆眼左右张望，[lid] 0 睁开…1 闭合（≥0.8 画成闭眼弧线）。
 struct MascotView: View {
     var scale: CGFloat = 0.8
     var centerY: CGFloat = 0.56
+    var gazeX: CGFloat = 0
+    var lid: CGFloat = 0
     var body: some View {
         Canvas { context, size in
             let base = context
@@ -110,12 +117,22 @@ struct MascotView: View {
                 $0.fill(Path(ellipseIn: CGRect(x: c.x - s * 0.33, y: top + s * 0.09, width: s * 0.26, height: s * 0.1)), with: .color(.white.opacity(0.16)))
             }
             // 豆豆眼 + 高光
+            let open = min(1, max(0, 1 - lid))
             for side in [-1.0, 1.0] {
-                let eye = CGPoint(x: c.x + side * s * 0.19, y: c.y - s * 0.02)
-                let rx = s * 0.052, ry = s * 0.072
-                context.fill(Path(ellipseIn: CGRect(x: eye.x - rx, y: eye.y - ry, width: rx * 2, height: ry * 2)), with: .color(EyeStyle.ink))
-                let glint = CGPoint(x: eye.x + rx * 0.4, y: eye.y - ry * 0.45)
-                context.fill(Path(ellipseIn: CGRect(x: glint.x - s * 0.02, y: glint.y - s * 0.02, width: s * 0.04, height: s * 0.04)), with: .color(.white))
+                let base = CGPoint(x: c.x + side * s * 0.19, y: c.y - s * 0.02)
+                if open < 0.2 {
+                    var closed = Path(); closed.move(to: CGPoint(x: base.x - s * 0.055, y: base.y))
+                    closed.addQuadCurve(to: CGPoint(x: base.x + s * 0.055, y: base.y), control: CGPoint(x: base.x, y: base.y + s * 0.045))
+                    context.stroke(closed, with: .color(EyeStyle.ink), style: StrokeStyle(lineWidth: s * 0.026, lineCap: .round))
+                } else {
+                    let eye = CGPoint(x: base.x + gazeX * s * 0.035, y: base.y)
+                    let rx = s * 0.052, ry = s * 0.072 * open
+                    context.fill(Path(ellipseIn: CGRect(x: eye.x - rx, y: eye.y - ry, width: rx * 2, height: ry * 2)), with: .color(EyeStyle.ink))
+                    if open > 0.5 {
+                        let glint = CGPoint(x: eye.x + rx * 0.4, y: eye.y - ry * 0.45)
+                        context.fill(Path(ellipseIn: CGRect(x: glint.x - s * 0.02, y: glint.y - s * 0.02, width: s * 0.04, height: s * 0.04)), with: .color(.white))
+                    }
+                }
                 // 腮红
                 let blush = CGPoint(x: c.x + side * s * 0.31, y: c.y + s * 0.11)
                 context.fill(Path(ellipseIn: CGRect(x: blush.x - s * 0.055, y: blush.y - s * 0.032, width: s * 0.11, height: s * 0.064)),

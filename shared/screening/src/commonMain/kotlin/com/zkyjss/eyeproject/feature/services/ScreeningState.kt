@@ -133,10 +133,14 @@ data class ScreeningState(
     val invalidTrialCount: Int = 0,
     val answers: List<VisionAnswer> = emptyList(),
     val coverMarks: List<CoverMark> = emptyList(),
+    /** 刚执行的遮盖动作仍在保持期内；保持结束时给震动与音效，并只播报下一动作。 */
+    val coverHolding: Boolean = false,
     val targetX: Float = 0f,
     val targetY: Float = 0f,
     val gazeCalibrated: Boolean = false,
     val gazeCalibrationIndex: Int = 0,
+    /** 第几轮校准（首轮 0，补测 1）；界面据此在同一点重看时也重新上报位置、重播换点动效。 */
+    val gazeCalibrationRound: Int = 0,
     val gazeCalibrationFailed: Boolean = false,
     val gazeWarning: String? = null,
     val warning: String? = null,

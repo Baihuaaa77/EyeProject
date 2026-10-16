@@ -15,6 +15,8 @@ internal class RecordArray(values: List<Any?> = emptyList()) {
     private val items = values.map(::element).toMutableList()
     fun put(value: Any?) { items += element(value) }
     fun json(): JsonArray = JsonArray(items)
+    /** 必须输出 JSON：苹果端按 JSON 解析反馈事件，缺少此覆盖时得到对象地址，测试中的震动与音效全部丢失。 */
+    override fun toString(): String = json().toString()
 }
 
 private fun element(value: Any?): JsonElement = when (value) {

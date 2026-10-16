@@ -4,7 +4,7 @@ package com.zkyjss.eyeproject.feature.services
 sealed interface VoiceCommand {
     /** 方向：0 右 1 下 2 左 3 上（与 E 开口方向编码一致）。 */
     data class Direction(val direction: Int) : VoiceCommand
-    /** 「看不清 / 不知道」：记为错误作答。 */
+    /** 「看不清 / 跳过 / 不知道」：与「跳过」键相同，记为无法辨认。 */
     data object Unsure : VoiceCommand
     /** 「模糊」：移近法中表示开始持续模糊。 */
     data object Blur : VoiceCommand
@@ -21,7 +21,8 @@ object VoiceCommandParser {
         3 to "上尚晌",
     )
     private val englishDirections = mapOf("right" to 0, "down" to 1, "left" to 2, "up" to 3)
-    private val unsureWords = listOf("看不清", "看不见", "不知道", "不清楚", "不确定", "没看清")
+    private val unsureWords = listOf("看不清", "看不见", "看不到", "不知道", "不清楚", "不确定", "没看清",
+        "跳过", "跳锅", "条过", "挑过", "调过", "跳")
     private val blurWords = listOf("模糊", "糊了", "花了", "虚了")
     private val readyWords = listOf("好了", "准备好", "开始", "可以了", "继续")
 

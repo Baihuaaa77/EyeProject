@@ -27,6 +27,8 @@ class VoiceCommandParserTest {
 
     @Test fun nonDirectionCommands() {
         assertEquals(VoiceCommand.Unsure, VoiceCommandParser.parse("看不清"))
+        assertEquals(VoiceCommand.Unsure, VoiceCommandParser.parse("跳过"))
+        assertEquals(VoiceCommand.Unsure, VoiceCommandParser.parse("跳过吧"))
         assertEquals(VoiceCommand.Blur, VoiceCommandParser.parse("模糊了"))
         assertEquals(VoiceCommand.Ready, VoiceCommandParser.parse("好了"))
         assertNull(VoiceCommandParser.parse("嗯"))

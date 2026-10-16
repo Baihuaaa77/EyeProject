@@ -117,7 +117,7 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, modifier: M
         ScreeningStep.FLIPPER -> "请移动到${if (s.trialIndex % 2 == 0) "五十" else "二十五"}厘米。停稳后视标自动出现，再选择开口方向。"
         ScreeningStep.FIXATION -> "请保持三十三厘米，看着中间闪烁的小瞳，头和手机都不要动。"
         ScreeningStep.GAZE_CALIBRATION -> "请只用眼睛依次看着圆点，头和手机都不要动。"
-        ScreeningStep.COVER -> StrabismusProtocol.COVER_SEQUENCE.getOrNull(s.coverMarks.size)?.label ?: "遮盖完成"
+        ScreeningStep.COVER -> coverSpokenPrompt(s)
         ScreeningStep.PURSUIT -> "请只用双眼跟随移动的小瞳，保持头部稳定。"
         ScreeningStep.RESULT -> "测试完成，请查看结果。"
     }
@@ -372,7 +372,8 @@ internal fun GazeCalibrationContent(s: ScreeningState, vm: ScreeningTestViewMode
     // 换点时外圈从大收拢，帮助视线找到新位置；圆点中心即上报位置，立即到位。
     val reduced = com.zkyjss.eyeproject.core.designsystem.theme.rememberReducedMotion()
     val halo = remember { androidx.compose.animation.core.Animatable(1f) }
-    LaunchedEffect(s.gazeCalibrationIndex, s.gazeCalibrationFailed) {
+    // 补测轮重看同一点时 round 变化，也会重播动效并触发重绘上报位置。
+    LaunchedEffect(s.gazeCalibrationIndex, s.gazeCalibrationRound, s.gazeCalibrationFailed) {
         if (reduced || s.gazeCalibrationFailed) halo.snapTo(1f) else {
             halo.snapTo(2.4f)
             halo.animateTo(1f, com.zkyjss.eyeproject.core.designsystem.theme.EyeMotion.settleSpring())

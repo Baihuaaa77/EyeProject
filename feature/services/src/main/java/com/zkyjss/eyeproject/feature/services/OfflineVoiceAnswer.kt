@@ -97,7 +97,7 @@ internal class OfflineVoiceAnswer(private val context: Context, private val call
         const val MODEL_DIR = "vosk-model-small-cn-0.22"
         // 短指令词表减少推理负担；[unk] 保留拒绝无关声音的路径。
         val GRAMMAR: String = JSONArray(listOf("上", "下", "左", "右", "向 上", "向 下", "向 左", "向 右",
-            "看 不 清", "不 知道", "模糊", "好 了", "开始", "[unk]")).toString()
+            "看 不 清", "跳 过", "不 知道", "模糊", "好 了", "开始", "[unk]")).toString()
     }
 }
 

@@ -70,6 +70,15 @@ fun spokenDistanceZone(distanceCm: Float, faceVisible: Boolean, target: Pair<Flo
     else -> 1
 }
 
+/**
+ * 遮盖任务的播报：只读动作名称。保持期间仍返回刚执行的动作（与上次相同，不会重复播报），
+ * 保持结束时变为下一动作，由震动与音效配合提示，不再反复说「保持两秒」。
+ */
+fun coverSpokenPrompt(s: ScreeningState): String {
+    val index = if (s.coverHolding) s.coverMarks.size - 1 else s.coverMarks.size
+    return StrabismusProtocol.COVER_SEQUENCE.getOrNull(index)?.label ?: "遮盖完成"
+}
+
 /** 口语化的播报短句：重复提醒时换一种说法，回到合适距离时给一句肯定，听起来更像真人引导。 */
 object SpokenPrompts {
     /** 回到合适距离后的肯定。 */

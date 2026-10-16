@@ -130,7 +130,7 @@ final class EyeVoice: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
             // 优先设备端识别；本机没有离线中文模型时使用系统在线识别（与安卓回退系统识别服务一致）。
             next.requiresOnDeviceRecognition = recognizer.supportsOnDeviceRecognition
             next.taskHint = .confirmation
-            next.contextualStrings = ["上", "下", "左", "右", "看不清", "模糊", "开始", "好了"]
+            next.contextualStrings = ["上", "下", "左", "右", "看不清", "跳过", "模糊", "开始", "好了"]
             request = next
             let input = audio.inputNode
             let format = input.outputFormat(forBus: 0)
@@ -156,7 +156,7 @@ final class EyeVoice: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
                     }
                 }
             }
-            status = "正在听：说上、下、左、右；看不清就说看不清"
+            status = "正在听：说上、下、左、右；看不清就说「跳过」"
         } catch { stopListening(); retryAfter = Date().addingTimeInterval(2); status = "麦克风启动失败，请使用按钮或重试" }
     }
 
