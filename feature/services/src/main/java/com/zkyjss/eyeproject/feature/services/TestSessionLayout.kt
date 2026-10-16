@@ -229,6 +229,7 @@ internal fun TestSettingsSheet(
             }
             if (settings.speechEnabled && speechAvailable == false) EyeText("语音播报不可用", style = typography.bodySecondary, color = colors.warning)
             if (settings.speechEnabled) {
+                VoicePicker()
                 LevelSlider("播报音量", settings.speechVolume, 0.1f..1f, settings::saveSpeechVolume)
                 LevelSlider("播报语速", settings.speechRate, 0.7f..1.4f, settings::saveSpeechRate)
             }
@@ -271,4 +272,38 @@ private fun LevelSlider(title: String, value: Float, range: ClosedFloatingPointR
                 activeTrackColor = colors.primary, inactiveTrackColor = colors.neutralSoft),
         )
     }
+}
+
+/** 当前发声人与更换入口：三项测试共用同一发声人，在任一测试里更换都对全部生效。 */
+@Composable
+private fun VoicePicker() {
+    val colors = LocalEyeColors.current
+    val typography = LocalEyeTypography.current
+    val voices = SharedSpeech.voices
+    val current = SharedSpeech.currentVoice
+    EyeText("发声人：${current?.let(::voiceLabel) ?: "系统默认"}", style = typography.body, color = colors.textPrimary)
+    if (voices.size > 1) EyeDisclosure("更换发声人") {
+        voices.forEach { voice ->
+            val selected = voice.name == current
+            Row(Modifier.fillMaxWidth().heightIn(min = 44.dp).clickable(role = Role.RadioButton) { SharedSpeech.selectVoice(voice.name) },
+                verticalAlignment = Alignment.CenterVertically) {
+                EyeText(voiceLabel(voice.name) + qualityLabel(voice), style = typography.body,
+                    color = if (selected) colors.primary else colors.textPrimary, modifier = Modifier.weight(1f))
+                if (selected) EyeText("当前", style = typography.bodySecondary, color = colors.primary)
+            }
+        }
+    }
+}
+
+/** 引擎内部名（如 cmn-cn-x-ccc-local）转成易读的编号与离线标记。 */
+private fun voiceLabel(name: String): String {
+    val code = Regex("""x-([a-z]{3})""").find(name)?.groupValues?.get(1)?.uppercase()
+    val where = if (name.endsWith("network")) "在线" else "离线"
+    return if (code != null) "中文 $code（$where）" else name
+}
+
+private fun qualityLabel(voice: android.speech.tts.Voice): String = when {
+    voice.quality >= android.speech.tts.Voice.QUALITY_VERY_HIGH -> " · 最高音质"
+    voice.quality >= android.speech.tts.Voice.QUALITY_HIGH -> " · 高音质"
+    else -> ""
 }

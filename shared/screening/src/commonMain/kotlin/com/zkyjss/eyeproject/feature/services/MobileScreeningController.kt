@@ -192,7 +192,7 @@ class MobileScreeningController(
                 put("direction",s.direction); put("optotypePx",s.optotypePx); put("savedFile",s.savedFile)
                 put("risk",s.report?.riskLevel?.name); put("findings",RecordArray(s.report?.indicators.orEmpty() + s.report?.abnormal.orEmpty()))
                 put("advice",s.report?.advice); put("voiceActive",s.trialVisible)
-                put("canExtend",s.canExtend); put("canRest",s.canRestRetest); put("progress",s.progressFraction)
+                put("naturalSeconds",s.naturalSeconds); put("afterRest",s.afterRest); put("canExtend",s.canExtend); put("canRest",s.canRestRetest); put("progress",s.progressFraction)
                 dryEyeProgress(s).let { p -> put("overallProgress",p?.fraction); put("remainingText",p?.remainingText) }
             }
         } else {

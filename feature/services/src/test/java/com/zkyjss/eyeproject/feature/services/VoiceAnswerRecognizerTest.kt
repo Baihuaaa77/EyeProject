@@ -105,6 +105,21 @@ class VoiceAnswerRecognizerTest {
         b.close()
     }
 
+    @Test fun concurrentScreensShareOneEngineAndVoice() {
+        ShadowTextToSpeech.addLanguageAvailability(Locale.SIMPLIFIED_CHINESE)
+        ShadowTextToSpeech.addVoice(Voice("chinese-default", Locale.SIMPLIFIED_CHINESE, Voice.QUALITY_NORMAL, Voice.LATENCY_NORMAL, false, emptySet()))
+        val first = initializedVoice()
+        val engine = ShadowTextToSpeech.getLastTextToSpeechInstance()
+        // 导航过渡时新页先建、旧页后释放：不能再建第二个引擎，也不能各自挑选发声人
+        val second = ScreeningVoice(context)
+        assertTrue(engine === ShadowTextToSpeech.getLastTextToSpeechInstance())
+        first.close()
+        second.speak("请保持三十三厘米")
+        assertEquals("chinese-default", shadowOf(engine).currentVoice.name)
+        assertTrue(second.speaking)
+        second.close()
+    }
+
     @Test fun playbackGuardTracksNewUtteranceAndEndsAfterCooldown() {
         ShadowTextToSpeech.addLanguageAvailability(Locale.SIMPLIFIED_CHINESE)
         val voice = initializedVoice()

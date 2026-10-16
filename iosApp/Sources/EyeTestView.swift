@@ -102,7 +102,14 @@ struct EyeTestView: View {
     }
     @ViewBuilder private var testContent: some View {
         if phase == "Setup" || phase == "ENVIRONMENT" {
-            Text(runtime.kind == "STRABISMUS" ? "保持约 33 cm，后续遮眼由协助者完成。" : "保持约 40 cm，建议佩戴最佳矫正眼镜。").font(EyeStyle.body)
+            // 与安卓准备页一致：干眼先提示最佳矫正，再示范姿势
+            if runtime.kind == "DRY_EYE" {
+                Text("建议佩戴最佳矫正视力眼镜进行测试").font(EyeStyle.body).frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(14).background(Cartoon.accentSoft, in: RoundedRectangle(cornerRadius: EyeStyle.radiusMedium))
+            }
+            TestGuideView(motion: .posture, title: runtime.kind == "DRY_EYE" ? "调整姿势 · 约 40 cm" : "调整姿势",
+                cue: runtime.kind == "DRY_EYE" ? "正对屏幕，手机距离眼睛约 40 厘米，光线均匀"
+                    : runtime.kind == "STRABISMUS" ? "正对屏幕，约 33 厘米；请协助者在旁准备" : "正对屏幕，约 40 厘米")
             Button("开始测试") { runtime.act("begin") }.buttonStyle(EyeButtonStyle())
             Button("重试相机") { runtime.act("retryCamera") }.buttonStyle(EyeButtonStyle(role: .secondary))
             DisclosureGroup("测距校准") {
@@ -115,13 +122,25 @@ struct EyeTestView: View {
                     }
                 }.disabled(runtime.number("distanceCm") <= 0)
             }
-        } else if phase == "PracticeGuide" || phase == "FormalGuide" {
-            Text(phase == "PracticeGuide" ? "先练习 12 秒：看 E 的开口方向，在 2 秒内作答。" : "自然眨眼 60 秒后继续尽量睁眼 20 秒。两段全程看 E 并选择方向，中途没有休息。")
-            Button("准备好了") { runtime.act(phase == "PracticeGuide" ? "practice" : "formal") }.buttonStyle(EyeButtonStyle())
+        } else if phase == "PracticeGuide" {
+            TestGuideView(motion: .acuity, title: "视标练习 · 约 12 秒", cue: "先练习一下：2 秒内点选 E 的开口方向；练习不计入结果") {
+                runtime.act("practice")
+            }
+        } else if phase == "FormalGuide" {
+            let seconds = max(1, Int(runtime.number("naturalSeconds")))
+            if runtime.bool("afterRest") {
+                Text("休息结束，下面进行复测，流程与首次相同").font(EyeStyle.body).frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(14).background(Cartoon.accentSoft, in: RoundedRectangle(cornerRadius: EyeStyle.radiusMedium))
+            }
+            TestGuideView(motion: .fva, title: "正式测试 · \(seconds) 秒 + 20 秒",
+                cue: "全程看 E 选方向。前 \(seconds) 秒自然眨眼，随后不停顿，直接尽量保持睁眼 20 秒", readyTitle: "开始正式测试") {
+                runtime.act("formal")
+            }
         } else if runtime.bool("guidePending") {
-            Text(runtime.string("stepTitle")).font(EyeStyle.title)
-            Text(runtime.string("guideText").isEmpty ? runtime.string("instruction") : runtime.string("guideText"))
-            Button("准备好了") { runtime.act("guide") }.buttonStyle(EyeButtonStyle())
+            TestGuideView(motion: .forStep(phase), title: runtime.string("stepTitle"),
+                cue: runtime.string("guideText").isEmpty ? runtime.string("instruction") : runtime.string("guideText")) {
+                runtime.act("guide")
+            }
         } else if phase == "Result" || phase == "RESULT" {
             Text(runtime.string("category").isEmpty ? riskLabel(runtime.string("risk")) : runtime.string("category")).font(EyeStyle.title)
             ForEach(Array((runtime.state["findings"] as? [String] ?? []).enumerated()), id: \.offset) { _, line in Text(line).frame(maxWidth: .infinity, alignment: .leading) }

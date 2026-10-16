@@ -80,9 +80,9 @@ struct EyeCardButtonStyle: ButtonStyle {
     }
 }
 
-/// 吉祥物「小瞳」：逐项移植安卓 core:ui 的 drawMascot（双叶嫩芽、渐变团子头、顶部柔光、豆豆眼高光、腮红、微笑）。
+/// 吉祥物「小瞳」：绘制见 Cartoon.mascot（逐项移植安卓 drawMascot）。
 /// [scale] 为头宽占画布短边的比例，[centerY] 为头部中心的纵向位置（画布高度的比例）；
-/// [gazeX] −1…1 为豆豆眼左右张望，[lid] 0 睁开…1 闭合（≥0.8 画成闭眼弧线）。
+/// [gazeX] −1…1 为豆豆眼左右张望，[lid] 0 睁开…1 闭合。
 struct MascotView: View {
     var scale: CGFloat = 0.8
     var centerY: CGFloat = 0.56
@@ -90,59 +90,8 @@ struct MascotView: View {
     var lid: CGFloat = 0
     var body: some View {
         Canvas { context, size in
-            let base = context
-            let s = min(size.width, size.height) * scale
-            let c = CGPoint(x: size.width / 2, y: size.height * centerY)
-            let top = c.y - s * 0.42
-            func rotated(_ degrees: Double, around pivot: CGPoint, _ draw: (inout GraphicsContext) -> Void) {
-                var layer = base
-                layer.translateBy(x: pivot.x, y: pivot.y); layer.rotate(by: .degrees(degrees)); layer.translateBy(x: -pivot.x, y: -pivot.y)
-                draw(&layer)
-            }
-            // 双叶嫩芽
-            var stem = Path(); stem.move(to: CGPoint(x: c.x, y: top + s * 0.02))
-            stem.addQuadCurve(to: CGPoint(x: c.x + s * 0.015, y: top - s * 0.1), control: CGPoint(x: c.x + s * 0.005, y: top - s * 0.05))
-            context.stroke(stem, with: .color(EyeStyle.brandStart), style: StrokeStyle(lineWidth: s * 0.035, lineCap: .round))
-            rotated(25, around: CGPoint(x: c.x - s * 0.06, y: top - s * 0.11)) {
-                $0.fill(Path(ellipseIn: CGRect(x: c.x - s * 0.15, y: top - s * 0.155, width: s * 0.18, height: s * 0.09)), with: .color(EyeStyle.brandStart))
-            }
-            rotated(-30, around: CGPoint(x: c.x + s * 0.09, y: top - s * 0.14)) {
-                $0.fill(Path(ellipseIn: CGRect(x: c.x - s * 0.01, y: top - s * 0.19, width: s * 0.2, height: s * 0.1)), with: .color(EyeStyle.brandStart))
-            }
-            // 团子头 + 顶部柔光
-            let head = CGRect(x: c.x - s / 2, y: top, width: s, height: s * 0.84)
-            context.fill(Path(roundedRect: head, cornerRadius: s * 0.4), with: .linearGradient(
-                Gradient(colors: [EyeStyle.brandStart, EyeStyle.brandEnd]), startPoint: head.origin, endPoint: CGPoint(x: head.maxX, y: head.maxY)))
-            rotated(-18, around: CGPoint(x: c.x - s * 0.2, y: top + s * 0.14)) {
-                $0.fill(Path(ellipseIn: CGRect(x: c.x - s * 0.33, y: top + s * 0.09, width: s * 0.26, height: s * 0.1)), with: .color(.white.opacity(0.16)))
-            }
-            // 豆豆眼 + 高光
-            let open = min(1, max(0, 1 - lid))
-            for side in [-1.0, 1.0] {
-                let base = CGPoint(x: c.x + side * s * 0.19, y: c.y - s * 0.02)
-                if open < 0.2 {
-                    var closed = Path(); closed.move(to: CGPoint(x: base.x - s * 0.055, y: base.y))
-                    closed.addQuadCurve(to: CGPoint(x: base.x + s * 0.055, y: base.y), control: CGPoint(x: base.x, y: base.y + s * 0.045))
-                    context.stroke(closed, with: .color(EyeStyle.ink), style: StrokeStyle(lineWidth: s * 0.026, lineCap: .round))
-                } else {
-                    let eye = CGPoint(x: base.x + gazeX * s * 0.035, y: base.y)
-                    let rx = s * 0.052, ry = s * 0.072 * open
-                    context.fill(Path(ellipseIn: CGRect(x: eye.x - rx, y: eye.y - ry, width: rx * 2, height: ry * 2)), with: .color(EyeStyle.ink))
-                    if open > 0.5 {
-                        let glint = CGPoint(x: eye.x + rx * 0.4, y: eye.y - ry * 0.45)
-                        context.fill(Path(ellipseIn: CGRect(x: glint.x - s * 0.02, y: glint.y - s * 0.02, width: s * 0.04, height: s * 0.04)), with: .color(.white))
-                    }
-                }
-                // 腮红
-                let blush = CGPoint(x: c.x + side * s * 0.31, y: c.y + s * 0.11)
-                context.fill(Path(ellipseIn: CGRect(x: blush.x - s * 0.055, y: blush.y - s * 0.032, width: s * 0.11, height: s * 0.064)),
-                    with: .color(EyeStyle.accent.opacity(0.75)))
-            }
-            // 微笑
-            let mouthY = c.y + s * 0.1
-            var mouth = Path(); mouth.move(to: CGPoint(x: c.x - s * 0.05, y: mouthY))
-            mouth.addQuadCurve(to: CGPoint(x: c.x + s * 0.05, y: mouthY), control: CGPoint(x: c.x, y: mouthY + s * 0.05))
-            context.stroke(mouth, with: .color(EyeStyle.ink), style: StrokeStyle(lineWidth: s * 0.024, lineCap: .round))
+            Cartoon.mascot(context, center: CGPoint(x: size.width / 2, y: size.height * centerY),
+                size: min(size.width, size.height) * scale, gaze: CGPoint(x: gazeX, y: 0), lid: lid)
         }.accessibilityLabel("小瞳")
     }
 }
