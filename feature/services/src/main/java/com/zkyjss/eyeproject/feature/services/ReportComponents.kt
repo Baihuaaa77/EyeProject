@@ -61,6 +61,9 @@ import com.zkyjss.eyeproject.core.ui.component.drawMascot
  * 「查看本次数据」「导出数据」→ 一行说明。首屏不放成段小字，明细都在底板里。
  */
 
+/** 结论超过这个字数时改用较小的标题字号（两端一致）。 */
+private const val LONG_TITLE = 8
+
 private fun EyeColors.toneFor(level: ScreeningRiskLevel): Pair<Color, Color> = when (level) {
     ScreeningRiskLevel.LOW -> success to successSoft
     ScreeningRiskLevel.MEDIUM -> warning to warningSoft
@@ -133,7 +136,9 @@ private fun ResultHero(report: ResultReport) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 EyeText(report.badge, style = typography.chip, color = colors.onStatus,
                     modifier = Modifier.clip(EyeShapes.chip).background(strong).padding(horizontal = 12.dp, vertical = 6.dp))
-                EyeText(report.title, style = typography.headline, color = colors.textPrimary)
+                // 长结论（如「调节能力与实际年龄基本匹配」）用标题字号，避免大字折成三行
+                EyeText(report.title, style = if (report.title.length > LONG_TITLE) typography.title else typography.headline,
+                    color = colors.textPrimary)
             }
             Mascot(report.mood, Modifier.size(104.dp))
         }

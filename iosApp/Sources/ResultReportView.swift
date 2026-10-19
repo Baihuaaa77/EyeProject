@@ -119,7 +119,8 @@ private struct ResultHero: View {
                 VStack(alignment: .leading, spacing: 10) {
                     Text(report.badge).font(EyeStyle.chip).foregroundStyle(EyeStyle.onStatus)
                         .padding(.horizontal, 12).padding(.vertical, 6).background(tone.0, in: Capsule())
-                    Text(report.title).font(EyeStyle.headline).foregroundStyle(EyeStyle.text)
+                    // 长结论用标题字号，避免大字折成三行；与安卓 LONG_TITLE 一致
+                    Text(report.title).font(report.title.count > 8 ? EyeStyle.title : EyeStyle.headline).foregroundStyle(EyeStyle.text)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 8)
