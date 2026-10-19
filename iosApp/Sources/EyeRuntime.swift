@@ -113,6 +113,9 @@ final class EyeRuntime: ObservableObject {
         if phase == "Profile" || phase == "PROFILE" { base = "请先填写基本信息。" }
         else if phase == "Setup" || phase == "ENVIRONMENT" {
             base = kind == "STRABISMUS" ? "请正对屏幕，保持三十三厘米。" : "请正对屏幕，保持四十厘米。"
+        } else if bool("calibrationPaused") {
+            // 与安卓一致：校准暂停时播报暂停原因
+            base = string("warning")
         } else if phase == "COVER" && !bool("guidePending") {
             // 与安卓同一读法：保持期间不重复播报，保持结束只读下一动作。
             base = string("coverPrompt")

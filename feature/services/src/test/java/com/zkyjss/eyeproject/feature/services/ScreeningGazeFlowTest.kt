@@ -32,7 +32,8 @@ class ScreeningGazeFlowTest {
         val vm = viewModel()
         vm.confirmGuide()
         assertEquals(ScreeningStep.GAZE_CALIBRATION, vm.state.value.step)
-        val calibrationSeconds = StrabismusGaze.calibrationTargets.size * StrabismusGaze.CALIBRATION_POINT_MS / 1000
+        // 没有相机帧时每点采样不足，按最长等待时间顺延后才判失败
+        val calibrationSeconds = StrabismusGaze.calibrationTargets.size * StrabismusGaze.CALIBRATION_POINT_MAX_MS / 1000
         ShadowLooper.idleMainLooper(calibrationSeconds - 1, TimeUnit.SECONDS)
         assertFalse(vm.state.value.gazeCalibrationFailed)
         assertEquals(ScreeningStep.GAZE_CALIBRATION, vm.state.value.step)
@@ -61,7 +62,8 @@ class ScreeningGazeFlowTest {
                     GazePoint((target.x - 0.5f) / 5f, (target.y - 0.5f) / 3f), null))
             }
         }
-        ShadowLooper.idleMainLooper(StrabismusGaze.calibrationTargets.size * StrabismusGaze.CALIBRATION_POINT_MS / 1000, TimeUnit.SECONDS)
+        // 注入的样本不计入实时采样时长，每点等到最长时间后换点
+        ShadowLooper.idleMainLooper(StrabismusGaze.calibrationTargets.size * StrabismusGaze.CALIBRATION_POINT_MAX_MS / 1000, TimeUnit.SECONDS)
         assertTrue(vm.state.value.gazeCalibrated)
         assertEquals(ScreeningStep.FIXATION, vm.state.value.step)
         ShadowLooper.idleMainLooper(11, TimeUnit.SECONDS)

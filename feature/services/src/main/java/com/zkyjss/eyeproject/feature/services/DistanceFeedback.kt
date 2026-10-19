@@ -133,7 +133,7 @@ internal fun DistanceBanner(status: DistanceStatus, modifier: Modifier = Modifie
     ) {
         DirectionGlyph(status.zone, fg, Modifier.size(if (compact) 28.dp else 36.dp))
         Column(Modifier.weight(1f)) {
-            if (singleLine) EyeText(status.detail, style = typography.body, color = fg)
+            if (singleLine) EyeText(status.detail, style = typography.body, color = fg, maxLines = 1)
             else {
                 EyeText(status.title, style = if (compact) typography.subtitle else typography.title, color = fg)
                 EyeText(status.detail, style = typography.bodySecondary, color = fg)

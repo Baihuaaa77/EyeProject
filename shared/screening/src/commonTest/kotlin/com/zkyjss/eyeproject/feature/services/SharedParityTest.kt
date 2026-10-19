@@ -134,12 +134,62 @@ class SharedParityTest {
         engine.answer(0); engine.markCover()
         assertEquals(listOf(ScreeningFeedbackCue.START), platform.feedbackEvents, "非作答与遮盖阶段不确认输入")
         assertEquals(ScreeningStep.GAZE_CALIBRATION,engine.state.value.step)
+        // 没有有效帧时校准暂停、每点顺延：按原 3 秒/点不会结束，到每点最长等待后才判失败
         advanceTimeBy(StrabismusGaze.calibrationTargets.size * StrabismusGaze.CALIBRATION_POINT_MS); runCurrent()
+        assertFalse(engine.state.value.gazeCalibrationFailed)
+        advanceTimeBy(StrabismusGaze.calibrationTargets.size * StrabismusGaze.CALIBRATION_POINT_MAX_MS); runCurrent()
         assertTrue(engine.state.value.gazeCalibrationFailed)
         engine.retryGazeCalibration(); runCurrent(); engine.interruptTest()
         advanceTimeBy(30_000); runCurrent()
         assertEquals(ScreeningStep.ENVIRONMENT,engine.state.value.step)
         assertFalse(engine.state.value.gazeCalibrated)
+        engine.close()
+    }
+    @Test fun calibrationPausesWhileEyesAreNotTrackedAndResumes() = runTest {
+        val platform = TestPlatform { 1_000 + testScheduler.currentTime }
+        val engine = ScreeningEngine(platform,backgroundScope)
+        engine.configure(ScreeningKind.STRABISMUS); engine.setField("年龄","8"); engine.nextFromProfile(); engine.startCamera(); runCurrent()
+        val eye = EyeLandmarks("LEFT",listOf(Point2f(0f,0f),Point2f(20f,-10f),Point2f(60f,-10f),Point2f(80f,0f),Point2f(60f,10f),Point2f(20f,10f)),
+            listOf(Point2f(40f,0f)),11.7f * 400 / 330)
+        fun frame(withFace: Boolean) {
+            val now = platform.nowMs()
+            platform.onFrame!!(FaceLandmarkFrame(if (withFace) listOf(FaceMetrics(BoundingBox(0f,0f,300f,300f),eye,eye,
+                headPose = HeadPoseEstimate(0f,0f,0f))) else emptyList(),400,400,now,0,30f,150f,now))
+        }
+        repeat(8) { frame(true); advanceTimeBy(100); runCurrent() }
+        engine.begin(); engine.confirmGuide(); runCurrent()
+        assertEquals(ScreeningStep.GAZE_CALIBRATION,engine.state.value.step)
+        repeat(40) { frame(false); advanceTimeBy(100); runCurrent() } // 4 秒：旧逻辑 3 秒就换点
+        assertTrue(engine.state.value.gazeCalibrationPaused, "看不到双眼时校准应暂停")
+        assertTrue(engine.state.value.gazeWarning!!.contains("暂停"))
+        assertEquals(0,engine.state.value.gazeCalibrationIndex, "暂停期间不换点")
+        repeat(3) { frame(true); advanceTimeBy(100); runCurrent() }
+        assertFalse(engine.state.value.gazeCalibrationPaused)
+        engine.close()
+    }
+    @Test fun standardModeWithReadingGlassesAsksToRemoveThemFirst() = runTest {
+        val platform = TestPlatform { 1_000 + testScheduler.currentTime }
+        val engine = ScreeningEngine(platform,backgroundScope)
+        engine.configure(ScreeningKind.PRESBYOPIA); engine.setField("年龄","55"); engine.setField("日常矫正方式","老花镜")
+        engine.setMode(PRESBYOPIA_MODE_STANDARD); engine.nextFromProfile(); engine.startCamera(); runCurrent()
+        repeat(20) {
+            val now = platform.nowMs()
+            val eye = EyeLandmarks("LEFT",listOf(Point2f(0f,0f),Point2f(20f,-10f),Point2f(60f,-10f),Point2f(80f,0f),Point2f(60f,10f),Point2f(20f,10f)),
+                listOf(Point2f(40f,0f)),11.7f * 400 / 400)
+            platform.onFrame!!(FaceLandmarkFrame(listOf(FaceMetrics(BoundingBox(0f,0f,300f,300f),eye,eye,
+                headPose = HeadPoseEstimate(0f,0f,0f))),400,400,now,0,30f,150f,now))
+            advanceTimeBy(100); runCurrent()
+        }
+        engine.begin(); runCurrent()
+        assertEquals(ScreeningStep.NEAR_VISION,engine.state.value.step)
+        assertTrue(engine.state.value.glassesCheckPending)
+        assertEquals(GLASSES_REMOVAL_PROMPT,screeningGuideText(engine.state.value))
+        engine.confirmGuide()
+        assertTrue(engine.state.value.guidePending, "确认摘镜前不能跳过")
+        engine.confirmGlassesRemoved()
+        assertFalse(engine.state.value.glassesCheckPending); assertTrue(engine.state.value.glassesRemovedConfirmed)
+        engine.confirmGuide()
+        assertFalse(engine.state.value.guidePending)
         engine.close()
     }
     @Test fun backgroundingDuringEnvironmentCheckOnlyReleasesTheCamera() = runTest {

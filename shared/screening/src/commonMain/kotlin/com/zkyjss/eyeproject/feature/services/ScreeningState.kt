@@ -91,6 +91,10 @@ data class ScreeningState(
     /** 用户选择先跳过问卷；记录中注明，依赖问卷的评估（如同龄对照）会说明无法评估。 */
     val profileSkipped: Boolean = false,
     val mode: String = "",
+    /** 老视标准模式开始前需确认已摘下老花镜/渐进镜（摘镜提醒页）。 */
+    val glassesCheckPending: Boolean = false,
+    /** 受试者已在摘镜提醒页确认摘下近用眼镜；写入记录。 */
+    val glassesRemovedConfirmed: Boolean = false,
     val faceDetected: Boolean = false,
     val distanceCm: Float = 0f,
     val lux: Float? = null,
@@ -151,6 +155,8 @@ data class ScreeningState(
     /** 第几轮校准（首轮 0，补测 1）；界面据此在同一点重看时也重新上报位置、重播换点动效。 */
     val gazeCalibrationRound: Int = 0,
     val gazeCalibrationFailed: Boolean = false,
+    /** 校准因异常（看不到双眼、头偏、距离超出）暂停中：本点不采样、计时顺延，界面淡化圆点并提示。 */
+    val gazeCalibrationPaused: Boolean = false,
     val gazeWarning: String? = null,
     val warning: String? = null,
     val result: List<String> = emptyList(),

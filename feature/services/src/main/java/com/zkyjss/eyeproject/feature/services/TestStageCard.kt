@@ -8,7 +8,9 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
@@ -16,6 +18,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
@@ -61,3 +64,25 @@ internal fun TestNotice(text: String?, modifier: Modifier = Modifier) {
                 .padding(horizontal = 16.dp, vertical = 10.dp))
     }
 }
+
+/**
+ * 注视类任务（校准、注视、遮盖、追踪）用的提示位：始终占住固定高度，提示出现或消失都不挤动下方画布。
+ * 画布一移动，屏幕上的校准点和注视目标就跟着移动，受试者刚才看的位置与记录的位置不再一致。
+ */
+@Composable
+internal fun TestNoticeSlot(text: String?) {
+    val colors = LocalEyeColors.current
+    var last by remember { mutableStateOf(text.orEmpty()) }
+    if (text != null) last = text
+    Box(Modifier.fillMaxWidth().height(NOTICE_SLOT_HEIGHT), contentAlignment = Alignment.Center) {
+        AnimatedVisibility(visible = text != null, enter = fadeIn(tween(EyeMotion.MEDIUM)), exit = fadeOut(tween(EyeMotion.SHORT))) {
+            EyeText(last, style = LocalEyeTypography.current.body, color = colors.warning, textAlign = TextAlign.Center, maxLines = 2,
+                modifier = Modifier.fillMaxWidth().clip(EyeShapes.chip).background(colors.warningSoft)
+                    .semantics { liveRegion = LiveRegionMode.Polite }
+                    .padding(horizontal = 16.dp, vertical = 8.dp))
+        }
+    }
+}
+
+/** 两行正文 + 上下内边距。 */
+private val NOTICE_SLOT_HEIGHT = 64.dp

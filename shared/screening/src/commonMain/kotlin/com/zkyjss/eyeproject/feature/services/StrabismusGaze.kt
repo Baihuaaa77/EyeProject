@@ -40,6 +40,16 @@ class StrabismusGaze private constructor(private val left: Mapping?, private val
         )
         const val CALIBRATION_POINT_MS = 3_000L
         const val SETTLE_MS = 1_200L
+        /** 每点需累计的有效采样时长（正常情况下 3 秒 − 1.2 秒稳定期）。 */
+        const val SAMPLE_MS = CALIBRATION_POINT_MS - SETTLE_MS
+        /** 异常导致采样不足时，每点最长等待时间；超过后换点，由补测或整体重试处理。 */
+        const val CALIBRATION_POINT_MAX_MS = 8_000L
+        /** 异常恢复后的重新稳定时间（视线回到圆点）。 */
+        const val RESETTLE_MS = 600L
+        /** 相邻有效帧间隔超过此值不计入累计采样时长（丢帧期间不算看过）。 */
+        const val MAX_SAMPLE_GAP_MS = 400L
+        /** 异常持续超过此时长才提示「校准已暂停」，避免眨眼一下就闪提示。 */
+        const val PAUSE_NOTICE_MS = 500L
         /** 注视容差（屏幕比例）：只判断「大致在看目标」，手机前置相机的眼动估计误差不小，宁宽勿严。 */
         const val TOLERANCE_X = 0.30f
         const val TOLERANCE_Y = 0.25f

@@ -78,7 +78,8 @@ struct EyeTestView: View {
                     runtime.prepare(pixelsPerMm: value)
                 }
             } else {
-                TestNotice(text: runtime.error ?? warningText)
+                if isGazeTask { TestNoticeSlot(text: runtime.error ?? warningText) }
+                else { TestNotice(text: runtime.error ?? warningText) }
                 if isProfile { QuestionnaireView(runtime: runtime) }
                 else if isRunning { VStack(spacing: EyeStyle.spacing) { testContent }.modifier(TestStagePanel()) }
                 else { testContent }
@@ -93,6 +94,10 @@ struct EyeTestView: View {
         return text
     }
     private var isProfile: Bool { phase == "Profile" || phase == "PROFILE" }
+    /// 注视类任务：提示位固定高度，画布位置不随提示变化
+    private var isGazeTask: Bool {
+        pixelsPerMm > 0 && !runtime.bool("guidePending") && ["GAZE_CALIBRATION","FIXATION","COVER","PURSUIT"].contains(phase)
+    }
     private var hasReflexStimulus: Bool {
         pixelsPerMm > 0 && runtime.kind == "STRABISMUS" && !isProfile && !phase.isEmpty && phase != "RESULT"
     }
@@ -136,6 +141,8 @@ struct EyeTestView: View {
                 cue: "全程看 E 选方向。前 \(seconds) 秒自然眨眼，随后不停顿，直接尽量保持睁眼 20 秒", readyTitle: "开始正式测试") {
                 runtime.act("formal")
             }
+        } else if runtime.bool("guidePending") && runtime.bool("glassesCheck") {
+            GlassesCheckView { runtime.act("glassesRemoved") }
         } else if runtime.bool("guidePending") {
             TestGuideView(motion: .forStep(phase), title: runtime.string("stepTitle"),
                 cue: runtime.string("guideText").isEmpty ? runtime.string("instruction") : runtime.string("guideText")) {
@@ -404,7 +411,9 @@ private struct GazeTargetView: View {
                 EyeStyle.panel
                 if phase == "GAZE_CALIBRATION" {
                     // 补测轮重看同一点时编号变化，外圈动效重播。
-                    CalibrationDot(index: Int(runtime.number("gazeCalibrationIndex") + runtime.number("gazeCalibrationRound") * 100)).position(point)
+                    CalibrationDot(index: Int(runtime.number("gazeCalibrationIndex") + runtime.number("gazeCalibrationRound") * 100))
+                        // 暂停时圆点变淡：位置不变，提示受试者校准在等待
+                        .opacity(runtime.bool("calibrationPaused") ? 0.35 : 1).position(point)
                 } else {
                     let width = phase == "PURSUIT" ? CGFloat(5 * pixelsPerMm / 0.65) / UIScreen.main.scale : CGFloat(runtime.number("targetDiameterMm") * Double(pixelsPerMm)) / UIScreen.main.scale
                     // 与安卓一致：头宽 = 目标半径 / 0.65，头部中心即上报的目标位置。
@@ -470,5 +479,20 @@ private struct CalibrationDot: View {
         var snap = Transaction(); snap.disablesAnimations = true
         withTransaction(snap) { halo = 2.4 }
         DispatchQueue.main.async { withAnimation(.spring(response: 0.45, dampingFraction: 0.65)) { halo = 1 } }
+    }
+}
+
+/// 老视标准模式开始前的摘镜提醒：小瞳 + 一句话 + 确认按钮，语音同步播报。与安卓 GlassesCheckContent 一致。
+private struct GlassesCheckView: View {
+    let confirm: () -> Void
+    var body: some View {
+        VStack(spacing: 16) {
+            MascotView(scale: 0.8, centerY: 0.58).frame(width: 112, height: 112)
+            Text("先摘下老花镜").font(EyeStyle.title)
+            Text("这项测试要看眼睛本身的调节能力。请摘下老花镜或渐进镜；看远用的近视眼镜可以继续戴。")
+                .font(EyeStyle.body).foregroundStyle(EyeStyle.secondary).multilineTextAlignment(.center)
+            Button("已摘下，继续", action: confirm).buttonStyle(EyeButtonStyle())
+        }.padding(20).frame(maxWidth: .infinity)
+            .background(EyeStyle.panel, in: RoundedRectangle(cornerRadius: EyeStyle.radius))
     }
 }

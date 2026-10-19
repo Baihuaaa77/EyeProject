@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.BasicTextField
@@ -145,7 +146,7 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, modifier: M
         }
     }
     // 引导与告警优先于距离提醒，距离提醒优先于其余提示。
-    val urgent = if (s.guidePending) guideCue(s.step) else s.gazeWarning ?: s.warning
+    val urgent = if (s.guidePending) screeningGuideText(s) else s.gazeWarning ?: s.warning
     val basePrompt = urgent ?: guidance?.takeUnless { it == "保持稳定" || it.startsWith("太近") || it.startsWith("太远") || it.startsWith("请移动到") || it == "请正对屏幕" }
         ?: voicePrompt
     SpeakTestPrompts(voice, voiceEnabled && !settingsOpen, basePrompt, distance?.takeIf { urgent == null && it.clearlyOff() })
@@ -175,6 +176,7 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, modifier: M
         onDispose { owner.lifecycle.removeObserver(observer) }
     }
     val activeTest = !s.guidePending && s.step !in setOf(ScreeningStep.PROFILE, ScreeningStep.ENVIRONMENT, ScreeningStep.RESULT)
+    val gazeTask = activeTest && s.step in setOf(ScreeningStep.GAZE_CALIBRATION, ScreeningStep.FIXATION, ScreeningStep.COVER, ScreeningStep.PURSUIT)
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
     Box(modifier.fillMaxSize()) {
@@ -183,14 +185,17 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, modifier: M
             onBack = { viewModel.stopCamera(); onBack() }, onSettings = { settingsOpen = true },
             centered = activeTest, scroll = pageScroll, progress = screeningProgress(s),
             reflexStimulus = kind == ScreeningKind.STRABISMUS && s.step != ScreeningStep.PROFILE && s.step != ScreeningStep.RESULT,
-            status = { distance?.let { DistanceBanner(it, compact = true) } },
+            // 注视类任务里距离条固定为单行，文字变化不改变高度，避免挤动画布
+            status = { distance?.let { DistanceBanner(it, compact = true, singleLine = gazeTask) } },
         ) {
             val notice = s.gazeWarning ?: s.warning ?: guidance?.takeUnless {
                 it == "保持稳定" || it == "慢慢移近" || it.startsWith("太近") || it.startsWith("太远") || it.startsWith("请移动到") ||
                     (distance != null && it == "请正对屏幕")
             }
-            TestNotice(notice.takeIf { !s.guidePending })
-            if (s.guidePending) {
+            if (gazeTask) TestNoticeSlot(notice) else TestNotice(notice.takeIf { !s.guidePending })
+            if (s.guidePending && s.glassesCheckPending) {
+                GlassesCheckContent(viewModel::confirmGlassesRemoved)
+            } else if (s.guidePending) {
                 TestGuide(guideMotion(s.step), stepTitle(s.step), guideCue(s.step), viewModel::confirmGuide)
             } else when (s.step) {
                 ScreeningStep.PROFILE -> ProfileContent(kind, s, viewModel)
@@ -390,8 +395,10 @@ internal fun GazeCalibrationContent(s: ScreeningState, vm: ScreeningTestViewMode
                 .onGloballyPositioned { origin = it.positionInWindow() }) {
                 val target = StrabismusGaze.calibrationTargets[s.gazeCalibrationIndex]
                 val point = Offset(size.width * target.x, size.height * target.y)
-                drawCircle(StageAccent.copy(alpha = 0.18f), radius = 16.dp.toPx() * halo.value, center = point)
-                drawCircle(StageAccent, radius = 8.dp.toPx(), center = point)
+                // 暂停时圆点变淡：位置不变，提示受试者校准在等待
+                val dim = if (s.gazeCalibrationPaused) 0.35f else 1f
+                drawCircle(StageAccent.copy(alpha = 0.18f * dim), radius = 16.dp.toPx() * halo.value, center = point)
+                drawCircle(StageAccent.copy(alpha = dim), radius = 8.dp.toPx(), center = point)
                 drawCircle(colors.white, radius = 2.5.dp.toPx(), center = point)
                 vm.reportGazeTarget(origin.x + point.x, origin.y + point.y)
             }
@@ -510,5 +517,24 @@ internal fun OptotypeSurface(direction: Int, size: androidx.compose.ui.unit.Dp) 
     Box(Modifier.fillMaxWidth().height(ringDiameter(size) + 48.dp + rememberStageExtra()).clip(EyeShapes.large)
         .background(LocalEyeColors.current.white), contentAlignment = Alignment.Center) {
         FramedOptotype(direction, size)
+    }
+}
+
+/** 老视标准模式开始前的摘镜提醒：小瞳 + 一句话 + 确认按钮，语音同步播报。 */
+@Composable
+private fun GlassesCheckContent(onConfirm: () -> Unit) {
+    val colors = LocalEyeColors.current
+    val typography = LocalEyeTypography.current
+    TestStageCard {
+        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Canvas(Modifier.size(112.dp)) {
+                val s = size.minDimension
+                drawMascot(colors, Offset(s / 2, s * 0.58f), s * 0.8f, gaze = Offset(0f, -0.3f))
+            }
+            EyeText("先摘下老花镜", typography.title, colors.textPrimary)
+            BaseEyeText("这项测试要看眼睛本身的调节能力。请摘下老花镜或渐进镜；看远用的近视眼镜可以继续戴。",
+                style = typography.body, color = colors.textSecondary, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            EyeButton("已摘下，继续", EyeButtonRole.PRIMARY, onConfirm, Modifier.fillMaxWidth())
+        }
     }
 }

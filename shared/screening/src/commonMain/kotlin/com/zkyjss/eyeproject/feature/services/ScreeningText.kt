@@ -14,6 +14,12 @@ fun stepTitle(step: ScreeningStep) = when (step) {
     ScreeningStep.RESULT -> "测试结果"
 }
 
+/** 老视标准模式的摘镜提醒（界面与语音共用）。 */
+const val GLASSES_REMOVAL_PROMPT = "请先摘下老花镜或渐进镜；看远用的近视眼镜可以继续戴。摘好后点「已摘下，继续」。"
+
+/** 当前引导页要说的话：摘镜提醒优先于步骤示范。 */
+fun screeningGuideText(s: ScreeningState): String = if (s.glassesCheckPending) GLASSES_REMOVAL_PROMPT else guideCue(s.step)
+
 fun guideCue(step: ScreeningStep) = when (step) {
     ScreeningStep.NEAR_VISION -> "先遮左眼，用右眼看 E，点选开口方向"
     ScreeningStep.PUSH_UP -> "从 45 cm 外看着 E，慢慢连续移近；E 一开始持续模糊就点按。共做 3 次"

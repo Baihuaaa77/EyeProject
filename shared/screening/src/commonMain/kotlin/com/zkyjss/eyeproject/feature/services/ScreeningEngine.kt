@@ -18,6 +18,15 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
     private var gaze: StrabismusGaze? = null
     private val gazeCalibration = mutableListOf<GazeCalibrationSample>()
     private var calibrationPointStartMs = 0L
+    /** 校准异常（人脸丢失、头偏、距离超出、闭眼）开始的时刻；异常期间不采样、本点计时暂停。 */
+    private var calibrationPausedSinceMs: Long? = null
+    /** 异常恢复的时刻：恢复后需重新稳定 [StrabismusGaze.RESETTLE_MS] 才继续采样。 */
+    private var calibrationResumeMs = 0L
+    /** 当前点在屏幕上的实际位置发生移动（如提示条挤动布局）的时刻：移动后视线需重新稳定。 */
+    private var calibrationTargetMovedMs = 0L
+    /** 当前点已累计的有效采样时长与上一次采样时刻。 */
+    private var calibrationSampledMs = 0L
+    private var lastCalibrationSampleMs = 0L
     private val voiceGuard = VoiceRepeatGuard()
     private data class RenderedTarget(val timeMs: Long, val step: ScreeningStep, val index: Int, val point: GazePoint)
     private val renderedTargets = ArrayDeque<RenderedTarget>()
@@ -159,10 +168,14 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
 
     private fun startNearVision() {
         timer?.cancel()
+        // 标准模式测的是不戴近用眼镜时的调节能力：平时戴老花镜/渐进镜（或没填问卷、无从得知）时，先确认已摘下
+        val s0 = _state.value
+        val glassesCheck = s0.mode.startsWith("标准") && (nearCorrectionInUse(s0.fields) || s0.profileSkipped)
         _state.update { it.copy(step = ScreeningStep.NEAR_VISION, guidePending = true, visionEye = VisionEye.RIGHT,
             nearAwaitingEyeReady = true, nearDescending = false, trialVisible = false,
-            trialIndex = 0, direction = Random.nextInt(4), visionLevel = 0.3f,
-            answers = emptyList(), warning = null, instruction = "先遮住左眼，露出右眼；每级 4 题，停稳后再显示视标。") }
+            trialIndex = 0, direction = Random.nextInt(4), visionLevel = 0.3f, glassesCheckPending = glassesCheck,
+            answers = emptyList(), warning = null,
+            instruction = if (glassesCheck) GLASSES_REMOVAL_PROMPT else "先遮住左眼，露出右眼；每级 4 题，停稳后再显示视标。") }
     }
 
     fun readyForNearEye() {
@@ -500,10 +513,18 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
 
     }
 
+    /** 老视标准模式：受试者确认已摘下老花镜/渐进镜后，才进入近视力示范。 */
+    fun confirmGlassesRemoved() {
+        if (!_state.value.glassesCheckPending) return
+        platform.feedback(ScreeningFeedbackCue.ANSWER)
+        _state.update { it.copy(glassesCheckPending = false, glassesRemovedConfirmed = true,
+            instruction = "先遮住左眼，露出右眼；每级 4 题，停稳后再显示视标。") }
+    }
+
     /** 示范结束后才开始采样和计时，避免将阅读时间计入测试。 */
     fun confirmGuide() {
         val s = _state.value
-        if (!s.guidePending) return
+        if (!s.guidePending || s.glassesCheckPending) return
         stepStartMs = platform.nowMs()
         flipperMoveStartMs = stepStartMs
         coverStageStartMs = stepStartMs
@@ -531,13 +552,22 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
         faceCenterBaseline = null
         stepStartMs = platform.nowMs()
         _state.update { it.copy(step = ScreeningStep.GAZE_CALIBRATION, guidePending = false,
-            gazeCalibrationIndex = 0, gazeCalibrationRound = 0, gazeCalibrationFailed = false, gazeCalibrated = false,
+            gazeCalibrationIndex = 0, gazeCalibrationRound = 0, gazeCalibrationFailed = false, gazeCalibrated = false, gazeCalibrationPaused = false,
             instruction = "只用眼睛依次看着圆点，头和手机保持不动。", warning = null) }
         timer = scope.launch {
+            // 每点需累计 [StrabismusGaze.SAMPLE_MS] 的有效采样才换下一点：异常期间暂停计时、自动延长，
+            // 最长 [StrabismusGaze.CALIBRATION_POINT_MAX_MS]；仍不够的点交给补测或整体重试。
             suspend fun show(points: List<Int>) = points.forEach { index ->
                 calibrationPointStartMs = platform.nowMs()
+                calibrationPausedSinceMs = null; calibrationResumeMs = 0L; calibrationTargetMovedMs = 0L
+                calibrationSampledMs = 0L; lastCalibrationSampleMs = 0L
                 _state.update { it.copy(gazeCalibrationIndex = index) }
-                delay(StrabismusGaze.CALIBRATION_POINT_MS)
+                while (true) {
+                    delay(100)
+                    val elapsed = platform.nowMs() - calibrationPointStartMs
+                    if (calibrationSampledMs >= StrabismusGaze.SAMPLE_MS && elapsed >= StrabismusGaze.CALIBRATION_POINT_MS) break
+                    if (elapsed >= StrabismusGaze.CALIBRATION_POINT_MAX_MS) break
+                }
             }
             show(StrabismusGaze.calibrationTargets.indices.toList())
             gaze = StrabismusGaze.calibrate(gazeCalibration)
@@ -549,6 +579,7 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
                 show(retake)
                 gaze = StrabismusGaze.calibrate(gazeCalibration)
             }
+            _state.update { it.copy(gazeCalibrationPaused = false, gazeWarning = null) }
             if (gaze == null) {
                 _state.update { it.copy(gazeCalibrationFailed = true,
                     warning = "未获得可靠注视校准。" + StrabismusGaze.failureReason(gazeCalibration)) }
@@ -567,8 +598,13 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
         if (s.guidePending || s.step !in setOf(ScreeningStep.GAZE_CALIBRATION, ScreeningStep.FIXATION, ScreeningStep.COVER, ScreeningStep.PURSUIT)) return
         val display = platform.display
         val now = platform.nowMs()
-        renderedTargets.addLast(RenderedTarget(now, s.step, s.gazeCalibrationIndex,
-            GazePoint(xPx / display.widthPixels, yPx / display.heightPixels)))
+        val point = GazePoint(xPx / display.widthPixels, yPx / display.heightPixels)
+        // 同一校准点在屏幕上被挪动（布局变化）：此前看的位置已不是现在记录的位置，需重新稳定后再采样
+        renderedTargets.lastOrNull()?.takeIf { it.step == s.step && it.index == s.gazeCalibrationIndex }?.let { last ->
+            if (s.step == ScreeningStep.GAZE_CALIBRATION && (abs(last.point.x - point.x) > 0.01f || abs(last.point.y - point.y) > 0.01f))
+                calibrationTargetMovedMs = now
+        }
+        renderedTargets.addLast(RenderedTarget(now, s.step, s.gazeCalibrationIndex, point))
         while (renderedTargets.isNotEmpty() && renderedTargets.first().timeMs < now - 2_000L) renderedTargets.removeFirst()
     }
 
@@ -639,6 +675,7 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
                         put("evidence", assessment.evidence.toRecordArray())
                     })
                     put("mode", s.mode)
+                    put("glassesRemovedConfirmed", s.glassesRemovedConfirmed)
                     put("profile", RecordObject(s.fields))
                     put("profileSkipped", s.profileSkipped)
                     put("ambientLux", s.lux?.toDouble() ?: RecordObject.NULL)
@@ -881,13 +918,32 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
                 ?.let { GazePoint(it.first, it.second) }
         val gazeLeft = openEye(face?.leftEye, left, VisionEye.LEFT)
         val gazeRight = openEye(face?.rightEye, right, VisionEye.RIGHT)
-        if (step == ScreeningStep.GAZE_CALIBRATION && !_state.value.gazeCalibrationFailed &&
-            step == _state.value.step && valid && rendered != null && rendered.index == _state.value.gazeCalibrationIndex) {
-            // 从本次换点后的首次实际绘制起等待注视稳定；补测重看同一点时不沿用上一轮的绘制时刻。
-            val firstShown = renderedTargets.firstOrNull { it.step == step && it.index == rendered.index &&
-                it.timeMs >= calibrationPointStartMs }?.timeMs
-            if (firstShown != null && time - firstShown >= StrabismusGaze.SETTLE_MS)
-                gazeCalibration.add(GazeCalibrationSample(rendered.index, rendered.point, gazeLeft, gazeRight))
+        if (step == ScreeningStep.GAZE_CALIBRATION && !_state.value.gazeCalibrationFailed && !_state.value.gazeCalibrated &&
+            step == _state.value.step && time >= calibrationPointStartMs) {
+            // 异常（人脸丢失、头偏或移动、距离超出、双眼都闭着）：暂停采样，本点计时随之顺延
+            if (!valid || (gazeLeft == null && gazeRight == null)) {
+                if (calibrationPausedSinceMs == null) calibrationPausedSinceMs = time
+                lastCalibrationSampleMs = 0L
+            } else {
+                if (calibrationPausedSinceMs != null) { calibrationPausedSinceMs = null; calibrationResumeMs = time }
+                if (rendered != null && rendered.index == _state.value.gazeCalibrationIndex) {
+                    // 从本次换点后的首次实际绘制起等待注视稳定；补测重看同一点时不沿用上一轮的绘制时刻。
+                    // 异常恢复或目标被挪动后，也要重新稳定再采样。
+                    val firstShown = renderedTargets.firstOrNull { it.step == step && it.index == rendered.index &&
+                        it.timeMs >= calibrationPointStartMs }?.timeMs
+                    val settledAt = firstShown?.let { maxOf(it + StrabismusGaze.SETTLE_MS, calibrationResumeMs + StrabismusGaze.RESETTLE_MS,
+                        calibrationTargetMovedMs + StrabismusGaze.SETTLE_MS) }
+                    if (settledAt != null && time >= settledAt) {
+                        gazeCalibration.add(GazeCalibrationSample(rendered.index, rendered.point, gazeLeft, gazeRight))
+                        if (lastCalibrationSampleMs > 0L && time - lastCalibrationSampleMs <= StrabismusGaze.MAX_SAMPLE_GAP_MS)
+                            calibrationSampledMs += time - lastCalibrationSampleMs
+                        lastCalibrationSampleMs = time
+                    } else lastCalibrationSampleMs = 0L
+                }
+            }
+            val paused = calibrationPausedSinceMs?.let { time - it >= StrabismusGaze.PAUSE_NOTICE_MS } == true
+            if (paused != _state.value.gazeCalibrationPaused) _state.update { it.copy(gazeCalibrationPaused = paused,
+                gazeWarning = if (paused) "校准已暂停：请把头摆正、保持约 33 cm，眼睛看着圆点" else null) }
         }
         val estimates = if (valid) gaze?.estimate(gazeLeft, gazeRight) else null
         // 遮盖动作前后 0.8 秒：手在脸前移动、眼睛正在再注视，不判断是否注视目标

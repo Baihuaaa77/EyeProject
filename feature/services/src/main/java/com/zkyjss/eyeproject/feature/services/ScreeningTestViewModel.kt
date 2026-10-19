@@ -38,6 +38,7 @@ class ScreeningTestViewModel @Inject constructor(
     fun markPushBlur() = engine.markPushBlur()
     fun markCover() = engine.markCover()
     fun confirmGuide() = engine.confirmGuide()
+    fun confirmGlassesRemoved() = engine.confirmGlassesRemoved()
     fun retryGazeCalibration() = engine.retryGazeCalibration()
     fun reportGazeTarget(xPx: Float, yPx: Float) = engine.reportGazeTarget(xPx, yPx)
     fun reportPursuitCapacity(maxXDeg: Float, maxYDeg: Float) = engine.reportPursuitCapacity(maxXDeg, maxYDeg)

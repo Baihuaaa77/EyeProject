@@ -82,6 +82,7 @@ class MobileScreeningController(
             "practice" -> dry.confirmPracticeGuide()
             "formal" -> dry.confirmFormalGuide()
             "guide" -> screening.confirmGuide()
+            "glassesRemoved" -> screening.confirmGlassesRemoved()
             "eyeReady" -> screening.readyForNearEye()
             "pushStart" -> screening.startPushTrial()
             "blur" -> screening.markPushBlur()
@@ -209,7 +210,8 @@ class MobileScreeningController(
             result.apply {
                 put("phase",s.step.name); put("title",if (s.kind == ScreeningKind.PRESBYOPIA) "老视自测" else "眼位自测")
                 put("instruction",s.instruction); put("stepTitle",stepTitle(s.step)); put("guidePending",s.guidePending)
-                put("guideText",guideCue(s.step))
+                put("guideText",screeningGuideText(s)); put("glassesCheck",s.glassesCheckPending)
+                put("calibrationPaused",s.gazeCalibrationPaused)
                 put("distanceCm",s.distanceCm); put("faceDetected",s.faceDetected); put("warning",s.gazeWarning ?: s.warning ?: screeningGuidance(s)?.takeUnless { it == "保持稳定" || it.startsWith("请移动到") })
                 put("secondsLeft",s.secondsLeft); put("trialVisible",s.trialVisible); put("trialId",s.trialId)
                 put("targetDistanceCm",screeningDistanceTarget(s)?.first)

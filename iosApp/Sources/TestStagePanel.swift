@@ -43,8 +43,9 @@ struct TestDistanceBanner: View {
                 .font(.system(size: 24, weight: .semibold)).frame(width: 28)
                 .contentTransition(.opacity)
             VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.headline)
-                Text(detail).font(.subheadline).monospacedDigit()
+                // 单行：文字变化不改变高度，避免挤动下方注视画布
+                Text(title).font(.headline).lineLimit(1)
+                Text(detail).font(.subheadline).monospacedDigit().lineLimit(1)
             }.frame(maxWidth: .infinity, alignment: .leading)
             if known && tolerance > 0 { DistanceRuler(distance: distance, target: target, tolerance: tolerance) }
         }.foregroundStyle(known || moving ? EyeStyle.panel : EyeStyle.text).padding(.horizontal, 16).padding(.vertical, 10)
@@ -73,6 +74,22 @@ private struct DistanceRuler: View {
 }
 
 /// 任务中的质量提醒：浅色胶囊淡入，消失时收起。
+/// 注视类任务（校准、注视、遮盖、追踪）用的提示位：始终占住固定高度，提示出现或消失都不挤动下方画布。
+/// 画布一移动，屏幕上的校准点和注视目标就跟着移动，受试者刚才看的位置与记录的位置不再一致。与安卓 TestNoticeSlot 一致。
+struct TestNoticeSlot: View {
+    let text: String
+    var body: some View {
+        ZStack {
+            if !text.isEmpty {
+                Text(text).font(.body).foregroundStyle(EyeStyle.warning).multilineTextAlignment(.center).lineLimit(2)
+                    .padding(.horizontal, 16).padding(.vertical, 8).frame(maxWidth: .infinity)
+                    .background(EyeStyle.warning.opacity(0.12), in: Capsule())
+                    .transition(.opacity)
+            }
+        }.frame(maxWidth: .infinity).frame(height: 64)
+    }
+}
+
 struct TestNotice: View {
     let text: String
     var body: some View {
