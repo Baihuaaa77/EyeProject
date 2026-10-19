@@ -46,6 +46,10 @@ class ScreenWalkthroughCapture {
         shot("干眼-02-准备与测距")
         state.value = ready.copy(phase = DryEyePhase.Setup, distanceCm = 31f, gateReady = false)
         shot("干眼-03-准备-太近")
+        state.value = ready.copy(phase = DryEyePhase.Setup, distanceCm = 49f, gateReady = false)
+        shot("干眼-03a-准备-太远")
+        state.value = ready.copy(phase = DryEyePhase.Setup, faceDetected = false, distanceCm = 0f, gateReady = false)
+        shot("干眼-03b-准备-未看到双眼")
         state.value = ready.copy(phase = DryEyePhase.PracticeGuide)
         shot("干眼-04-练习说明")
         state.value = ready.copy(phase = DryEyePhase.Practice, trialVisible = true, trialId = 1, direction = 0, optotypePx = 31f,
@@ -58,6 +62,10 @@ class ScreenWalkthroughCapture {
         state.value = ready.copy(phase = DryEyePhase.Natural, trialVisible = true, trialId = 2, direction = 1, optotypePx = 24f,
             remainingSeconds = 42, progressFraction = 0.3f, phase1BlinkCount = 4)
         shot("干眼-08-自然眨眼")
+        state.value = state.value.copy(distanceCm = 32f, gateReady = false)
+        shot("干眼-08a-自然眨眼-太近")
+        state.value = state.value.copy(distanceCm = 48f, gateReady = false, headTurned = true, qualityWarning = "请把头摆正")
+        shot("干眼-08b-自然眨眼-太远且头偏")
         state.value = ready.copy(phase = DryEyePhase.Open, trialVisible = true, trialId = 3, direction = 3, optotypePx = 24f,
             remainingSeconds = 12, progressFraction = 0.4f)
         shot("干眼-09-持续睁眼")
@@ -98,6 +106,10 @@ class ScreenWalkthroughCapture {
         shot("老视-01-问卷")
         state.value = base.copy(step = ScreeningStep.ENVIRONMENT, trackingStatus = "双眼跟踪与测距正常")
         shot("老视-02-准备与测距")
+        state.value = base.copy(step = ScreeningStep.ENVIRONMENT, distanceCm = 31f, trackingStatus = "双眼跟踪与测距正常")
+        shot("老视-02a-准备-太近")
+        state.value = base.copy(step = ScreeningStep.ENVIRONMENT, faceDetected = false, distanceCm = 0f, trackingStatus = "相机已工作，未识别人脸")
+        shot("老视-02b-准备-未看到双眼")
         state.value = base.copy(step = ScreeningStep.NEAR_VISION, guidePending = true, glassesCheckPending = true,
             nearAwaitingEyeReady = true, instruction = GLASSES_REMOVAL_PROMPT)
         shot("老视-03-摘镜确认")
@@ -109,6 +121,10 @@ class ScreenWalkthroughCapture {
         state.value = base.copy(step = ScreeningStep.NEAR_VISION, visionEye = VisionEye.RIGHT, trialVisible = true, trialId = 1,
             direction = 2, trialOptotypePx = 20f, visionLevel = 0.5f)
         shot("老视-06-近视力-作答")
+        state.value = state.value.copy(distanceCm = 33f)
+        shot("老视-06a-近视力-太近")
+        state.value = state.value.copy(distanceCm = 49f)
+        shot("老视-06b-近视力-太远")
         state.value = base.copy(step = ScreeningStep.PUSH_UP, pushStage = PushStage.READY, distanceCm = 48f, visionLevel = 0.5f)
         shot("老视-07-移近法-准备")
         state.value = base.copy(step = ScreeningStep.PUSH_UP, pushStage = PushStage.APPROACH, distanceCm = 27f, trialVisible = true,
@@ -117,9 +133,17 @@ class ScreenWalkthroughCapture {
         state.value = base.copy(step = ScreeningStep.DISTANCE_CURVE, curveIndex = 0, distanceCm = 60f, trialVisible = true, trialId = 3,
             direction = 1, trialOptotypePx = 22f)
         shot("老视-09-多距离视力")
+        state.value = base.copy(step = ScreeningStep.DISTANCE_CURVE, curveIndex = 1, distanceCm = 58f, distanceMoveToCm = 33f)
+        shot("老视-09a-多距离-请移动到33厘米")
+        state.value = base.copy(step = ScreeningStep.DISTANCE_CURVE, curveIndex = 2, distanceCm = 34f)
+        shot("老视-09b-多距离-25厘米太远")
         state.value = base.copy(step = ScreeningStep.FLIPPER, distanceCm = 25f, secondsLeft = 38, trialIndex = 1, trialVisible = true,
             trialId = 4, direction = 0, trialOptotypePx = 16f)
         shot("老视-10-远近切换")
+        state.value = base.copy(step = ScreeningStep.FLIPPER, distanceCm = 27f, secondsLeft = 31, trialIndex = 2, distanceMoveToCm = 50f)
+        shot("老视-10a-远近切换-请移动到50厘米")
+        state.value = base.copy(step = ScreeningStep.FLIPPER, distanceCm = 57f, secondsLeft = 29, trialIndex = 2)
+        shot("老视-10b-远近切换-太远")
 
         val answers = VisionEye.entries.flatMap { eye -> List(4) { VisionAnswer(ScreeningStep.NEAR_VISION, 40f, 0.6f, 0, 0, true, 700, 20f, eye) } } +
             List(8) { VisionAnswer(ScreeningStep.FLIPPER, if (it % 2 == 0) 50f else 25f, 0.2f, 1, 1, true, 900, 20f) }
@@ -150,6 +174,10 @@ class ScreenWalkthroughCapture {
         shot("斜视-01-问卷")
         state.value = base.copy(step = ScreeningStep.ENVIRONMENT, trackingStatus = "双眼跟踪与测距正常", opticalStatus = "双眼光学测量可用")
         shot("斜视-02-准备与测距")
+        state.value = base.copy(step = ScreeningStep.ENVIRONMENT, distanceCm = 25f, trackingStatus = "双眼跟踪与测距正常")
+        shot("斜视-02a-准备-太近")
+        state.value = base.copy(step = ScreeningStep.ENVIRONMENT, distanceCm = 42f, trackingStatus = "双眼跟踪与测距正常")
+        shot("斜视-02b-准备-太远")
         state.value = base.copy(step = ScreeningStep.FIXATION, guidePending = true)
         shot("斜视-03-注视与校准说明")
         state.value = base.copy(step = ScreeningStep.GAZE_CALIBRATION, gazeCalibrationIndex = 1)
@@ -157,16 +185,25 @@ class ScreenWalkthroughCapture {
         state.value = base.copy(step = ScreeningStep.GAZE_CALIBRATION, gazeCalibrationIndex = 1, gazeCalibrationPaused = true,
             gazeWarning = "校准已暂停：请把头摆正、保持约 33 cm，眼睛看着圆点")
         shot("斜视-05-注视校准-异常暂停")
+        state.value = base.copy(step = ScreeningStep.GAZE_CALIBRATION, gazeCalibrationIndex = 3, distanceCm = 41f, gazeCalibrationPaused = true,
+            gazeWarning = "校准已暂停：请把头摆正、保持约 33 cm，眼睛看着圆点")
+        shot("斜视-05a-注视校准-太远暂停")
         state.value = base.copy(step = ScreeningStep.GAZE_CALIBRATION, gazeCalibrationIndex = 4, gazeCalibrationFailed = true,
             warning = "未获得可靠注视校准。请在光线均匀处保持头部不动后重试。")
         shot("斜视-06-注视校准-失败重试")
         state.value = base.copy(step = ScreeningStep.FIXATION, gazeCalibrated = true, secondsLeft = 9, targetX = 1f)
         shot("斜视-07-稳定注视")
+        state.value = state.value.copy(distanceCm = 26f, gazeWarning = "注视明显偏离，请看着屏幕上的小瞳")
+        shot("斜视-07a-稳定注视-太近且偏离")
+        state.value = state.value.copy(distanceCm = 0f, faceDetected = false, gazeWarning = "暂时无法确认注视，请保持头部稳定并看着屏幕目标")
+        shot("斜视-07b-稳定注视-未看到双眼")
         state.value = base.copy(step = ScreeningStep.COVER, gazeCalibrated = true,
             coverMarks = listOf(CoverMark("遮右眼", 0L, covered = VisionEye.RIGHT)), coverHolding = true, instruction = "保持：遮右眼")
         shot("斜视-08-交替遮盖")
         state.value = base.copy(step = ScreeningStep.PURSUIT, gazeCalibrated = true, secondsLeft = 15, targetX = 6f, targetY = 0f)
         shot("斜视-09-追踪")
+        state.value = state.value.copy(distanceCm = 40f, gazeWarning = "未检测到有效跟随，请只用眼睛跟随移动的小瞳")
+        shot("斜视-09a-追踪-太远且未跟随")
 
         val (samples, marks) = strabismusSamples()
         val measured = base.copy(coverMarks = marks, gazeCalibrated = true, pursuitMaxDeg = 9f to 9f)
