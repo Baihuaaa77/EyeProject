@@ -52,6 +52,7 @@ import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.zkyjss.eyeproject.core.ui.component.EyeOptionRow
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeShapes
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
@@ -62,17 +63,17 @@ import com.zkyjss.eyeproject.core.ui.component.EyeText as BaseEyeText
 import com.zkyjss.eyeproject.core.ui.component.drawMascot
 
 @Composable
-fun PresbyopiaScreen(onBack: () -> Unit, modifier: Modifier = Modifier, viewModel: ScreeningTestViewModel = hiltViewModel()) {
-    ScreeningScreen(ScreeningKind.PRESBYOPIA, onBack, modifier, viewModel)
+fun PresbyopiaScreen(onBack: () -> Unit, onEditSubject: (String?) -> Unit, modifier: Modifier = Modifier, viewModel: ScreeningTestViewModel = hiltViewModel()) {
+    ScreeningScreen(ScreeningKind.PRESBYOPIA, onBack, onEditSubject, modifier, viewModel)
 }
 
 @Composable
-fun StrabismusScreen(onBack: () -> Unit, modifier: Modifier = Modifier, viewModel: ScreeningTestViewModel = hiltViewModel()) {
-    ScreeningScreen(ScreeningKind.STRABISMUS, onBack, modifier, viewModel)
+fun StrabismusScreen(onBack: () -> Unit, onEditSubject: (String?) -> Unit, modifier: Modifier = Modifier, viewModel: ScreeningTestViewModel = hiltViewModel()) {
+    ScreeningScreen(ScreeningKind.STRABISMUS, onBack, onEditSubject, modifier, viewModel)
 }
 
 @Composable
-private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, modifier: Modifier, viewModel: ScreeningTestViewModel) {
+private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, onEditSubject: (String?) -> Unit, modifier: Modifier, viewModel: ScreeningTestViewModel) {
     val s by viewModel.state.collectAsStateWithLifecycle()
     val owner = LocalLifecycleOwner.current
     val context = LocalContext.current
@@ -111,7 +112,7 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, modifier: M
         }
     }
     val voicePrompt = when (s.step) {
-        ScreeningStep.PROFILE -> "请先填写基本信息。"
+        ScreeningStep.PROFILE -> if (kind == ScreeningKind.STRABISMUS) "这次给谁测？" else "这次测谁？"
         ScreeningStep.ENVIRONMENT -> if (kind == ScreeningKind.PRESBYOPIA) "请正对屏幕，保持约四十厘米，检查光照和距离。" else "请正对屏幕，保持三十三厘米，由家长协助后续遮眼任务。"
         ScreeningStep.NEAR_VISION -> if (s.nearAwaitingEyeReady) s.instruction else "${s.visionEye.label}测试。保持四十厘米，停稳后显示视标。"
         ScreeningStep.PUSH_UP -> if (s.pushStage == PushStage.READY) "第${s.nearPoints.size + 1}次移近。先移到四十五厘米以外。" else "看着E，慢慢移近。一开始持续模糊就点按。"
@@ -198,7 +199,7 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, modifier: M
             } else if (s.guidePending) {
                 TestGuide(guideMotion(s.step), stepTitle(s.step), guideCue(s.step), viewModel::confirmGuide)
             } else when (s.step) {
-                ScreeningStep.PROFILE -> ProfileContent(kind, s, viewModel)
+                ScreeningStep.PROFILE -> ProfileContent(kind, s, viewModel, onEditSubject)
                 ScreeningStep.ENVIRONMENT -> EnvironmentContent(kind, s, viewModel, retryCamera)
                 ScreeningStep.NEAR_VISION -> VisionContent(s, viewModel)
                 ScreeningStep.PUSH_UP -> PushUpContent(s, viewModel)
@@ -233,42 +234,33 @@ private fun lightingLabel(s: ScreeningState): String = when {
     else -> "读取中"
 }
 
+/** 开始页：先选「这次测谁」（资料在「我的」维护）；老视选好人后再选这次戴哪副眼镜。 */
 @Composable
-internal fun ProfileContent(kind: ScreeningKind, s: ScreeningState, vm: ScreeningTestViewModel) {
-    val questions = if (kind == ScreeningKind.PRESBYOPIA) presbyopiaQuestions else strabismusQuestions
+internal fun ProfileContent(kind: ScreeningKind, s: ScreeningState, vm: ScreeningTestViewModel, onEditSubject: (String?) -> Unit) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
-    QuestionnaireContent(
-        questions = questions,
-        fields = s.fields,
-        onSetField = vm::setField,
-        onFinish = vm::nextFromProfile,
-        onSkip = vm::skipProfile,
-        stateKey = kind,
-        extraPageComplete = kind != ScreeningKind.PRESBYOPIA || s.mode.isNotBlank(),
-        extraPage = if (kind == ScreeningKind.PRESBYOPIA) {
-            {
-                EyeText("这次测试戴哪副眼镜？", typography.title, colors.textPrimary)
-                OptionRow(
-                    "戴看远的眼镜，或不戴眼镜",
-                    "推荐：能测出眼睛本身的调节能力",
-                    s.mode.startsWith("标准"), multiple = false,
-                ) { vm.setMode(PRESBYOPIA_MODE_STANDARD) }
-                OptionRow(
-                    "戴平时看近用的眼镜",
-                    "老花镜或渐进镜：看戴镜后的实际效果",
-                    s.mode.startsWith("日常"), multiple = false,
-                ) { vm.setMode(PRESBYOPIA_MODE_DAILY) }
-                if (nearCorrectionInUse(s.fields) && s.mode.startsWith("标准")) {
-                    EyeText("请先摘下老花镜或渐进镜。", typography.body, colors.warning)
-                }
-                val age = s.fields["年龄"]?.toIntOrNull()
-                if (age != null && age < PresbyopiaProtocol.TARGET_MIN_AGE) {
-                    EyeText("这项测试主要适合 35 岁以上，结果仅供参考。", typography.body, colors.textSecondary)
-                }
+    val subjects by vm.subjects.collectAsStateWithLifecycle()
+    SubjectPicker(kind.name, subjects, s.subject?.id, vm::useSubject, onEditSubject, vm::skipProfile)
+    if (kind == ScreeningKind.PRESBYOPIA && s.subject != null) {
+        Column(
+            Modifier.fillMaxWidth().clip(EyeShapes.panel).background(colors.panelBackground).padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            EyeText("这次测试戴哪副眼镜？", style = typography.title, color = colors.textPrimary)
+            EyeOptionRow("戴看远的眼镜，或不戴眼镜", "推荐：能测出眼睛本身的调节能力",
+                s.mode.startsWith("标准"), multiple = false) { vm.setMode(PRESBYOPIA_MODE_STANDARD) }
+            EyeOptionRow("戴平时看近用的眼镜", "老花镜或渐进镜：看戴镜后的实际效果",
+                s.mode.startsWith("日常"), multiple = false) { vm.setMode(PRESBYOPIA_MODE_DAILY) }
+            if (nearCorrectionInUse(s.fields) && s.mode.startsWith("标准")) {
+                EyeText("请先摘下老花镜或渐进镜。", style = typography.body, color = colors.warning)
             }
-        } else null,
-    )
+            val age = s.fields["年龄"]?.toIntOrNull()
+            if (age != null && age < PresbyopiaProtocol.TARGET_MIN_AGE) {
+                EyeText("这项测试主要适合 35 岁以上，结果仅供参考。", style = typography.body, color = colors.textSecondary)
+            }
+            EyeButton("开始", EyeButtonRole.PRIMARY, vm::nextFromProfile, Modifier.fillMaxWidth(), s.mode.isNotBlank())
+        }
+    }
 }
 
 @Composable

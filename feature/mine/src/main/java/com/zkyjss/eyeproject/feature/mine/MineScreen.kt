@@ -35,16 +35,19 @@ import com.zkyjss.eyeproject.core.ui.component.EyeBrandLockup
 import com.zkyjss.eyeproject.core.ui.component.EyeSectionCard
 import com.zkyjss.eyeproject.core.ui.component.EyeSelectCard
 import com.zkyjss.eyeproject.core.ui.component.EyeText
+import com.zkyjss.eyeproject.feature.services.SubjectProfile
 
-/** 「我的」页：本机测试记录、云端同步与数据、系统权限入口、关于与免责声明（与苹果端同一顺序）。 */
+/** 「我的」页：家庭成员与资料、本机测试记录、云端同步与数据、系统权限入口、关于与免责声明（与苹果端同一顺序）。 */
 @Composable
 fun MineScreen(
+    onEditSubject: (String?) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: MineViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
     val cloudState by viewModel.cloudState.collectAsStateWithLifecycle()
     val records by viewModel.localRecords.collectAsStateWithLifecycle()
+    val subjects by viewModel.subjects.collectAsStateWithLifecycle()
     var recordsOpen by rememberSaveable { mutableStateOf(false) }
     var exporting by rememberSaveable { mutableStateOf<String?>(null) }
     val recordExport = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
@@ -75,6 +78,8 @@ fun MineScreen(
             deleteCloudAccount = viewModel::deleteCloudAccount,
         ),
         modifier = modifier,
+        subjects = subjects,
+        onEditSubject = onEditSubject,
         onOpenRecords = { recordsOpen = true },
         onOpenAppSettings = {
             context.startActivity(
@@ -93,6 +98,8 @@ internal fun MineContent(
     versionName: String,
     onOpenAppSettings: () -> Unit,
     onOpenRecords: () -> Unit = {},
+    subjects: List<SubjectProfile> = emptyList(),
+    onEditSubject: (String?) -> Unit = {},
     cloudState: CloudSyncUiState = CloudSyncUiState.NotConfigured,
     cloudActions: CloudSyncActions = CloudSyncActions(),
     modifier: Modifier = Modifier,
@@ -109,6 +116,8 @@ internal fun MineContent(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         EyeText("我的", style = typography.headline, color = colors.textPrimary, modifier = Modifier.padding(vertical = 16.dp))
+
+        SubjectsSection(subjects, onEditSubject)
 
         EyeSelectCard(content = "本机测试记录", subtitle = "查看与导出保存在这台手机上的记录", onClick = onOpenRecords)
 

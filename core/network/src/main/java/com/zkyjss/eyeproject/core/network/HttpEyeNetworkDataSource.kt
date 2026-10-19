@@ -9,6 +9,9 @@ import com.zkyjss.eyeproject.core.sync.RecordSummaryDto
 import com.zkyjss.eyeproject.core.sync.RecordUpload
 import com.zkyjss.eyeproject.core.sync.RefreshRequest
 import com.zkyjss.eyeproject.core.sync.RegisterRequest
+import com.zkyjss.eyeproject.core.sync.SubjectDto
+import com.zkyjss.eyeproject.core.sync.SubjectInput
+import com.zkyjss.eyeproject.core.sync.SubjectProfileInput
 import com.zkyjss.eyeproject.core.sync.SyncContract
 import com.zkyjss.eyeproject.core.sync.TokenResponse
 import kotlinx.coroutines.Dispatchers
@@ -54,6 +57,22 @@ class HttpEyeNetworkDataSource internal constructor(private val baseUrl: String)
 
     override suspend fun uploadRecord(accessToken: String, recordId: String, upload: RecordUpload) =
         call("PUT", "/records/$recordId", accessToken, encode(upload), serializer<RecordSummaryDto>())
+
+    override suspend fun subjects(accessToken: String) =
+        call("GET", "/subjects", accessToken, null, ListSerializer(SubjectDto.serializer()))
+
+    override suspend fun createSubject(accessToken: String, input: SubjectInput) =
+        call("POST", "/subjects", accessToken, encode(input), serializer<SubjectDto>())
+
+    // HttpURLConnection 不支持 PATCH：服务端为成员更新同时提供 PUT
+    override suspend fun updateSubject(accessToken: String, subjectId: String, input: SubjectInput) =
+        call("PUT", "/subjects/$subjectId", accessToken, encode(input), serializer<SubjectDto>())
+
+    override suspend fun deleteSubject(accessToken: String, subjectId: String): NetworkResult<Unit> =
+        call("DELETE", "/subjects/$subjectId", accessToken, null, null)
+
+    override suspend fun putSubjectProfile(accessToken: String, subjectId: String, input: SubjectProfileInput) =
+        call("PUT", "/subjects/$subjectId/profile", accessToken, encode(input), serializer<SubjectDto>())
 
     override suspend fun exportAll(accessToken: String): NetworkResult<String> = raw("GET", "/me/export", accessToken, null)
 

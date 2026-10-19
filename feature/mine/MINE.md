@@ -1,6 +1,9 @@
 # feature:mine
 
-「我的」页：本机测试记录、云端同步与数据、系统权限入口、版本、品牌和自测免责声明（与苹果端同一顺序）。
+「我的」页：家庭成员与资料、本机测试记录、云端同步与数据、系统权限入口、版本、品牌和自测免责声明（与苹果端同一顺序）。
+
+- `SubjectsSection`：本人与家庭成员列表（称呼 · 关系 · 年龄 · 已填几项），点开进入 `SubjectEditScreen`；「添加家庭成员」。原先每项测试开头的问卷都在这里填写一次，测试时只选人。
+- `SubjectEditScreen` / `SubjectEditViewModel`：路由 `SubjectEditRoute(id)`（id 为空即新建）；称呼、关系 + 共享 `SubjectProfiles.sections` 分组题目（`core:ui` 的 `EyeChoiceList`），追问随答案出现；填了就必须有效，隐藏的追问不保存；可删除家庭成员（「本人」不可删）。测试开始页缺资料时也由 app 导航到这里，保存后返回测试。
 
 - `LocalRecordsSheet`：本机测试记录底板，数据来自 `ScreeningRecordRepository.localRecords`（摘要由共享 `LocalRecordCatalog` 解析，苹果端同一份）；每行测试名、时间、结论徽标，点开看要点并可「导出完整记录」（系统创建文件，`exportRecord` 写入）。
 

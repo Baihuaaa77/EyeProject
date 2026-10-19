@@ -3,6 +3,7 @@ package com.zkyjss.eyeproject.server
 import com.zkyjss.eyeproject.core.sync.ConsentInput
 import com.zkyjss.eyeproject.core.sync.ErrorBody
 import com.zkyjss.eyeproject.core.sync.ErrorCodes
+import com.zkyjss.eyeproject.core.sync.SubjectProfileInput
 import com.zkyjss.eyeproject.core.sync.LoginRequest
 import com.zkyjss.eyeproject.core.sync.RefreshRequest
 import com.zkyjss.eyeproject.core.sync.RegisterRequest
@@ -67,7 +68,7 @@ class Services(val config: ServerConfig, clock: () -> Long = System::currentTime
     val audit = AuditLog(IpHasher(config.auditSalt), clock)
     val auth = AuthService(db, config, audit, clock)
     val records = RecordService(db, PayloadCipher(config.dataKeys, config.activeKeyId), audit, clock)
-    val profile = ProfileService(db, config, audit, records, clock)
+    val profile = ProfileService(db, config, audit, records, PayloadCipher(config.dataKeys, config.activeKeyId), clock)
     val retention = RetentionJob(db, config, audit, clock)
     override fun close() = db.close()
 }
@@ -176,6 +177,13 @@ private fun Route.subjectRoutes(s: Services) = route("/subjects") {
     post { call.respond(HttpStatusCode.Created, s.profile.createSubject(call.accountId, call.receive<SubjectInput>(), call.ip)) }
     patch("/{id}") {
         call.respond(s.profile.updateSubject(call.accountId, call.parameters["id"]!!, call.receive<SubjectInput>(), call.ip))
+    }
+    // 安卓 HttpURLConnection 不支持 PATCH；请求体是完整的成员信息，PUT 语义相同
+    put("/{id}") {
+        call.respond(s.profile.updateSubject(call.accountId, call.parameters["id"]!!, call.receive<SubjectInput>(), call.ip))
+    }
+    put("/{id}/profile") {
+        call.respond(s.profile.updateHealthProfile(call.accountId, call.parameters["id"]!!, call.receive<SubjectProfileInput>(), call.ip))
     }
     delete("/{id}") {
         s.profile.deleteSubject(call.accountId, call.parameters["id"]!!, call.ip)

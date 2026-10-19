@@ -34,14 +34,14 @@ class ScreenWalkthroughCapture {
     // region 干眼
 
     @Test fun dryEye() {
-        val vm = DryEyeTestViewModel(context, CameraController(context), CameraIntrinsicsProvider(context), TestScreeningRecordRepository(context))
+        val vm = DryEyeTestViewModel(context, CameraController(context), CameraIntrinsicsProvider(context), TestScreeningRecordRepository(context), TestSubjectRepository())
         @Suppress("UNCHECKED_CAST")
         val state = DryEyeEngine::class.java.getDeclaredField("_uiState").apply { isAccessible = true }
             .get(vm.engine) as MutableStateFlow<DryEyeTestUiState>
         val ready = DryEyeTestUiState(faceDetected = true, distanceCm = 40f, gateReady = true, lux = 320f)
         state.value = DryEyeTestUiState()
-        compose.setContent { EyeProjectTheme { DryEyeScreen(onBack = {}, viewModel = vm) } }
-        shot("干眼-01-问卷")
+        compose.setContent { EyeProjectTheme { DryEyeScreen(onBack = {}, onEditSubject = {}, viewModel = vm) } }
+        shot("干眼-01-选择被测者")
         state.value = ready.copy(phase = DryEyePhase.Setup)
         shot("干眼-02-准备与测距")
         state.value = ready.copy(phase = DryEyePhase.Setup, distanceCm = 31f, gateReady = false)
@@ -97,13 +97,13 @@ class ScreenWalkthroughCapture {
     // region 老视
 
     @Test fun presbyopia() {
-        val vm = ScreeningTestViewModel(context, CameraController(context), CameraIntrinsicsProvider(context), TestScreeningRecordRepository(context))
+        val vm = ScreeningTestViewModel(context, CameraController(context), CameraIntrinsicsProvider(context), TestScreeningRecordRepository(context), TestSubjectRepository())
         val state = stateOf(vm)
         val base = ScreeningState(kind = ScreeningKind.PRESBYOPIA, mode = PRESBYOPIA_MODE_STANDARD, faceDetected = true, distanceCm = 40f,
             fields = mapOf("年龄" to "52", "日常矫正方式" to "老花镜"), lux = 300f, lightSensorAvailable = true)
         state.value = base.copy(step = ScreeningStep.PROFILE)
-        compose.setContent { EyeProjectTheme { PresbyopiaScreen(onBack = {}, viewModel = vm) } }
-        shot("老视-01-问卷")
+        compose.setContent { EyeProjectTheme { PresbyopiaScreen(onBack = {}, onEditSubject = {}, viewModel = vm) } }
+        shot("老视-01-选择被测者")
         state.value = base.copy(step = ScreeningStep.ENVIRONMENT, trackingStatus = "双眼跟踪与测距正常")
         shot("老视-02-准备与测距")
         state.value = base.copy(step = ScreeningStep.ENVIRONMENT, distanceCm = 31f, trackingStatus = "双眼跟踪与测距正常")
@@ -165,13 +165,13 @@ class ScreenWalkthroughCapture {
     // region 斜视
 
     @Test fun strabismus() {
-        val vm = ScreeningTestViewModel(context, CameraController(context), CameraIntrinsicsProvider(context), TestScreeningRecordRepository(context))
+        val vm = ScreeningTestViewModel(context, CameraController(context), CameraIntrinsicsProvider(context), TestScreeningRecordRepository(context), TestSubjectRepository())
         val state = stateOf(vm)
         val base = ScreeningState(kind = ScreeningKind.STRABISMUS, faceDetected = true, distanceCm = 33f,
             fields = mapOf("年龄" to "8", "协助测试者" to "家长"), lux = 300f, lightSensorAvailable = true)
         state.value = base.copy(step = ScreeningStep.PROFILE)
-        compose.setContent { EyeProjectTheme { StrabismusScreen(onBack = {}, viewModel = vm) } }
-        shot("斜视-01-问卷")
+        compose.setContent { EyeProjectTheme { StrabismusScreen(onBack = {}, onEditSubject = {}, viewModel = vm) } }
+        shot("斜视-01-选择被测者")
         state.value = base.copy(step = ScreeningStep.ENVIRONMENT, trackingStatus = "双眼跟踪与测距正常", opticalStatus = "双眼光学测量可用")
         shot("斜视-02-准备与测距")
         state.value = base.copy(step = ScreeningStep.ENVIRONMENT, distanceCm = 25f, trackingStatus = "双眼跟踪与测距正常")

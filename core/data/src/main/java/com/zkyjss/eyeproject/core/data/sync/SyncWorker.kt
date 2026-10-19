@@ -10,6 +10,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.zkyjss.eyeproject.core.data.record.ScreeningRecordRepository
+import com.zkyjss.eyeproject.core.data.subject.SubjectRepository
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
@@ -42,18 +43,19 @@ internal class WorkManagerSyncScheduler @Inject constructor(
     }
 }
 
-/** 推送待上传记录。只有网络类失败才重试；未登录、未同意由用户在「我的」页处理。 */
+/** 先同步家庭成员与资料（记录要归属到成员），再推送待上传记录。只有网络类失败才重试；未登录、未同意由用户在「我的」页处理。 */
 class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     @EntryPoint
     @InstallIn(SingletonComponent::class)
     interface SyncWorkerEntryPoint {
         fun screeningRecordRepository(): ScreeningRecordRepository
+        fun subjectRepository(): SubjectRepository
     }
 
     override suspend fun doWork(): Result {
-        val repository = EntryPointAccessors.fromApplication(applicationContext, SyncWorkerEntryPoint::class.java)
-            .screeningRecordRepository()
-        val report = repository.syncNow() ?: return Result.success()
+        val entry = EntryPointAccessors.fromApplication(applicationContext, SyncWorkerEntryPoint::class.java)
+        entry.subjectRepository().sync()
+        val report = entry.screeningRecordRepository().syncNow() ?: return Result.success()
         return if (report.shouldRetry && runAttemptCount < MAX_ATTEMPTS) Result.retry() else Result.success()
     }
 

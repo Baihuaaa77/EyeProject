@@ -116,6 +116,12 @@ chmod +x gradlew scripts/ios/*.sh
 | 远近切换中反复说「好……」 | 每题换距离，到位后都说「好，就保持这个距离」 | 「请移动到 xx 厘米处」到位后改为一声提示音，主提示没变不重读（双端） |
 | 「我的」没有本机记录入口（安卓） | — | 双端「我的 → 本机测试记录」：共享 `LocalRecordCatalog` 解析测试名、时间、结论徽标与要点，点开可导出完整 JSON |
 
+## 资料移入「我的」（2026-10-19）
+
+三项测试不再逐题填写问卷：问卷合并为被测者资料（共享 `SubjectProfiles`，键沿用原问卷），在「我的 → 家庭成员与资料」按成员维护（本人、孩子、父母……），
+测试开始页只选「这次测谁」，成员缺本测试必需项时点开即去补充。iOS 端 `EyeSubjects.swift`：`SubjectStore` 本机保存（应用沙盒 `subjects.json`，尚未接入云端）、
+`SubjectEditView` 编辑（题目分组与追问由共享 `editorJson` 给出）、`SubjectPickerView` 选人（必需项由 `missingJson` 判断）。安卓另有云端同步，见 `core/data/DATA.md`。
+
 ## 测试演示动画（2026-10-16）
 
 iOS 原先只显示步骤文字。现移植安卓 `TestGuide`：`TestGuideView.swift` 含全部 12 个场景（姿势、视标练习、连续视力、眨眼、睁眼、近视力、移近、多距离、远近切换、注视、遮盖、跟随），

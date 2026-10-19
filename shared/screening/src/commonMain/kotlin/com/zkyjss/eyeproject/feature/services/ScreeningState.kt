@@ -88,7 +88,9 @@ data class ScreeningState(
     val step: ScreeningStep = ScreeningStep.PROFILE,
     val guidePending: Boolean = false,
     val fields: Map<String, String> = emptyMap(),
-    /** 用户选择先跳过问卷；记录中注明，依赖问卷的评估（如同龄对照）会说明无法评估。 */
+    /** 本次被测者（在「我的」维护资料）；为空表示未选成员直接测试。 */
+    val subject: TestSubject? = null,
+    /** 未选成员、没有资料直接测试；记录中注明，依赖资料的评估（如同龄对照）会说明无法评估。 */
     val profileSkipped: Boolean = false,
     val mode: String = "",
     /** 老视标准模式开始前需确认已摘下老花镜/渐进镜（摘镜提醒页）。 */

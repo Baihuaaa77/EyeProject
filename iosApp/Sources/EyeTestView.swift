@@ -80,7 +80,7 @@ struct EyeTestView: View {
             } else {
                 if isGazeTask { TestNoticeSlot(text: runtime.error ?? warningText) }
                 else { TestNotice(text: runtime.error ?? warningText) }
-                if isProfile { QuestionnaireView(runtime: runtime) }
+                if isProfile { SubjectPickerView(runtime: runtime) }
                 else if isRunning { VStack(spacing: EyeStyle.spacing) { testContent }.modifier(TestStagePanel()) }
                 else { testContent }
             }
@@ -210,60 +210,6 @@ private struct ScreenCalibrationView: View {
             Rectangle().fill(EyeStyle.text).frame(width: length, height: 3).padding(.vertical, 24)
             Slider(value: $length, in: 140...Double(UIScreen.main.bounds.width - 40))
             Button("已量好：线段为 5 cm") { complete(Float(length * UIScreen.main.scale / 50)) }.buttonStyle(EyeButtonStyle())
-        }
-    }
-}
-
-private struct QuestionnaireView: View {
-    @ObservedObject var runtime: EyeRuntime
-    @State private var index = 0
-    @State private var mode = "标准模式"
-    var body: some View {
-        if !runtime.questions.isEmpty {
-            let q = runtime.questions[min(index, runtime.questions.count - 1)]
-            let key = q["key"] as? String ?? ""
-            let value = runtime.fields[key] ?? ""
-            VStack(alignment: .leading, spacing: EyeStyle.spacing) {
-                Text("\(index + 1)/\(runtime.questions.count)").foregroundStyle(EyeStyle.secondary)
-                Text(q["title"] as? String ?? key).font(EyeStyle.title)
-                if let options = q["options"] as? [String] {
-                    ForEach(options, id: \.self) { option in
-                        let selected = ("、" + value + "、").contains("、" + option + "、")
-                        Button {
-                            if q["multiple"] as? Bool == true {
-                                let exclusive = Set(q["exclusive"] as? [String] ?? [])
-                                var chosen = options.filter { ("、" + value + "、").contains("、" + $0 + "、") }
-                                if selected { chosen.removeAll { $0 == option } }
-                                else if exclusive.contains(option) { chosen = [option] }
-                                else { chosen.removeAll { exclusive.contains($0) }; chosen.append(option) }
-                                runtime.setField(key, chosen.joined(separator: "、"))
-                            } else { runtime.setField(key, option) }  // 选中后停在本题，由「下一题」确认
-                        } label: {
-                            HStack { Text(option); Spacer(); if selected { Image(systemName: "checkmark").foregroundStyle(EyeStyle.primary) } }
-                        }.buttonStyle(EyeCardButtonStyle(selected: selected))
-                    }
-                } else {
-                    TextField("请输入", text: Binding(get: { runtime.fields[key] ?? "" }, set: { runtime.setField(key, $0) }))
-                        .keyboardType(q["numeric"] as? Bool == true ? .numberPad : .default).textFieldStyle(.roundedBorder)
-                }
-                if index > 0 { Button("上一题") { index -= 1 }.buttonStyle(EyeButtonStyle(role: .secondary)) }
-                if index == runtime.questions.count - 1 && runtime.kind == "PRESBYOPIA" {
-                    Text("这次测试戴哪副眼镜？")
-                    Picker("测试模式", selection: $mode) {
-                        Text("标准：摘下老花镜／渐进镜，戴看远的眼镜或不戴镜").tag("标准模式")
-                        Text("日常：戴平时看近的眼镜").tag("日常模式")
-                    }.pickerStyle(.menu).onChange(of: mode) { value in runtime.controller.setMode(mode: value) }
-                }
-                Button(index < runtime.questions.count - 1 ? "下一题" : "检查测试条件") {
-                    if index < runtime.questions.count - 1 { index += 1 }
-                    else { if runtime.kind == "PRESBYOPIA" { runtime.controller.setMode(mode: mode) }; runtime.finishProfile() }
-                }.buttonStyle(EyeButtonStyle()).disabled(q["valid"] as? Bool != true)
-                VStack(spacing: 2) {
-                    Button("跳过问卷，直接测试") { runtime.act("skipProfile") }
-                        .font(EyeStyle.body).foregroundStyle(EyeStyle.primary).frame(minHeight: 44)
-                    Text("跳过后，依赖年龄和症状的判断会注明无法评估。").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
-                }.frame(maxWidth: .infinity)
-            }
         }
     }
 }

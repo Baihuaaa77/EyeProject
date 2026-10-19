@@ -7,8 +7,10 @@ import com.zkyjss.eyeproject.core.data.account.AccountRepository
 import com.zkyjss.eyeproject.core.data.account.AccountResult
 import com.zkyjss.eyeproject.core.data.record.RecordSyncStatus
 import com.zkyjss.eyeproject.core.data.record.ScreeningRecordRepository
+import com.zkyjss.eyeproject.core.data.subject.SubjectRepository
 import com.zkyjss.eyeproject.core.sync.ConsentType
 import com.zkyjss.eyeproject.feature.services.LocalRecordEntry
+import com.zkyjss.eyeproject.feature.services.SubjectProfile
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -39,6 +41,7 @@ sealed interface CloudSyncUiState {
 class MineViewModel @Inject constructor(
     private val accounts: AccountRepository,
     private val records: ScreeningRecordRepository,
+    private val subjectRepository: SubjectRepository,
 ) : ViewModel() {
     private val busy = MutableStateFlow(false)
     private val message = MutableStateFlow<String?>(null)
@@ -52,6 +55,10 @@ class MineViewModel @Inject constructor(
                     account.researchUse, status, working || status.syncing, note ?: status.lastMessage)
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), CloudSyncUiState.Loading)
+
+    /** 本人与家庭成员（本人在前）。 */
+    val subjects: StateFlow<List<SubjectProfile>> =
+        subjectRepository.subjects.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /** 本机测试记录（最新在前）。 */
     val localRecords: StateFlow<List<LocalRecordEntry>> =
@@ -71,6 +78,8 @@ class MineViewModel @Inject constructor(
     fun setConsent(type: ConsentType, granted: Boolean) = run(null) { accounts.setConsent(type, granted) }
 
     fun syncNow() = run(null) {
+        // 先同步成员与资料：记录要归属到成员
+        subjectRepository.sync()
         if (records.syncNow() == null) AccountResult.Failure("请先同意云端存储") else AccountResult.Success
     }
 

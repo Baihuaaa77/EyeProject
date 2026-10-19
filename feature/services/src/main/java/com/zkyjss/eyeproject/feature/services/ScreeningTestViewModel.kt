@@ -7,6 +7,10 @@ import androidx.lifecycle.viewModelScope
 import com.zkyjss.eyeproject.core.camera.CameraController
 import com.zkyjss.eyeproject.core.camera.CameraIntrinsicsProvider
 import com.zkyjss.eyeproject.core.data.record.ScreeningRecordRepository
+import com.zkyjss.eyeproject.core.data.subject.SubjectRepository
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.stateIn
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -18,13 +22,17 @@ class ScreeningTestViewModel @Inject constructor(
     camera: CameraController,
     intrinsics: CameraIntrinsicsProvider,
     records: ScreeningRecordRepository,
+    subjectRepository: SubjectRepository,
 ) : ViewModel() {
     private val platform = AndroidScreeningPlatform(context, camera, intrinsics, records)
     val engine = ScreeningEngine(platform, viewModelScope)
     val state get() = engine.state
     fun feedbackCues(enabled: Boolean) = platform.feedbackSession.poll(screeningFeedbackFrame(state.value, engine.coverRemainingMs()), platform.nowMs(), enabled)
     fun configure(kind: ScreeningKind) = engine.configure(kind)
-    fun setField(key: String, value: String) = engine.setField(key, value)
+    /** 本人与家庭成员：测试开始时选「这次测谁」，资料在「我的」维护。 */
+    val subjects: StateFlow<List<SubjectProfile>> =
+        subjectRepository.subjects.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    fun useSubject(profile: SubjectProfile) = engine.useSubject(profile)
     fun setMode(mode: String) = engine.setMode(mode)
     fun cameraPermissionDenied() = engine.cameraPermissionDenied()
     fun nextFromProfile() = engine.nextFromProfile()

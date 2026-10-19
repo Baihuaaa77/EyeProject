@@ -25,10 +25,6 @@ data class Question(
     }
 }
 
-fun ageQuestion(range: IntRange, title: String = "你的年龄") = Question(
-    key = "年龄", title = title, numeric = true,
-    validate = { it.toIntOrNull()?.let { age -> age in range } == true },
-)
 
 /** 多选字段里是否包含任一指定选项。 */
 fun Map<String, String>.hasAny(key: String, vararg values: String): Boolean =

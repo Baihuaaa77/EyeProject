@@ -11,6 +11,7 @@
 | `account/SessionStore` | 会话（令牌 + 同意缓存）整体以 Android Keystore 中不可导出的 AES-GCM 密钥加密后存 SharedPreferences；已排除出自动备份 |
 | `account/AuthorizedCaller` | 带令牌调用：快过期先刷新、401 刷新后重试一次；刷新被拒清会话，离线则返回不可达以便稍后重试 |
 | `record/ScreeningRecordRepository` | 接口 + `OfflineFirstScreeningRecordRepository`：`saveRecord` 先写本机文件（文件名与位置不变），再登记发件箱 `screening_outbox.json`；`syncStatus: Flow`；`syncNow` 使用共享 `RecordSyncEngine` 推送，首次同步时把升级前的历史记录补登为待上传；发件箱记录归属账号，换账号（含注销后重新注册）时全部换新编号重传；`requestSync` 供应用启动时补传积压记录；`localRecords: Flow` 为本机记录摘要（共享 `LocalRecordCatalog` 解析，保存后自动刷新），`exportRecord` 把一条记录写到用户选择的位置 |
+| `subject/SubjectRepository` | 接口 + `OfflineFirstSubjectRepository`：本人与家庭成员及其资料（原测试问卷），本机 `subjects.json` 为事实源，首次使用自动建立空白「本人」；`subjects: Flow`、`remoteIds: Flow`（本机 → 云端成员编号）；满足上传条件时 `sync()` 双向同步：「本人」绑定账号默认成员、成员用本机 UUID 在云端新建、资料版本旧于云端时以云端为准、孩子资料未获监护人同意时保持待传；换账号时全部重新待传 |
 | `sync/SyncWorker` | WorkManager 一次性任务（需联网、指数退避、同名任务串接）；通过 Hilt EntryPoint 取仓库 |
 | `di/DataModule` | Hilt 绑定（仓库与 `SyncScheduler`） |
 
@@ -18,6 +19,7 @@
 
 已配置服务器（`core:network`）+ 已登录 + 已授予 `HEALTH_DATA_SYNC` 同意，三者缺一不上传；保存与测试流程不受影响。
 儿童记录（问卷年龄 < 14）还需监护人同意，未同意的记录保持待上传，不阻塞其他记录。记录不可变，因此没有双向合并。
+记录按其中的 `subject.id` 归属到成员（SyncWorker 先同步成员再推送记录）；家庭成员尚未同步到云端时记录留待下次，不会错归到「本人」。
 
 ## 依赖
 

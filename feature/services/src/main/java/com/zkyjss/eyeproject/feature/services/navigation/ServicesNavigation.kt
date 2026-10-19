@@ -52,20 +52,21 @@ fun NavGraphBuilder.servicesScreen(
     }
 }
 
-fun NavGraphBuilder.dryEyeScreen(onBack: () -> Unit) {
+/** [onEditSubject]：去「我的」补充或新建被测者资料（app 负责跳转，feature 之间不直接依赖）。 */
+fun NavGraphBuilder.dryEyeScreen(onBack: () -> Unit, onEditSubject: (String?) -> Unit) {
     composable<DryEyeRoute> {
-        DryEyeScreen(onBack = onBack)
+        DryEyeScreen(onBack = onBack, onEditSubject = onEditSubject)
     }
 }
 
-fun NavGraphBuilder.presbyopiaScreen(onBack: () -> Unit) {
+fun NavGraphBuilder.presbyopiaScreen(onBack: () -> Unit, onEditSubject: (String?) -> Unit) {
     composable<PresbyopiaRoute> {
-        PresbyopiaScreen(onBack = onBack)
+        PresbyopiaScreen(onBack = onBack, onEditSubject = onEditSubject)
     }
 }
 
-fun NavGraphBuilder.strabismusScreen(onBack: () -> Unit) {
+fun NavGraphBuilder.strabismusScreen(onBack: () -> Unit, onEditSubject: (String?) -> Unit) {
     composable<StrabismusRoute> {
-        StrabismusScreen(onBack = onBack)
+        StrabismusScreen(onBack = onBack, onEditSubject = onEditSubject)
     }
 }

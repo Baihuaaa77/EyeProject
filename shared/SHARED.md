@@ -6,7 +6,7 @@
 
 - `model`：原 core:model 的纯数据类型，包名不变。
 - `domain`：原 core:domain 的眨眼、虹膜测距及系统端口；共用瞳孔／反光点算法、478 点索引与头姿转换。锁分别用 JVM synchronized 和 iOS NSRecursiveLock。
-- `screening`：三项问卷、完整状态机、质量门控、分级、注视监督、视标尺寸、语音指令解析和记录格式。
+- `screening`：被测者资料（原三项问卷合并，`SubjectProfiles`）、本机记录摘要（`LocalRecordCatalog`）、完整状态机、质量门控、分级、注视监督、视标尺寸、语音指令解析和记录格式。
 - `sync`：云端同步契约（v1 DTO、错误代码）、`RecordSummaries`（从记录 JSON 抽取病种/版本/风险/质量/特征/问卷年龄）、纯 Kotlin `Sha256`、`RecordSyncEngine`（端口 `RecordOutbox` / `RecordRemote`）。安卓 `core:network`/`core:data` 与 `backend/server` 共用；尚未导出到 iOS framework。
 - `ScreeningFeedback`：双端共用的交互反馈事件、距离防抖、阶段及标定点切换提示；引擎只在有效输入后投递作答事件。`shared/feedback/res/raw` 提供同一套短音，平台层各自播放声音与原生轻触觉。
 

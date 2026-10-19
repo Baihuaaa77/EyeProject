@@ -20,6 +20,7 @@ import com.zkyjss.eyeproject.core.sync.RegisterRequest
 import com.zkyjss.eyeproject.core.sync.Sha256
 import com.zkyjss.eyeproject.core.sync.SubjectDto
 import com.zkyjss.eyeproject.core.sync.SubjectInput
+import com.zkyjss.eyeproject.core.sync.SubjectProfileInput
 import com.zkyjss.eyeproject.core.sync.SubjectRelation
 import com.zkyjss.eyeproject.core.sync.SyncContract
 import com.zkyjss.eyeproject.core.sync.TokenResponse
@@ -111,6 +112,60 @@ class ApiTest {
             setBody(RegisterRequest("b@example.com", "12345678", null, "v"))
         }
         assertEquals(HttpStatusCode.BadRequest, weak.status)
+    }
+
+    @Test fun healthProfileIsEncryptedConsentGatedAndRejectsStaleVersions() = api { client, services ->
+        val tokens = client.register()
+        val token = tokens.accessToken
+        val me: AccountDto = client.get("/v1/me") { bearerAuth(token) }.body()
+        suspend fun putProfile(id: String, fields: Map<String, String>, at: Long) =
+            client.put("/v1/subjects/$id/profile") { bearerAuth(token); contentType(ContentType.Application.Json); setBody(SubjectProfileInput(fields, at)) }
+        val fields = mapOf("出生年份" to "1980", "日常矫正方式" to "老花镜", "屈光情况" to "近视、散光")
+
+        // 未同意健康数据云端存储时不能上传
+        val blocked = putProfile(me.defaultSubjectId, fields, now - 1_000)
+        assertEquals(HttpStatusCode.Forbidden, blocked.status)
+        assertEquals(ErrorCodes.CONSENT_REQUIRED, blocked.error())
+        client.consent(token, ConsentType.HEALTH_DATA_SYNC)
+        val saved = putProfile(me.defaultSubjectId, fields, now - 1_000)
+        assertEquals(HttpStatusCode.OK, saved.status)
+        assertEquals(fields, saved.body<SubjectDto>().profile)
+
+        // 密文入库：库里查不到明文
+        services.db.transaction {
+            val sealed = single("SELECT profile_cipher FROM subjects WHERE id = ?", me.defaultSubjectId) { it.getBytes(1) }!!
+            assertFalse(sealed.decodeToString().contains("老花镜"))
+        }
+        // 旧版本不能覆盖新版本
+        val stale = putProfile(me.defaultSubjectId, mapOf("出生年份" to "1979"), now - 5_000)
+        assertEquals(HttpStatusCode.Conflict, stale.status)
+        val subjects: List<SubjectDto> = client.get("/v1/subjects") { bearerAuth(token) }.body()
+        assertEquals(now - 1_000, subjects.single().profileUpdatedAt)
+        assertEquals(fields, subjects.single().profile)
+
+        // 客户端离线新建的孩子：沿用客户端编号；资料需监护人同意
+        val childId = UUID.randomUUID().toString()
+        val child = client.post("/v1/subjects") {
+            bearerAuth(token); contentType(ContentType.Application.Json)
+            setBody(SubjectInput(SubjectRelation.CHILD, id = childId, nickname = "小明", birthYear = 2018))
+        }
+        assertEquals(childId, child.body<SubjectDto>().id)
+        val guardian = putProfile(childId, mapOf("出生年份" to "2018"), now)
+        assertEquals(ErrorCodes.GUARDIAN_CONSENT_REQUIRED, guardian.error())
+        client.consent(token, ConsentType.GUARDIAN, childId)
+        assertEquals(HttpStatusCode.OK, putProfile(childId, mapOf("出生年份" to "2018"), now).status)
+
+        // 导出包含资料；别的账号看不到也改不了
+        val export: ExportBundle = client.get("/v1/me/export") { bearerAuth(token) }.body()
+        assertEquals(fields, export.subjects.first { it.id == me.defaultSubjectId }.profile)
+        val other = client.register("other@example.com").accessToken
+        client.consent(other, ConsentType.HEALTH_DATA_SYNC)
+        val foreign = client.put("/v1/subjects/$childId/profile") {
+            bearerAuth(other); contentType(ContentType.Application.Json); setBody(SubjectProfileInput(mapOf("出生年份" to "2000"), now))
+        }
+        assertEquals(HttpStatusCode.NotFound, foreign.status)
+        val tooMany = putProfile(me.defaultSubjectId, (1..70).associate { "k$it" to "v" }, now)
+        assertEquals(HttpStatusCode.BadRequest, tooMany.status)
     }
 
     @Test fun loginRejectsWrongPasswordAndUnknownEmailAlike() = api { client, _ ->

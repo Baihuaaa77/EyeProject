@@ -128,21 +128,32 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
         it.copy(warning = "未授予相机权限，无法测距或定位双眼。请允许相机权限后重试。")
     }
 
+    /**
+     * 选定被测者：带入其资料（含由出生年份换算的年龄），不再逐题填写问卷。
+     * 老视还需在本页选「这次戴哪副眼镜」再继续；其余测试直接进入准备页。
+     */
+    fun useSubject(profile: SubjectProfile) {
+        _state.update { it.copy(fields = SubjectProfiles.testFields(profile, platform.epochMs()),
+            subject = TestSubject(profile.id, profile.nickname, profile.relation), profileSkipped = false, warning = null) }
+        if (_state.value.kind != ScreeningKind.PRESBYOPIA) nextFromProfile()
+    }
+
     fun nextFromProfile() {
         val age = _state.value.fields["年龄"]?.toIntOrNull()
-        if (age == null || age !in 3..100) {
-            _state.update { it.copy(warning = "请填写有效年龄") }; return
+        val range = SubjectProfiles.ageRange(_state.value.kind.name)
+        if (age == null || age !in range) {
+            _state.update { it.copy(warning = "请先在「我的」填写出生年份（本测试适合 ${range.first} 岁以上）") }; return
         }
         if (_state.value.kind == ScreeningKind.PRESBYOPIA &&
             (_state.value.mode.isBlank() || _state.value.fields["日常矫正方式"].isNullOrBlank())) {
-            _state.update { it.copy(warning = "请选择平时戴的眼镜和这次测试戴哪副眼镜") }; return
+            _state.update { it.copy(warning = "请在资料里填写平时戴的眼镜，并选择这次测试戴哪副眼镜") }; return
         }
         _state.update { it.copy(step = ScreeningStep.ENVIRONMENT, warning = null) }
     }
 
-    /** 先不填问卷直接测试：老视默认标准模式；年龄缺失时评估会如实说明无法与同龄对照。 */
+    /** 不选成员直接测试：老视默认标准模式；年龄缺失时评估会如实说明无法与同龄对照。 */
     fun skipProfile() {
-        _state.update { it.copy(step = ScreeningStep.ENVIRONMENT, profileSkipped = true, warning = null,
+        _state.update { it.copy(step = ScreeningStep.ENVIRONMENT, fields = emptyMap(), subject = null, profileSkipped = true, warning = null,
             mode = if (it.kind == ScreeningKind.PRESBYOPIA && it.mode.isBlank()) "标准模式" else it.mode) }
     }
 
@@ -677,6 +688,7 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
                     put("mode", s.mode)
                     put("glassesRemovedConfirmed", s.glassesRemovedConfirmed)
                     put("profile", RecordObject(s.fields))
+                    s.subject?.let { put("subject", it.toRecordObject()) }
                     put("profileSkipped", s.profileSkipped)
                     put("ambientLux", s.lux?.toDouble() ?: RecordObject.NULL)
                     put("lightSensorAvailable", s.lightSensorAvailable ?: RecordObject.NULL)
@@ -796,7 +808,8 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
         gaze = null; gazeCalibration.clear(); renderedTargets.clear(); resetGazeWindow()
         distanceTracker.clear()
         // 环境检查尚未开始计时，切后台只需释放相机，不提示「测试已中断」。
-        _state.value = ScreeningState(kind = current.kind, fields = current.fields, mode = current.mode,
+        _state.value = ScreeningState(kind = current.kind, fields = current.fields, subject = current.subject,
+            profileSkipped = current.profileSkipped, mode = current.mode,
             step = ScreeningStep.ENVIRONMENT,
             warning = if (current.step == ScreeningStep.ENVIRONMENT) null else "测试已中断，请重新开始")
     }

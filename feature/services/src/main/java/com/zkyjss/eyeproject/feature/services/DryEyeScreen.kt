@@ -92,6 +92,7 @@ import com.zkyjss.eyeproject.core.ui.component.EyeText
 @Composable
 fun DryEyeScreen(
     onBack: () -> Unit,
+    onEditSubject: (String?) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: DryEyeTestViewModel = hiltViewModel(),
 ) {
@@ -131,7 +132,7 @@ fun DryEyeScreen(
         }
     }
     val basePrompt = when (state.phase) {
-        DryEyePhase.Profile -> "请先填写基本信息"
+        DryEyePhase.Profile -> "这次测谁？"
         DryEyePhase.Setup -> "建议佩戴最佳矫正视力眼镜。准备好后开始"
         DryEyePhase.PracticeGuide -> guideCueDryEyePractice
         DryEyePhase.FormalGuide -> "正式测试。先自然眨眼，之后不停顿，直接保持睁眼二十秒"
@@ -169,8 +170,10 @@ fun DryEyeScreen(
                 if (running && state.phase != DryEyePhase.Rest) DistanceBanner(distance, compact = true)
             }) {
             when (state.phase) {
-                DryEyePhase.Profile -> QuestionnaireContent(dryEyeQuestions, state.fields, viewModel::setField, viewModel::finishProfile,
-                    stateKey = "dryeye", onSkip = viewModel::skipProfile)
+                DryEyePhase.Profile -> {
+                    val subjects by viewModel.subjects.collectAsStateWithLifecycle()
+                    SubjectPicker("DRY_EYE", subjects, state.subject?.id, viewModel::useSubject, onEditSubject, viewModel::skipProfile)
+                }
                 DryEyePhase.Setup -> {
                     SetupGate(state, viewModel::startTest)
                     if (!state.faceDetected) EyeButton("重试相机", EyeButtonRole.SECONDARY, { viewModel.stopMonitoring(); ensureCamera() }, Modifier.fillMaxWidth())

@@ -277,13 +277,14 @@ private struct MascotHeroCard: View {
 
 // MARK: 我的
 
-/// 我的：本机测试记录、权限与通知、关于与免责声明。云端同步尚未接入 iOS（见设计文档 P2）。
+/// 我的：家庭成员与资料、本机测试记录、权限与通知、关于与免责声明。云端同步尚未接入 iOS（见设计文档 P2），资料只存本机。
 private struct MinePage: View {
     @State private var showRecords = false
     private let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
     var body: some View {
         PageScroll {
             Text("我的").font(EyeStyle.headline).foregroundStyle(EyeStyle.text).padding(.vertical, 16)
+            SubjectsSection()
             SelectCard(title: "本机测试记录", subtitle: "查看与导出保存在这台手机上的记录") {
                 Image(systemName: "doc.text").font(.system(size: 22)).foregroundStyle(EyeStyle.primary)
             } action: { showRecords = true }

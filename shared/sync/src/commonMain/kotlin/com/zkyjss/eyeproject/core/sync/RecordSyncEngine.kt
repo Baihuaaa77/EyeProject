@@ -70,6 +70,9 @@ data class SyncReport(
     val shouldRetry: Boolean get() = stopReason == SyncStopReason.TRANSIENT
 }
 
+/** [RecordSyncEngine] 的成员换算抛出：记录所属成员尚未同步到云端，本条留待下次（不能错归到「本人」）。 */
+class SubjectNotSyncedException : Exception("记录所属成员尚未同步")
+
 /**
  * 按测试时间顺序推送待上传记录。遇到需要用户处理的情况（未登录、未同意）或网络失败时整轮停止，
  * 其余记录保持 PENDING；单条记录的冲突或无效不影响后续记录。
@@ -78,7 +81,8 @@ class RecordSyncEngine(
     private val outbox: RecordOutbox,
     private val remote: RecordRemote,
     private val clock: () -> Long,
-    private val subjectId: String? = null,
+    /** 记录归属的云端成员编号（由记录里的本机成员编号换算）；为空归入账号的「本人」。 */
+    private val subjectFor: suspend (payload: String) -> String? = { null },
     private val clientPlatform: String? = null,
     private val appVersion: String? = null,
 ) {
@@ -92,6 +96,7 @@ class RecordSyncEngine(
                 report = report.copy(rejected = report.rejected + 1)
                 continue
             }
+            val subjectId = try { subjectFor(payload) } catch (_: SubjectNotSyncedException) { continue }
             val upload = RecordUpload(subjectId, entry.testedAt, payload, Sha256.hex(payload), clientPlatform, appVersion)
             val attempted = entry.copy(attempts = entry.attempts + 1)
             val stop = when (val result = remote.upload(entry.recordId, upload)) {

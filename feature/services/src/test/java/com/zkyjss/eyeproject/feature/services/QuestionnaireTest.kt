@@ -16,6 +16,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performTouchInput
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeProjectTheme
+import com.zkyjss.eyeproject.core.ui.component.EyeChoiceList
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -25,17 +26,18 @@ import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], qualifiers = "zh-rCN-w390dp-h844dp-mdpi")
+/** 资料编辑页与选人页共用的选项列表（core:ui EyeChoiceList）。 */
 class QuestionnaireTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
-    @Test fun dryEyeFirstSymptomCanBeSelectedAndRemoved() =
-        verifyMultipleChoice("干眼症状")
+    @Test fun firstSymptomCanBeSelectedAndRemoved() =
+        verifyMultipleChoice("干眼症状", "都没有")
 
-    @Test fun dryEyeFirstEyeDiseaseCanBeSelectedAndRemoved() =
-        verifyMultipleChoice("眼部疾病")
+    @Test fun firstEyeDiseaseCanBeSelectedAndRemoved() =
+        verifyMultipleChoice("既往眼病", "没有")
 
-    private fun verifyMultipleChoice(key: String) {
-        val question = dryEyeQuestions.single { it.key == key }
+    private fun verifyMultipleChoice(key: String, none: String) {
+        val question = SubjectProfiles.questions.single { it.key == key }
         val options = question.options!!
         val first = options[0]
         val second = options[1]
@@ -43,7 +45,8 @@ class QuestionnaireTest {
         compose.setContent {
             EyeProjectTheme {
                 Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-                    QuestionnaireContent(listOf(question), fields, { k, v -> fields = fields + (k to v) }, {})
+                    EyeChoiceList(question.options!!, fields[key].orEmpty(), question.multiple,
+                        { fields = fields + (key to it) }, question.hints, question.exclusive)
                 }
             }
         }
@@ -65,13 +68,13 @@ class QuestionnaireTest {
         compose.onNodeWithText(first).assertIsOn()
         compose.onNodeWithText(second).assertIsOn()
 
-        compose.onNodeWithText("都没有").performTouchInput { click() }
+        compose.onNodeWithText(none).performTouchInput { click() }
         compose.onNodeWithText(first).assertIsOff()
         compose.onNodeWithText(second).assertIsOff()
-        compose.onNodeWithText("都没有").assertIsOn()
+        compose.onNodeWithText(none).assertIsOn()
         compose.onNodeWithText(first).performTouchInput { click() }
         compose.onNodeWithText(first).assertIsOn()
-        compose.onNodeWithText("都没有").assertIsOff()
+        compose.onNodeWithText(none).assertIsOff()
         compose.runOnIdle { assertEquals(first, fields[key]) }
     }
 }

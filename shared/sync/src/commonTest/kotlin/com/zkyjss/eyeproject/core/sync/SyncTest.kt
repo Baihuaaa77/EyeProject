@@ -92,7 +92,7 @@ class RecordSyncEngineTest {
         )
         val remote = ScriptedRemote(mapOf("a" to UploadResult.Created, "b" to UploadResult.Duplicate,
             "c" to UploadResult.Conflict, "d" to UploadResult.Rejected("记录无效")))
-        val report = RecordSyncEngine(outbox, remote, clock = { 99L }, subjectId = "s1").pushPending()
+        val report = RecordSyncEngine(outbox, remote, clock = { 99L }, subjectFor = { "s1" }).pushPending()
 
         assertEquals(listOf("a", "b", "c", "d"), remote.calls.map { it.first })
         assertEquals(Sha256.hex(STRABISMUS_RECORD), remote.calls.first().second.payloadSha256)

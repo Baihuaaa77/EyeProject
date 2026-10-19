@@ -50,14 +50,18 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
         _uiState.update { it.copy(error = error.message ?: "相机不可用", gateReady = false) }
     }
 
-    // region 问卷
+    // region 被测者
 
-    fun setField(key: String, value: String) = _uiState.update { it.copy(fields = it.fields + (key to value)) }
+    /** 选定被测者：带入其资料（含由出生年份换算的年龄），不再逐题填写问卷。 */
+    fun useSubject(profile: SubjectProfile) = _uiState.update {
+        it.copy(phase = DryEyePhase.Setup, fields = SubjectProfiles.testFields(profile, platform.epochMs()),
+            subject = TestSubject(profile.id, profile.nickname, profile.relation), profileSkipped = false, error = null)
+    }
 
-    fun finishProfile() = _uiState.update { it.copy(phase = DryEyePhase.Setup, error = null) }
-
-    /** 先不填问卷直接测试；症状相关的风险判断按「未报告症状」处理，记录中注明跳过。 */
-    fun skipProfile() = _uiState.update { it.copy(phase = DryEyePhase.Setup, profileSkipped = true, error = null) }
+    /** 不选成员直接测试；症状相关的风险判断按「未报告症状」处理，记录中注明跳过。 */
+    fun skipProfile() = _uiState.update {
+        it.copy(phase = DryEyePhase.Setup, fields = emptyMap(), subject = null, profileSkipped = true, error = null)
+    }
 
     // endregion
 
@@ -150,7 +154,8 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
         formalStartMs = 0L
         monitoringGate = true
         _uiState.update {
-            DryEyeTestUiState(phase = DryEyePhase.Setup, fields = it.fields, lux = it.lux, error = message)
+            DryEyeTestUiState(phase = DryEyePhase.Setup, fields = it.fields, subject = it.subject,
+                profileSkipped = it.profileSkipped, lux = it.lux, error = message)
         }
     }
 
@@ -452,6 +457,7 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
                     put("displayWidthPx", platform.display.widthPixels)
                     put("displayHeightPx", platform.display.heightPixels)
                     put("profile", RecordObject(fields))
+                    _uiState.value.subject?.let { put("subject", it.toRecordObject()) }
                     put("profileSkipped", _uiState.value.profileSkipped)
                     put("naturalSeconds", session.naturalSeconds)
                     put("afterRest", session.afterRest)

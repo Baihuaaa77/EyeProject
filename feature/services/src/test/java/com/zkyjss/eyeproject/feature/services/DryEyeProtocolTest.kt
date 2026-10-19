@@ -75,10 +75,11 @@ class DryEyeProtocolTest {
         assertTrue(report.validityReasons.contains("测试未完整完成"))
     }
 
-    @Test fun questionnaireCoversDocumentItems() {
-        val labels = dryEyeQuestions.map { it.key }
-        listOf("年龄", "性别", "眼部疾病", "眼手术或外伤史", "佩戴隐形眼镜史", "近期眼部用药", "屈光矫正状态",
-            "基础视力", "近期用眼情况", "每日电子产品使用", "是否眼部化妆", "睡眠时长", "全身疾病", "干眼症状")
+    /** 原文研究内容一（1）的问卷条目，现在都在「我的」资料里（年龄由出生年份换算）。 */
+    @Test fun profileCoversDocumentItems() {
+        val labels = SubjectProfiles.questions.map { it.key }
+        listOf("出生年份", "性别", "既往眼病", "眼部手术", "眼外伤史", "佩戴隐形眼镜史", "近期眼部用药", "日常矫正方式",
+            "屈光情况", "基础视力", "近期用眼情况", "每日电子产品使用", "是否眼部化妆", "睡眠时长", "全身疾病", "干眼症状")
             .forEach { assertTrue("缺少 $it", it in labels) }
     }
 }

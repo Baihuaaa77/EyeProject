@@ -109,7 +109,7 @@ class SharedParityTest {
                 val state = Json.parseToJsonElement(controller.snapshotJson()).jsonObject
                 assertEquals(kind,state["kind"]!!.jsonPrimitive.content)
                 assertTrue(state["phase"]!!.jsonPrimitive.content in setOf("Profile","PROFILE"))
-                assertFalse(controller.profileComplete())
+                assertFalse(controller.proceedFromProfile(), "未选被测者不能进入测量")
                 assertEquals(0, controller.voiceAnswer("无关内容", null))
             }
         } finally { controller.close(); Dispatchers.resetMain() }
@@ -223,7 +223,6 @@ class SharedParityTest {
         try {
             controller.configureDisplay(1170,2532,18f)
             controller.selectTest("DRY_EYE")
-            controller.setField("年龄","40")
             controller.interrupt(); controller.resume()
             val state = Json.parseToJsonElement(controller.snapshotJson()).jsonObject
             assertEquals("Profile",state["phase"]!!.jsonPrimitive.content, "问卷阶段切后台不能跳到准备页")

@@ -104,7 +104,7 @@ object ResultReports {
                 ResultRow("坚持睁眼答对率", "${pct(previous.accuracyOpen)} → ${pct(report.accuracyOpen)}"),
                 ResultRow("结论", "${previous.riskLevel.label} → ${report.riskLevel.label}"),
             ))) }
-            profileSection(dryEyeQuestions, state.fields, "我的问卷回答")?.let(::add)
+            profileSection(state.fields, state.subject)?.let(::add)
             add(ResultSection("完整指标", report.indicators.map { ResultRow("", it) }))
         }
         return ResultReport(
@@ -228,8 +228,7 @@ object ResultReports {
                 )))
             }
             if (s.history.isNotEmpty()) add(ResultSection("与上次对比", s.history.map { ResultRow("", it) }))
-            profileSection(if (strabismus) strabismusQuestions else presbyopiaQuestions, s.fields,
-                if (strabismus) "孩子的基本信息" else "我的问卷回答")?.let(::add)
+            profileSection(s.fields, s.subject)?.let(::add)
             add(ResultSection("完整报告", s.result.map { ResultRow("", it) }))
         }
         return ResultReport(
@@ -241,9 +240,14 @@ object ResultReports {
 
     // endregion
 
-    private fun profileSection(questions: List<Question>, fields: Map<String, String>, title: String): ResultSection? =
-        questions.filter { !fields[it.key].isNullOrBlank() }.map { ResultRow(it.title, fields[it.key].orEmpty()) }
-            .takeIf { it.isNotEmpty() }?.let { ResultSection(title, it) }
+    /** 本次使用的被测者资料（来自「我的」）；年龄由出生年份换算。 */
+    private fun profileSection(fields: Map<String, String>, subject: TestSubject?): ResultSection? {
+        val rows = listOfNotNull(subject?.let { ResultRow("被测者", "${it.name}（${SubjectProfiles.relationLabel(it.relation)}）") },
+            fields["年龄"]?.let { ResultRow("年龄", "$it 岁") }) +
+            SubjectProfiles.questions.filter { it.key != SubjectProfiles.BIRTH_YEAR && !fields[it.key].isNullOrBlank() }
+                .map { ResultRow(it.title, fields[it.key].orEmpty()) }
+        return rows.takeIf { it.isNotEmpty() }?.let { ResultSection("被测者资料", it) }
+    }
 
     private fun fmt1(v: Double?) = v?.let { decimalString(it, 1) } ?: "—"
     private fun pct(v: Double?) = v?.let { "${(it * 100).toInt()}%" } ?: "—"

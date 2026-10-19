@@ -7,6 +7,9 @@ import com.zkyjss.eyeproject.core.sync.LoginRequest
 import com.zkyjss.eyeproject.core.sync.RecordSummaryDto
 import com.zkyjss.eyeproject.core.sync.RecordUpload
 import com.zkyjss.eyeproject.core.sync.RegisterRequest
+import com.zkyjss.eyeproject.core.sync.SubjectDto
+import com.zkyjss.eyeproject.core.sync.SubjectInput
+import com.zkyjss.eyeproject.core.sync.SubjectProfileInput
 import com.zkyjss.eyeproject.core.sync.TokenResponse
 
 /** 一次远端调用的结果：成功、服务端拒绝（带稳定错误代码），或网络不可达。 */
@@ -32,6 +35,12 @@ interface EyeNetworkDataSource {
     suspend fun consents(accessToken: String): NetworkResult<List<ConsentDto>>
     suspend fun recordConsent(accessToken: String, input: ConsentInput): NetworkResult<List<ConsentDto>>
     suspend fun uploadRecord(accessToken: String, recordId: String, upload: RecordUpload): NetworkResult<RecordSummaryDto>
+    /** 家庭成员（被测者）与其健康资料。 */
+    suspend fun subjects(accessToken: String): NetworkResult<List<SubjectDto>>
+    suspend fun createSubject(accessToken: String, input: SubjectInput): NetworkResult<SubjectDto>
+    suspend fun updateSubject(accessToken: String, subjectId: String, input: SubjectInput): NetworkResult<SubjectDto>
+    suspend fun deleteSubject(accessToken: String, subjectId: String): NetworkResult<Unit>
+    suspend fun putSubjectProfile(accessToken: String, subjectId: String, input: SubjectProfileInput): NetworkResult<SubjectDto>
     /** 返回服务端导出的原始 JSON 文本，由调用方写入用户选择的位置。 */
     suspend fun exportAll(accessToken: String): NetworkResult<String>
     suspend fun deleteAccount(accessToken: String): NetworkResult<Unit>

@@ -5,6 +5,7 @@ import android.content.Context
 import android.net.Uri
 import com.zkyjss.eyeproject.core.data.account.AuthorizedCaller
 import com.zkyjss.eyeproject.core.data.account.SessionStore
+import com.zkyjss.eyeproject.core.data.subject.SubjectRepository
 import com.zkyjss.eyeproject.core.data.sync.SyncScheduler
 import com.zkyjss.eyeproject.core.network.EyeNetworkDataSource
 import com.zkyjss.eyeproject.core.network.NetworkResult
@@ -13,11 +14,13 @@ import com.zkyjss.eyeproject.core.sync.ErrorCodes
 import com.zkyjss.eyeproject.core.sync.OutboxEntry
 import com.zkyjss.eyeproject.core.sync.RecordOutbox
 import com.zkyjss.eyeproject.core.sync.RecordRemote
+import com.zkyjss.eyeproject.core.sync.RecordSummaries
 import com.zkyjss.eyeproject.core.sync.RecordSyncEngine
 import com.zkyjss.eyeproject.core.sync.RecordUpload
 import com.zkyjss.eyeproject.core.sync.SyncContract
 import com.zkyjss.eyeproject.core.sync.SyncReport
 import com.zkyjss.eyeproject.core.sync.SyncState
+import com.zkyjss.eyeproject.core.sync.SubjectNotSyncedException
 import com.zkyjss.eyeproject.core.sync.SyncStopReason
 import com.zkyjss.eyeproject.core.sync.UploadResult
 import com.zkyjss.eyeproject.feature.services.LocalRecordCatalog
@@ -27,6 +30,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
@@ -84,6 +88,8 @@ internal class OfflineFirstScreeningRecordRepository(
     private val caller: AuthorizedCaller,
     private val scheduler: SyncScheduler,
     private val resolver: ContentResolver? = null,
+    /** 本机成员编号 → 云端成员编号；没有对应的成员时为 null。 */
+    private val remoteSubjectIds: suspend () -> Map<String, String> = { emptyMap() },
     private val clock: () -> Long,
 ) : ScreeningRecordRepository {
     @Inject constructor(
@@ -92,7 +98,9 @@ internal class OfflineFirstScreeningRecordRepository(
         sessions: SessionStore,
         caller: AuthorizedCaller,
         scheduler: SyncScheduler,
-    ) : this(context.filesDir, network, sessions, caller, scheduler, context.contentResolver, System::currentTimeMillis)
+        subjects: SubjectRepository,
+    ) : this(context.filesDir, network, sessions, caller, scheduler, context.contentResolver,
+        { subjects.remoteIds.first() }, System::currentTimeMillis)
 
     private val outboxFile = File(directory, OUTBOX_FILE)
     private val lock = Mutex()
@@ -148,7 +156,7 @@ internal class OfflineFirstScreeningRecordRepository(
             adoptAccount(accountId)
             backfill()
             val report = runCatching {
-                RecordSyncEngine(outbox, remote, clock, clientPlatform = "Android").pushPending()
+                RecordSyncEngine(outbox, remote, clock, subjectFor = ::remoteSubjectFor, clientPlatform = "Android").pushPending()
             }.getOrElse { SyncReport(stopReason = SyncStopReason.TRANSIENT) }
             progress.update { RecordSyncStatus(lastSyncAt = clock(), lastMessage = describe(report)) }
             report
@@ -172,6 +180,17 @@ internal class OfflineFirstScreeningRecordRepository(
             directory.listFiles { file -> RECORD_NAME.matches(file.name) && file.name !in known }.orEmpty().map(File::getName)
         }
         if (files.isNotEmpty()) mutate { list -> list + files.map { OutboxEntry(UUID.randomUUID().toString(), it, testedAt(it)) } }
+    }
+
+    /**
+     * 记录所属成员的云端编号：旧记录或「本人」（尚未绑定）归入账号默认成员；
+     * 家庭成员尚未同步到云端时本条留待下次，不能错归到「本人」。
+     */
+    private suspend fun remoteSubjectFor(payload: String): String? {
+        val local = RecordSummaries.localSubjectId(payload) ?: return null
+        val remote = remoteSubjectIds()[local]
+        if (remote == null && RecordSummaries.subjectRelation(payload) != "SELF") throw SubjectNotSyncedException()
+        return remote
     }
 
     private val outbox = object : RecordOutbox {

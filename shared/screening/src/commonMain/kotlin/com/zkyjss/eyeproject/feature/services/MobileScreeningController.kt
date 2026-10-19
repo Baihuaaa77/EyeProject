@@ -60,20 +60,34 @@ class MobileScreeningController(
         kind = name
         if (kind != "DRY_EYE") screening.configure(ScreeningKind.valueOf(kind))
     }
-    fun setField(key: String,value: String) { if (kind == "DRY_EYE") dry.setField(key,value) else screening.setField(key,value) }
     fun setMode(mode: String) = screening.setMode(mode)
-    fun profileComplete(): Boolean {
-        val fields = if (kind == "DRY_EYE") dry.uiState.value.fields else screening.state.value.fields
-        val valid = questions().filter { it.visibleWhen(fields) }.all { q ->
-            q.optional || (!fields[q.key].isNullOrBlank() && q.validate(fields[q.key]!!))
+
+    /**
+     * 选定被测者（[profileJson] 为 [SubjectProfiles.toJson] 数组中的一个对象），带入其资料。
+     * 老视还需 [setMode] 后调用 [proceedFromProfile]；其余测试直接进入准备页。返回是否已进入准备页。
+     */
+    fun useSubject(profileJson: String): Boolean {
+        val profile = SubjectProfiles.fromJson("[$profileJson]").firstOrNull() ?: return false
+        if (kind == "DRY_EYE") dry.useSubject(profile) else screening.useSubject(profile)
+        return kind != "PRESBYOPIA" && proceedFromProfile()
+    }
+
+    /** 这位成员做当前测试还缺的资料项（JSON 字符串数组）；为空可以开始。 */
+    fun missingJson(profileJson: String): String {
+        val profile = SubjectProfiles.fromJson("[$profileJson]").firstOrNull() ?: return RecordArray(listOf("资料无法读取")).toString()
+        return RecordArray(SubjectProfiles.missing(kind, profile, platform.epochMs())).toString()
+    }
+
+    /** 离开选人页进入准备页并启动相机；老视未选戴镜方式或资料不全时返回 false。 */
+    fun proceedFromProfile(): Boolean {
+        if (display.xdpi <= 0) return false
+        if (kind == "DRY_EYE") {
+            if (dry.uiState.value.phase != DryEyePhase.Setup) return false
+            dry.startMonitoring(); return true
         }
-        if (!valid || display.xdpi <= 0) return false
-        if (kind == "DRY_EYE") { dry.finishProfile(); dry.startMonitoring() }
-        else {
-            screening.nextFromProfile()
-            if (screening.state.value.step != ScreeningStep.ENVIRONMENT) return false
-            screening.startCamera()
-        }
+        if (screening.state.value.step == ScreeningStep.PROFILE) screening.nextFromProfile()
+        if (screening.state.value.step != ScreeningStep.ENVIRONMENT) return false
+        screening.startCamera()
         return true
     }
     fun action(name: String) {
@@ -162,29 +176,13 @@ class MobileScreeningController(
         if (focalChanged(focalPx, focalLengthPx)) { focalPx = focalLengthPx; cameraVersion++ }
         cameraFrame?.invoke(FaceLandmarkFrame(listOfNotNull(face),imageWidth,imageHeight,timeMs,0,30f,brightness,timeMs))
     }
-    private fun questions(): List<Question> = when(kind) {
-        "DRY_EYE" -> dryEyeQuestions
-        "PRESBYOPIA" -> presbyopiaQuestions
-        else -> strabismusQuestions
-    }
-    fun questionnaireJson(): String {
-        val fields = if (kind == "DRY_EYE") dry.uiState.value.fields else screening.state.value.fields
-        return RecordObject().apply {
-            put("fields",RecordObject(fields))
-            put("questions",RecordArray(questions().filter { it.visibleWhen(fields) }.map { q -> RecordObject().apply {
-                put("key",q.key); put("title",q.title); put("options",q.options?.let(::RecordArray))
-                put("multiple",q.multiple); put("numeric",q.numeric); put("optional",q.optional)
-                put("hints",RecordObject(q.hints)); put("exclusive",RecordArray(q.exclusive.toList()))
-                put("valid",q.optional || (!fields[q.key].isNullOrBlank() && q.validate(fields[q.key]!!)))
-            }}))
-        }.toString()
-    }
     fun snapshotJson(): String {
         val result = RecordObject().apply { put("kind",kind) }
         if (kind == "DRY_EYE") {
             val s = dry.uiState.value
             result.apply {
                 put("phase",s.phase.name); put("title","干眼自测"); put("instruction",s.instruction)
+                put("subjectName",s.subject?.name)
                 put("distanceCm",s.distanceCm); put("gateReady",s.gateReady); put("warning",s.error ?: s.qualityWarning)
                 put("faceDetected",s.faceDetected)
                 val distanceSpeech = s.phase in setOf(DryEyePhase.Setup, DryEyePhase.FormalGuide, DryEyePhase.Countdown,
@@ -210,6 +208,7 @@ class MobileScreeningController(
             result.apply {
                 put("phase",s.step.name); put("title",if (s.kind == ScreeningKind.PRESBYOPIA) "老视自测" else "眼位自测")
                 put("instruction",s.instruction); put("stepTitle",stepTitle(s.step)); put("guidePending",s.guidePending)
+                put("subjectName",s.subject?.name); put("mode",s.mode)
                 put("guideText",screeningGuideText(s)); put("glassesCheck",s.glassesCheckPending)
                 put("calibrationPaused",s.gazeCalibrationPaused)
                 put("distanceCm",s.distanceCm); put("faceDetected",s.faceDetected); put("warning",s.gazeWarning ?: s.warning ?: screeningGuidance(s)?.takeUnless { it == "保持稳定" || it.startsWith("请移动到") })

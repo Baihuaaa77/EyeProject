@@ -129,37 +129,46 @@ class ServiceVisualTest {
         assertEquals(false, started)
     }
 
-    @Test fun questionnaireRequiresValidAge() {
+    /** 测试开始页只选人：缺必需项的成员去「我的」补充，资料齐全的直接开始（老视再选戴镜方式）。 */
+    @Test fun subjectPickerStartsCompleteMembersAndSendsOthersToProfile() {
         val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val members = listOf(
+            SubjectProfile("me", "SELF", "妈妈", mapOf("出生年份" to "1975", "日常矫正方式" to "老花镜", "屈光情况" to "老花"), 0L),
+            SubjectProfile("kid", "CHILD", "小明", mapOf("出生年份" to "2018"), 0L),
+        )
         val vm = ScreeningTestViewModel(context,
             com.zkyjss.eyeproject.core.camera.CameraController(context),
-            com.zkyjss.eyeproject.core.camera.CameraIntrinsicsProvider(context), TestScreeningRecordRepository(context))
+            com.zkyjss.eyeproject.core.camera.CameraIntrinsicsProvider(context), TestScreeningRecordRepository(context), TestSubjectRepository(members))
+        vm.configure(ScreeningKind.PRESBYOPIA)
+        var edited: String? = "none"
         compose.setContent {
             EyeProjectTheme {
                 Column(Modifier.fillMaxSize().background(LocalEyeColors.current.appBackground).verticalScroll(rememberScrollState()).padding(20.dp)) {
                     val state by vm.state.collectAsState()
-                    ProfileContent(ScreeningKind.PRESBYOPIA, state, vm)
+                    ProfileContent(ScreeningKind.PRESBYOPIA, state, vm) { edited = it }
                 }
             }
         }
-        compose.onNodeWithText("下一题").assertIsNotEnabled()
-        compose.onNode(hasSetTextAction()).performTextInput("46")
-        compose.onNodeWithText("下一题").assertIsEnabled()
-        compose.onNodeWithText("下一题").performClick()
-        compose.onNodeWithText("你的性别").assertIsDisplayed()
-        // 单选：点选后自动进入下一题
-        compose.onNodeWithText("女").performClick()
-        compose.mainClock.advanceTimeBy(1_000)
-        compose.onNodeWithText("平时戴什么眼镜？").assertIsDisplayed()
-        compose.onNodeWithText("渐进多焦点眼镜").performClick()
+        compose.onNodeWithText("小明").performClick()
+        assertEquals("kid", edited)
+        compose.onNodeWithText("添加家庭成员").performScrollTo().performClick()
+        assertEquals(null, edited)
+        compose.onNodeWithText("妈妈").performScrollTo().performClick()
+        compose.onNodeWithText("这次测试戴哪副眼镜？").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("开始").assertIsNotEnabled()
+        compose.onNodeWithText("戴看远的眼镜，或不戴眼镜").performScrollTo().performClick()
         capture("profile")
+        compose.onNodeWithText("开始").performScrollTo().performClick()
+        compose.runOnIdle { assertEquals(ScreeningStep.ENVIRONMENT, vm.state.value.step) }
+        // 年龄由出生年份换算
+        assertEquals((java.time.Year.now().value - 1975).toString(), vm.state.value.fields["年龄"])
     }
 
     @Test fun unknownResultKeepsQualityWarning() {
         val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
         val vm = ScreeningTestViewModel(context,
             com.zkyjss.eyeproject.core.camera.CameraController(context),
-            com.zkyjss.eyeproject.core.camera.CameraIntrinsicsProvider(context), TestScreeningRecordRepository(context))
+            com.zkyjss.eyeproject.core.camera.CameraIntrinsicsProvider(context), TestScreeningRecordRepository(context), TestSubjectRepository())
         compose.setContent {
             EyeProjectTheme {
                 Column(Modifier.fillMaxSize().background(LocalEyeColors.current.appBackground).verticalScroll(rememberScrollState()).padding(20.dp)) {
@@ -178,7 +187,7 @@ class ServiceVisualTest {
         val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
         val vm = ScreeningTestViewModel(context,
             com.zkyjss.eyeproject.core.camera.CameraController(context),
-            com.zkyjss.eyeproject.core.camera.CameraIntrinsicsProvider(context), TestScreeningRecordRepository(context))
+            com.zkyjss.eyeproject.core.camera.CameraIntrinsicsProvider(context), TestScreeningRecordRepository(context), TestSubjectRepository())
         compose.setContent {
             EyeProjectTheme(darkTheme = true) {
                 Column(Modifier.fillMaxSize().background(LocalEyeColors.current.appBackground).padding(20.dp)) {
@@ -194,7 +203,7 @@ class ServiceVisualTest {
         val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
         val vm = ScreeningTestViewModel(context,
             com.zkyjss.eyeproject.core.camera.CameraController(context),
-            com.zkyjss.eyeproject.core.camera.CameraIntrinsicsProvider(context), TestScreeningRecordRepository(context))
+            com.zkyjss.eyeproject.core.camera.CameraIntrinsicsProvider(context), TestScreeningRecordRepository(context), TestSubjectRepository())
         var task by androidx.compose.runtime.mutableIntStateOf(0)
         compose.setContent {
             EyeProjectTheme {
@@ -370,7 +379,7 @@ class ServiceVisualTest {
         val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
         val vm = ScreeningTestViewModel(context,
             com.zkyjss.eyeproject.core.camera.CameraController(context),
-            com.zkyjss.eyeproject.core.camera.CameraIntrinsicsProvider(context), TestScreeningRecordRepository(context))
+            com.zkyjss.eyeproject.core.camera.CameraIntrinsicsProvider(context), TestScreeningRecordRepository(context), TestSubjectRepository())
         var answered = -1
         var page by androidx.compose.runtime.mutableIntStateOf(0)
         compose.setContent {
@@ -401,13 +410,13 @@ class ServiceVisualTest {
     @Test fun dryEyeScreenKeepsDistanceBannerDuringTrials() {
         val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
         val vm = DryEyeTestViewModel(context, com.zkyjss.eyeproject.core.camera.CameraController(context),
-            com.zkyjss.eyeproject.core.camera.CameraIntrinsicsProvider(context), TestScreeningRecordRepository(context))
+            com.zkyjss.eyeproject.core.camera.CameraIntrinsicsProvider(context), TestScreeningRecordRepository(context), TestSubjectRepository())
         @Suppress("UNCHECKED_CAST")
         val state = DryEyeEngine::class.java.getDeclaredField("_uiState").apply { isAccessible = true }
             .get(vm.engine) as kotlinx.coroutines.flow.MutableStateFlow<DryEyeTestUiState>
         state.value = DryEyeTestUiState(phase = DryEyePhase.Open, trialVisible = true, trialId = 1, direction = 2,
             optotypePx = 40f, remainingSeconds = 12, progressFraction = 0.4f, faceDetected = true, distanceCm = 40f, gateReady = true)
-        compose.setContent { EyeProjectTheme { DryEyeScreen(onBack = {}, viewModel = vm) } }
+        compose.setContent { EyeProjectTheme { DryEyeScreen(onBack = {}, onEditSubject = {}, viewModel = vm) } }
         compose.onNodeWithText("距离合适").assertIsDisplayed()
         compose.onNodeWithText("持续睁眼").assertIsDisplayed()
         capture("dry-eye-screen-open-ok")
@@ -426,7 +435,7 @@ class ServiceVisualTest {
         val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
         val vm = ScreeningTestViewModel(context,
             com.zkyjss.eyeproject.core.camera.CameraController(context),
-            com.zkyjss.eyeproject.core.camera.CameraIntrinsicsProvider(context), TestScreeningRecordRepository(context))
+            com.zkyjss.eyeproject.core.camera.CameraIntrinsicsProvider(context), TestScreeningRecordRepository(context), TestSubjectRepository())
         var index by androidx.compose.runtime.mutableIntStateOf(0)
         compose.setContent {
             EyeProjectTheme {
@@ -490,7 +499,7 @@ class ServiceVisualTest {
         val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
         val vm = ScreeningTestViewModel(context,
             com.zkyjss.eyeproject.core.camera.CameraController(context),
-            com.zkyjss.eyeproject.core.camera.CameraIntrinsicsProvider(context), TestScreeningRecordRepository(context))
+            com.zkyjss.eyeproject.core.camera.CameraIntrinsicsProvider(context), TestScreeningRecordRepository(context), TestSubjectRepository())
         var kind by androidx.compose.runtime.mutableStateOf(ScreeningKind.PRESBYOPIA)
         compose.setContent {
             EyeProjectTheme {
@@ -561,7 +570,7 @@ class ServiceVisualTest {
         val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
         val vm = ScreeningTestViewModel(context,
             com.zkyjss.eyeproject.core.camera.CameraController(context),
-            com.zkyjss.eyeproject.core.camera.CameraIntrinsicsProvider(context), TestScreeningRecordRepository(context))
+            com.zkyjss.eyeproject.core.camera.CameraIntrinsicsProvider(context), TestScreeningRecordRepository(context), TestSubjectRepository())
         compose.setContent {
             EyeProjectTheme {
                 Column(Modifier.fillMaxSize().background(LocalEyeColors.current.appBackground).padding(20.dp)) {

@@ -13,6 +13,10 @@ object SyncContract {
     const val PRIVACY_POLICY_VERSION = "2026-10-15"
     /** 单条记录原文上限（字节）；斜视逐帧样本约 2 MB。 */
     const val MAX_PAYLOAD_BYTES = 8 * 1024 * 1024
+    /** 被测者资料（原测试问卷）：最多 64 项，键 ≤ 32 字、值 ≤ 200 字。 */
+    const val MAX_PROFILE_FIELDS = 64
+    const val MAX_PROFILE_KEY_LENGTH = 32
+    const val MAX_PROFILE_VALUE_LENGTH = 200
     const val MIN_PASSWORD_LENGTH = 8
 
     val json = Json { ignoreUnknownKeys = true; encodeDefaults = true; explicitNulls = false }
@@ -62,6 +66,8 @@ data class SubjectInput(
     val birthYear: Int? = null,
     val birthMonth: Int? = null,
     val sex: String? = null,
+    /** 新建时可由客户端给出编号（UUID），离线新建的成员与云端编号一致；为空由服务端生成。 */
+    val id: String? = null,
 )
 
 @Serializable
@@ -74,6 +80,20 @@ data class SubjectDto(
     val sex: String? = null,
     val isDefault: Boolean,
     val createdAt: Long,
+    /** 健康资料（原测试问卷：键 → 答案）；未上传时为空。服务端加密保存。 */
+    val profile: Map<String, String>? = null,
+    /** 资料在客户端最后修改的时间，用于判断哪边更新。 */
+    val profileUpdatedAt: Long? = null,
+)
+
+/**
+ * 被测者健康资料（原测试问卷）。上传需「健康数据云端存储」同意；儿童还需监护人同意。
+ * [updatedAt] 早于云端已有版本时返回 409，客户端应先拉取云端版本。
+ */
+@Serializable
+data class SubjectProfileInput(
+    val fields: Map<String, String>,
+    val updatedAt: Long,
 )
 
 /**

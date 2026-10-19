@@ -58,6 +58,8 @@ import com.zkyjss.eyeproject.feature.mine.navigation.MineRoute
 import com.zkyjss.eyeproject.feature.services.navigation.ServicesRoute
 import com.zkyjss.eyeproject.feature.services.navigation.dryEyeScreen
 import com.zkyjss.eyeproject.feature.mine.navigation.mineScreen
+import com.zkyjss.eyeproject.feature.mine.navigation.navigateToSubjectEdit
+import com.zkyjss.eyeproject.feature.mine.navigation.subjectEditScreen
 import com.zkyjss.eyeproject.feature.mine.navigation.navigateToMine
 import com.zkyjss.eyeproject.feature.services.navigation.navigateToDryEye
 import com.zkyjss.eyeproject.feature.services.navigation.navigateToPresbyopia
@@ -113,7 +115,8 @@ fun EyeProjectNavHost(
                 onPresbyopiaClick = { navController.navigateToPresbyopia() },
                 onStrabismusClick = { navController.navigateToStrabismus() },
             )
-            mineScreen()
+            mineScreen(onEditSubject = { navController.navigateToSubjectEdit(it) })
+            subjectEditScreen(onBack = { navController.navigateUp() })
             agentScreen(onBack = { navController.navigateUp() })
             testModelScreen(
                 onBack = { navController.navigateUp() },
@@ -124,9 +127,10 @@ fun EyeProjectNavHost(
             gazeScreen(onBack = { navController.navigateUp() })
             blinkTestScreen(onBack = { navController.navigateUp() })
             standaloneBlinkScreen(onBack = { navController.navigateUp() })
-            dryEyeScreen(onBack = { navController.navigateUp() })
-            presbyopiaScreen(onBack = { navController.navigateUp() })
-            strabismusScreen(onBack = { navController.navigateUp() })
+            // 测试开始页缺资料时去「我的」的资料编辑页，保存后返回测试
+            dryEyeScreen(onBack = { navController.navigateUp() }, onEditSubject = { navController.navigateToSubjectEdit(it) })
+            presbyopiaScreen(onBack = { navController.navigateUp() }, onEditSubject = { navController.navigateToSubjectEdit(it) })
+            strabismusScreen(onBack = { navController.navigateUp() }, onEditSubject = { navController.navigateToSubjectEdit(it) })
         }
     }
 }

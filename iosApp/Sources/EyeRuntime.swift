@@ -6,15 +6,12 @@ import EyeScreening
 /// 快照只用于界面呈现；所有作答、阶段切换和分级事件进入同一 Kotlin 引擎。
 final class EyeRuntime: ObservableObject {
     @Published var state: [String: Any] = [:]
-    @Published var questions: [[String: Any]] = []
-    @Published var fields: [String: String] = [:]
     @Published var error: String?
     let camera = EyeCamera()
     let voice = EyeVoice()
     let feedback = EyeFeedback()
     private var timer: Timer?
     private var lastSnapshot = ""
-    private var lastQuestionnaire = ""
     private var lastPrompt = ""
     private var lastBase = ""
     private var lastWasDistance = false
@@ -97,20 +94,13 @@ final class EyeRuntime: ObservableObject {
             state = Self.object(snapshot)
         }
         speakPrompts()
-        let questionnaire = controller.questionnaireJson()
-        if questionnaire != lastQuestionnaire {
-            lastQuestionnaire = questionnaire
-            let data = Self.object(questionnaire)
-            questions = data["questions"] as? [[String: Any]] ?? []
-            fields = data["fields"] as? [String: String] ?? [:]
-        }
         voice.setListening(isForeground && !settingsPresented && bool("voiceActive"))
     }
     /// 与安卓同一套播报：距离偏离优先，持续偏离每 6 秒换一种说法；回到合适距离先肯定一句，主提示有变化再接着说。
     private func speakPrompts() {
         let phase = string("phase")
         let base: String
-        if phase == "Profile" || phase == "PROFILE" { base = "请先填写基本信息。" }
+        if phase == "Profile" || phase == "PROFILE" { base = kind == "STRABISMUS" ? "这次给谁测？" : "这次测谁？" }
         else if phase == "Setup" || phase == "ENVIRONMENT" {
             base = kind == "STRABISMUS" ? "请正对屏幕，保持三十三厘米。" : "请正对屏幕，保持四十厘米。"
         } else if bool("calibrationPaused") {
@@ -159,12 +149,22 @@ final class EyeRuntime: ObservableObject {
     func string(_ key: String) -> String { state[key] as? String ?? "" }
     func bool(_ key: String) -> Bool { state[key] as? Bool ?? false }
     func number(_ key: String) -> Double { (state[key] as? NSNumber)?.doubleValue ?? 0 }
-    func setField(_ key: String, _ value: String) { controller.setField(key: key, value: value); refresh() }
     func act(_ name: String) { controller.action(name: name); refresh() }
     func answer(_ direction: Int) { controller.answer(direction: Int32(direction), byVoice: false); refresh() }
     func schedulePresented(_ id: Int32) { if id > 0 { presentation.schedule(id) } }
-    func finishProfile() {
-        if !controller.profileComplete() { error = "请完成所有必填项，并选择测试戴镜模式。" }
+    /// 这位成员做当前测试还缺的资料项（共用规则）。
+    func missing(_ s: SubjectProfileItem) -> [String] {
+        (try? JSONSerialization.jsonObject(with: Data(controller.missingJson(profileJson: s.jsonText).utf8))) as? [String] ?? []
+    }
+    /// 选定被测者：资料带入共用引擎；老视还需选戴镜方式后 [proceed]。
+    func useSubject(_ s: SubjectProfileItem) {
+        error = nil
+        _ = controller.useSubject(profileJson: s.jsonText)
+        refresh()
+    }
+    func proceed(mode: String) {
+        controller.setMode(mode: mode)
+        if !controller.proceedFromProfile() { error = "请先在资料里填好必需项，并选择这次戴哪副眼镜。" }
         refresh()
     }
     func interrupt() {

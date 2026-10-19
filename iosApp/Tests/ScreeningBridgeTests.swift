@@ -19,9 +19,9 @@ final class ScreeningBridgeTests: XCTestCase {
         for kind in ["DRY_EYE", "PRESBYOPIA", "STRABISMUS"] {
             controller.selectTest(name: kind)
             XCTAssertEqual(EyeRuntime.object(controller.snapshotJson())["kind"] as? String, kind)
-            let questions = EyeRuntime.object(controller.questionnaireJson())["questions"] as? [[String: Any]]
-            XCTAssertFalse(questions?.isEmpty ?? true)
-            XCTAssertFalse(controller.profileComplete(), "未完成问卷不能进入测量")
+            XCTAssertFalse(controller.proceedFromProfile(), "未选被测者不能进入测量")
+            let blank = #"{"id":"me","relation":"SELF","nickname":"我","fields":{},"updatedAt":0}"#
+            XCTAssertTrue(controller.missingJson(profileJson: blank).contains("出生年份"), "资料缺出生年份时提示补充")
         }
         controller.close()
     }

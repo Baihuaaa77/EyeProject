@@ -58,6 +58,18 @@ object RecordSummaries {
         return summary.copy(ageYears = age)
     }
 
+    /** 记录里本机成员的编号（shared/screening 写入的 `subject.id`）；旧记录没有时返回 null。 */
+    fun localSubjectId(payload: String): String? = runCatching {
+        ((SyncContract.json.parseToJsonElement(payload).jsonObject["subject"] as? JsonObject)?.get("id") as? JsonPrimitive)
+            ?.takeIf { it.isString }?.content
+    }.getOrNull()
+
+    /** 记录里成员的关系代码（`subject.relation`，如 SELF / CHILD）。 */
+    fun subjectRelation(payload: String): String? = runCatching {
+        ((SyncContract.json.parseToJsonElement(payload).jsonObject["subject"] as? JsonObject)?.get("relation") as? JsonPrimitive)
+            ?.takeIf { it.isString }?.content
+    }.getOrNull()
+
     /** 未满 14 周岁属于需监护人同意的范围（《个人信息保护法》第 31 条）。 */
     fun isMinor(ageYears: Int?): Boolean = ageYears != null && ageYears < MINOR_AGE_YEARS
     const val MINOR_AGE_YEARS = 14
