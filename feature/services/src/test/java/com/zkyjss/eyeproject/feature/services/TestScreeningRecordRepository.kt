@@ -12,7 +12,7 @@ class TestScreeningRecordRepository(private val context: Context) : ScreeningRec
     val saved = mutableListOf<String>()
     override val syncStatus: StateFlow<RecordSyncStatus> = MutableStateFlow(RecordSyncStatus())
     override val localRecords: StateFlow<List<LocalRecordEntry>> = MutableStateFlow(emptyList())
-    override suspend fun exportRecord(fileName: String, target: Uri) = false
+    override suspend fun exportRecord(fileName: String, target: Uri, format: com.zkyjss.eyeproject.core.data.record.RecordExportFormat) = false
     override suspend fun saveRecord(name: String, json: String) {
         context.openFileOutput(name, Context.MODE_PRIVATE).bufferedWriter().use { it.write(json) }
         saved += name

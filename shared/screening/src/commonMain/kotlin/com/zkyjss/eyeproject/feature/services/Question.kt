@@ -19,11 +19,24 @@ data class Question(
     /** 仅当返回 true 时出现（如手术细节只在选择了手术后出现）。 */
     val visibleWhen: (Map<String, String>) -> Boolean = { true },
     val validate: (String) -> Boolean = { true },
+    /** 资料输入题的两端共用编辑规则；不改变已有选项或存储键。 */
+    val inputKind: QuestionInput = if (numeric) QuestionInput.INTEGER else QuestionInput.TEXT,
+    val placeholder: String = "请输入",
+    val maxLength: Int = if (numeric) 4 else 200,
 ) {
+    fun filterInput(value: String): String = when (inputKind) {
+        QuestionInput.INTEGER -> value.filter(Char::isDigit)
+        QuestionInput.DECIMAL -> value.filter { it.isDigit() || it in "+-." }
+        QuestionInput.DATE -> value.filter { it.isDigit() || it == '-' }
+        QuestionInput.TEXT -> value
+    }.take(maxLength)
+
     companion object {
         val NONE_OPTIONS = setOf("无", "没有", "都没有", "不清楚", "都没有或不清楚", "不戴眼镜")
     }
 }
+
+enum class QuestionInput { TEXT, INTEGER, DECIMAL, DATE }
 
 
 /** 多选字段里是否包含任一指定选项。 */

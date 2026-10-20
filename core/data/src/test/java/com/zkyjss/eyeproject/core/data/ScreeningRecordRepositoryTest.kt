@@ -5,6 +5,8 @@ import com.zkyjss.eyeproject.core.data.account.AuthorizedCaller
 import com.zkyjss.eyeproject.core.data.account.Session
 import com.zkyjss.eyeproject.core.data.account.SessionStore
 import com.zkyjss.eyeproject.core.data.record.OfflineFirstScreeningRecordRepository
+import com.zkyjss.eyeproject.core.data.record.RecordExportFormat
+import android.net.Uri
 import com.zkyjss.eyeproject.core.network.NetworkResult
 import com.zkyjss.eyeproject.core.sync.ConsentType
 import com.zkyjss.eyeproject.core.sync.ErrorCodes
@@ -160,5 +162,27 @@ class ScreeningRecordRepositoryTest {
     @Test(expected = IllegalArgumentException::class)
     fun rejectsUnexpectedFileNames() = runTest {
         repository().saveRecord("../escape.json", "{}")
+    }
+
+    @Test
+    fun exportsReadableReportAndOriginalJsonWithoutChangingSourceOrUploading() = runTest {
+        val repo = OfflineFirstScreeningRecordRepository(directory, network, sessions, AuthorizedCaller(network, sessions),
+            scheduler, resolver = context.contentResolver) { 1_760_500_000_000L }
+        val name = "dryeye_1760000000000.json"
+        val json = """{"kind":"DRY_EYE","valid":true,"riskLevel":"UNCERTAIN","assessmentVersion":"archived-version",
+            "profile":{"右眼球镜":"-2.50"},"features":{"analysis_fps":10}}"""
+        repo.saveRecord(name, json)
+        val original = File(directory, name).readBytes()
+        val jsonTarget = File(directory, "export.json")
+        val textTarget = File(directory, "report.txt")
+        assertTrue(repo.exportRecord(name, Uri.fromFile(jsonTarget), RecordExportFormat.JSON))
+        assertTrue(repo.exportRecord(name, Uri.fromFile(textTarget), RecordExportFormat.TEXT))
+        assertEquals(json, jsonTarget.readText())
+        val text = textTarget.readText()
+        assertTrue(text.contains("结果不确定")); assertTrue(text.contains("archived-version")); assertTrue(text.contains("-2.50"))
+        assertTrue(text.contains("2025-10"))
+        assertTrue(original.contentEquals(File(directory, name).readBytes()))
+        assertTrue(network.uploads.isEmpty())
+        assertFalse(repo.exportRecord("../outside.json", Uri.fromFile(textTarget), RecordExportFormat.TEXT))
     }
 }

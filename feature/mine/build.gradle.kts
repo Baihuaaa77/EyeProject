@@ -7,6 +7,8 @@ plugins {
 
 android {
     namespace = "com.zkyjss.eyeproject.feature.mine"
+    testOptions.unitTests.isIncludeAndroidResources = true
+    testOptions.unitTests.all { it.systemProperty("robolectric.dependency.repo.url", "https://repo.maven.apache.org/maven2") }
 }
 
 dependencies {
@@ -26,4 +28,8 @@ dependencies {
     implementation(libs.androidx.activity.compose)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
+    testImplementation(libs.junit)
+    testImplementation("org.robolectric:robolectric:4.16.1")
+    testImplementation(libs.androidx.compose.ui.test.junit4)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
 }

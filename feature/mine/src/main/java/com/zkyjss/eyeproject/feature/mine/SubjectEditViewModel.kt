@@ -57,10 +57,8 @@ class SubjectEditViewModel @Inject constructor(
     /** 保存：出生年份等填写了就必须有效；称呼为空时用关系名代替。 */
     fun save(onDone: () -> Unit) {
         val draft = _uiState.value.draft ?: return
-        val invalid = SubjectProfiles.questions.firstOrNull { q ->
-            q.visibleWhen(draft.fields) && draft.fields[q.key].orEmpty().let { it.isNotBlank() && !q.validate(it) }
-        }
-        if (invalid != null) { _uiState.update { it.copy(error = "「${invalid.title}」填写有误") }; return }
+        val error = SubjectProfiles.validationError(draft.fields)
+        if (error != null) { _uiState.update { it.copy(error = error) }; return }
         // 隐藏的追问（如取消了手术后的手术类型）不再保存
         val visible = SubjectProfiles.questions.filter { it.visibleWhen(draft.fields) }.mapTo(HashSet()) { it.key }
         viewModelScope.launch {

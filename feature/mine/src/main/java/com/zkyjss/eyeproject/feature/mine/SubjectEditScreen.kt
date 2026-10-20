@@ -33,6 +33,7 @@ import com.zkyjss.eyeproject.core.ui.component.EyeText
 import com.zkyjss.eyeproject.core.ui.component.EyeTextField
 import com.zkyjss.eyeproject.core.ui.component.TopBackBar
 import com.zkyjss.eyeproject.feature.services.Question
+import com.zkyjss.eyeproject.feature.services.QuestionInput
 import com.zkyjss.eyeproject.feature.services.SubjectProfile
 import com.zkyjss.eyeproject.feature.services.SubjectProfiles
 
@@ -116,9 +117,13 @@ private fun ProfileQuestion(question: Question, value: String, onChange: (String
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         val options = question.options
         if (options == null) {
-            EyeTextField(value, { onChange(it.filter(Char::isDigit).take(4)) }, label = question.title,
-                placeholder = if (question.key == SubjectProfiles.BIRTH_YEAR) "如：1980" else "请输入",
-                keyboardType = if (question.numeric) KeyboardType.Number else KeyboardType.Text)
+            EyeTextField(value, { onChange(question.filterInput(it)) }, label = question.title,
+                placeholder = if (question.key == SubjectProfiles.BIRTH_YEAR) "如：1980" else question.placeholder,
+                keyboardType = when (question.inputKind) {
+                    QuestionInput.INTEGER -> KeyboardType.Number
+                    QuestionInput.DECIMAL -> KeyboardType.Text // 需要可输入正负号，部分数字键盘不提供。
+                    QuestionInput.DATE, QuestionInput.TEXT -> KeyboardType.Text
+                })
         } else {
             EyeText(question.title + if (question.multiple) "（可多选）" else "", style = typography.subtitle, color = colors.textPrimary)
             EyeChoiceList(options, value, question.multiple, onChange, question.hints, question.exclusive)

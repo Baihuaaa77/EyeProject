@@ -36,6 +36,7 @@ import com.zkyjss.eyeproject.core.ui.component.EyeSectionCard
 import com.zkyjss.eyeproject.core.ui.component.EyeSelectCard
 import com.zkyjss.eyeproject.core.ui.component.EyeText
 import com.zkyjss.eyeproject.feature.services.SubjectProfile
+import com.zkyjss.eyeproject.core.data.record.RecordExportFormat
 
 /** 「我的」页：家庭成员与资料、本机测试记录、云端同步与数据、系统权限入口、关于与免责声明（与苹果端同一顺序）。 */
 @Composable
@@ -56,7 +57,14 @@ fun MineScreen(
             Toast.makeText(context, if (ok) "已导出测试记录" else "导出失败，请换个位置再试", Toast.LENGTH_SHORT).show()
         }
     }
+    val reportExport = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
+        val file = exporting
+        if (uri != null && file != null) viewModel.exportRecord(file, uri, RecordExportFormat.TEXT) { ok ->
+            Toast.makeText(context, if (ok) "已导出文字报告" else "导出失败，请换个位置再试", Toast.LENGTH_SHORT).show()
+        }
+    }
     if (recordsOpen) LocalRecordsSheet(records, onExport = { exporting = it.fileName; recordExport.launch(it.fileName) },
+        onExportReport = { exporting = it.fileName; reportExport.launch(it.fileName.removeSuffix(".json") + "_报告.txt") },
         onDismiss = { recordsOpen = false })
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         uri?.let(viewModel::exportTo)

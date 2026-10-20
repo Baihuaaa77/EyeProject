@@ -28,6 +28,7 @@ data class ResultReport(
     val problems: List<String>,
     val sections: List<ResultSection>,
     val version: String,
+    val qualityNotes: List<String> = emptyList(),
 ) {
     val valid: Boolean get() = level != ScreeningRiskLevel.UNKNOWN
 }
@@ -93,11 +94,12 @@ object ResultReports {
                 ResultRow("视觉维持率（旧指标）", f["vmr"]?.let { decimalString(it, 2) } ?: "—"),
                 ResultRow("眨眼前 → 后 2 秒答对率", if (f["blink_recovery_before"] != null) "${pct(f["blink_recovery_before"])} → ${pct(f["blink_recovery_after"])}" else "—"),
             )))
-            add(ResultSection("数据质量", listOf(
+            if (report.intervalRows.isNotEmpty()) add(ResultSection("距上次眨眼的作答（描述性，不参与判断）", report.intervalRows))
+            add(ResultSection("数据可靠性", report.qualityRows.ifEmpty { listOf(
                 ResultRow("双眼可见的帧", pct(f["valid_frame_ratio"])),
                 ResultRow("距离在 40 cm 附近", pct(f["distance_in_range_ratio"])),
                 ResultRow("头部明显偏转", pct(f["head_turn_ratio"])),
-            )))
+            ) }))
             state.previousReport?.let { previous -> add(ResultSection("与上一次对比", listOf(
                 ResultRow("眨眼频率", "${fmt1(previous.blinkRatePerMin)} → ${fmt1(report.blinkRatePerMin)} 次/分"),
                 ResultRow("最长坚持睁眼", "${fmt1(previous.longestOpenSec)} → ${fmt1(report.longestOpenSec)} 秒"),
@@ -117,7 +119,7 @@ object ResultReports {
             title = if (state.afterRest) "休息后复测：$title" else title,
             advice = report.advice, mood = mood(level), metrics = metrics, evidence = report.evidence,
             problems = if (report.valid) emptyList() else report.validityReasons,
-            sections = sections, version = DryEyeAssessment.VERSION,
+            sections = sections, version = DryEyeAssessment.VERSION, qualityNotes = report.qualityNotes,
         )
     }
 
@@ -262,6 +264,7 @@ internal fun ResultReport.toRecordObject(): RecordObject = RecordObject().apply 
     } }))
     put("evidence", evidence.toRecordArray())
     put("problems", RecordArray(problems))
+    put("qualityNotes", RecordArray(qualityNotes))
     put("sections", RecordArray(sections.map { section -> RecordObject().apply {
         put("title", section.title)
         put("rows", RecordArray(section.rows.map { r -> RecordObject().apply { put("label", r.label); put("value", r.value) } }))

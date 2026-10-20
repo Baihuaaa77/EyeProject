@@ -25,7 +25,7 @@ data class TestSubject(val id: String, val name: String, val relation: String)
 
 /** 写入记录的「subject」对象。 */
 internal fun TestSubject.toRecordObject(): RecordObject = RecordObject().apply {
-    put("id", id); put("relation", relation)
+    put("id", id); put("relation", relation); put("name", name)
 }
 
 data class ProfileSection(val title: String, val questions: List<Question>)
@@ -89,9 +89,32 @@ object SubjectProfiles {
             Question("近期眼部用药", "最近在用眼药水吗？", listOf("没有", "人工泪液", "其他眼药水", "不清楚"), optional = true),
             Question("协助测试者", "测试时谁来帮忙？（孩子测眼位需要有人协助遮眼）", listOf("家长", "医生或护士", "自己完成", "其他"), optional = true),
         )),
+        HealthProfileFields.measurements,
+        HealthProfileFields.histories,
     )
 
     val questions: List<Question> get() = sections.flatMap { it.questions }
+
+    /** 两端共用校验；填写了才校验，新增选填项不会阻止旧资料开始测试。 */
+    fun validationError(fields: Map<String, String>): String? {
+        val invalid = questions.firstOrNull { q ->
+            q.visibleWhen(fields) && fields[q.key].orEmpty().let { it.isNotBlank() && (it.length > q.maxLength || !q.validate(it)) }
+        }
+        if (invalid != null) return "「${invalid.title}」填写有误，请按输入提示填写"
+        val start = fields["眼药水开始日期"].orEmpty()
+        val end = fields["眼药水结束日期"].orEmpty()
+        if (fields["近期眼部用药"] in setOf("人工泪液", "其他眼药水") && start.isNotBlank() && end.isNotBlank() && end < start)
+            return "眼药水结束日期不能早于开始日期"
+        return null
+    }
+
+    fun validationErrorJson(fieldsJson: String): String? = validationError(decodeFields(fieldsJson))
+
+    private fun decodeFields(text: String): Map<String, String> = runCatching {
+        (json.parseToJsonElement(text) as JsonObject).mapNotNull { (k, v) ->
+            (v as? JsonPrimitive)?.takeIf { it.isString }?.content?.let { k to it }
+        }.toMap()
+    }.getOrDefault(emptyMap())
 
     /** 各项测试开始前必须填好的项（评估规则会用到的）；其余项缺失时如实记为未填。 */
     fun requiredKeys(kind: String, fields: Map<String, String>): List<String> = buildList {
@@ -147,6 +170,7 @@ object SubjectProfiles {
             put("questions", RecordArray(section.questions.filter { it.visibleWhen(fields) }.map { q -> RecordObject().apply {
                 put("key", q.key); put("title", q.title); put("options", q.options?.let(::RecordArray))
                 put("multiple", q.multiple); put("numeric", q.numeric)
+                put("inputKind", q.inputKind.name); put("placeholder", q.placeholder); put("maxLength", q.maxLength)
                 put("hints", RecordObject(q.hints)); put("exclusive", RecordArray(q.exclusive.toList()))
                 val value = fields[q.key].orEmpty()
                 put("valid", value.isBlank() || q.validate(value))

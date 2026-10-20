@@ -11,6 +11,21 @@ struct ResultReportView: View {
         if let report = ReportModel(runtime.state["report"] as? [String: Any]) {
             VStack(spacing: 14) {
                 ResultHero(report: report)
+                // 数据无效时原因已在 ProblemCard 列出，这里只为有效结果说明可靠性
+                if report.valid && !report.qualityNotes.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("数据可靠性说明").font(EyeStyle.subtitle)
+                        Text(report.qualityNotes[0]).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
+                        if report.qualityNotes.count > 1 {
+                            DisclosureGroup("查看说明") {
+                                ForEach(Array(report.qualityNotes.dropFirst().enumerated()), id: \.offset) { _, note in
+                                    Text(note).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
+                                }
+                            }
+                        }
+                    }.padding(16).frame(maxWidth: .infinity, alignment: .leading)
+                        .background(EyeStyle.panel, in: RoundedRectangle(cornerRadius: EyeStyle.radius))
+                }
                 if !report.valid {
                     ProblemCard(problems: report.problems)
                 } else {
@@ -57,6 +72,7 @@ struct ReportModel {
 
     let level: String, badge: String, title: String, advice: String, mood: String, footnote: String, version: String
     let valid: Bool
+    let qualityNotes: [String]
     let metrics: [Metric], evidence: [Evidence], problems: [String], sections: [Section]
 
     init?(_ dict: [String: Any]?) {
@@ -66,6 +82,7 @@ struct ReportModel {
         advice = d["advice"] as? String ?? ""; mood = d["mood"] as? String ?? "HAPPY"
         footnote = d["footnote"] as? String ?? ""; version = d["version"] as? String ?? ""
         valid = d["valid"] as? Bool ?? false
+        qualityNotes = d["qualityNotes"] as? [String] ?? []
         metrics = (d["metrics"] as? [[String: Any]] ?? []).enumerated().map { i, m in
             Metric(id: i, label: m["label"] as? String ?? "", value: m["value"] as? String ?? "—", status: m["status"] as? String ?? "UNAVAILABLE")
         }

@@ -43,6 +43,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -116,6 +117,14 @@ fun DryEyeScreen(
         }
     }
     LaunchedEffect(state.phase) { if (state.phase != DryEyePhase.Profile) ensureCamera() }
+    // 视标真正画出后再回报，作答计时从此刻开始（与老视/斜视同一做法：两次帧回调后取单调钟）
+    LaunchedEffect(state.trialVisible, state.trialId) {
+        if (state.trialVisible) {
+            withFrameNanos { }
+            withFrameNanos { }
+            viewModel.markTrialPresented(state.trialId, android.os.SystemClock.elapsedRealtime())
+        }
+    }
     val distance = distanceStatus(state.distanceCm, state.faceDetected, DryEyeProtocol.TARGET_DISTANCE_CM, DryEyeProtocol.DISTANCE_TOLERANCE_CM)
     // 与共用反馈门控一致：倒计时期间同样要求固定距离，光边和语音不能缺席。
     val distanceMatters = state.phase in setOf(DryEyePhase.Setup, DryEyePhase.FormalGuide, DryEyePhase.Countdown,

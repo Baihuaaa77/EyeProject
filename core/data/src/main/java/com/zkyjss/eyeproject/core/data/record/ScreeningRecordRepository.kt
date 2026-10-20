@@ -39,6 +39,9 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -55,6 +58,9 @@ data class RecordSyncStatus(
     val lastMessage: String? = null,
 )
 
+/** 导出格式：原始 JSON（含逐题、逐帧数据）或可读的文字报告。 */
+enum class RecordExportFormat { JSON, TEXT }
+
 /**
  * 测试记录仓库（离线优先）：本机文件是事实源，保存永远先落盘；
  * 发件箱记录每条的云端状态，满足「已配置服务器 + 已登录 + 已同意」时才上传。
@@ -64,7 +70,7 @@ interface ScreeningRecordRepository {
     /** 本机保存的全部测试记录摘要，最新在前；保存新记录后自动更新。 */
     val localRecords: Flow<List<LocalRecordEntry>>
     /** 把一条本机记录（完整 JSON）写到用户选择的位置；成功返回 true。 */
-    suspend fun exportRecord(fileName: String, target: Uri): Boolean
+    suspend fun exportRecord(fileName: String, target: Uri, format: RecordExportFormat = RecordExportFormat.JSON): Boolean
     /** 写入本机记录（文件名与内容格式由 shared/screening 决定），并按条件排队上传。 */
     suspend fun saveRecord(name: String, json: String)
     /** 立即推送待上传记录；不满足同步条件时返回 null。 */
@@ -116,10 +122,18 @@ internal class OfflineFirstScreeningRecordRepository(
             .sortedByDescending { it.testedAtMs ?: 0L }
     }.flowOn(Dispatchers.IO)
 
-    override suspend fun exportRecord(fileName: String, target: Uri): Boolean = withContext(Dispatchers.IO) {
+    override suspend fun exportRecord(fileName: String, target: Uri, format: RecordExportFormat): Boolean = withContext(Dispatchers.IO) {
         if (!RECORD_NAME.matches(fileName)) return@withContext false
         runCatching {
-            val text = File(directory, fileName).readText()
+            val json = File(directory, fileName).readText()
+            val text = when (format) {
+                RecordExportFormat.JSON -> json
+                RecordExportFormat.TEXT -> {
+                    val entry = requireNotNull(LocalRecordCatalog.entry(fileName, json))
+                    val time = entry.testedAtMs?.let { SimpleDateFormat("yyyy-MM-dd HH:mm:ss Z", Locale.CHINA).format(Date(it)) } ?: "未记录"
+                    entry.reportText(time)
+                }
+            }
             resolver!!.openOutputStream(target, "wt")!!.use { it.write(text.toByteArray()) }
         }.isSuccess
     }

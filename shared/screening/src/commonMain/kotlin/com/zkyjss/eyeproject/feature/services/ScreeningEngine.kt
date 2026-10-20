@@ -658,6 +658,7 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
             riskLevel = assessment.riskLevel, riskScope = assessment.riskScope, secondsLeft = 0,
             category = assessment.category, findings = assessment.findings, limitations = assessment.limitations,
             features = assessment.features, evidence = assessment.evidence) }
+        val resultState = _state.value
         stopCamera()
         scope.launch(Dispatchers.IO) {
             runCatching {
@@ -781,6 +782,7 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
                 }
                 val history = platform.compareHistory(s, assessment)
                 _state.update { it.copy(history = history) }
+                ResultReports.screening(resultState.copy(history = history))?.let { data.put("report", it.toRecordObject()) }
                 val name = "${s.kind.name.lowercase()}_${platform.epochMs()}.json"
                 val json = data.toString()
                 lastRecordJson = json

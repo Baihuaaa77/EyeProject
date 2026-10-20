@@ -134,7 +134,9 @@ class MobileScreeningController(
         }
         return 1
     }
-    fun markPresented(trialId: Int) { if (kind != "DRY_EYE") screening.markTrialPresented(trialId,platform.nowMs()) }
+    fun markPresented(trialId: Int) {
+        if (kind == "DRY_EYE") dry.markTrialPresented(trialId,platform.nowMs()) else screening.markTrialPresented(trialId,platform.nowMs())
+    }
     fun feedbackJson(enabled: Boolean): String {
         val frame = if (kind == "DRY_EYE") screeningFeedbackFrame(dry.uiState.value) else screeningFeedbackFrame(screening.state.value, screening.coverRemainingMs())
         val events = feedbackSession.poll(frame, platform.nowMs(), enabled && !closed)

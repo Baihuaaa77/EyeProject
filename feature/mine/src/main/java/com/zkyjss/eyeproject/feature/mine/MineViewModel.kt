@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.zkyjss.eyeproject.core.data.account.AccountRepository
 import com.zkyjss.eyeproject.core.data.account.AccountResult
 import com.zkyjss.eyeproject.core.data.record.RecordSyncStatus
+import com.zkyjss.eyeproject.core.data.record.RecordExportFormat
 import com.zkyjss.eyeproject.core.data.record.ScreeningRecordRepository
 import com.zkyjss.eyeproject.core.data.subject.SubjectRepository
 import com.zkyjss.eyeproject.core.sync.ConsentType
@@ -65,8 +66,8 @@ class MineViewModel @Inject constructor(
         records.localRecords.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /** 导出一条本机记录到用户选择的位置；[done] 在主线程回报是否成功。 */
-    fun exportRecord(fileName: String, target: Uri, done: (Boolean) -> Unit) {
-        viewModelScope.launch { done(records.exportRecord(fileName, target)) }
+    fun exportRecord(fileName: String, target: Uri, format: RecordExportFormat = RecordExportFormat.JSON, done: (Boolean) -> Unit) {
+        viewModelScope.launch { done(records.exportRecord(fileName, target, format)) }
     }
 
     fun signIn(email: String, password: String) = run("已登录") { accounts.signIn(email, password) }

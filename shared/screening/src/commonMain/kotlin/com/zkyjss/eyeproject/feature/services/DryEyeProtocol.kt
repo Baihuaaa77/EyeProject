@@ -29,6 +29,8 @@ object DryEyeProtocol {
     const val REST_SECONDS = 60
     const val TRIAL_TIMEOUT_MS = 2_000L
     const val INTER_TRIAL_MS = 300L
+    /** 等界面回报「已画出」的上限；超过则以发出显示的时刻起算（不再继续等）。 */
+    const val PRESENT_WAIT_MS = 250L
     const val START_LEVEL_INDEX = 5 // 0.3
 
     /** 小数视力档位（0.1 logMAR 间隔）。下标越大视标越小。 */
@@ -94,9 +96,18 @@ data class DryEyeTrial(
     val optotypePx: Float,
     /** true 表示语音作答（反应时包含语音识别延迟）。 */
     val byVoice: Boolean = false,
+    /**
+     * 从发出显示到界面回报「已画出」的毫秒数；null 表示界面未回报（切后台、测试替身），
+     * 此时反应时与 2 秒时限从发出时刻起算。仅说明计时起点，不是屏幕发光时刻的硬件测量。
+     */
+    val presentDelayMs: Long? = null,
 ) {
     val correct: Boolean get() = answer == direction
     val timeout: Boolean get() = answer == null
+    /** 主动说「看不清 / 跳过」（作答 -1），与答错、超时分开统计。 */
+    val unsure: Boolean get() = answer == UNSURE_ANSWER
+
+    companion object { const val UNSURE_ANSWER = -1 }
 }
 
 /** 一次正式测试的原始数据（用于评估与复测对比）。 */
@@ -114,6 +125,8 @@ data class DryEyeSession(
     val afterRest: Boolean = false,
     /** 正式测试期间相机分析帧率（逐秒帧数的中位数）；null 表示未记录（旧数据或测试替身）。 */
     val analysisFps: Double? = null,
+    /** 正式阶段每约 500 ms 的距离读数；0 表示没有读数，仅用于描述采集条件。 */
+    val distanceSamplesCm: List<Float> = emptyList(),
 )
 
 data class DryEyeReport(
@@ -135,6 +148,10 @@ data class DryEyeReport(
     /** 判定依据（证据族）；结果页「判断依据」与导出记录据此展示。 */
     val evidence: List<Evidence> = emptyList(),
     val analysisFps: Double? = null,
+    val qualityNotes: List<String> = emptyList(),
+    val qualityRows: List<ResultRow> = emptyList(),
+    /** 距上次眨眼的分箱作答（描述性，不参与判断）。 */
+    val intervalRows: List<ResultRow> = emptyList(),
 )
 
 object DryEyeAssessment {
@@ -330,6 +347,8 @@ object DryEyeAssessment {
             blinkRatePerMin = blinkRate, longestOpenSec = longestOpen, vmr = vmr,
             accuracyNatural = accNatural, accuracyOpen = accOpen, meanRtMs = meanRt,
             declineSec = declineSec, features = features, evidence = evidence, analysisFps = fps,
+            qualityNotes = DryEyeReliability.notes(session, validity), qualityRows = DryEyeReliability.rows(session),
+            intervalRows = DryEyeReliability.blinkIntervalRows(session),
         )
     }
 

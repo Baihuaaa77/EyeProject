@@ -1,0 +1,186 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="3000" height="2190" viewBox="0 0 3000 2190">
+<rect width="100%" height="100%" fill="#f4f7fc"/>
+<text x="50" y="38" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="52" font-weight="700" dominant-baseline="text-before-edge">EyeProject · 眼健康助手</text>
+<text x="50" y="110" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="37" font-weight="700" dominant-baseline="text-before-edge">系统架构与模块技术栈</text>
+<text x="1970" y="55" fill="#52657e" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="28" font-weight="700" dominant-baseline="text-before-edge">代码现状  /  2026-10-20</text>
+<text x="1970" y="104" fill="#52657e" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="26" font-weight="400" dominant-baseline="text-before-edge">原生双端 · 共享评估核心 · 可选云端同步</text>
+<polyline points="1062,1470 1120,1470 1120,1685 1880,1685 1880,379 1938,379" fill="none" stroke="#2563eb" stroke-width="5" stroke-linejoin="round"/>
+<polygon points="1938,379 1924.0,372.0 1924.0,386.0" fill="#2563eb"/>
+<text x="1150" y="1645" fill="#2563eb" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="27" font-weight="700" dominant-baseline="text-before-edge">Android → REST /v1 · JSON · Bearer</text>
+<rect x="50" y="200" width="1040" height="1410" rx="25" fill="#ffffff" stroke="#d3ddeb" stroke-width="2"/>
+<rect x="74" y="226" width="8" height="48" rx="4" fill="#2563eb" stroke="#2563eb" stroke-width="2"/>
+<text x="98" y="224" fill="#2563eb" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="34" font-weight="700" dominant-baseline="text-before-edge">01  Android 前端</text>
+<text x="98" y="274" fill="#52657e" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="23" font-weight="400" dominant-baseline="text-before-edge">Kotlin 2.2.10 · Compose BOM 2026.02.01 · Hilt 2.59.2</text>
+<rect x="78" y="323" width="984" height="130" rx="14" fill="#f8faff" stroke="#dce4f0" stroke-width="2"/>
+<text x="100" y="340" fill="#2563eb" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="27" font-weight="700" dominant-baseline="text-before-edge">app  应用入口与导航</text>
+<text x="100" y="385" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">Jetpack Compose / Material 3 · Navigation Compose 2.10.0</text>
+<text x="100" y="420" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">Hilt 注入 · ViewModel + StateFlow · Coroutines 1.9.0</text>
+<polyline points="570,453 570,483" fill="none" stroke="#2563eb" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="570,483 577.0,469.0 563.0,469.0" fill="#2563eb"/>
+<rect x="78" y="483" width="480" height="170" rx="14" fill="#f8faff" stroke="#dce4f0" stroke-width="2"/>
+<text x="100" y="500" fill="#2563eb" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="27" font-weight="700" dominant-baseline="text-before-edge">feature:home  首页</text>
+<text x="100" y="545" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">Compose · HomeViewModel</text>
+<text x="100" y="580" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">品牌、休息提醒、模型测试入口</text>
+<text x="100" y="615" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">提醒调度：app / AlarmManager</text>
+<rect x="582" y="483" width="480" height="170" rx="14" fill="#f8faff" stroke="#dce4f0" stroke-width="2"/>
+<text x="604" y="500" fill="#2563eb" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="27" font-weight="700" dominant-baseline="text-before-edge">feature:services  三项自测</text>
+<text x="604" y="545" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">Compose · ViewModel · Vico 2.1.3</text>
+<text x="604" y="580" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">干眼 / 老视 / 斜视 · 报告与导出</text>
+<text x="604" y="615" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">Vosk 0.3.75 · 系统识别 / TTS</text>
+<rect x="78" y="675" width="480" height="170" rx="14" fill="#f8faff" stroke="#dce4f0" stroke-width="2"/>
+<text x="100" y="692" fill="#2563eb" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="27" font-weight="700" dominant-baseline="text-before-edge">feature:mine  我的与档案</text>
+<text x="100" y="737" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">Compose · ViewModel · Flow</text>
+<text x="100" y="772" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">家庭成员、健康资料、历史报告</text>
+<text x="100" y="807" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">登录、分项同意、云端同步</text>
+<rect x="582" y="675" width="480" height="170" rx="14" fill="#f8faff" stroke="#dce4f0" stroke-width="2"/>
+<text x="604" y="692" fill="#2563eb" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="27" font-weight="700" dominant-baseline="text-before-edge">feature:testmodel  实验页</text>
+<text x="604" y="737" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">CameraX · MediaPipe · L2CS-Net</text>
+<text x="604" y="772" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">LiteRT 2.1.1 · C++20 / JNI</text>
+<text x="604" y="807" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">CMake / NDK · 注视估计实验</text>
+<rect x="78" y="867" width="480" height="135" rx="14" fill="#fffaf0" stroke="#dce4f0" stroke-width="2"/>
+<text x="100" y="884" fill="#a66a0a" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="27" font-weight="700" dominant-baseline="text-before-edge">feature:agent  智能体占位</text>
+<text x="100" y="929" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">Compose · ViewModel / StateFlow</text>
+<text x="100" y="964" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">固定回复「开发中」· 尚未接入 LLM</text>
+<rect x="582" y="867" width="480" height="135" rx="14" fill="#f8faff" stroke="#dce4f0" stroke-width="2"/>
+<text x="604" y="884" fill="#2563eb" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="27" font-weight="700" dominant-baseline="text-before-edge">公共界面与工具</text>
+<text x="604" y="929" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">core:designsystem / ui：主题与组件</text>
+<text x="604" y="964" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">core:common：格式化等通用工具</text>
+<rect x="78" y="1024" width="480" height="170" rx="14" fill="#f8faff" stroke="#dce4f0" stroke-width="2"/>
+<text x="100" y="1041" fill="#2563eb" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="27" font-weight="700" dominant-baseline="text-before-edge">core:camera  视觉采集</text>
+<text x="100" y="1086" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">CameraX 1.4.1 · Camera2</text>
+<text x="100" y="1121" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">MediaPipe Tasks Vision 1.0.0</text>
+<text x="100" y="1156" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">Face Landmarker · 478 点 / 眼区</text>
+<rect x="582" y="1024" width="480" height="170" rx="14" fill="#f8faff" stroke="#dce4f0" stroke-width="2"/>
+<text x="604" y="1041" fill="#2563eb" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="27" font-weight="700" dominant-baseline="text-before-edge">领域接口与系统通知</text>
+<text x="604" y="1086" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">core:model / domain → shared 转发</text>
+<text x="604" y="1121" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">core:notifications：系统通知</text>
+<text x="604" y="1156" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">app：AlarmManager / Receiver</text>
+<rect x="78" y="1216" width="984" height="170" rx="14" fill="#f8faff" stroke="#dce4f0" stroke-width="2"/>
+<text x="100" y="1233" fill="#2563eb" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="27" font-weight="700" dominant-baseline="text-before-edge">core:data  离线优先仓储</text>
+<text x="100" y="1278" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">Account / Subject / ScreeningRecord Repository · Coroutines / Flow</text>
+<text x="100" y="1313" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">本机 JSON 记录、subjects.json、同步发件箱 · WorkManager 2.11.2</text>
+<text x="100" y="1348" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">SharedPreferences 保存偏好；会话使用 Android Keystore + AES-GCM</text>
+<rect x="78" y="1408" width="984" height="170" rx="14" fill="#f8faff" stroke="#dce4f0" stroke-width="2"/>
+<text x="100" y="1425" fill="#2563eb" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="27" font-weight="700" dominant-baseline="text-before-edge">core:network  HTTP 适配</text>
+<text x="100" y="1470" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">HttpURLConnection · kotlinx.serialization JSON · shared:sync DTO</text>
+<text x="100" y="1505" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">AuthorizedCaller（core:data）负责令牌刷新与 401 重试</text>
+<text x="100" y="1540" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">配置服务地址 + 登录 + 同意后同步；未配置时仍可本机测试和保存</text>
+<rect x="1150" y="200" width="700" height="810" rx="25" fill="#ffffff" stroke="#d3ddeb" stroke-width="2"/>
+<rect x="1174" y="226" width="8" height="48" rx="4" fill="#087f8c" stroke="#087f8c" stroke-width="2"/>
+<text x="1198" y="224" fill="#087f8c" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="34" font-weight="700" dominant-baseline="text-before-edge">02  跨平台共享核心</text>
+<text x="1198" y="274" fill="#52657e" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="23" font-weight="400" dominant-baseline="text-before-edge">shared/ · Kotlin Multiplatform 2.4.21</text>
+<rect x="1178" y="323" width="644" height="135" rx="14" fill="#f2faf9" stroke="#dce4f0" stroke-width="2"/>
+<text x="1200" y="340" fill="#087f8c" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="27" font-weight="700" dominant-baseline="text-before-edge">shared:model / domain</text>
+<text x="1200" y="385" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">纯 Kotlin 数据模型、眨眼、虹膜测距</text>
+<text x="1200" y="420" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">眼区光学算法、关键点几何与平台端口</text>
+<rect x="1178" y="480" width="644" height="240" rx="14" fill="#f2faf9" stroke="#dce4f0" stroke-width="2"/>
+<text x="1200" y="497" fill="#087f8c" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="27" font-weight="700" dominant-baseline="text-before-edge">shared:screening</text>
+<text x="1200" y="542" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">干眼 / 老视 / 斜视状态机与测试协议</text>
+<text x="1200" y="577" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">质量门控、规则分级、报告快照</text>
+<text x="1200" y="612" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">健康资料校验、历史记录解析、反馈事件</text>
+<text x="1200" y="647" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">Coroutines 1.9.0 · Serialization 1.9.0</text>
+<text x="1200" y="682" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">Android：JVM 包；iOS：EyeScreening</text>
+<rect x="1178" y="742" width="644" height="235" rx="14" fill="#f2faf9" stroke="#dce4f0" stroke-width="2"/>
+<text x="1200" y="759" fill="#087f8c" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="27" font-weight="700" dominant-baseline="text-before-edge">shared:sync</text>
+<text x="1200" y="804" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">v1 DTO / 错误码 / JSON 契约</text>
+<text x="1200" y="839" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">RecordSummaries · SHA-256</text>
+<text x="1200" y="874" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">RecordSyncEngine · Outbox / Remote</text>
+<text x="1200" y="909" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">Android 与 Ktor 共用；iOS 尚未导出</text>
+<text x="1200" y="944" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">这是编译依赖，不是独立网络服务</text>
+<polyline points="1090,586 1150,586" fill="none" stroke="#087f8c" stroke-width="4" stroke-linejoin="round"/>
+<polygon points="1150,586 1136.0,579.0 1136.0,593.0" fill="#087f8c"/>
+<text x="1100" y="548" fill="#087f8c" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="25" font-weight="700" dominant-baseline="text-before-edge">①</text>
+<polyline points="1910,856 1850,856" fill="none" stroke="#087f8c" stroke-width="4" stroke-linejoin="round"/>
+<polygon points="1850,856 1864.0,863.0 1864.0,849.0" fill="#087f8c"/>
+<text x="1862" y="817" fill="#087f8c" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="25" font-weight="700" dominant-baseline="text-before-edge">②</text>
+<rect x="1150" y="1100" width="700" height="510" rx="25" fill="#ffffff" stroke="#d3ddeb" stroke-width="2"/>
+<rect x="1174" y="1126" width="8" height="48" rx="4" fill="#7050b2" stroke="#7050b2" stroke-width="2"/>
+<text x="1198" y="1124" fill="#7050b2" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="34" font-weight="700" dominant-baseline="text-before-edge">03  iOS 前端</text>
+<text x="1198" y="1174" fill="#52657e" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="23" font-weight="400" dominant-baseline="text-before-edge">iosApp/ · Swift 5 配置 · iOS 16+</text>
+<rect x="1178" y="1223" width="644" height="350" rx="14" fill="#faf7ff" stroke="#dce4f0" stroke-width="2"/>
+<text x="1200" y="1240" fill="#7050b2" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="27" font-weight="700" dominant-baseline="text-before-edge">SwiftUI + 原生平台能力</text>
+<text x="1200" y="1285" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">首页 / 服务 / 我的 · 自测与家庭成员资料</text>
+<text x="1200" y="1320" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">AVFoundation · MediaPipeTasksVision 1.0.0</text>
+<text x="1200" y="1355" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">Speech / AVSpeechSynthesizer · 中文语音</text>
+<text x="1200" y="1390" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">Core Haptics · AVAudioPlayer · 交互反馈</text>
+<text x="1200" y="1425" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">UserNotifications · 休息提醒</text>
+<text x="1200" y="1460" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">FileManager / JSON · UserDefaults · 导出</text>
+<text x="1200" y="1495" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">EyeScreening.framework 调用共享规则</text>
+<text x="1200" y="1530" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">当前为本机数据链路；尚未接入云端同步</text>
+<polyline points="1500,1100 1500,1010" fill="none" stroke="#7050b2" stroke-width="4" stroke-linejoin="round"/>
+<polygon points="1500,1010 1493.0,1024.0 1507.0,1024.0" fill="#7050b2"/>
+<text x="1522" y="1030" fill="#7050b2" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="700" dominant-baseline="text-before-edge">③  静态 Framework 调用</text>
+<rect x="1910" y="200" width="1040" height="1410" rx="25" fill="#ffffff" stroke="#d3ddeb" stroke-width="2"/>
+<rect x="1934" y="226" width="8" height="48" rx="4" fill="#087f8c" stroke="#087f8c" stroke-width="2"/>
+<text x="1958" y="224" fill="#087f8c" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="34" font-weight="700" dominant-baseline="text-before-edge">04  后端服务</text>
+<text x="1958" y="274" fill="#52657e" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="23" font-weight="400" dominant-baseline="text-before-edge">backend/server · Kotlin 2.4.21 / JVM 17 · Ktor 3.6.0</text>
+<rect x="1938" y="323" width="984" height="170" rx="14" fill="#f2faf9" stroke="#dce4f0" stroke-width="2"/>
+<text x="1960" y="340" fill="#087f8c" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="27" font-weight="700" dominant-baseline="text-before-edge">Application.kt  API 入口</text>
+<text x="1960" y="385" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">Netty · Ktor Routing · ContentNegotiation / kotlinx.serialization</text>
+<text x="1960" y="420" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">REST /v1：auth / me / subjects / records</text>
+<text x="1960" y="455" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">Bearer 认证 · 限流 · 错误响应 · 请求体限制 · HTTPS 强制配置</text>
+<polyline points="2430,493 2430,523" fill="none" stroke="#087f8c" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="2430,523 2437.0,509.0 2423.0,509.0" fill="#087f8c"/>
+<rect x="1938" y="523" width="480" height="170" rx="14" fill="#f2faf9" stroke="#dce4f0" stroke-width="2"/>
+<text x="1960" y="540" fill="#087f8c" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="27" font-weight="700" dominant-baseline="text-before-edge">AuthService  账号认证</text>
+<text x="1960" y="585" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">注册、登录、登出</text>
+<text x="1960" y="620" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">不透明令牌 · 刷新轮换 / 重用检测</text>
+<text x="1960" y="655" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">PBKDF2 口令哈希</text>
+<rect x="2442" y="523" width="480" height="170" rx="14" fill="#f2faf9" stroke="#dce4f0" stroke-width="2"/>
+<text x="2464" y="540" fill="#087f8c" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="27" font-weight="700" dominant-baseline="text-before-edge">ProfileService  成员与资料</text>
+<text x="2464" y="585" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">账号 / 家庭成员 / 健康资料</text>
+<text x="2464" y="620" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">分项同意与监护人约束</text>
+<text x="2464" y="655" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">数据导出、账号注销</text>
+<rect x="1938" y="715" width="480" height="170" rx="14" fill="#f2faf9" stroke="#dce4f0" stroke-width="2"/>
+<text x="1960" y="732" fill="#087f8c" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="27" font-weight="700" dominant-baseline="text-before-edge">RecordService  测试记录</text>
+<text x="1960" y="777" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">幂等上传、列表、详情、删除</text>
+<text x="1960" y="812" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">历史与同病种对比 API</text>
+<text x="1960" y="847" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">shared:sync 摘要解析与契约</text>
+<rect x="2442" y="715" width="480" height="170" rx="14" fill="#f2faf9" stroke="#dce4f0" stroke-width="2"/>
+<text x="2464" y="732" fill="#087f8c" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="27" font-weight="700" dominant-baseline="text-before-edge">安全、审计与保留期</text>
+<text x="2464" y="777" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">Security：AES-256-GCM / AAD</text>
+<text x="2464" y="812" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">AuditLog · Logback 1.6.5</text>
+<text x="2464" y="847" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">RetentionJob · 协程定时清理</text>
+<polyline points="2430,907 2430,949" fill="none" stroke="#087f8c" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="2430,949 2437.0,935.0 2423.0,935.0" fill="#087f8c"/>
+<rect x="1938" y="949" width="984" height="170" rx="14" fill="#f2faf9" stroke="#dce4f0" stroke-width="2"/>
+<text x="1960" y="966" fill="#087f8c" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="27" font-weight="700" dominant-baseline="text-before-edge">Database.kt  数据访问</text>
+<text x="1960" y="1011" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">JDBC 参数化 SQL / 事务 · Coroutines Dispatchers.IO</text>
+<text x="1960" y="1046" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">HikariCP 7.1.0 连接池 · Flyway 13.10.0 版本迁移</text>
+<text x="1960" y="1081" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">V1：核心表结构；V2：成员健康资料</text>
+<polyline points="2430,1119 2430,1149" fill="none" stroke="#087f8c" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="2430,1149 2437.0,1135.0 2423.0,1135.0" fill="#087f8c"/>
+<rect x="1938" y="1149" width="480" height="170" rx="14" fill="#f2faf9" stroke="#dce4f0" stroke-width="2"/>
+<text x="1960" y="1166" fill="#087f8c" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="27" font-weight="700" dominant-baseline="text-before-edge">开发与测试存储</text>
+<text x="1960" y="1211" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">H2 2.5.252</text>
+<text x="1960" y="1246" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">开发：本地文件数据库</text>
+<text x="1960" y="1281" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">测试：内存库 / PostgreSQL 模式</text>
+<rect x="2442" y="1149" width="480" height="170" rx="14" fill="#f2faf9" stroke="#dce4f0" stroke-width="2"/>
+<text x="2464" y="1166" fill="#087f8c" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="27" font-weight="700" dominant-baseline="text-before-edge">生产数据库配置</text>
+<text x="2464" y="1211" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">PostgreSQL · JDBC 42.7.14</text>
+<text x="2464" y="1246" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">账号、成员、同意、记录、审计</text>
+<text x="2464" y="1281" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">健康资料 / 记录原文加密入库</text>
+<rect x="1938" y="1341" width="984" height="237" rx="14" fill="#fffaf0" stroke="#dce4f0" stroke-width="2"/>
+<text x="1960" y="1358" fill="#a66a0a" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="27" font-weight="700" dominant-baseline="text-before-edge">接口与部署边界</text>
+<text x="1960" y="1403" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">同一 Ktor 进程内按职责分层；以上 Service 并非独立微服务</text>
+<text x="1960" y="1438" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">记录历史 / 对比 API 已实现；当前 Android 网络层尚未接入这些查询</text>
+<text x="1960" y="1473" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">生产模式要求 PostgreSQL、数据密钥和审计盐等配置</text>
+<text x="1960" y="1508" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">代码与配置已核对；此图不代表生产服务已经部署</text>
+<text x="1960" y="1543" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" dominant-baseline="text-before-edge">外部托管、TLS 终止与 KMS 的实际部署未在本次验证</text>
+<rect x="50" y="1740" width="1040" height="300" rx="25" fill="#ffffff" stroke="#d3ddeb" stroke-width="2"/>
+<rect x="74" y="1766" width="8" height="48" rx="4" fill="#a66a0a" stroke="#a66a0a" stroke-width="2"/>
+<text x="98" y="1764" fill="#a66a0a" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="34" font-weight="700" dominant-baseline="text-before-edge">05  离线研究工具</text>
+<text x="98" y="1814" fill="#52657e" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="23" font-weight="400" dominant-baseline="text-before-edge">backend/screening_model.py · Python 标准库</text>
+<text x="80" y="1860" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="26" font-weight="400" dominant-baseline="text-before-edge">记录 JSON + 临床标签 CSV  →  逻辑回归训练 / 留出评估</text>
+<text x="80" y="1910" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="26" font-weight="400" dominant-baseline="text-before-edge">输出模型 JSON / 研究分数；未接入 Ktor 在线推理链路</text>
+<text x="80" y="1960" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="26" font-weight="400" dominant-baseline="text-before-edge">当前手机评估由 shared:screening 的规则与质量门控完成</text>
+<rect x="1150" y="1740" width="1800" height="300" rx="25" fill="#ffffff" stroke="#d3ddeb" stroke-width="2"/>
+<rect x="1174" y="1766" width="8" height="48" rx="4" fill="#172b46" stroke="#172b46" stroke-width="2"/>
+<text x="1198" y="1764" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="34" font-weight="700" dominant-baseline="text-before-edge">阅读说明与构建基座</text>
+<text x="1198" y="1814" fill="#52657e" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="23" font-weight="400" dominant-baseline="text-before-edge">实线：调用或处理方向；编号箭头：共享库依赖（非网络请求）</text>
+<text x="1180" y="1860" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="26" font-weight="400" dominant-baseline="text-before-edge">① Android 复用共享逻辑    ② Ktor 复用 shared:sync    ③ iOS 复用 model / domain / screening</text>
+<text x="1180" y="1910" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="26" font-weight="400" dominant-baseline="text-before-edge">Android：Gradle 9.5 / AGP 9.3.0 / KSP 2.2.10-2.0.2；iOS：XcodeGen / CocoaPods / Xcode 26.4</text>
+<text x="1180" y="1960" fill="#172b46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="26" font-weight="400" dominant-baseline="text-before-edge">范围：当前主工程与未提交改动；newpart 的 FastAPI / MySQL 属于独立参考工程，未计入主系统。</text>
+<text x="50" y="2092" fill="#52657e" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="25" font-weight="400" dominant-baseline="text-before-edge">核对依据：模块构建文件、Android / Swift 源码、Ktor 路由与 SQL 迁移；版本表示仓库声明值。</text>
+<text x="50" y="2133" fill="#52657e" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="25" font-weight="400" dominant-baseline="text-before-edge">整体结构：原生前端 → 本机共享规则与离线数据 → 按条件同步到账号与记录服务</text>
+</svg>

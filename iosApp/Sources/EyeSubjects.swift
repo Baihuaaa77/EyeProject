@@ -157,6 +157,8 @@ struct SubjectEditView: View {
 
     private func save() {
         // 填了就必须有效；隐藏的追问（如取消手术后的手术类型）不保存
+        let fieldsJson = (try? JSONSerialization.data(withJSONObject: draft.fields)).flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
+        if let message = SubjectProfiles.shared.validationErrorJson(fieldsJson: fieldsJson) { error = message; return }
         let visible = sections.flatMap { $0["questions"] as? [[String: Any]] ?? [] }
         if let bad = visible.first(where: { $0["valid"] as? Bool == false }) { error = "「\(bad["title"] as? String ?? "")」填写有误"; return }
         let keys = Set(visible.compactMap { $0["key"] as? String })
@@ -186,9 +188,23 @@ struct SubjectEditView: View {
                     }
                 }
             } else {
-                TextField(key == "出生年份" ? "如：1980" : "请输入", text: Binding(get: { draft.fields[key] ?? "" },
-                    set: { draft.fields[key] = String($0.filter(\.isNumber).prefix(4)) }))
-                    .keyboardType(.numberPad).textFieldStyle(.roundedBorder)
+                let inputKind = q["inputKind"] as? String ?? "TEXT"
+                let limit = q["maxLength"] as? Int ?? 200
+                TextField(key == "出生年份" ? "如：1980" : (q["placeholder"] as? String ?? "请输入"), text: Binding(get: { draft.fields[key] ?? "" },
+                    set: { text in
+                        let filtered = text.filter { char in
+                            switch inputKind {
+                            case "INTEGER": return char.isNumber
+                            case "DECIMAL": return char.isNumber || "+-.".contains(char)
+                            case "DATE": return char.isNumber || char == "-"
+                            default: return true
+                            }
+                        }
+                        draft.fields[key] = String(filtered.prefix(limit))
+                    }))
+                    // 度数要输入正负号、日期要输入「-」：用带符号的数字键盘
+                    .keyboardType(inputKind == "INTEGER" ? .numberPad : inputKind == "TEXT" ? .default : .numbersAndPunctuation)
+                    .textFieldStyle(.roundedBorder)
             }
         }
     }

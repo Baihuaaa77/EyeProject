@@ -97,6 +97,24 @@ internal fun ResultReportView(
     var dataOpen by rememberSaveable { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         ResultHero(report)
+        // 数据无效时原因已在 ProblemCard 列出，这里只为有效结果说明可靠性，避免同一原因出现两遍
+        if (report.valid && report.qualityNotes.isNotEmpty()) {
+            val colors = LocalEyeColors.current
+            var qualityOpen by rememberSaveable { mutableStateOf(false) }
+            Column(Modifier.fillMaxWidth().clip(EyeShapes.large).background(colors.panelBackground).padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                EyeText("数据可靠性说明", style = LocalEyeTypography.current.subtitle, color = colors.textPrimary)
+                EyeText(report.qualityNotes.first(), style = LocalEyeTypography.current.bodySecondary, color = colors.textSecondary)
+                if (report.qualityNotes.size > 1) {
+                    EyeText(if (qualityOpen) "收起说明 ▴" else "查看说明 ▾",
+                        Modifier.fillMaxWidth().heightIn(min = 44.dp).clickable(role = Role.Button) { qualityOpen = !qualityOpen },
+                        style = LocalEyeTypography.current.body, color = colors.primary)
+                    if (qualityOpen) report.qualityNotes.drop(1).forEach {
+                        EyeText(it, style = LocalEyeTypography.current.bodySecondary, color = colors.textSecondary)
+                    }
+                }
+            }
+        }
         if (!report.valid) {
             ProblemCard(report.problems)
         } else {

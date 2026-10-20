@@ -45,7 +45,8 @@ import java.util.Locale
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun LocalRecordsSheet(records: List<LocalRecordEntry>, onExport: (LocalRecordEntry) -> Unit, onDismiss: () -> Unit) {
+internal fun LocalRecordsSheet(records: List<LocalRecordEntry>, onExport: (LocalRecordEntry) -> Unit,
+    onDismiss: () -> Unit, onExportReport: (LocalRecordEntry) -> Unit = {}) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = colors.appBackground,
@@ -56,19 +57,19 @@ internal fun LocalRecordsSheet(records: List<LocalRecordEntry>, onExport: (Local
         ) {
             item {
                 EyeText("本机测试记录", style = typography.title, color = colors.textPrimary)
-                EyeText("记录只保存在这台手机上；卸载应用会一并删除。", style = typography.bodySecondary, color = colors.textSecondary)
+                EyeText("这里展示本机记录；卸载应用会删除本机副本。", style = typography.bodySecondary, color = colors.textSecondary)
             }
             if (records.isEmpty()) item {
                 EyeText("还没有测试记录", Modifier.padding(vertical = 24.dp), style = typography.body, color = colors.textSecondary)
             }
-            items(records, key = { it.fileName }) { record -> RecordRow(record) { onExport(record) } }
+            items(records, key = { it.fileName }) { record -> RecordRow(record, { onExport(record) }, { onExportReport(record) }) }
             item { Spacer(Modifier.height(28.dp)) }
         }
     }
 }
 
 @Composable
-private fun RecordRow(record: LocalRecordEntry, onExport: () -> Unit) {
+private fun RecordRow(record: LocalRecordEntry, onExport: () -> Unit, onExportReport: () -> Unit) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
     var expanded by rememberSaveable(record.fileName) { mutableStateOf(false) }
@@ -82,13 +83,34 @@ private fun RecordRow(record: LocalRecordEntry, onExport: () -> Unit) {
             Column(Modifier.weight(1f)) {
                 EyeText(record.title, style = typography.subtitle, color = colors.textPrimary)
                 EyeText(record.testedAtMs?.let(::formatTime) ?: record.fileName, style = typography.bodySecondary, color = colors.textSecondary)
+                EyeText(record.subjectLabel, style = typography.bodySecondary, color = colors.textSecondary)
             }
             EyeStatusChip(record.badge, tone(record.level))
         }
         if (expanded) {
+            if (record.advice.isNotBlank()) EyeText(record.advice, style = typography.body, color = colors.textPrimary)
             record.lines.forEach { EyeText("· $it", style = typography.bodySecondary, color = colors.textSecondary) }
-            EyeButton("导出完整记录", EyeButtonRole.SECONDARY, onExport, Modifier.fillMaxWidth())
+            if (record.qualityNotes.isNotEmpty()) RecordSection("数据可靠性说明", record.qualityNotes.map { "" to it })
+            record.sections.forEach { section -> RecordSection(section.title, section.rows.map { it.label to it.value }) }
+            EyeText("评估版本：${record.version} · 按保存时的结论展示", style = typography.bodySecondary, color = colors.textSecondary)
+            EyeButton("导出文字报告", EyeButtonRole.SECONDARY, onExportReport, Modifier.fillMaxWidth())
+            EyeButton("导出原始数据（JSON）", EyeButtonRole.SECONDARY, onExport, Modifier.fillMaxWidth())
         }
+    }
+}
+
+/** 报告明细独立展开，避免一条记录把整个列表撑满。 */
+@Composable
+private fun RecordSection(title: String, rows: List<Pair<String, String>>) {
+    var open by rememberSaveable { mutableStateOf(false) }
+    val colors = LocalEyeColors.current
+    val typography = LocalEyeTypography.current
+    Column(Modifier.fillMaxWidth().clip(EyeShapes.large).background(colors.appBackground).padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        EyeText((if (open) "▾ " else "▸ ") + title, Modifier.fillMaxWidth().heightIn(min = 44.dp).clickable(role = Role.Button) { open = !open },
+            style = typography.subtitle, color = colors.textPrimary)
+        if (open) rows.forEach { (label, value) -> EyeText(if (label.isBlank()) value else "$label：$value",
+            style = typography.bodySecondary, color = colors.textSecondary) }
     }
 }
 

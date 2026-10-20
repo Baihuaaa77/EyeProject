@@ -5,6 +5,7 @@ import com.zkyjss.eyeproject.core.model.*
 import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.random.Random
+import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
@@ -137,6 +138,14 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
             it.copy(phase = DryEyePhase.FormalGuide, naturalSeconds = naturalSeconds, afterRest = afterRest,
                 previousReport = it.report, report = null, error = null)
         }
+    }
+
+    /** 当前等待界面回报「已画出」的题号与回报通道。 */
+    private var pendingPresentation: Pair<Int, CompletableDeferred<Long>>? = null
+
+    /** 界面完成 [trialId] 题的首帧绘制后回报（安卓两次 withFrameNanos、苹果两次 CADisplayLink）；旧题号与重复回报忽略。 */
+    fun markTrialPresented(trialId: Int, timestampMs: Long) {
+        pendingPresentation?.takeIf { it.first == trialId }?.second?.complete(timestampMs)
     }
 
     /** 回答当前视标；只接受每题第一次作答。[direction] 为 -1 表示「看不清」（记为错误）。 */
@@ -310,6 +319,7 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
             completed = completed,
             afterRest = afterRest,
             analysisFps = medianFps(formalFrameTimes),
+            distanceSamplesCm = distances.map { it.cm },
         )
         lastSession = session
         val report = DryEyeAssessment.evaluate(session, _uiState.value.fields)
@@ -332,9 +342,19 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
             val deferred = CompletableDeferred<Pair<Int, Boolean>>()
             pendingAnswer = deferred
             val id = ++nextTrialId
-            val onset = platform.nowMs()
+            val presented = CompletableDeferred<Long>()
+            pendingPresentation = id to presented
+            val requestedAt = platform.nowMs()
             _uiState.update { it.copy(trialVisible = true, trialId = id, direction = direction, level = level, optotypePx = spec.sizePx) }
-            val answer = withTimeoutOrNull(DryEyeProtocol.TRIAL_TIMEOUT_MS) { deferred.await() }
+            // 界面真正画出本题后才开始计时（两端用显示刷新回调回报），渲染卡顿不再算进反应时、也不提前消耗 2 秒时限。
+            // 回报前已作答或一直没有回报时（切后台、测试替身）以发出时刻计。
+            val presentedAt = if (deferred.isCompleted) null else withTimeoutOrNull(DryEyeProtocol.PRESENT_WAIT_MS) {
+                select<Long?> { presented.onAwait { it }; deferred.onAwait { null } }
+            }
+            val onset = presentedAt?.coerceAtLeast(requestedAt) ?: requestedAt
+            val remaining = (DryEyeProtocol.TRIAL_TIMEOUT_MS - (platform.nowMs() - onset)).coerceAtLeast(0L)
+            val answer = if (deferred.isCompleted) deferred.await() else withTimeoutOrNull(remaining) { deferred.await() }
+            pendingPresentation = null
             val rt = if (answer != null) platform.nowMs() - onset else null
             val onsetSec = (onset - start) / 1000f
             val trialStage = when {
@@ -342,7 +362,8 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
                 onsetSec < naturalSeconds -> DryEyeStage.NATURAL
                 else -> DryEyeStage.OPEN
             }
-            val trial = DryEyeTrial(trialStage, onsetSec, level, direction, answer?.first, rt, distance, spec.sizePx, answer?.second == true)
+            val trial = DryEyeTrial(trialStage, onsetSec, level, direction, answer?.first, rt, distance, spec.sizePx, answer?.second == true,
+                presentDelayMs = presentedAt?.let { (it - requestedAt).coerceAtLeast(0L) })
             out += trial
             staircase.record(trial.correct, maxIndex)
             _uiState.update { it.copy(trialVisible = false, lastAnswerCorrect = trial.correct) }
@@ -442,7 +463,9 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
     }
 
     private fun save(session: DryEyeSession, report: DryEyeReport) {
-        val fields = _uiState.value.fields
+        val snapshot = _uiState.value
+        val fields = snapshot.fields
+        val savedReport = ResultReports.dryEye(snapshot)?.toRecordObject()
         val trace = earTrace.toList()
         scope.launch(Dispatchers.IO) {
             runCatching {
@@ -450,6 +473,7 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
                     put("protocolVersion", 1)
                     put("kind", "DRY_EYE")
                     put("assessmentVersion", DryEyeAssessment.VERSION)
+                    savedReport?.let { put("report", it) }
                     put("platform", platform.platformName)
                     put("displaySizeSource", platform.displaySizeSource)
                     put("distanceSource", platform.distanceSource)
@@ -457,17 +481,18 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
                     put("displayWidthPx", platform.display.widthPixels)
                     put("displayHeightPx", platform.display.heightPixels)
                     put("profile", RecordObject(fields))
-                    _uiState.value.subject?.let { put("subject", it.toRecordObject()) }
-                    put("profileSkipped", _uiState.value.profileSkipped)
+                    snapshot.subject?.let { put("subject", it.toRecordObject()) }
+                    put("profileSkipped", snapshot.profileSkipped)
                     put("naturalSeconds", session.naturalSeconds)
                     put("afterRest", session.afterRest)
                     put("completed", session.completed)
                     put("baselineDecimal", session.baselineLevel.toDouble())
-                    put("ambientLux", _uiState.value.lux?.toDouble() ?: RecordObject.NULL)
+                    put("ambientLux", snapshot.lux?.toDouble() ?: RecordObject.NULL)
                     put("screenBrightness", "测试期间窗口亮度设为最高")
                     put("riskLevel", report.riskLevel.name)
                     put("valid", report.valid)
                     put("validityReasons", RecordArray(report.validityReasons))
+                    put("distanceSamples", RecordArray(session.distanceSamplesCm.map { it.toDouble() }))
                     put("abnormal", RecordArray(report.abnormal))
                     put("evidence", report.evidence.toRecordArray())
                     put("analysisFps", report.analysisFps ?: RecordObject.NULL)
@@ -484,6 +509,7 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
                             put("answer", t.answer ?: RecordObject.NULL); put("correct", t.correct)
                             put("rtMs", t.rtMs ?: RecordObject.NULL); put("distanceCm", t.distanceCm.toDouble())
                             put("optotypePx", t.optotypePx.toDouble()); put("byVoice", t.byVoice)
+                            put("presentDelayMs", t.presentDelayMs ?: RecordObject.NULL)
                         }) }
                     })
                 }

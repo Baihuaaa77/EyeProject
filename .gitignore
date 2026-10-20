@@ -45,3 +45,6 @@ iosApp/ExportOptions.local.plist
 # Python 缓存
 __pycache__/
 *.pyc
+
+# 老师转来的同学工程（仅供对照参考，不纳入本仓库）
+/newpart/
