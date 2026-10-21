@@ -25,6 +25,29 @@ final class ScreeningBridgeTests: XCTestCase {
         }
         controller.close()
     }
+    /// 云端客户端经 iOS 框架桥接：未配置服务器时不联网；地址格式校验；状态快照可读。
+    func testCloudClientBridgeStaysOfflineUntilAServerIsSet() {
+        final class Platform: NSObject, CloudPlatform {
+            var values: [String: String] = [:]
+            func nowMs() -> Int64 { 1_760_500_000_000 }
+            func readSecret(key: String) -> String? { nil }
+            func writeSecret(key: String, value: String?) {}
+            func readValue(key: String) -> String? { values[key] }
+            func writeValue(key: String, value: String?) { values[key] = value }
+            func recordFileNames() -> [String] { [] }
+            func readRecord(fileName: String) -> String? { nil }
+            func subjectsJson() -> String { "[]" }
+            func upsertSubjectJson(json: String) {}
+            func removeSubject(id: String) {}
+        }
+        let platform = Platform()
+        let client = IosCloudClientKt.makeIosCloudClient(transport: CloudTransport(), platform: platform) {}
+        XCTAssertEqual(EyeRuntime.object(client.snapshotJson())["configured"] as? Bool, false)
+        XCTAssertFalse(client.setServer(url: "192.168.1.5:8080"), "缺少 http:// 的地址不接受")
+        XCTAssertTrue(client.setServer(url: "http://192.168.1.5:8080"))
+        XCTAssertEqual(platform.values["cloud.serverUrl"], "http://192.168.1.5:8080")
+        XCTAssertEqual(EyeRuntime.object(client.snapshotJson())["signedIn"] as? Bool, false)
+    }
     func testIOSPixelsUseTheSameRGBWeights() {
         var pixelBuffer: CVPixelBuffer?
         XCTAssertEqual(CVPixelBufferCreate(kCFAllocatorDefault, 2, 2, kCVPixelFormatType_32BGRA, nil, &pixelBuffer), kCVReturnSuccess)

@@ -8,6 +8,7 @@ enum TopLevelTab: CaseIterable { case home, services, mine
 }
 
 struct EyeRootView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @State private var tab = TopLevelTab.home
     @State private var selectedTest: String?
     var body: some View {
@@ -27,6 +28,8 @@ struct EyeRootView: View {
             .fullScreenCover(item: Binding(get: { selectedTest.map(TestSelection.init) }, set: { selectedTest = $0?.id })) { test in
                 EyeTestView(kind: test.id)
             }
+            // 回到前台时补传离线期间保存的记录与资料（未登录或未同意时不联网）
+            .onChange(of: scenePhase) { phase in if phase == .active { CloudModel.shared.client.syncNow() } }
     }
 }
 
@@ -277,7 +280,7 @@ private struct MascotHeroCard: View {
 
 // MARK: 我的
 
-/// 我的：家庭成员与资料、本机测试记录、权限与通知、关于与免责声明。云端同步尚未接入 iOS（见设计文档 P2），资料只存本机。
+/// 我的：家庭成员与资料、本机测试记录、云端同步与数据、权限与通知、关于与免责声明（与安卓同一顺序）。
 private struct MinePage: View {
     @State private var showRecords = false
     private let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
@@ -288,6 +291,7 @@ private struct MinePage: View {
             SelectCard(title: "本机测试记录", subtitle: "查看与导出保存在这台手机上的记录") {
                 Image(systemName: "doc.text").font(.system(size: 22)).foregroundStyle(EyeStyle.primary)
             } action: { showRecords = true }
+            CloudSection()
             SelectCard(title: "权限与通知", subtitle: "相机、麦克风、语音识别与通知") {
                 Image(systemName: "gearshape").font(.system(size: 22)).foregroundStyle(EyeStyle.primary)
             } action: {

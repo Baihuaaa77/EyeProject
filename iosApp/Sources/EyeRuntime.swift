@@ -45,6 +45,8 @@ final class EyeRuntime: ObservableObject {
                 "pixelsPerMm": UserDefaults.standard.float(forKey: "eye.pixelsPerMm"), "systemVersion": UIDevice.current.systemVersion]
             let data = try JSONSerialization.data(withJSONObject: record, options: [.sortedKeys])
             try data.write(to: directory.appendingPathComponent(name), options: .atomic)
+            // 登记待上传；登录并同意云端存储后自动上传
+            CloudModel.shared.recordSaved(name)
         } catch { DispatchQueue.main.async { self?.error = "保存记录失败：\(error.localizedDescription)" } }
     })
     static var recordsDirectory: URL {

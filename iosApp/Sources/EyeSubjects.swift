@@ -2,7 +2,7 @@ import SwiftUI
 import EyeScreening
 
 /// 被测者（本人与家庭成员）：原先每项测试开头的问卷合并为一份资料，在「我的」维护，测试时只选「这次测谁」。
-/// 题目、必需项与年龄换算全部来自共用 SubjectProfiles；本机以 JSON 文件保存（iOS 尚未接入云端同步）。
+/// 题目、必需项与年龄换算全部来自共用 SubjectProfiles；本机以 JSON 文件保存，登录并同意后经 CloudModel 与云端同步。
 struct SubjectProfileItem: Identifiable, Equatable {
     var id: String
     var relation: String
@@ -24,15 +24,36 @@ final class SubjectStore: ObservableObject {
 
     private init() {
         let data = (try? Data(contentsOf: file)).flatMap { try? JSONSerialization.jsonObject(with: $0) as? [[String: Any]] } ?? []
-        subjects = data.compactMap { o in
-            guard let id = o["id"] as? String else { return nil }
-            return SubjectProfileItem(id: id, relation: o["relation"] as? String ?? "OTHER", nickname: o["nickname"] as? String ?? "",
-                                      fields: o["fields"] as? [String: String] ?? [:], updatedAt: (o["updatedAt"] as? NSNumber)?.doubleValue ?? 0)
-        }
-        // 首次使用：建立空白的「本人」
+        subjects = data.compactMap(Self.item)
+        // 首次使用：建立空白的「本人」并立即保存，编号固定下来（记录与云端同步都按编号归属）
         if !subjects.contains(where: { $0.relation == "SELF" }) {
             subjects.insert(SubjectProfileItem(id: UUID().uuidString.lowercased(), relation: "SELF", nickname: "我", fields: [:], updatedAt: 0), at: 0)
+            persist()
         }
+    }
+
+    private static func item(_ o: [String: Any]) -> SubjectProfileItem? {
+        guard let id = o["id"] as? String else { return nil }
+        return SubjectProfileItem(id: id, relation: o["relation"] as? String ?? "OTHER", nickname: o["nickname"] as? String ?? "",
+                                  fields: o["fields"] as? [String: String] ?? [:], updatedAt: (o["updatedAt"] as? NSNumber)?.doubleValue ?? 0)
+    }
+
+    /// 全部成员（SubjectProfiles.toJson 同格式），供云端同步读取。
+    var jsonText: String {
+        (try? JSONSerialization.data(withJSONObject: subjects.map(\.json))).flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
+    }
+
+    /// 云端拉下来的成员：原样写入（保留云端的修改时间，不触发再次上传）。
+    func upsertFromCloud(_ json: String) {
+        guard let object = (try? JSONSerialization.jsonObject(with: Data(json.utf8))) as? [String: Any], let item = Self.item(object) else { return }
+        if let index = subjects.firstIndex(where: { $0.id == item.id }) { subjects[index] = item } else { subjects.append(item) }
+        persist()
+    }
+
+    /// 别的设备已删除的成员。
+    func removeFromCloud(_ id: String) {
+        subjects.removeAll { $0.id == id && $0.relation != "SELF" }
+        persist()
     }
 
     func save(_ item: SubjectProfileItem) {
@@ -43,11 +64,13 @@ final class SubjectStore: ObservableObject {
         }
         if let index = subjects.firstIndex(where: { $0.id == item.id }) { subjects[index] = next } else { subjects.append(next) }
         persist()
+        CloudModel.shared.subjectsChanged()
     }
 
     func delete(_ id: String) {
         subjects.removeAll { $0.id == id && $0.relation != "SELF" }
         persist()
+        CloudModel.shared.subjectsChanged()
     }
 
     private func persist() {

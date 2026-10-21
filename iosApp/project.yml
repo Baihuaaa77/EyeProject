@@ -32,6 +32,11 @@ targets:
         NSCameraUsageDescription: 用前置摄像头检测眼部关键点、眨眼和眼屏距离，完成眼健康自测。
         NSMicrophoneUsageDescription: 在测试中通过语音回答 E 的方向，减少手动操作。
         NSSpeechRecognitionUsageDescription: 将上、下、左、右等短指令转换为测试答案。
+        NSLocalNetworkUsageDescription: 局域网试用时连接你在电脑上运行的眼健康云端服务。
+        # 局域网试用的服务器是 http 地址；正式部署只用 https 域名，届时去掉 NSAllowsArbitraryLoads。
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+          NSAllowsArbitraryLoads: true
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
         ITSAppUsesNonExemptEncryption: false
