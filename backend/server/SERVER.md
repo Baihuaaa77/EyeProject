@@ -12,7 +12,7 @@ Ktor 3 API 服务：账号、家庭成员（被测者）及其健康资料、分
 
 本机若有 `E:\Android\gradle-cache\gradle.properties` 写死的旧代理端口导致下载失败，命令后加 `-Dhttp.proxyPort=<端口> -Dhttps.proxyPort=<端口>` 覆盖。
 
-iOS 连本机服务：在「我的 → 云端同步与数据 → 服务器地址」填电脑的局域网地址（如 `http://192.168.1.5:8080`），手机与电脑连同一 Wi-Fi；
+iOS 连本机服务：在「我的 → 云端同步 → 服务器地址」（已登录时先退出登录，在「数据如何处理 · 服务器设置」里修改）填电脑的局域网地址（如 `http://192.168.1.5:8080`），手机与电脑连同一 Wi-Fi；
 首次连接时允许「本地网络」权限。客户端逻辑见 `shared/sync` 的 `client/CloudClient`。
 
 安卓调试包连本机服务：在根 `local.properties` 写 `eyeproject.apiBaseUrl=http://10.0.2.2:8080`（模拟器）或局域网地址（真机），见 `core/network/NETWORK.md`。

@@ -39,10 +39,10 @@ class RecordsAndProfileTest {
             LocalRecordsSheet(listOf(entry), onExport = { exportedJson = true }, onDismiss = {}, onExportReport = { exportedText = true })
         } }
         compose.onNodeWithText("干眼自测").performClick()
-        compose.onNodeWithText("小明").assertIsDisplayed()
+        compose.onNodeWithText("小明", substring = true).assertIsDisplayed()
         capture("record-details", modal = true)
-        compose.onNodeWithText("导出文字报告").performScrollTo().performClick()
-        compose.onNodeWithText("导出原始数据（JSON）").performScrollTo().performClick()
+        compose.onNodeWithText("导出报告").performScrollTo().performClick()
+        compose.onNodeWithText("导出原始数据").performScrollTo().performClick()
         assertTrue(exportedText); assertTrue(exportedJson)
     }
 

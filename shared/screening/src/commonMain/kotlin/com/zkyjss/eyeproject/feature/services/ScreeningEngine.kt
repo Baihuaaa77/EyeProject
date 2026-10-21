@@ -582,7 +582,7 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
             }
             show(StrabismusGaze.calibrationTargets.indices.toList())
             gaze = StrabismusGaze.calibrate(gazeCalibration)
-            // 少数点没看稳（眨眼、看晚了）时只重看这几个点，而不是整轮 27 秒重来。
+            // 少数点没看稳（眨眼、看晚了）时只重看这几个点，而不是整轮约 18 秒重来。
             val retake = if (gaze == null) StrabismusGaze.pointsToRetake(gazeCalibration) else emptyList()
             if (retake.isNotEmpty()) {
                 gazeCalibration.removeAll { it.index in retake }

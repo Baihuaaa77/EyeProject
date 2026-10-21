@@ -4,7 +4,7 @@ import UniformTypeIdentifiers
 import EyeScreening
 
 /// 苹果端云端同步：规则全部在共用的 CloudClient（shared/sync），这里只实现网络、钥匙串与文件三个平台端口
-/// 和「我的 → 云端同步与数据」界面，与安卓同一套接口、同意与同步规则。
+/// 和「我的 → 云端同步」界面，与安卓同一套接口、同意与同步规则。
 final class CloudModel: ObservableObject {
     static let shared = CloudModel()
     @Published private(set) var state: [String: Any] = [:]
@@ -88,124 +88,138 @@ private final class CloudStorage: NSObject, CloudPlatform {
     func removeSubject(id: String) { SubjectStore.shared.removeFromCloud(id) }
 }
 
-/// 「我的 → 云端同步与数据」：未配置 / 未登录 / 已登录三态，文案与安卓一致；所有上传以分项同意为前提。
+//// 「云端同步」：标题右侧一个状态徽标（未配置 / 未登录 / 已开启 / 仅本机），正文只放必要的输入与开关；
+/// 数据处理说明收在「数据如何处理」里。与安卓 CloudSyncSection 同一排版与文案；所有上传以分项同意为前提。
 struct CloudSection: View {
     @ObservedObject private var cloud = CloudModel.shared
-    @State private var server = CloudModel.shared.string("serverUrl")
     @State private var email = ""
     @State private var password = ""
     @State private var agreed = false
     @State private var confirmDelete = false
+    @State private var moreOpen = false
     @State private var exportText: String?
     @State private var exporting = false
     private var busy: Bool { cloud.bool("busy") }
+    private var message: String { cloud.string("message") }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("云端同步与数据").font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text)
-            serverRow
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("云端同步").font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text)
+                Spacer()
+                chip
+            }
             if !cloud.bool("configured") {
-                note("未配置云端服务。测试记录和资料只保存在这台手机上，不会上传。")
+                note("未连接服务器，数据只保存在本机。")
+                ServerRow(cloud: cloud, busy: false)
+                if !message.isEmpty { note(message) }
             } else if !cloud.bool("signedIn") {
                 signedOut
             } else {
                 signedIn
             }
-            if !cloud.string("message").isEmpty { note(cloud.string("message")) }
         }.padding(16).frame(maxWidth: .infinity, alignment: .leading)
             .background(EyeStyle.panel, in: RoundedRectangle(cornerRadius: EyeStyle.radius))
+            .animation(.easeOut(duration: 0.2), value: cloud.bool("signedIn"))
+            // 每次操作结束：成功 / 失败各一种振动（序号递增，同一结果不重复触发），与安卓一致
+            .onChange(of: cloud.int("outcomeId")) { _ in if cloud.bool("outcomeOk") { EyeHaptics.success() } else { EyeHaptics.failure() } }
+            .onChange(of: confirmDelete) { if $0 { EyeHaptics.failure() } }
             .fileExporter(isPresented: $exporting, document: CloudExportDocument(text: exportText ?? ""), contentType: .json,
                           defaultFilename: "eyeproject-cloud-export.json") { _ in exportText = nil }
     }
 
-    /// 服务器地址：局域网试用时填电脑的地址（如 http://192.168.1.5:8080），正式部署后填 https 域名。
-    private var serverRow: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("服务器地址").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
-            HStack {
-                TextField("如 http://192.168.1.5:8080，留空表示不使用云端", text: $server)
-                    .keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled().textFieldStyle(.roundedBorder)
-                Button("保存") { _ = cloud.client.setServer(url: server) }.disabled(busy || server == cloud.string("serverUrl"))
-            }
-        }
+    private var chip: some View {
+        let (label, color): (String, Color) = !cloud.bool("configured") ? ("未配置", EyeStyle.secondary)
+            : !cloud.bool("signedIn") ? ("未登录", EyeStyle.secondary)
+            : cloud.bool("healthDataSync") ? ("已开启", EyeStyle.success) : ("仅本机", EyeStyle.secondary)
+        return HStack(spacing: 6) {
+            if busy { ProgressView().controlSize(.mini) }
+            Text(label).font(EyeStyle.chip)
+        }.foregroundStyle(color).padding(.horizontal, 10).padding(.vertical, 4).background(color.opacity(0.12), in: Capsule())
     }
 
     private var signedOut: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            note("登录后可在多台设备间保存和对比测试记录。不登录也能正常使用全部测试。")
+        VStack(alignment: .leading, spacing: 12) {
             TextField("邮箱", text: $email).keyboardType(.emailAddress).textInputAutocapitalization(.never)
                 .autocorrectionDisabled().textFieldStyle(.roundedBorder)
             SecureField("密码（至少 8 位，含字母和数字）", text: $password).textFieldStyle(.roundedBorder)
-            dataHandling
-            Toggle("我已阅读上述说明并同意隐私政策（注册时需要）", isOn: $agreed).font(EyeStyle.bodySecondary)
+            toggleRow("同意隐私政策", isOn: $agreed)
+            if !message.isEmpty { note(message) }
             HStack(spacing: 12) {
-                Button("登录") { cloud.client.signIn(email: email, password: password) }.buttonStyle(EyeButtonStyle())
+                Button("登录") { EyeHaptics.tap(); cloud.client.signIn(email: email, password: password) }.buttonStyle(EyeButtonStyle())
                     .disabled(busy || email.isEmpty || password.isEmpty)
-                Button("注册") { cloud.client.register(email: email, password: password) }.buttonStyle(EyeButtonStyle(role: .secondary))
+                Button("注册") { EyeHaptics.tap(); cloud.client.register(email: email, password: password) }.buttonStyle(EyeButtonStyle(role: .secondary))
                     .disabled(busy || !agreed || email.isEmpty || password.isEmpty)
             }
+            moreSettings(server: true)
         }
     }
 
     private var signedIn: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text(cloud.string("email")).font(EyeStyle.body)
-                Spacer()
-                Text(cloud.bool("healthDataSync") ? "同步已开启" : "仅本机").font(EyeStyle.chip)
-                    .foregroundStyle(cloud.bool("healthDataSync") ? EyeStyle.success : EyeStyle.secondary)
-            }
-            consent("同意将测试记录加密存储到云端", "HEALTH_DATA_SYNC")
-            if !cloud.bool("healthDataSync") && cloud.int("synced") > 0 {
-                note("已停止上传。之前上传的 \(cloud.int("synced")) 条记录仍在云端，可导出查看；如需删除请注销云端账号。")
-            }
-            consent("我是监护人，同意上传为未满 14 岁孩子所做的测试", "GUARDIAN")
-            consent("（可选）同意去除身份信息后用于眼健康研究", "RESEARCH_USE")
+        VStack(alignment: .leading, spacing: 12) {
+            Text(cloud.string("email")).font(EyeStyle.body).foregroundStyle(EyeStyle.text)
+            consent("云端保存测试记录与资料", "HEALTH_DATA_SYNC", "healthDataSync")
+            consent("监护人同意（未满 14 岁）", "GUARDIAN", "guardian")
+            consent("用于研究（可选，去标识）", "RESEARCH_USE", "researchUse")
             note(statusLine)
-            dataHandling
+            if !message.isEmpty { note(message) }
             HStack(spacing: 12) {
-                Button("立即同步") { cloud.client.syncNow() }.buttonStyle(EyeButtonStyle()).disabled(busy || !cloud.bool("healthDataSync"))
-                Button("导出云端数据") {
+                Button("立即同步") { EyeHaptics.tap(); cloud.client.syncNow(userInitiated: true) }.buttonStyle(EyeButtonStyle())
+                    .disabled(busy || !cloud.bool("healthDataSync"))
+                Button("导出数据") {
+                    EyeHaptics.tap()
                     cloud.client.exportCloudData { text in
                         DispatchQueue.main.async { if let text { exportText = text; exporting = true } }
                     }
                 }.buttonStyle(EyeButtonStyle(role: .secondary)).disabled(busy)
             }
             HStack(spacing: 12) {
-                Button("退出登录") { cloud.client.signOut() }.buttonStyle(EyeButtonStyle(role: .secondary)).disabled(busy)
-                Button(confirmDelete ? "确认删除" : "注销云端账号") {
+                Button("退出登录") { EyeHaptics.tap(); cloud.client.signOut() }.buttonStyle(EyeButtonStyle(role: .secondary)).disabled(busy)
+                Button(confirmDelete ? "确认注销" : "注销账号") {
                     if confirmDelete { confirmDelete = false; cloud.client.deleteCloudAccount() } else { confirmDelete = true }
                 }.buttonStyle(EyeButtonStyle(role: .danger)).disabled(busy)
             }
-            if confirmDelete { note("将永久删除云端账号、家庭成员和全部已上传记录，无法恢复。本机记录不受影响。再点一次「确认删除」继续。") }
+            if confirmDelete { note("将永久删除云端账号与全部已上传数据，本机记录保留。") }
+            moreSettings(server: false)
         }
     }
+
+    /// 收起的次要内容：数据如何处理、服务器地址（未登录时可改）。
+    @ViewBuilder private func moreSettings(server: Bool) -> some View {
+        Button { EyeHaptics.tap(); withAnimation(.easeOut(duration: 0.2)) { moreOpen.toggle() } } label: {
+            Text(moreOpen ? "收起 ▴" : server ? "数据如何处理 · 服务器设置 ▾" : "数据如何处理 ▾").font(EyeStyle.body).foregroundStyle(EyeStyle.primary)
+                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).contentShape(Rectangle())
+        }.buttonStyle(.plain)
+        if moreOpen {
+            ForEach(Self.dataHandling, id: \.self) { note("· " + $0) }
+            if server { ServerRow(cloud: cloud, busy: busy) }
+        }
+    }
+
+    /// 数据处理要点（两端同一文案）；正式隐私政策文本待法务提供后替换。
+    static let dataHandling = [
+        "上传测试记录与成员资料，不收集身份证号、照片或视频。",
+        "传输加密，云端以独立密钥加密保存，查看、导出、删除都有审计记录。",
+        "可随时关闭上传、导出全部云端数据，或注销账号删除云端数据；本机记录始终保留。",
+        "未满 14 岁孩子的数据需监护人同意才上传；研究用途需单独同意。",
+    ]
 
     private var statusLine: String {
         var parts = ["已上传 \(cloud.int("synced")) 条"]
         if cloud.int("pending") > 0 { parts.append("待上传 \(cloud.int("pending")) 条") }
-        if cloud.int("awaitingGuardian") > 0 { parts.append("\(cloud.int("awaitingGuardian")) 项待监护人同意") }
+        if cloud.int("awaitingGuardian") > 0 { parts.append("\(cloud.int("awaitingGuardian")) 条待监护人同意") }
         if cloud.int("failed") > 0 { parts.append("\(cloud.int("failed")) 条未能上传") }
         if busy { parts.append("正在同步…") }
         return parts.joined(separator: " · ")
     }
 
-    private func consent(_ title: String, _ type: String) -> some View {
-        Toggle(title, isOn: Binding(get: { cloud.bool(type == "HEALTH_DATA_SYNC" ? "healthDataSync" : type == "GUARDIAN" ? "guardian" : "researchUse") },
-                                    set: { cloud.client.setConsent(type: type, granted: $0) }))
-            .font(EyeStyle.bodySecondary).disabled(busy)
+    private func consent(_ title: String, _ type: String, _ key: String) -> some View {
+        toggleRow(title, isOn: Binding(get: { cloud.bool(key) }, set: { cloud.client.setConsent(type: type, granted: $0) })).disabled(busy)
     }
 
-    private var dataHandling: some View {
-        DisclosureGroup("数据如何处理") {
-            VStack(alignment: .leading, spacing: 6) {
-                ForEach(["上传内容：测试记录（含问卷回答、逐题作答和眼动数据）与成员资料。不收集身份证号、照片或视频。",
-                         "保护方式：传输加密（正式部署使用 HTTPS），云端以独立密钥加密保存；所有查看、导出、删除操作留有审计记录。",
-                         "你的权利：可随时关闭上传、导出全部云端数据，或注销账号立即删除全部云端数据。本机记录始终保留。",
-                         "儿童：为未满 14 岁孩子所做的测试与资料，需监护人单独同意后才会上传。",
-                         "结果性质：测试与评估仅为初筛参考，不能替代眼科诊断。"], id: \.self) { note($0) }
-            }
-        }.font(EyeStyle.bodySecondary)
+    private func toggleRow(_ title: String, isOn: Binding<Bool>) -> some View {
+        Toggle(title, isOn: Binding(get: { isOn.wrappedValue }, set: { EyeHaptics.toggle(); isOn.wrappedValue = $0 }))
+            .font(EyeStyle.body).foregroundStyle(EyeStyle.text).tint(EyeStyle.primary).frame(minHeight: 48)
     }
 
     private func note(_ text: String) -> some View {
@@ -213,7 +227,23 @@ struct CloudSection: View {
     }
 }
 
-/// 云端导出经系统文件选择器保存。
+/// 服务器地址：局域网试用填电脑地址（如 http://192.168.1.5:8080），正式部署填 https 域名。
+private struct ServerRow: View {
+    @ObservedObject var cloud: CloudModel
+    let busy: Bool
+    @State private var text = CloudModel.shared.string("serverUrl")
+    var body: some View {
+        HStack(spacing: 8) {
+            TextField("服务器地址，如 http://192.168.1.5:8080", text: $text)
+                .keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled().textFieldStyle(.roundedBorder)
+            Button("保存") { EyeHaptics.tap(); _ = cloud.client.setServer(url: text) }
+                .font(EyeStyle.button).foregroundStyle(EyeStyle.primary).frame(minWidth: 56, minHeight: 44)
+                .disabled(busy || text.trimmingCharacters(in: .whitespaces) == cloud.string("serverUrl"))
+        }
+    }
+}
+
+// 云端导出经系统文件选择器保存。
 private struct CloudExportDocument: FileDocument {
     static var readableContentTypes: [UTType] { [.json] }
     var text: String

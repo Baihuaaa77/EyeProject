@@ -35,10 +35,12 @@ import com.zkyjss.eyeproject.core.ui.component.EyeBrandLockup
 import com.zkyjss.eyeproject.core.ui.component.EyeSectionCard
 import com.zkyjss.eyeproject.core.ui.component.EyeSelectCard
 import com.zkyjss.eyeproject.core.ui.component.EyeText
+import com.zkyjss.eyeproject.core.ui.component.rememberEyeHaptics
+import androidx.compose.runtime.LaunchedEffect
 import com.zkyjss.eyeproject.feature.services.SubjectProfile
 import com.zkyjss.eyeproject.core.data.record.RecordExportFormat
 
-/** 「我的」页：家庭成员与资料、本机测试记录、云端同步与数据、系统权限入口、关于与免责声明（与苹果端同一顺序）。 */
+/** 「我的」页：家庭成员、测试记录、云端同步、权限与通知、关于（与苹果端同一顺序与文案）。 */
 @Composable
 fun MineScreen(
     onEditSubject: (String?) -> Unit,
@@ -49,17 +51,24 @@ fun MineScreen(
     val cloudState by viewModel.cloudState.collectAsStateWithLifecycle()
     val records by viewModel.localRecords.collectAsStateWithLifecycle()
     val subjects by viewModel.subjects.collectAsStateWithLifecycle()
+    val serverUrl by viewModel.serverUrl.collectAsStateWithLifecycle()
+    val outcome by viewModel.outcome.collectAsStateWithLifecycle()
+    val haptics = rememberEyeHaptics()
+    // 登录、同意、同步等操作完成：成功轻确认、失败短促提醒（与苹果端一致）
+    LaunchedEffect(outcome?.id) { outcome?.let { if (it.success) haptics.success() else haptics.failure() } }
     var recordsOpen by rememberSaveable { mutableStateOf(false) }
     var exporting by rememberSaveable { mutableStateOf<String?>(null) }
     val recordExport = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         val file = exporting
         if (uri != null && file != null) viewModel.exportRecord(file, uri) { ok ->
+            if (ok) haptics.success() else haptics.failure()
             Toast.makeText(context, if (ok) "已导出测试记录" else "导出失败，请换个位置再试", Toast.LENGTH_SHORT).show()
         }
     }
     val reportExport = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
         val file = exporting
         if (uri != null && file != null) viewModel.exportRecord(file, uri, RecordExportFormat.TEXT) { ok ->
+            if (ok) haptics.success() else haptics.failure()
             Toast.makeText(context, if (ok) "已导出文字报告" else "导出失败，请换个位置再试", Toast.LENGTH_SHORT).show()
         }
     }
@@ -84,12 +93,16 @@ fun MineScreen(
             syncNow = viewModel::syncNow,
             export = { exportLauncher.launch("eyeproject-cloud-export.json") },
             deleteCloudAccount = viewModel::deleteCloudAccount,
+            setServer = viewModel::setServer,
         ),
+        serverUrl = serverUrl,
+        recordCount = records.size,
         modifier = modifier,
         subjects = subjects,
         onEditSubject = onEditSubject,
-        onOpenRecords = { recordsOpen = true },
+        onOpenRecords = { haptics.tap(); recordsOpen = true },
         onOpenAppSettings = {
+            haptics.tap()
             context.startActivity(
                 Intent(
                     Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
@@ -108,9 +121,11 @@ internal fun MineContent(
     onOpenRecords: () -> Unit = {},
     subjects: List<SubjectProfile> = emptyList(),
     onEditSubject: (String?) -> Unit = {},
-    cloudState: CloudSyncUiState = CloudSyncUiState.NotConfigured,
+    cloudState: CloudSyncUiState = CloudSyncUiState.NotConfigured(),
     cloudActions: CloudSyncActions = CloudSyncActions(),
     modifier: Modifier = Modifier,
+    serverUrl: String = "",
+    recordCount: Int = 0,
 ) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
@@ -127,24 +142,17 @@ internal fun MineContent(
 
         SubjectsSection(subjects, onEditSubject)
 
-        EyeSelectCard(content = "本机测试记录", subtitle = "查看与导出保存在这台手机上的记录", onClick = onOpenRecords)
+        EyeSelectCard(content = "测试记录", subtitle = if (recordCount == 0) "暂无记录" else "共 $recordCount 条", onClick = onOpenRecords)
 
-        CloudSyncSection(cloudState, cloudActions)
+        CloudSyncSection(cloudState, cloudActions, serverUrl)
 
         EyeSelectCard(content = "权限与通知", onClick = onOpenAppSettings)
 
-        EyeSectionCard(title = "关于") {
+        EyeSectionCard {
             EyeBrandLockup()
             Spacer(Modifier.height(12.dp))
-            if (versionName.isNotEmpty()) {
-                EyeText("版本 $versionName", style = typography.bodySecondary, color = colors.textSecondary)
-                Spacer(Modifier.height(4.dp))
-            }
-            EyeText(
-                "本应用的评估与自测结果仅供日常用眼参考，不能替代专业眼科检查。如有眼部不适，请及时就医。",
-                style = typography.bodySecondary,
-                color = colors.textSecondary
-            )
+            EyeText(listOfNotNull(versionName.takeIf { it.isNotEmpty() }?.let { "版本 $it" }, "结果仅供参考，不能替代眼科检查")
+                .joinToString(" · "), style = typography.bodySecondary, color = colors.textSecondary)
         }
         Spacer(Modifier.height(24.dp))
     }

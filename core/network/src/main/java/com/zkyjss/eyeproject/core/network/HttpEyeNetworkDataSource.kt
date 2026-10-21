@@ -27,13 +27,14 @@ import javax.inject.Singleton
 
 /** 基于 HttpURLConnection 的实现：接口少、无需额外网络库。请求体与令牌不写日志。 */
 @Singleton
-class HttpEyeNetworkDataSource internal constructor(private val baseUrl: String) : EyeNetworkDataSource {
-    @Inject constructor() : this(BuildConfig.API_BASE_URL)
+class HttpEyeNetworkDataSource internal constructor(private val baseUrl: () -> String) : EyeNetworkDataSource {
+    @Inject constructor(addresses: ServerAddressStore) : this({ addresses.address.value })
+    internal constructor(baseUrl: String) : this({ baseUrl })
 
     private val json = SyncContract.json
-    private val api = baseUrl.trimEnd('/') + SyncContract.API_PREFIX
+    private val api: String get() = baseUrl().trimEnd('/') + SyncContract.API_PREFIX
 
-    override val isConfigured: Boolean get() = baseUrl.isNotBlank()
+    override val isConfigured: Boolean get() = baseUrl().isNotBlank()
 
     override suspend fun register(request: RegisterRequest) =
         call("POST", "/auth/register", null, encode(request), serializer<TokenResponse>())

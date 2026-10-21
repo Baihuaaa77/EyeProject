@@ -16,7 +16,9 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -24,8 +26,8 @@ import javax.inject.Inject
 /** 「云端同步与数据」区的界面状态。 */
 sealed interface CloudSyncUiState {
     data object Loading : CloudSyncUiState
-    /** 本构建未配置服务器：数据只在本机。 */
-    data object NotConfigured : CloudSyncUiState
+    /** 未设置服务器地址：数据只在本机；[message] 为地址填写有误等提示。 */
+    data class NotConfigured(val message: String? = null) : CloudSyncUiState
     data class SignedOut(val busy: Boolean, val message: String?) : CloudSyncUiState
     data class SignedIn(
         val email: String,
@@ -46,11 +48,21 @@ class MineViewModel @Inject constructor(
 ) : ViewModel() {
     private val busy = MutableStateFlow(false)
     private val message = MutableStateFlow<String?>(null)
+    private val _outcome = MutableStateFlow<ActionOutcome?>(null)
+    /** 最近一次操作的结果（界面据此给成功 / 失败振动）；id 递增，同一结果不重复触发。 */
+    val outcome: StateFlow<ActionOutcome?> = _outcome.asStateFlow()
+
+    /** 当前服务器地址；空表示未配置。 */
+    val serverUrl: StateFlow<String> = accounts.accountState.map { it.serverUrl }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "")
+
+    /** 设置服务器地址（换地址会退出登录）。 */
+    fun setServer(url: String) = run("已保存服务器地址") { accounts.setServerAddress(url) }
 
     val cloudState: StateFlow<CloudSyncUiState> =
         combine(accounts.accountState, records.syncStatus, busy, message) { account, status, working, note ->
             when {
-                !account.cloudConfigured -> CloudSyncUiState.NotConfigured
+                !account.cloudConfigured -> CloudSyncUiState.NotConfigured(note)
                 account.email == null -> CloudSyncUiState.SignedOut(working, note)
                 else -> CloudSyncUiState.SignedIn(account.email!!, account.healthDataSync, account.guardian,
                     account.researchUse, status, working || status.syncing, note ?: status.lastMessage)
@@ -93,11 +105,16 @@ class MineViewModel @Inject constructor(
         viewModelScope.launch {
             busy.value = true
             message.value = null
-            message.value = when (val result = action()) {
+            val result = action()
+            message.value = when (result) {
                 AccountResult.Success -> success
                 is AccountResult.Failure -> result.message
             }
+            _outcome.value = ActionOutcome((_outcome.value?.id ?: 0) + 1, result is AccountResult.Success)
             busy.value = false
         }
     }
 }
+
+/** 一次操作的结果：[id] 区分先后两次相同的结果。 */
+data class ActionOutcome(val id: Int, val success: Boolean)

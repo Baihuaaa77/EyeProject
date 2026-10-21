@@ -29,7 +29,7 @@ struct EyeRootView: View {
                 EyeTestView(kind: test.id)
             }
             // 回到前台时补传离线期间保存的记录与资料（未登录或未同意时不联网）
-            .onChange(of: scenePhase) { phase in if phase == .active { CloudModel.shared.client.syncNow() } }
+            .onChange(of: scenePhase) { phase in if phase == .active { CloudModel.shared.client.syncNow(userInitiated: false) } }
     }
 }
 
@@ -280,24 +280,26 @@ private struct MascotHeroCard: View {
 
 // MARK: 我的
 
-/// 我的：家庭成员与资料、本机测试记录、云端同步与数据、权限与通知、关于与免责声明（与安卓同一顺序）。
+//// 我的：家庭成员、测试记录、云端同步、权限与通知、关于与免责声明（与安卓同一顺序与文案）。
 private struct MinePage: View {
     @State private var showRecords = false
+    @State private var recordCount = 0
     private let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
     var body: some View {
         PageScroll {
             Text("我的").font(EyeStyle.headline).foregroundStyle(EyeStyle.text).padding(.vertical, 16)
             SubjectsSection()
-            SelectCard(title: "本机测试记录", subtitle: "查看与导出保存在这台手机上的记录") {
+            SelectCard(title: "测试记录", subtitle: recordCount == 0 ? "暂无记录" : "共 \(recordCount) 条") {
                 Image(systemName: "doc.text").font(.system(size: 22)).foregroundStyle(EyeStyle.primary)
-            } action: { showRecords = true }
+            } action: { EyeHaptics.tap(); showRecords = true }
             CloudSection()
-            SelectCard(title: "权限与通知", subtitle: "相机、麦克风、语音识别与通知") {
+            SelectCard(title: "权限与通知") {
                 Image(systemName: "gearshape").font(.system(size: 22)).foregroundStyle(EyeStyle.primary)
             } action: {
+                EyeHaptics.tap()
                 if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
             }
-            SectionCard(title: "关于") {
+            SectionCard {
                 HStack(spacing: 12) {
                     BrandMarkView().frame(width: 44, height: 44)
                     VStack(alignment: .leading, spacing: 2) {
@@ -305,10 +307,15 @@ private struct MinePage: View {
                         Text("守护每一次注视").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
                     }
                 }.padding(.bottom, 4)
-                if !version.isEmpty { Text("版本 \(version)").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary) }
-                Text("本应用的评估与自测结果仅供日常用眼参考，不能替代专业眼科检查。如有眼部不适，请及时就医。")
+                Text(((version.isEmpty ? [] : ["版本 \(version)"]) + ["结果仅供参考，不能替代眼科检查"]).joined(separator: " · "))
                     .font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
             }
-        }.sheet(isPresented: $showRecords) { RecordsView() }
+        }.sheet(isPresented: $showRecords, onDismiss: recount) { RecordsView() }
+            .onAppear(perform: recount)
+    }
+
+    private func recount() {
+        recordCount = ((try? FileManager.default.contentsOfDirectory(atPath: EyeRuntime.recordsDirectory.path)) ?? [])
+            .filter { $0.hasSuffix(".json") }.count
     }
 }

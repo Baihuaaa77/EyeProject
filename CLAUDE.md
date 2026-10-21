@@ -42,7 +42,7 @@ feature/
   home/         首页：品牌、休息提醒、模型测试入口
   services/     干眼/老视/斜视自检
   testmodel/    实验页：主导航 + gaze/（FaceDetector + LiteRT L2CS-Net 注视估计）+ blink/（FaceLandmarker EAR 眨眼检测）
-  mine/         「我的」：云端同步与数据（登录、分项同意、导出、注销）
+  mine/         「我的」：家庭成员资料、测试记录、云端同步（登录、分项同意、导出、注销）
   agent/        占位页
 shared/sync/    KMP 同步契约 + 记录摘要 + 同步引擎（安卓与服务端共用）
 backend/server/ Ktor 服务端（见其 SERVER.md）；backend/screening_model.py 为离线训练脚本

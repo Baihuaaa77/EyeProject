@@ -30,7 +30,7 @@ class StrabismusGaze private constructor(private val left: Mapping?, private val
         /**
          * 画布内 3×3 网格，四周仅留 8% 边距，覆盖追踪任务的整个显示范围；
          * 从中心开始按顺时针走相邻点，视线每次移动距离短、容易找到新点。
-         * 约 27 秒，每点先等待 1.2 秒，再采样 1.8 秒。
+         * 约 18 秒，每点先等待 0.8 秒让视线落定，再采样 1.2 秒（30 帧/秒下约 36 帧，远多于每点至少 4 帧的要求）。
          */
         val calibrationTargets = listOf(
             GazePoint(0.5f, 0.5f),
@@ -38,12 +38,12 @@ class StrabismusGaze private constructor(private val left: Mapping?, private val
             GazePoint(0.92f, 0.5f), GazePoint(0.92f, 0.92f), GazePoint(0.5f, 0.92f),
             GazePoint(0.08f, 0.92f), GazePoint(0.08f, 0.5f),
         )
-        const val CALIBRATION_POINT_MS = 3_000L
-        const val SETTLE_MS = 1_200L
-        /** 每点需累计的有效采样时长（正常情况下 3 秒 − 1.2 秒稳定期）。 */
+        const val CALIBRATION_POINT_MS = 2_000L
+        const val SETTLE_MS = 800L
+        /** 每点需累计的有效采样时长（正常情况下 2 秒 − 0.8 秒稳定期）。 */
         const val SAMPLE_MS = CALIBRATION_POINT_MS - SETTLE_MS
         /** 异常导致采样不足时，每点最长等待时间；超过后换点，由补测或整体重试处理。 */
-        const val CALIBRATION_POINT_MAX_MS = 8_000L
+        const val CALIBRATION_POINT_MAX_MS = 6_000L
         /** 异常恢复后的重新稳定时间（视线回到圆点）。 */
         const val RESETTLE_MS = 600L
         /** 相邻有效帧间隔超过此值不计入累计采样时长（丢帧期间不算看过）。 */

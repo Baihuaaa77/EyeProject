@@ -68,8 +68,8 @@ class SharedParityTest {
         val estimate = mapping.estimate(GazePoint(0f,0f),null)
         assertTrue(StrabismusGaze.onTarget(estimate.first,GazePoint(0.5f,0.5f)))
         assertNull(estimate.second)
-        assertEquals(3_000L,StrabismusGaze.CALIBRATION_POINT_MS)
-        assertEquals(1_200L,StrabismusGaze.SETTLE_MS)
+        assertEquals(2_000L,StrabismusGaze.CALIBRATION_POINT_MS)
+        assertEquals(800L,StrabismusGaze.SETTLE_MS)
     }
     @Test fun opticalPixelsAreProcessedByTheSameAlgorithm() {
         val image = object : GrayImage {

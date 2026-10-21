@@ -79,6 +79,11 @@ class CloudClient(
     private var syncing = false
     private var message: String? = null
     private var lastSyncAt: Long? = null
+    /** 最近一次用户操作的结果（界面据此给成功 / 失败振动）；序号递增，同一结果不重复触发。 */
+    private var outcomeId = 0
+    private var outcomeOk = false
+    /** 用户点了「立即同步」：本轮同步结束后报告结果。 */
+    private var reportSync = false
 
     /** 服务器地址（如 `http://192.168.1.5:8080`）；为空表示未配置，任何数据都不离开手机。 */
     var serverUrl: String = platform.readValue(KEY_SERVER).orEmpty()
@@ -97,11 +102,12 @@ class CloudClient(
     fun setServer(url: String): Boolean {
         val trimmed = url.trim().trimEnd('/')
         if (trimmed.isNotEmpty() && !Regex("^https?://[^\\s/]+(:\\d+)?$").matches(trimmed)) {
-            message = "地址格式应为 http://IP:端口 或 https://域名"; onChange(); return false
+            message = "地址格式应为 http://IP:端口 或 https://域名"; outcome(false); onChange(); return false
         }
         if (trimmed != serverUrl) { session = null; message = null }
         serverUrl = trimmed
         platform.writeValue(KEY_SERVER, trimmed.ifEmpty { null })
+        outcome(true)
         onChange()
         return true
     }
@@ -135,8 +141,12 @@ class CloudClient(
         }
     }
 
-    /** 立即同步成员资料与测试记录。 */
-    fun syncNow() = launchSync()
+    /** 立即同步成员资料与测试记录；[userInitiated] 为用户点按（结束后给出结果），回到前台的自动补传为 false。 */
+    fun syncNow(userInitiated: Boolean) {
+        if (userInitiated && !canSync()) { message = "请先同意云端存储"; outcome(false); onChange(); return }
+        if (userInitiated) reportSync = true
+        launchSync()
+    }
 
     /** 新记录已保存到本机：登记到发件箱并在满足条件时上传。 */
     fun recordSaved(fileName: String) {
@@ -157,8 +167,8 @@ class CloudClient(
         track(scope.launch {
             busy = true; onChange()
             when (val result = authorized { api.exportAll(it) }) {
-                is ApiResult.Ok -> { message = "已导出云端数据"; done(result.value) }
-                else -> { message = describe(result); done(null) }
+                is ApiResult.Ok -> { message = "已导出云端数据"; outcome(true); done(result.value) }
+                else -> { message = describe(result); outcome(false); done(null) }
             }
             busy = false; onChange()
         })
@@ -192,6 +202,8 @@ class CloudClient(
             put("busy", busy || syncing)
             put("message", message)
             put("lastSyncAt", lastSyncAt)
+            put("outcomeId", outcomeId)
+            put("outcomeOk", outcomeOk)
         }.toString()
     }
 
@@ -210,9 +222,12 @@ class CloudClient(
             busy = true; message = null; onChange()
             val failure = block()
             message = failure ?: success
+            outcome(failure == null)
             busy = false; onChange()
         })
     }
+
+    private fun outcome(ok: Boolean) { outcomeId++; outcomeOk = ok }
 
     private fun canSync() = api.configured && session?.consents?.get(ConsentType.HEALTH_DATA_SYNC) == true
 
@@ -224,7 +239,9 @@ class CloudClient(
         if (!canSync()) return
         if (syncJob?.isActive == true) { resyncRequested = true; return }
         syncJob = scope.launch {
-            do { resyncRequested = false; sync() } while (resyncRequested && canSync())
+            var ok: Boolean
+            do { resyncRequested = false; ok = sync() } while (resyncRequested && canSync())
+            if (reportSync) { reportSync = false; outcome(ok); onChange() }
         }.also(::track)
     }
 

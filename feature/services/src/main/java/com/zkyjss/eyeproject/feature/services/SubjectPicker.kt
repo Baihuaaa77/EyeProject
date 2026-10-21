@@ -23,7 +23,7 @@ import com.zkyjss.eyeproject.core.ui.component.EyeOptionRow
 import com.zkyjss.eyeproject.core.ui.component.EyeText
 
 /**
- * 测试开始页「这次测谁？」：替代原先的逐题问卷。资料在「我的 → 家庭成员与资料」维护；
+ * 测试开始页「这次测谁？」：替代原先的逐题问卷。资料在「我的 → 家庭成员」维护；
  * 缺少本测试必需项的成员点开即去补充，补好返回本页即可开始。与苹果端一致。
  */
 @Composable
@@ -43,7 +43,7 @@ internal fun SubjectPicker(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         EyeText(if (kind == "STRABISMUS") "这次给谁测？" else "这次测谁？", style = typography.title, color = colors.textPrimary)
-        EyeText("资料在「我的 → 家庭成员与资料」中填写和修改，测试时自动带入。", style = typography.bodySecondary, color = colors.textSecondary)
+        EyeText("资料在「我的 → 家庭成员」中填写，测试时自动带入。", style = typography.bodySecondary, color = colors.textSecondary)
         subjects.forEach { s ->
             val missing = SubjectProfiles.missing(kind, s, nowMs)
             val name = s.nickname.ifBlank { SubjectProfiles.relationLabel(s.relation) }

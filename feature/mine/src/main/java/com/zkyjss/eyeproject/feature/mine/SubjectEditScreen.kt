@@ -32,6 +32,8 @@ import com.zkyjss.eyeproject.core.ui.component.EyeSectionCard
 import com.zkyjss.eyeproject.core.ui.component.EyeText
 import com.zkyjss.eyeproject.core.ui.component.EyeTextField
 import com.zkyjss.eyeproject.core.ui.component.TopBackBar
+import com.zkyjss.eyeproject.core.ui.component.rememberEyeHaptics
+import androidx.compose.runtime.LaunchedEffect
 import com.zkyjss.eyeproject.feature.services.Question
 import com.zkyjss.eyeproject.feature.services.QuestionInput
 import com.zkyjss.eyeproject.feature.services.SubjectProfile
@@ -67,14 +69,14 @@ internal fun SubjectEditContent(
     val typography = LocalEyeTypography.current
     val self = draft.relation == "SELF"
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
+    val haptics = rememberEyeHaptics()
+    LaunchedEffect(error) { if (error != null) haptics.failure() }
     Column(Modifier.fillMaxSize().background(colors.appBackground).padding(top = getTopStatusBarPadding())) {
         TopBackBar(title = if (isNew) "添加家庭成员" else "${draft.nickname.ifBlank { "成员" }}的资料", onBackClick = onBack)
         Column(
             Modifier.weight(1f).verticalScroll(rememberScrollState()).screenHorizontalPaddingLarge(),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            EyeText("测试时只需选择成员，不用每次填写问卷。都可以先不填，测试会提示缺少哪些必需项。",
-                style = typography.bodySecondary, color = colors.textSecondary)
             EyeSectionCard(title = "成员") {
                 EyeTextField(draft.nickname, onNickname, label = "称呼", placeholder = if (self) "我" else "如：小明、妈妈")
                 if (!self) {
@@ -99,12 +101,12 @@ internal fun SubjectEditContent(
         Column(Modifier.fillMaxWidth().screenHorizontalPaddingLarge().padding(vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (error != null) EyeText(error, style = typography.body, color = colors.danger)
-            if (confirmDelete) EyeText("将删除该成员的资料；已保存的测试记录保留在本机。再点一次「确认删除」继续。",
+            if (confirmDelete) EyeText("将删除该成员的资料，测试记录保留。",
                 style = typography.bodySecondary, color = colors.textSecondary)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (!self && !isNew) EyeButton(if (confirmDelete) "确认删除" else "删除成员", EyeButtonRole.DANGER,
-                    { if (confirmDelete) onDelete() else confirmDelete = true }, Modifier.weight(1f))
-                EyeButton("保存", EyeButtonRole.PRIMARY, onSave, Modifier.weight(1f))
+                    { if (confirmDelete) { haptics.success(); onDelete() } else { haptics.failure(); confirmDelete = true } }, Modifier.weight(1f))
+                EyeButton("保存", EyeButtonRole.PRIMARY, { haptics.tap(); onSave() }, Modifier.weight(1f))
             }
         }
     }

@@ -80,39 +80,48 @@ final class SubjectStore: ObservableObject {
     }
 }
 
-/// 一行摘要：关系 · 年龄 · 已填几项。
-private func subjectSummary(_ s: SubjectProfileItem) -> String {
+/// 一行摘要：关系 · 年龄；还没填过资料时提示「待完善」（与安卓 summary 一致，年龄由共用 SubjectProfiles 换算）。
+func subjectSummary(_ s: SubjectProfileItem) -> String {
     var parts = [SubjectProfiles.shared.relationLabel(code: s.relation)]
-    if let year = Int(s.fields["出生年份"] ?? "") { parts.append("\(Calendar.current.component(.year, from: Date()) - year) 岁") }
-    let filled = s.fields.values.filter { !$0.isEmpty }.count
-    parts.append(filled == 0 ? "资料未填写" : "已填 \(filled) 项")
+    if let age = SubjectProfiles.shared.age(fields: s.fields, nowMs: Int64(Date().timeIntervalSince1970 * 1000)) { parts.append("\(age.intValue) 岁") }
+    if s.fields.values.allSatisfy({ $0.trimmingCharacters(in: .whitespaces).isEmpty }) { parts.append("资料待完善") }
     return parts.joined(separator: " · ")
 }
 
-/// 「我的 → 家庭成员与资料」：与安卓同一排版。
+/// 「家庭成员」：每人一行（头像字 · 称呼 · 关系与年龄），点开编辑资料；末行添加成员。与安卓同一排版。
 struct SubjectsSection: View {
     @ObservedObject var store = SubjectStore.shared
     @State private var editing: SubjectProfileItem?
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("家庭成员与资料").font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text)
-            Text("测试前选择这次测谁，资料自动带入，不用每次填写问卷。").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
+        VStack(alignment: .leading, spacing: 0) {
+            Text("家庭成员").font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text).padding(.bottom, 4)
             ForEach(store.subjects) { s in
-                Button { editing = s } label: {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(s.displayName).font(EyeStyle.body).foregroundStyle(EyeStyle.text)
-                            Text(subjectSummary(s)).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
-                        }
-                        Spacer()
-                        Image(systemName: "chevron.right").foregroundStyle(EyeStyle.secondary)
+                memberRow({ editing = s }) {
+                    Text(String(s.displayName.prefix(1))).font(EyeStyle.subtitle).foregroundStyle(EyeStyle.primary)
+                        .frame(width: 40, height: 40).background(EyeStyle.primarySoft, in: Circle())
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(s.displayName).font(EyeStyle.body).foregroundStyle(EyeStyle.text)
+                        Text(subjectSummary(s)).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
                     }
-                }.buttonStyle(EyeCardButtonStyle())
+                    Spacer()
+                    Image(systemName: "chevron.right").font(.system(size: 14, weight: .semibold)).foregroundStyle(EyeStyle.secondary)
+                }
             }
-            Button("添加家庭成员") { editing = SubjectStore.newMember() }.buttonStyle(EyeButtonStyle(role: .secondary))
+            memberRow({ editing = SubjectStore.newMember() }) {
+                Text("+").font(EyeStyle.title).foregroundStyle(EyeStyle.primary)
+                    .frame(width: 40, height: 40).background(EyeStyle.background, in: Circle())
+                Text("添加家庭成员").font(EyeStyle.body).foregroundStyle(EyeStyle.primary)
+                Spacer()
+            }
         }.padding(16).frame(maxWidth: .infinity, alignment: .leading)
             .background(EyeStyle.panel, in: RoundedRectangle(cornerRadius: EyeStyle.radius))
             .sheet(item: $editing) { SubjectEditView(item: $0) }
+    }
+
+    private func memberRow<Content: View>(_ action: @escaping () -> Void, @ViewBuilder _ content: () -> Content) -> some View {
+        Button { EyeHaptics.tap(); action() } label: {
+            HStack(spacing: 12) { content() }.frame(maxWidth: .infinity, minHeight: 60, alignment: .leading).contentShape(Rectangle())
+        }.buttonStyle(.plain)
     }
 }
 
@@ -144,8 +153,6 @@ struct SubjectEditView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    Text("测试时只需选择成员，不用每次填写问卷。都可以先不填，测试会提示缺少哪些必需项。")
-                        .font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
                     card("成员") {
                         TextField(draft.relation == "SELF" ? "我" : "称呼，如：小明、妈妈", text: $draft.nickname).textFieldStyle(.roundedBorder)
                         if draft.relation != "SELF" {
@@ -162,14 +169,15 @@ struct SubjectEditView: View {
                         }
                     }
                     if let error { Text(error).foregroundStyle(EyeStyle.danger) }
-                    if confirmDelete { Text("将删除该成员的资料；已保存的测试记录保留在本机。再点一次「确认删除」继续。").font(EyeStyle.bodySecondary) }
+                    if confirmDelete { Text("将删除该成员的资料，测试记录保留。").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary) }
                     HStack(spacing: 8) {
                         if draft.relation != "SELF" && !isNew {
                             Button(confirmDelete ? "确认删除" : "删除成员") {
-                                if confirmDelete { SubjectStore.shared.delete(draft.id); dismiss() } else { confirmDelete = true }
+                                if confirmDelete { SubjectStore.shared.delete(draft.id); EyeHaptics.success(); dismiss() }
+                                else { EyeHaptics.failure(); confirmDelete = true }
                             }.buttonStyle(EyeButtonStyle(role: .danger))
                         }
-                        Button("保存") { save() }.buttonStyle(EyeButtonStyle())
+                        Button("保存") { EyeHaptics.tap(); save() }.buttonStyle(EyeButtonStyle())
                     }
                 }.padding(20)
             }.background(EyeStyle.background)
@@ -181,12 +189,15 @@ struct SubjectEditView: View {
     private func save() {
         // 填了就必须有效；隐藏的追问（如取消手术后的手术类型）不保存
         let fieldsJson = (try? JSONSerialization.data(withJSONObject: draft.fields)).flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
-        if let message = SubjectProfiles.shared.validationErrorJson(fieldsJson: fieldsJson) { error = message; return }
+        if let message = SubjectProfiles.shared.validationErrorJson(fieldsJson: fieldsJson) { error = message; EyeHaptics.failure(); return }
         let visible = sections.flatMap { $0["questions"] as? [[String: Any]] ?? [] }
-        if let bad = visible.first(where: { $0["valid"] as? Bool == false }) { error = "「\(bad["title"] as? String ?? "")」填写有误"; return }
+        if let bad = visible.first(where: { $0["valid"] as? Bool == false }) {
+            error = "「\(bad["title"] as? String ?? "")」填写有误"; EyeHaptics.failure(); return
+        }
         let keys = Set(visible.compactMap { $0["key"] as? String })
         draft.fields = draft.fields.filter { keys.contains($0.key) && !$0.value.isEmpty }
         SubjectStore.shared.save(draft)
+        EyeHaptics.success()
         dismiss()
     }
 
@@ -233,7 +244,7 @@ struct SubjectEditView: View {
     }
 
     private func choiceRow(_ label: String, hint: String?, selected: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
+        Button { EyeHaptics.tap(); action() } label: {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(label)
@@ -265,7 +276,7 @@ struct SubjectPickerView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: EyeStyle.spacing) {
             Text(runtime.kind == "STRABISMUS" ? "这次给谁测？" : "这次测谁？").font(EyeStyle.title)
-            Text("资料在「我的 → 家庭成员与资料」中填写和修改，测试时自动带入。").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
+            Text("资料在「我的 → 家庭成员」中填写，测试时自动带入。").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
             ForEach(store.subjects) { s in
                 let missing = runtime.missing(s)
                 Button {

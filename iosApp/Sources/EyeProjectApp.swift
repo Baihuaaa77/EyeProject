@@ -9,7 +9,7 @@ struct EyeProjectApp: App {
     }
 }
 
-/// 本机测试记录：与安卓同一份列表（共用 LocalRecordCatalog 解析）。每行为测试名、时间与结论徽标，
+/// 测试记录：与安卓同一份列表（共用 LocalRecordCatalog 解析）。每行为测试名、时间与结论徽标，
 /// 点开看要点，并可把完整记录（JSON）分享给医生或开发者。
 struct RecordsView: View {
     @Environment(\.dismiss) private var dismiss
@@ -24,11 +24,9 @@ struct RecordsView: View {
     var body: some View {
         NavigationStack {
             List {
-                Section {
-                    if records.isEmpty { Text("还没有测试记录").foregroundStyle(EyeStyle.secondary) }
-                    ForEach(records) { RecordRow(entry: $0) }
-                } footer: { Text("记录只保存在这台手机上；删除应用会一并删除。") }
-            }.navigationTitle("本机测试记录").toolbar { Button("完成") { dismiss() } }
+                if records.isEmpty { Text("还没有测试记录").foregroundStyle(EyeStyle.secondary) }
+                ForEach(records) { RecordRow(entry: $0) }
+            }.navigationTitle("测试记录").toolbar { Button("完成") { EyeHaptics.tap(); dismiss() } }
         }
     }
 
@@ -93,26 +91,29 @@ private struct RecordRow: View {
                     }
                 }
             }
-            Text("评估版本：\(entry.version) · 按保存时的结论展示").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
-            Button("导出文字报告") { exportingReport = true }
-            ShareLink(item: entry.url) { Label("导出原始数据（JSON）", systemImage: "square.and.arrow.up") }
+            Text("评估版本 \(entry.version)").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
+            // 非默认按钮样式：同一行两个按钮各自响应，不会点一处触发整行
+            HStack(spacing: 12) {
+                Button("导出报告") { EyeHaptics.tap(); exportingReport = true }
+                ShareLink(item: entry.url) { Text("导出原始数据") }.simultaneousGesture(TapGesture().onEnded { EyeHaptics.tap() })
+            }.buttonStyle(EyeButtonStyle(role: .secondary))
             if let exportError { Text(exportError).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.danger) }
         } label: {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(entry.title).font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text)
-                    Text(entry.testedAt.map { Self.formatter.string(from: $0) } ?? entry.url.lastPathComponent)
+                    Text((entry.testedAt.map { Self.formatter.string(from: $0) } ?? entry.url.lastPathComponent) + " · " + entry.subjectLabel)
                         .font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
-                    Text(entry.subjectLabel).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
                 }
                 Spacer()
                 Text(entry.badge).font(EyeStyle.chip).foregroundStyle(tone)
                     .padding(.horizontal, 10).padding(.vertical, 4).background(tone.opacity(0.12), in: Capsule())
             }
         }
+        .onChange(of: expanded) { _ in EyeHaptics.tap() }
         .fileExporter(isPresented: $exportingReport, document: RecordReportDocument(text: entry.reportText), contentType: .plainText,
                       defaultFilename: entry.url.deletingPathExtension().lastPathComponent + "_报告.txt") { result in
-            if case .failure = result { exportError = "导出失败，请换个位置再试" } else { exportError = nil }
+            if case .failure = result { exportError = "导出失败，请换个位置再试"; EyeHaptics.failure() } else { exportError = nil; EyeHaptics.success() }
         }
     }
 }

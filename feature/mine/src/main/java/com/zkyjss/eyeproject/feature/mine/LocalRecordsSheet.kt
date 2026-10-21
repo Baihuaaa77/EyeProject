@@ -34,13 +34,14 @@ import com.zkyjss.eyeproject.core.ui.component.EyeButtonRole
 import com.zkyjss.eyeproject.core.ui.component.EyeStatusChip
 import com.zkyjss.eyeproject.core.ui.component.EyeText
 import com.zkyjss.eyeproject.core.ui.component.StatusTone
+import com.zkyjss.eyeproject.core.ui.component.rememberEyeHaptics
 import com.zkyjss.eyeproject.feature.services.LocalRecordEntry
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
 /**
- * 「本机测试记录」底板：与苹果端同一份列表（共用 LocalRecordCatalog）。
+ * 「测试记录」底板：与苹果端同一份列表（共用 LocalRecordCatalog）。
  * 每行为测试名、时间与结论徽标；点开看要点并可导出完整记录（JSON）。
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -56,8 +57,7 @@ internal fun LocalRecordsSheet(records: List<LocalRecordEntry>, onExport: (Local
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             item {
-                EyeText("本机测试记录", style = typography.title, color = colors.textPrimary)
-                EyeText("这里展示本机记录；卸载应用会删除本机副本。", style = typography.bodySecondary, color = colors.textSecondary)
+                EyeText("测试记录", style = typography.title, color = colors.textPrimary)
             }
             if (records.isEmpty()) item {
                 EyeText("还没有测试记录", Modifier.padding(vertical = 24.dp), style = typography.body, color = colors.textSecondary)
@@ -73,17 +73,18 @@ private fun RecordRow(record: LocalRecordEntry, onExport: () -> Unit, onExportRe
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
     var expanded by rememberSaveable(record.fileName) { mutableStateOf(false) }
+    val haptics = rememberEyeHaptics()
     Column(
         Modifier.fillMaxWidth().clip(EyeShapes.large).background(colors.panelBackground)
-            .clickable(role = Role.Button) { expanded = !expanded }
+            .clickable(role = Role.Button) { haptics.tap(); expanded = !expanded }
             .padding(16.dp).animateContentSize(),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Row(Modifier.fillMaxWidth().heightIn(min = 40.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 EyeText(record.title, style = typography.subtitle, color = colors.textPrimary)
-                EyeText(record.testedAtMs?.let(::formatTime) ?: record.fileName, style = typography.bodySecondary, color = colors.textSecondary)
-                EyeText(record.subjectLabel, style = typography.bodySecondary, color = colors.textSecondary)
+                EyeText(listOf(record.testedAtMs?.let(::formatTime) ?: record.fileName, record.subjectLabel).joinToString(" · "),
+                    style = typography.bodySecondary, color = colors.textSecondary)
             }
             EyeStatusChip(record.badge, tone(record.level))
         }
@@ -92,9 +93,11 @@ private fun RecordRow(record: LocalRecordEntry, onExport: () -> Unit, onExportRe
             record.lines.forEach { EyeText("· $it", style = typography.bodySecondary, color = colors.textSecondary) }
             if (record.qualityNotes.isNotEmpty()) RecordSection("数据可靠性说明", record.qualityNotes.map { "" to it })
             record.sections.forEach { section -> RecordSection(section.title, section.rows.map { it.label to it.value }) }
-            EyeText("评估版本：${record.version} · 按保存时的结论展示", style = typography.bodySecondary, color = colors.textSecondary)
-            EyeButton("导出文字报告", EyeButtonRole.SECONDARY, onExportReport, Modifier.fillMaxWidth())
-            EyeButton("导出原始数据（JSON）", EyeButtonRole.SECONDARY, onExport, Modifier.fillMaxWidth())
+            EyeText("评估版本 ${record.version}", style = typography.bodySecondary, color = colors.textSecondary)
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                EyeButton("导出报告", EyeButtonRole.SECONDARY, { haptics.tap(); onExportReport() }, Modifier.weight(1f))
+                EyeButton("导出原始数据", EyeButtonRole.SECONDARY, { haptics.tap(); onExport() }, Modifier.weight(1f))
+            }
         }
     }
 }
@@ -103,11 +106,12 @@ private fun RecordRow(record: LocalRecordEntry, onExport: () -> Unit, onExportRe
 @Composable
 private fun RecordSection(title: String, rows: List<Pair<String, String>>) {
     var open by rememberSaveable { mutableStateOf(false) }
+    val haptics = rememberEyeHaptics()
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
     Column(Modifier.fillMaxWidth().clip(EyeShapes.large).background(colors.appBackground).padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        EyeText((if (open) "▾ " else "▸ ") + title, Modifier.fillMaxWidth().heightIn(min = 44.dp).clickable(role = Role.Button) { open = !open },
+        EyeText((if (open) "▾ " else "▸ ") + title, Modifier.fillMaxWidth().heightIn(min = 44.dp).clickable(role = Role.Button) { haptics.tap(); open = !open },
             style = typography.subtitle, color = colors.textPrimary)
         if (open) rows.forEach { (label, value) -> EyeText(if (label.isBlank()) value else "$label：$value",
             style = typography.bodySecondary, color = colors.textSecondary) }

@@ -116,19 +116,25 @@ chmod +x gradlew scripts/ios/*.sh
 | 远近切换中反复说「好……」 | 每题换距离，到位后都说「好，就保持这个距离」 | 「请移动到 xx 厘米处」到位后改为一声提示音，主提示没变不重读（双端） |
 | 「我的」没有本机记录入口（安卓） | — | 双端「我的 → 本机测试记录」：共享 `LocalRecordCatalog` 解析测试名、时间、结论徽标与要点，点开可导出完整 JSON |
 
+## 「我的」精简与触感（2026-10-21）
+
+- 与安卓同一排版与文案：家庭成员（头像字行）、测试记录（「共 N 条」）、云端同步（状态徽标，说明收进「数据如何处理 · 服务器设置」）、权限与通知、关于。
+- `EyeHaptics.swift`：点按 light impact、开关 selection、成功 / 失败 notification；与安卓 `core:ui` 的 `EyeHaptics` 同一分级。云端操作结果来自共用 `CloudClient` 快照的 `outcomeId` / `outcomeOk`；回到前台的自动补传（`syncNow(userInitiated: false)`）不振动。
+- 安卓也支持在界面填写服务器地址（`core:network` 的 `ServerAddressStore`），两端不再依赖构建期地址。
+
 ## iOS 接入后端（2026-10-21）
 
 - 共用客户端 `shared/sync/client/CloudClient`（Kotlin）实现登录与令牌刷新、分项同意、成员与资料双向同步、记录按成员归属上传、导出与注销，
   规则与安卓一致；经 `screening` 导出到 EyeScreening.framework。
 - `EyeCloud.swift`：`CloudTransport`（URLSession）、`CloudStorage`（会话存钥匙串，发件箱与同步簿记存应用支持目录）、
-  `CloudSection`（「我的 → 云端同步与数据」：服务器地址、登录/注册、三项同意、立即同步、导出、退出、注销）。
+  `CloudSection`（「我的 → 云端同步」：服务器地址、登录/注册、三项同意、立即同步、导出、退出、注销）。
 - 触发上传：保存测试记录后、改动成员资料后、回到前台时；未登录或未同意时不联网。
 - 服务器地址在界面填写（IPA 由云端编译，无法写死局域网地址）。局域网试用为 http：Info.plist 允许本地网络与明文连接，正式部署改 https 后去掉 `NSAllowsArbitraryLoads`。
 - 验证：`CloudClientEndToEndTest` 在服务端测试中对接真实接口；Swift 部分经云端编译与 `testCloudClientBridgeStaysOfflineUntilAServerIsSet` 检查，需真机确认网络与钥匙串。
 
 ## 资料移入「我的」（2026-10-19）
 
-三项测试不再逐题填写问卷：问卷合并为被测者资料（共享 `SubjectProfiles`，键沿用原问卷），在「我的 → 家庭成员与资料」按成员维护（本人、孩子、父母……），
+三项测试不再逐题填写问卷：问卷合并为被测者资料（共享 `SubjectProfiles`，键沿用原问卷），在「我的 → 家庭成员」按成员维护（本人、孩子、父母……），
 测试开始页只选「这次测谁」，成员缺本测试必需项时点开即去补充。iOS 端 `EyeSubjects.swift`：`SubjectStore` 本机保存（应用沙盒 `subjects.json`，尚未接入云端）、
 `SubjectEditView` 编辑（题目分组与追问由共享 `editorJson` 给出）、`SubjectPickerView` 选人（必需项由 `missingJson` 判断）。安卓另有云端同步，见 `core/data/DATA.md`。
 

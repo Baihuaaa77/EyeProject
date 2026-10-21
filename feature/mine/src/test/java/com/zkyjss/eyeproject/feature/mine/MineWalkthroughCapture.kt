@@ -46,12 +46,12 @@ class MineWalkthroughCapture {
         SubjectProfile("demo-parent", "PARENT", "妈妈", mapOf("出生年份" to "1968", "性别" to "女", "日常矫正方式" to "老花镜", "屈光情况" to "老花"), 0))
 
     @Test fun overviewAndCloudControls() {
-        var cloud by mutableStateOf<CloudSyncUiState>(CloudSyncUiState.NotConfigured)
+        var cloud by mutableStateOf<CloudSyncUiState>(CloudSyncUiState.NotConfigured())
         compose.setContent { EyeProjectTheme { MineContent("0.1.0", {}, subjects = members, cloudState = cloud) } }
         capture("01-我的-家庭成员总览")
         cloud = CloudSyncUiState.SignedIn("demo@example.com", true, true, false,
             RecordSyncStatus(pending = 1, synced = 8, lastSyncAt = 1_792_476_000_000L), false, null)
-        focus("云端同步与数据", 20f)
+        focus("云端同步", 20f)
         capture("07-我的-云端同步-演示状态")
     }
 

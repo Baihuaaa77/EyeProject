@@ -5,6 +5,7 @@ import android.net.Uri
 import com.zkyjss.eyeproject.core.data.sync.SyncScheduler
 import com.zkyjss.eyeproject.core.network.EyeNetworkDataSource
 import com.zkyjss.eyeproject.core.network.NetworkResult
+import com.zkyjss.eyeproject.core.network.ServerAddressStore
 import com.zkyjss.eyeproject.core.sync.ConsentDto
 import com.zkyjss.eyeproject.core.sync.ConsentInput
 import com.zkyjss.eyeproject.core.sync.ConsentType
@@ -15,7 +16,7 @@ import com.zkyjss.eyeproject.core.sync.TokenResponse
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -30,6 +31,8 @@ data class AccountState(
     val guardian: Boolean = false,
     /** 可选：同意去标识数据用于眼健康研究。 */
     val researchUse: Boolean = false,
+    /** 当前服务器地址；空表示未配置。 */
+    val serverUrl: String = "",
 )
 
 sealed interface AccountResult {
@@ -40,6 +43,8 @@ sealed interface AccountResult {
 /** 账号、同意与云端数据权利（导出、注销）。读为数据流，写为挂起函数。 */
 interface AccountRepository {
     val accountState: Flow<AccountState>
+    /** 设置服务器地址（与苹果端一致可在「我的」修改）；换地址时退出登录。空字符串表示关闭云端。 */
+    suspend fun setServerAddress(url: String): AccountResult
     suspend fun register(email: String, password: String): AccountResult
     suspend fun signIn(email: String, password: String): AccountResult
     /** 退出登录只清本机会话；本机测试记录保留。 */
@@ -58,16 +63,28 @@ internal class DefaultAccountRepository @Inject constructor(
     private val sessions: SessionStore,
     private val caller: AuthorizedCaller,
     private val scheduler: SyncScheduler,
+    private val addresses: ServerAddressStore,
 ) : AccountRepository {
 
-    override val accountState: Flow<AccountState> = sessions.session.map { session ->
+    override val accountState: Flow<AccountState> = combine(sessions.session, addresses.address) { session, address ->
         AccountState(
-            cloudConfigured = network.isConfigured,
+            cloudConfigured = address.isNotBlank(),
+            serverUrl = address,
             email = session?.email,
             healthDataSync = session?.consents?.get(ConsentType.HEALTH_DATA_SYNC) == true,
             guardian = session?.consents?.get(ConsentType.GUARDIAN) == true,
             researchUse = session?.consents?.get(ConsentType.RESEARCH_USE) == true,
         )
+    }
+
+    override suspend fun setServerAddress(url: String): AccountResult {
+        val trimmed = url.trim().trimEnd('/')
+        if (trimmed == addresses.address.value) return AccountResult.Success
+        // 会话属于原服务器：换地址先退出登录
+        val previous = sessions.session.value
+        if (!addresses.set(trimmed)) return AccountResult.Failure("地址格式应为 http://IP:端口 或 https://域名")
+        if (previous != null) sessions.save(null)
+        return AccountResult.Success
     }
 
     override suspend fun register(email: String, password: String): AccountResult =

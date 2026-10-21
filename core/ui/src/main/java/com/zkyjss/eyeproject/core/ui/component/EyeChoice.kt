@@ -45,12 +45,14 @@ fun EyeChoiceList(
     hints: Map<String, String> = emptyMap(),
     exclusive: Set<String> = emptySet(),
 ) {
+    val haptics = rememberEyeHaptics()
     val stored = "、$value、"
     val selectedOptions = options.filter { "、$it、" in stored }.sortedBy { stored.indexOf("、$it、") }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         options.forEach { option ->
             val selected = if (multiple) option in selectedOptions else value == option
             EyeOptionRow(option, hints[option], selected, multiple) {
+                haptics.tap()
                 if (!multiple) onChange(if (selected) "" else option)
                 else {
                     val updated = when {
