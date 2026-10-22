@@ -49,6 +49,16 @@ struct BlinkCompareView: View {
             }
     }
 
+    private func diagnostics(_ stats: CameraStats) -> String {
+        var parts = [String(format: "相机 %.0f · 分析 %.0f 帧/秒", stats.inputFps, stats.analyzedFps),
+                     String(format: "检测 %.0f ms · 整帧 %.0f ms", stats.detectMs, stats.frameMs),
+                     stats.backend,
+                     String(format: "OCEC %.1f ms", model.latest?.ocecCostMs ?? 0)]
+        if stats.droppedFps > 0 { parts.append(String(format: "系统丢帧 %.0f/秒", stats.droppedFps) + "（" + stats.dropReason + "）") }
+        if model.droppedFrames > 0 { parts.append("界面丢 \(model.droppedFrames)") }
+        return parts.joined(separator: " · ")
+    }
+
     private var header: some View {
         let stats = model.camera.stats
         return VStack(alignment: .leading, spacing: 2) {
@@ -60,12 +70,9 @@ struct BlinkCompareView: View {
                 Spacer()
                 Text(String(format: "%.0f 帧/秒", model.fps)).font(EyeStyle.chip).foregroundStyle(EyeStyle.secondary).monospacedDigit()
             }
-            // 诊断：相机送来几帧、实际分析几帧、每帧检测与整帧耗时、推理后端；帧率低时据此判断瓶颈
-            Text(String(format: "相机 %.0f · 分析 %.0f 帧/秒 · 检测 %.0f ms · 整帧 %.0f ms · %@ · OCEC %.1f ms",
-                        stats.inputFps, stats.analyzedFps, stats.detectMs, stats.frameMs, stats.backend,
-                        model.latest?.ocecCostMs ?? 0) + (model.droppedFrames > 0 ? " · 丢 \(model.droppedFrames)" : ""))
-                .font(EyeStyle.chip).foregroundStyle(EyeStyle.secondary).monospacedDigit()
-                .lineLimit(1).minimumScaleFactor(0.6).padding(.leading, 52)
+            // 诊断：相机送来几帧、实际分析几帧、每帧检测与整帧耗时、推理后端、系统丢帧原因；帧率低时据此判断瓶颈
+            Text(diagnostics(stats)).font(EyeStyle.chip).foregroundStyle(EyeStyle.secondary).monospacedDigit()
+                .lineLimit(2).minimumScaleFactor(0.7).padding(.leading, 52)
         }.padding(.horizontal, 8).padding(.vertical, 4)
     }
 

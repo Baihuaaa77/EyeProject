@@ -5,14 +5,25 @@ import UIKit
 import EyeScreening
 import MediaPipeTasksVision
 
-/// PixelBuffer 保留到共用光学算法完成；显式使用 BGRA→RGB 灰度，不用 YUV 亮度代替。
+/// PixelBuffer 只在本帧处理期间可用；显式使用 BGRA→RGB 灰度，不用 YUV 亮度代替。
 /// 像素由共用核心的 BgraPixels 一次读完（逐像素跨桥会把分析帧率拖到每秒几帧）。
+///
+/// 本对象会传进 Kotlin（共用几何与光学算法），Kotlin/Native 持有它直到自己下一次垃圾回收。
+/// 若它一直引用相机的像素缓冲，缓冲池会被占满，相机只能等回收后才送下一帧（表现为每秒 1 帧、卡几秒又恢复）。
+/// 所以本帧处理完立即 [release]，之后 Kotlin 那边只留一个不含像素的空壳。
 final class CameraGrayImage: NSObject, GrayImage {
-    let buffer: CVPixelBuffer
-    var width: Int32 { Int32(CVPixelBufferGetWidth(buffer)) }
-    var height: Int32 { Int32(CVPixelBufferGetHeight(buffer)) }
-    init(_ buffer: CVPixelBuffer) { self.buffer = buffer; super.init() }
+    private var buffer: CVPixelBuffer?
+    let width: Int32
+    let height: Int32
+    init(_ buffer: CVPixelBuffer) {
+        self.buffer = buffer
+        width = Int32(CVPixelBufferGetWidth(buffer)); height = Int32(CVPixelBufferGetHeight(buffer))
+        super.init()
+    }
+    /// 归还相机像素缓冲（本帧处理完立即调用）。
+    func release() { buffer = nil }
     private func withPixels<T>(_ fallback: T, _ body: (UnsafeMutablePointer<UInt8>, Int32) -> T) -> T {
+        guard let buffer = buffer else { return fallback }
         CVPixelBufferLockBaseAddress(buffer, .readOnly)
         defer { CVPixelBufferUnlockBaseAddress(buffer, .readOnly) }
         guard let base = CVPixelBufferGetBaseAddress(buffer) else { return fallback }
@@ -65,6 +76,9 @@ struct CameraStats {
     var detectMs = 0.0
     var frameMs = 0.0
     var backend = ""
+    /// 最近一秒系统丢掉的帧数与最近一次原因
+    var droppedFps = 0.0
+    var dropReason = ""
 }
 
 final class EyeCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
@@ -86,8 +100,11 @@ final class EyeCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
     private var windowStart: Int64 = 0
     private var windowInput = 0
     private var windowAnalyzed = 0
+    private var windowDropped = 0
+    private var lastDropReason = ""
     private var usingGpu = false
-    private let queue = DispatchQueue(label: "eye.camera.analysis")
+    // 每个任务结束即清空自动释放池：MediaPipe 的 Objective-C 临时对象会引用像素缓冲，不能攒到线程空闲才释放
+    private let queue = DispatchQueue(label: "eye.camera.analysis", autoreleaseFrequency: .workItem)
     private let session = AVCaptureSession()
     private var detector: FaceLandmarker?
     private var device: AVCaptureDevice?
@@ -210,25 +227,47 @@ final class EyeCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
 
     /// 每秒汇总一次诊断读数。
     private func recordStats(analyzed: Bool, detectMs: Double = 0, frameMs: Double = 0, now: Int64) {
-        if windowStart == 0 { windowStart = now }
-        windowInput += 1
         statsLock.lock()
+        windowInput += 1
         if analyzed { windowAnalyzed += 1; currentStats.detectMs = detectMs; currentStats.frameMs = frameMs }
         currentStats.backend = usingGpu ? "GPU" : "CPU"
+        rollWindowLocked(now: now)
+        statsLock.unlock()
+    }
+
+    /// 满一秒换算成每秒读数（调用方持有 statsLock）。相机完全送不出帧时只有丢帧回调，也要靠它刷新读数。
+    private func rollWindowLocked(now: Int64) {
+        if windowStart == 0 { windowStart = now }
         if now - windowStart >= 1_000 {
             let seconds = Double(now - windowStart) / 1000
             currentStats.inputFps = Double(windowInput) / seconds
             currentStats.analyzedFps = Double(windowAnalyzed) / seconds
-            windowStart = now; windowInput = 0; windowAnalyzed = 0
+            currentStats.droppedFps = Double(windowDropped) / seconds
+            currentStats.dropReason = windowDropped > 0 ? lastDropReason : ""
+            windowStart = now; windowInput = 0; windowAnalyzed = 0; windowDropped = 0
         }
-        statsLock.unlock()
     }
 
     func stop() {
         requestLock.lock(); requestNumber += 1; requestLock.unlock()
         queue.async { self.active = false; self.generation += 1; if self.session.isRunning { self.session.stopRunning() } }
     }
+    /// 系统丢掉的帧：按原因计数（OutOfBuffers = 缓冲被占着没还；FrameWasLate = 上一帧没处理完）。
+    func captureOutput(_ output: AVCaptureOutput, didDrop sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+        let reason = CMGetAttachment(sampleBuffer, key: kCMSampleBufferAttachmentKey_DroppedFrameReason, attachmentModeOut: nil) as? String
+        statsLock.lock()
+        windowDropped += 1
+        if let reason = reason { lastDropReason = reason }
+        rollWindowLocked(now: Int64(ProcessInfo.processInfo.systemUptime * 1000))
+        statsLock.unlock()
+    }
+
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+        // 本帧产生的临时对象（含 MediaPipe 对像素缓冲的引用）在返回前全部释放
+        autoreleasepool { process(sampleBuffer) }
+    }
+
+    private func process(_ sampleBuffer: CMSampleBuffer) {
         let time = Int64(ProcessInfo.processInfo.systemUptime * 1000)
         guard active else { return }
         // 约 30 帧/秒：眨眼只持续 100–150 ms，帧率过低会漏检；追随速度相关也需要足够的相邻帧。
@@ -266,6 +305,7 @@ final class EyeCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
                 }}
             }
             let frame = CameraGrayImage(buffer)
+            defer { frame.release() }
             var focal: Float = 0
             if let data = CMGetAttachment(sampleBuffer, key: kCMSampleBufferAttachmentKey_CameraIntrinsicMatrix, attachmentModeOut: nil) as? Data, data.count >= 48 {
                 let values = data.withUnsafeBytes { raw -> [Float] in Array(raw.bindMemory(to: Float.self)) }
