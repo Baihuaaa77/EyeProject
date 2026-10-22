@@ -24,6 +24,15 @@ model = root / 'core/camera/src/main/assets/face_landmarker.task'
 expected = '64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff'
 if hashlib.sha256(model.read_bytes()).hexdigest() != expected:
     errors.append('MediaPipe model changed: review both platform fixtures and update model manifest')
+# 眨眼对比实验页的 OCEC 手写推理：权重须由导出脚本从锁定哈希的模型生成（改模型要重跑脚本并核对层结构）
+ocec_model = root / 'results/models/ocec_p_float32.tflite'
+ocec_weights = root / 'iosApp/Models/ocec_p_weights.bin'
+exporter = (root / 'scripts/ios/export_ocec_weights.py').read_text(encoding='utf-8')
+if hashlib.sha256(ocec_model.read_bytes()).hexdigest() not in exporter:
+    errors.append('OCEC model changed: rerun scripts/ios/export_ocec_weights.py after reviewing the layer table')
+weights = ocec_weights.read_bytes() if ocec_weights.exists() else b''
+if weights[:8] != b'OCECP001' or len(weights) != 8 + 26257 * 4:
+    errors.append('OCEC weights missing or malformed: run scripts/ios/export_ocec_weights.py')
 versions = (root / 'gradle/libs.versions.toml').read_text(encoding='utf-8')
 pod = (root / 'iosApp/Podfile').read_text(encoding='utf-8')
 android_sdk = re.search(r'^mediapipe = "([^"]+)"',versions,re.M).group(1)

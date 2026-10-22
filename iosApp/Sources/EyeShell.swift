@@ -130,9 +130,10 @@ private struct SwitchRow: View {
 
 // MARK: 首页
 
-/// 首页：品牌顶栏 + 护眼设置（休息提醒）。安卓的「开发者工具 / 模型测试」为实验页，iOS 不提供。
+/// 首页：品牌顶栏 + 护眼设置（休息提醒）+ 开发者工具（眨眼检测对比实验页）。
 private struct HomePage: View {
     @StateObject private var reminder = EyeReminder()
+    @State private var showBlinkCompare = false
     private let today: String = {
         let formatter = DateFormatter(); formatter.locale = Locale(identifier: "zh_CN"); formatter.dateFormat = "M月d日 EEEE"
         return formatter.string(from: Date())
@@ -155,7 +156,11 @@ private struct HomePage: View {
                 IntervalPicker(selected: reminder.intervalMinutes) { reminder.setInterval($0) }
                 if let notice = reminder.notice { Text(notice).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.warning) }
             }
-        }
+            Text("开发者工具").font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text).padding(.top, 4)
+            SelectCard(title: "眨眼检测对比", subtitle: "EAR 与 OCEC 同屏实时对比 · 实验") {
+                Image(systemName: "eye").font(.system(size: 22)).foregroundStyle(EyeStyle.primary)
+            } action: { EyeHaptics.tap(); showBlinkCompare = true }
+        }.fullScreenCover(isPresented: $showBlinkCompare) { BlinkCompareView() }
     }
 }
 

@@ -132,6 +132,16 @@ chmod +x gradlew scripts/ios/*.sh
 - 服务器地址在界面填写（IPA 由云端编译，无法写死局域网地址）。局域网试用为 http：Info.plist 允许本地网络与明文连接，正式部署改 https 后去掉 `NSAllowsArbitraryLoads`。
 - 验证：`CloudClientEndToEndTest` 在服务端测试中对接真实接口；Swift 部分经云端编译与 `testCloudClientBridgeStaysOfflineUntilAServerIsSet` 检查，需真机确认网络与钥匙串。
 
+## 眨眼检测对比实验页（2026-10-22）
+
+首页「开发者工具 → 眨眼检测对比」：同一路前置相机帧（与正式测试同一 `EyeCamera`：720p、约 30 帧/秒、同一 MediaPipe 设置）同时喂两种判据，实时对比。
+
+- **EAR**：共用 `LandmarkGeometry` 的 6 点 + `BlinkDetector.dryEyeEar()`，喂法与 `DryEyeEngine.handleFrame` 一致（双眼都在才更新，否则中断；双眼平均；≥60 ms；自适应阈值）。干眼引擎也改为调用同一个 `dryEyeEar()`，两处不会漂移。
+- **OCEC**：按 newpart 干眼 OCEC 方案移植——每只眼 6 个眼睑点外扩 15%（高不低于眼宽 0.33）裁片，最近邻拉伸到 40×24 送 OCEC-P，双眼概率平均，`BlinkDetector.ocecOpenProbability()`（连续 3 帧 < 0.5 判闭眼）。裁片参数与 0.5 阈值均未标定。
+- **推理实现**：iOS 不另引 TFLite（应用已静态链接 MediaPipe，再链一份有符号冲突风险），`OcecEyeClassifier.swift` 用 Accelerate 手写同一前向。权重 `iosApp/Models/ocec_p_weights.bin` 由 `scripts/ios/export_ocec_weights.py` 从 `results/models/ocec_p_float32.tflite` 导出；脚本用 numpy 同算法与 TFLite 在 50 张真机眼片上对拍（最大误差 2e-6），并生成单测夹具 `iosApp/Tests/ocec_fixture.json`，`OcecEyeClassifierTests` 在模拟器上再对拍 Swift 实现。换模型须重跑脚本（`check_project.py` 校验模型哈希与权重格式）。
+- **界面**：镜像预览叠加 EAR 6 点（蓝）与 OCEC 裁片框（橙），闭眼时变红；两张判据卡片（读数 / 阈值 / 闭眼灯 / 计数，判到时闪烁并显示闭眼时长）；OCEC 实际看到的双眼 40×24 眼片；8 秒双泳道曲线，每次判定一条竖线（绿 = 两者在 ±0.5 s 内都判到，红 = 仅一方）；事件列表。
+- **分轮测试**：选眨眼方式（自然 / 快 / 慢 / 用力大眨 / 轻微小眨 / 不眨眼）与计划次数，开始 → 按计划眨眼 → 结束，得到两种方法各自计数、与计划的差（漏检 / 误检提示）和配对情况。每轮逐帧数据与事件写入「文件」App → 我的 iPhone → 眼健康助手 → `BlinkCompare/`，`summary.csv` 汇总所有轮次。
+
 ## 资料移入「我的」（2026-10-19）
 
 三项测试不再逐题填写问卷：问卷合并为被测者资料（共享 `SubjectProfiles`，键沿用原问卷），在「我的 → 家庭成员」按成员维护（本人、孩子、父母……），

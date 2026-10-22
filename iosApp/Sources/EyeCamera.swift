@@ -32,6 +32,10 @@ final class EyeCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
     /// 相机队列上已算好的一帧：关键点几何与光学测量、图像宽高、焦距、单调时间、亮度。
     var onFrame: ((FaceMetrics?, Int32, Int32, Float, Int64, Float) -> Void)?
     var onError: ((String) -> Void)?
+    /// 眨眼对比实验页用：同一帧的原始像素与共用几何结果，在相机队列上同步回调（回调返回前像素缓冲有效）。
+    var onAnalyzedFrame: ((CVPixelBuffer, FaceMetrics?, Int64) -> Void)?
+    /// 眨眼对比实验页的预览用；正式测试不显示预览。
+    var captureSession: AVCaptureSession { session }
     private let queue = DispatchQueue(label: "eye.camera.analysis")
     private let session = AVCaptureSession()
     private var detector: FaceLandmarker?
@@ -138,6 +142,7 @@ final class EyeCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
             focal *= distanceScale
             // 关键点几何与光学测量在相机队列完成，主线程只接收结果。
             let face = points.isEmpty ? nil : LandmarkGeometry.shared.face(points: array, matrix: transform, image: frame)
+            onAnalyzedFrame?(buffer, face, time)
             onFrame?(face, frame.width, frame.height, focal, time, frame.brightness())
         } catch { onError?("眼部检测失败：\(error.localizedDescription)") }
     }

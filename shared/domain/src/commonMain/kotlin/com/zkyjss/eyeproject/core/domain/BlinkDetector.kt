@@ -112,6 +112,24 @@ class BlinkDetector(
         private const val ADAPTIVE_MIN = 0.14f
         private const val ADAPTIVE_MAX = 0.26f
 
+        /** 计时眨眼的最短闭眼时长：30 fps 需 2 帧、10 fps 1 帧即可，单帧关键点抖动不计。 */
+        const val DRY_EYE_MIN_CLOSED_MS = 60L
+
+        /**
+         * OCEC 睁眼概率（0–1，越低越闭）配套的闭眼阈值：Sigmoid 自然中点，**未标定**。
+         * 换信号源必须连阈值一起换——拿 EAR 的 0.23 去卡概率会永远判成睁眼，且不报任何错。
+         */
+        const val OPEN_PROB_THRESHOLD = 0.5f
+
+        /** 干眼测试的 EAR 判据：按时间判定 + 个人自适应阈值。正式测试与眨眼对比实验共用这一份配置。 */
+        fun dryEyeEar(): BlinkDetector = BlinkDetector(minClosedMs = DRY_EYE_MIN_CLOSED_MS, adaptive = true)
+
+        /**
+         * OCEC 判据（newpart 干眼 OCEC 方案的同一规则）：双眼睁眼概率平均值低于 [OPEN_PROB_THRESHOLD]
+         * 连续 3 帧判为闭眼、回升记一次眨眼；按帧数、不自适应。
+         */
+        fun ocecOpenProbability(): BlinkDetector = BlinkDetector(earThreshold = OPEN_PROB_THRESHOLD, consecutiveFrames = 3)
+
         /** 双眼平均 EAR；双眼都不可用时返回 null。 */
         fun averageEar(left: EyeLandmarks?, right: EyeLandmarks?): Float? {
             val leftEar = left?.let { ear(it.earPoints) }

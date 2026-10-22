@@ -16,7 +16,7 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
     val uiState: StateFlow<DryEyeTestUiState> = _uiState.asStateFlow()
 
     /** 按时间判定眨眼（与帧率无关）+ 个人自适应阈值，见 [BlinkDetector]。 */
-    private val blinkDetector = BlinkDetector(minClosedMs = BLINK_MIN_CLOSED_MS, adaptive = true)
+    private val blinkDetector = BlinkDetector.dryEyeEar()
     private val distanceTracker = ScreeningDistanceTracker()
     private val blinkEvents = TimeEventQueue()
 
@@ -528,8 +528,6 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
         private const val EYES_GRACE_MS = 1_500L
         private const val DISTANCE_GRACE_MS = 3_000L
         private const val HEAD_LIMIT_DEG = 15f
-        /** 计时眨眼的最短闭眼时长：30 fps 需 2 帧、10 fps 1 帧即可，单帧关键点抖动不计。 */
-        private const val BLINK_MIN_CLOSED_MS = 60L
         /** 逐帧轨迹上限（约 4 分钟 × 60 fps），防止异常情况下内存无限增长。 */
         private const val MAX_TRACE_FRAMES = 15_000
 
