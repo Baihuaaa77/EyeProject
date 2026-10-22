@@ -27,7 +27,7 @@
 | `SubjectProfile`（shared） | 三项问卷合并后的被测者资料：`SubjectProfiles.sections` 分组题目（键沿用原问卷，评估按键读取）、各测试必需项与适用年龄、出生年份换算年龄、JSON 编解码 |
 | 摘镜提醒 | 老视「标准模式」且平时戴老花镜/渐进镜（或跳过了问卷）时，近视力示范前先出现「先摘下老花镜」确认页（小瞳 + 一句话 + 「已摘下，继续」，语音同步播报），确认写入记录 `glassesRemovedConfirmed`；两端共用引擎的 `glassesCheckPending` |
 | `StrabismusGaze` | 斜视任务的九点注视校准与宽容监督：各眼独立以仿射映射（吸收头部轻微倾斜的轴间串扰）到屏幕坐标，留一预测误差剔除离群点（最多 2 点，剩余点须覆盖三行三列），允许单眼有效跟随；实际显示轨迹与眼动比较，避免同步静止或看别处被判为协调正常 |
-| `ReportComponents` | 三病种共用的结果页，渲染共享 `ResultReport`（与 iOS `ResultReportView.swift` 同一份内容）：结论卡（小瞳神情随等级变化 + 等级徽标 + 一句结论 + 一句建议）→ 关键指标 2×2 → 判断依据（每个证据族一行，点开看明细）→ 主操作 → 「查看本次数据」底板 / 「导出数据」→ 一行说明 |
+| `ReportComponents` | 三病种共用的结果页，渲染共享 `ResultReport`（与 iOS `ResultReportView.swift` 同一份内容）：结论卡（小瞳神情随等级变化 + 等级徽标 + 一句结论 + 一句建议）→ 关键指标 2×2 → 判断依据（每个证据族一行，点开看明细）→ AI 解读卡片（`core:ui` 的 `AiExplanationCard`，状态由两个测试 ViewModel 的 `explanation` 跟随 `savedFile` 给出，见 `AiExplanationUi.kt`）→ 主操作 → 「查看本次数据」底板 / 「导出数据」→ 一行说明 |
 | `RecordExport` | 用系统「另存为」导出本次完整记录 JSON（问卷、逐题作答、逐帧数据、特征与判定依据），不需存储权限、不联网 |
 | `ScreeningHistory`（在 ScreeningMetrics.kt） | 读取本机上一次同病种记录，结果页「与上次对比」 |
 | `ScreeningOptotype` / `ScreeningVoice` | 按前摄眼屏距离和系统屏幕像素密度换算视标尺寸及显示门槛；系统中文语音播报 |

@@ -4,6 +4,8 @@ import com.zkyjss.eyeproject.core.sync.AccountDto
 import com.zkyjss.eyeproject.core.sync.ConsentDto
 import com.zkyjss.eyeproject.core.sync.ConsentInput
 import com.zkyjss.eyeproject.core.sync.ErrorBody
+import com.zkyjss.eyeproject.core.sync.ExplanationDto
+import com.zkyjss.eyeproject.core.sync.ExplanationRequest
 import com.zkyjss.eyeproject.core.sync.LoginRequest
 import com.zkyjss.eyeproject.core.sync.RecordSummaryDto
 import com.zkyjss.eyeproject.core.sync.RecordUpload
@@ -78,6 +80,9 @@ class HttpEyeNetworkDataSource internal constructor(private val baseUrl: () -> S
     override suspend fun exportAll(accessToken: String): NetworkResult<String> = raw("GET", "/me/export", accessToken, null)
 
     override suspend fun deleteAccount(accessToken: String): NetworkResult<Unit> = call("DELETE", "/me", accessToken, null, null)
+
+    override suspend fun explain(accessToken: String, request: ExplanationRequest) =
+        call("POST", "/explanations", accessToken, encode(request), serializer<ExplanationDto>())
 
     private inline fun <reified T> encode(value: T): String = json.encodeToString(serializer<T>(), value)
 

@@ -8,6 +8,8 @@ import com.zkyjss.eyeproject.core.sync.AccountDto
 import com.zkyjss.eyeproject.core.sync.ConsentDto
 import com.zkyjss.eyeproject.core.sync.ConsentInput
 import com.zkyjss.eyeproject.core.sync.ErrorCodes
+import com.zkyjss.eyeproject.core.sync.ExplanationDto
+import com.zkyjss.eyeproject.core.sync.ExplanationRequest
 import com.zkyjss.eyeproject.core.sync.LoginRequest
 import com.zkyjss.eyeproject.core.sync.RecordQuality
 import com.zkyjss.eyeproject.core.sync.RecordSummaryDto
@@ -44,6 +46,8 @@ internal class FakeNetwork : EyeNetworkDataSource {
     val subjects = linkedMapOf("remote-self" to SubjectDto("remote-self", SubjectRelation.SELF, "我", isDefault = true, createdAt = 1L))
     var guardianRequired = false
     var subjectCalls = 0
+    val explanations = mutableListOf<ExplanationRequest>()
+    var explainError: NetworkResult.HttpError? = null
 
     override suspend fun register(request: RegisterRequest) = error("未使用")
     override suspend fun login(request: LoginRequest) = error("未使用")
@@ -91,4 +95,10 @@ internal class FakeNetwork : EyeNetworkDataSource {
     }
     override suspend fun exportAll(accessToken: String): NetworkResult<String> = error("未使用")
     override suspend fun deleteAccount(accessToken: String): NetworkResult<Unit> = error("未使用")
+    override suspend fun explain(accessToken: String, request: ExplanationRequest): NetworkResult<ExplanationDto> {
+        explainError?.let { return it }
+        explanations += request
+        return NetworkResult.Success(ExplanationDto("一句话", listOf("说明"), listOf("建议"), "不适时就医",
+            riskLevel = request.riskLevel, model = "fake", generatedAt = 1L), 200)
+    }
 }

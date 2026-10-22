@@ -48,3 +48,6 @@ __pycache__/
 
 # 老师转来的同学工程（仅供对照参考，不纳入本仓库）
 /newpart/
+
+# 本机试用 AI 解读的大模型密钥（backend/server/llm.properties，见 SERVER.md）
+backend/server/llm.properties

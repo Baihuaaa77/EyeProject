@@ -34,7 +34,7 @@ class ScreenWalkthroughCapture {
     // region 干眼
 
     @Test fun dryEye() {
-        val vm = DryEyeTestViewModel(context, CameraController(context), CameraIntrinsicsProvider(context), TestScreeningRecordRepository(context), TestSubjectRepository())
+        val vm = DryEyeTestViewModel(context, CameraController(context), CameraIntrinsicsProvider(context), TestScreeningRecordRepository(context), TestSubjectRepository(), TestExplanationRepository())
         @Suppress("UNCHECKED_CAST")
         val state = DryEyeEngine::class.java.getDeclaredField("_uiState").apply { isAccessible = true }
             .get(vm.engine) as MutableStateFlow<DryEyeTestUiState>
@@ -97,7 +97,7 @@ class ScreenWalkthroughCapture {
     // region 老视
 
     @Test fun presbyopia() {
-        val vm = ScreeningTestViewModel(context, CameraController(context), CameraIntrinsicsProvider(context), TestScreeningRecordRepository(context), TestSubjectRepository())
+        val vm = ScreeningTestViewModel(context, CameraController(context), CameraIntrinsicsProvider(context), TestScreeningRecordRepository(context), TestSubjectRepository(), TestExplanationRepository())
         val state = stateOf(vm)
         val base = ScreeningState(kind = ScreeningKind.PRESBYOPIA, mode = PRESBYOPIA_MODE_STANDARD, faceDetected = true, distanceCm = 40f,
             fields = mapOf("年龄" to "52", "日常矫正方式" to "老花镜"), lux = 300f, lightSensorAvailable = true)
@@ -165,7 +165,7 @@ class ScreenWalkthroughCapture {
     // region 斜视
 
     @Test fun strabismus() {
-        val vm = ScreeningTestViewModel(context, CameraController(context), CameraIntrinsicsProvider(context), TestScreeningRecordRepository(context), TestSubjectRepository())
+        val vm = ScreeningTestViewModel(context, CameraController(context), CameraIntrinsicsProvider(context), TestScreeningRecordRepository(context), TestSubjectRepository(), TestExplanationRepository())
         val state = stateOf(vm)
         val base = ScreeningState(kind = ScreeningKind.STRABISMUS, faceDetected = true, distanceCm = 33f,
             fields = mapOf("年龄" to "8", "协助测试者" to "家长"), lux = 300f, lightSensorAvailable = true)

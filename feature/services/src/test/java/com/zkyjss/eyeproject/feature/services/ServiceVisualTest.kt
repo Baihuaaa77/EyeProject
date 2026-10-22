@@ -138,7 +138,7 @@ class ServiceVisualTest {
         )
         val vm = ScreeningTestViewModel(context,
             com.zkyjss.eyeproject.core.camera.CameraController(context),
-            com.zkyjss.eyeproject.core.camera.CameraIntrinsicsProvider(context), TestScreeningRecordRepository(context), TestSubjectRepository(members))
+            com.zkyjss.eyeproject.core.camera.CameraIntrinsicsProvider(context), TestScreeningRecordRepository(context), TestSubjectRepository(members), TestExplanationRepository())
         vm.configure(ScreeningKind.PRESBYOPIA)
         var edited: String? = "none"
         compose.setContent {
@@ -168,7 +168,7 @@ class ServiceVisualTest {
         val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
         val vm = ScreeningTestViewModel(context,
             com.zkyjss.eyeproject.core.camera.CameraController(context),
-            com.zkyjss.eyeproject.core.camera.CameraIntrinsicsProvider(context), TestScreeningRecordRepository(context), TestSubjectRepository())
+            com.zkyjss.eyeproject.core.camera.CameraIntrinsicsProvider(context), TestScreeningRecordRepository(context), TestSubjectRepository(), TestExplanationRepository())
         compose.setContent {
             EyeProjectTheme {
                 Column(Modifier.fillMaxSize().background(LocalEyeColors.current.appBackground).verticalScroll(rememberScrollState()).padding(20.dp)) {
@@ -187,7 +187,7 @@ class ServiceVisualTest {
         val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
         val vm = ScreeningTestViewModel(context,
             com.zkyjss.eyeproject.core.camera.CameraController(context),
-            com.zkyjss.eyeproject.core.camera.CameraIntrinsicsProvider(context), TestScreeningRecordRepository(context), TestSubjectRepository())
+            com.zkyjss.eyeproject.core.camera.CameraIntrinsicsProvider(context), TestScreeningRecordRepository(context), TestSubjectRepository(), TestExplanationRepository())
         compose.setContent {
             EyeProjectTheme(darkTheme = true) {
                 Column(Modifier.fillMaxSize().background(LocalEyeColors.current.appBackground).padding(20.dp)) {
@@ -203,7 +203,7 @@ class ServiceVisualTest {
         val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
         val vm = ScreeningTestViewModel(context,
             com.zkyjss.eyeproject.core.camera.CameraController(context),
-            com.zkyjss.eyeproject.core.camera.CameraIntrinsicsProvider(context), TestScreeningRecordRepository(context), TestSubjectRepository())
+            com.zkyjss.eyeproject.core.camera.CameraIntrinsicsProvider(context), TestScreeningRecordRepository(context), TestSubjectRepository(), TestExplanationRepository())
         var task by androidx.compose.runtime.mutableIntStateOf(0)
         compose.setContent {
             EyeProjectTheme {
@@ -379,7 +379,7 @@ class ServiceVisualTest {
         val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
         val vm = ScreeningTestViewModel(context,
             com.zkyjss.eyeproject.core.camera.CameraController(context),
-            com.zkyjss.eyeproject.core.camera.CameraIntrinsicsProvider(context), TestScreeningRecordRepository(context), TestSubjectRepository())
+            com.zkyjss.eyeproject.core.camera.CameraIntrinsicsProvider(context), TestScreeningRecordRepository(context), TestSubjectRepository(), TestExplanationRepository())
         var answered = -1
         var page by androidx.compose.runtime.mutableIntStateOf(0)
         compose.setContent {
@@ -410,7 +410,7 @@ class ServiceVisualTest {
     @Test fun dryEyeScreenKeepsDistanceBannerDuringTrials() {
         val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
         val vm = DryEyeTestViewModel(context, com.zkyjss.eyeproject.core.camera.CameraController(context),
-            com.zkyjss.eyeproject.core.camera.CameraIntrinsicsProvider(context), TestScreeningRecordRepository(context), TestSubjectRepository())
+            com.zkyjss.eyeproject.core.camera.CameraIntrinsicsProvider(context), TestScreeningRecordRepository(context), TestSubjectRepository(), TestExplanationRepository())
         @Suppress("UNCHECKED_CAST")
         val state = DryEyeEngine::class.java.getDeclaredField("_uiState").apply { isAccessible = true }
             .get(vm.engine) as kotlinx.coroutines.flow.MutableStateFlow<DryEyeTestUiState>
@@ -435,7 +435,7 @@ class ServiceVisualTest {
         val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
         val vm = ScreeningTestViewModel(context,
             com.zkyjss.eyeproject.core.camera.CameraController(context),
-            com.zkyjss.eyeproject.core.camera.CameraIntrinsicsProvider(context), TestScreeningRecordRepository(context), TestSubjectRepository())
+            com.zkyjss.eyeproject.core.camera.CameraIntrinsicsProvider(context), TestScreeningRecordRepository(context), TestSubjectRepository(), TestExplanationRepository())
         var index by androidx.compose.runtime.mutableIntStateOf(0)
         compose.setContent {
             EyeProjectTheme {
@@ -499,7 +499,7 @@ class ServiceVisualTest {
         val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
         val vm = ScreeningTestViewModel(context,
             com.zkyjss.eyeproject.core.camera.CameraController(context),
-            com.zkyjss.eyeproject.core.camera.CameraIntrinsicsProvider(context), TestScreeningRecordRepository(context), TestSubjectRepository())
+            com.zkyjss.eyeproject.core.camera.CameraIntrinsicsProvider(context), TestScreeningRecordRepository(context), TestSubjectRepository(), TestExplanationRepository())
         var kind by androidx.compose.runtime.mutableStateOf(ScreeningKind.PRESBYOPIA)
         compose.setContent {
             EyeProjectTheme {
@@ -570,7 +570,7 @@ class ServiceVisualTest {
         val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
         val vm = ScreeningTestViewModel(context,
             com.zkyjss.eyeproject.core.camera.CameraController(context),
-            com.zkyjss.eyeproject.core.camera.CameraIntrinsicsProvider(context), TestScreeningRecordRepository(context), TestSubjectRepository())
+            com.zkyjss.eyeproject.core.camera.CameraIntrinsicsProvider(context), TestScreeningRecordRepository(context), TestSubjectRepository(), TestExplanationRepository())
         compose.setContent {
             EyeProjectTheme {
                 Column(Modifier.fillMaxSize().background(LocalEyeColors.current.appBackground).padding(20.dp)) {

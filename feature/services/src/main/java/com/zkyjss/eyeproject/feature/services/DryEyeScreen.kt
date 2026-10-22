@@ -80,6 +80,7 @@ import com.zkyjss.eyeproject.core.designsystem.theme.EyeShapes
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
 import com.zkyjss.eyeproject.core.designsystem.util.screenHorizontalPaddingLarge
+import com.zkyjss.eyeproject.core.ui.component.AiCardState
 import com.zkyjss.eyeproject.core.ui.component.EyeButton
 import com.zkyjss.eyeproject.core.ui.component.EyeButtonRole
 import com.zkyjss.eyeproject.core.ui.component.EyeDisclosure
@@ -195,7 +196,8 @@ fun DryEyeScreen(
                 }
                 DryEyePhase.Rest -> RestContent(state)
                 DryEyePhase.Result -> ResultContent(state, viewModel::startExtended, viewModel::startRestRetest, viewModel::restartAll,
-                    rememberRecordExport(state.savedFile) { viewModel.engine.lastRecordJson })
+                    rememberRecordExport(state.savedFile) { viewModel.engine.lastRecordJson },
+                    viewModel.explanation.collectAsStateWithLifecycle().value, viewModel::explain)
             }
         }
         if (distanceMatters) DistanceEdgeGlow(distance.zone)
@@ -366,10 +368,12 @@ private fun ResultContent(
     onRest: () -> Unit,
     onRestart: () -> Unit,
     onExport: (() -> Unit)? = null,
+    aiCard: AiCardState? = null,
+    onExplain: (Boolean) -> Unit = {},
 ) {
     val colors = LocalEyeColors.current
     val report = ResultReports.dryEye(state) ?: return
-    ResultReportView(report, onExport, actions = {
+    ResultReportView(report, onExport, aiCard = aiCard, onExplain = onExplain, actions = {
         if (state.canExtend) {
             EyeButton("延长测试（3 分钟）", EyeButtonRole.PRIMARY, onExtend, Modifier.fillMaxWidth())
         }

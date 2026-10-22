@@ -31,6 +31,8 @@ data class AccountState(
     val guardian: Boolean = false,
     /** 可选：同意去标识数据用于眼健康研究。 */
     val researchUse: Boolean = false,
+    /** 同意把去标识的结果发给大模型生成通俗解读。 */
+    val aiExplanation: Boolean = false,
     /** 当前服务器地址；空表示未配置。 */
     val serverUrl: String = "",
 )
@@ -74,6 +76,7 @@ internal class DefaultAccountRepository @Inject constructor(
             healthDataSync = session?.consents?.get(ConsentType.HEALTH_DATA_SYNC) == true,
             guardian = session?.consents?.get(ConsentType.GUARDIAN) == true,
             researchUse = session?.consents?.get(ConsentType.RESEARCH_USE) == true,
+            aiExplanation = session?.consents?.get(ConsentType.AI_EXPLANATION) == true,
         )
     }
 
@@ -110,7 +113,7 @@ internal class DefaultAccountRepository @Inject constructor(
             is NetworkResult.Success -> {
                 sessions.update { it.copy(consents = consentMap(result.value, it.defaultSubjectId)) }
                 // 开启云端存储或补上监护人同意后，把积压的记录传上去
-                if (granted && type != ConsentType.RESEARCH_USE) requestSyncIfConsented()
+                if (granted && type != ConsentType.RESEARCH_USE && type != ConsentType.AI_EXPLANATION) requestSyncIfConsented()
                 AccountResult.Success
             }
             else -> result.failure()

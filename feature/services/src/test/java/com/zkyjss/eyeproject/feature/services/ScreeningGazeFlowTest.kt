@@ -20,7 +20,7 @@ import java.util.concurrent.TimeUnit
 class ScreeningGazeFlowTest {
     private fun viewModel(): ScreeningTestViewModel {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        return ScreeningTestViewModel(context, CameraController(context), CameraIntrinsicsProvider(context), TestScreeningRecordRepository(context), TestSubjectRepository()).also { vm ->
+        return ScreeningTestViewModel(context, CameraController(context), CameraIntrinsicsProvider(context), TestScreeningRecordRepository(context), TestSubjectRepository(), TestExplanationRepository()).also { vm ->
             @Suppress("UNCHECKED_CAST")
             val state = ScreeningEngine::class.java.getDeclaredField("_state").apply { isAccessible = true }
                 .get(vm.engine) as MutableStateFlow<ScreeningState>

@@ -49,6 +49,8 @@ import com.zkyjss.eyeproject.core.designsystem.theme.EyeMotion
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeShapes
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
+import com.zkyjss.eyeproject.core.ui.component.AiCardState
+import com.zkyjss.eyeproject.core.ui.component.AiExplanationCard
 import com.zkyjss.eyeproject.core.ui.component.EyeButton
 import com.zkyjss.eyeproject.core.ui.component.EyeButtonRole
 import com.zkyjss.eyeproject.core.ui.component.EyeIcon
@@ -84,7 +86,7 @@ private val EvidenceStatus.metricLabel get() = if (this == EvidenceStatus.UNAVAI
 
 /**
  * 完整结果页。[actions] 放病种特有的主操作（延长、复测、重新测试）；[onExport] 为空时不显示导出；
- * [extraData] 追加到数据底板末尾（如干眼的眨眼分布图）。
+ * [extraData] 追加到数据底板末尾（如干眼的眨眼分布图）；[aiCard] 为空时不显示 AI 解读。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -92,6 +94,8 @@ internal fun ResultReportView(
     report: ResultReport,
     onExport: (() -> Unit)?,
     actions: @Composable ColumnScope.() -> Unit,
+    aiCard: AiCardState? = null,
+    onExplain: (agreeFirst: Boolean) -> Unit = {},
     extraData: @Composable ColumnScope.() -> Unit = {},
 ) {
     var dataOpen by rememberSaveable { mutableStateOf(false) }
@@ -121,6 +125,8 @@ internal fun ResultReportView(
             MetricGrid(report.metrics)
             EvidenceCard(report.evidence)
         }
+        // 解读放在规则结论与依据之后：先看规则判了什么，再看通俗解释
+        if (aiCard != null) AiExplanationCard(aiCard, onGenerate = { onExplain(false) }, onAgree = { onExplain(true) })
         actions()
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             EyeButton("查看本次数据", EyeButtonRole.SECONDARY, { dataOpen = true }, Modifier.weight(1f))

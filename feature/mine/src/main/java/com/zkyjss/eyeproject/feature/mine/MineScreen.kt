@@ -37,6 +37,7 @@ import com.zkyjss.eyeproject.core.ui.component.EyeSelectCard
 import com.zkyjss.eyeproject.core.ui.component.EyeText
 import com.zkyjss.eyeproject.core.ui.component.rememberEyeHaptics
 import androidx.compose.runtime.LaunchedEffect
+import com.zkyjss.eyeproject.core.ui.component.AiExplanationCard
 import com.zkyjss.eyeproject.feature.services.SubjectProfile
 import com.zkyjss.eyeproject.core.data.record.RecordExportFormat
 
@@ -74,7 +75,14 @@ fun MineScreen(
     }
     if (recordsOpen) LocalRecordsSheet(records, onExport = { exporting = it.fileName; recordExport.launch(it.fileName) },
         onExportReport = { exporting = it.fileName; reportExport.launch(it.fileName.removeSuffix(".json") + "_报告.txt") },
-        onDismiss = { recordsOpen = false })
+        onDismiss = { recordsOpen = false },
+        aiCard = { record ->
+            val card by remember(record.fileName) { viewModel.explanation(record.fileName) }.collectAsStateWithLifecycle()
+            card?.let {
+                AiExplanationCard(it, onGenerate = { viewModel.explain(record.fileName) },
+                    onAgree = { viewModel.explain(record.fileName, agreeFirst = true) }, embedded = true)
+            }
+        })
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         uri?.let(viewModel::exportTo)
     }

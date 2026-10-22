@@ -79,6 +79,7 @@ private struct RecordRow: View {
             ForEach(Array(entry.lines.enumerated()), id: \.offset) { _, line in
                 Text("· \(line)").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
             }
+            AiExplanationView(fileName: entry.url.lastPathComponent, embedded: true)
             if !entry.qualityNotes.isEmpty {
                 DisclosureGroup("数据可靠性说明") {
                     ForEach(Array(entry.qualityNotes.enumerated()), id: \.offset) { _, note in Text(note).font(EyeStyle.bodySecondary) }

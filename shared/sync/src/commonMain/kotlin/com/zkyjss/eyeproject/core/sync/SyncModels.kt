@@ -98,10 +98,11 @@ data class SubjectProfileInput(
 
 /**
  * 分项同意。PRIVACY_POLICY 注册必需；HEALTH_DATA_SYNC 上传必需；
- * GUARDIAN 为未满 14 周岁的被测者上传时必需；RESEARCH_USE 决定能否进入去标识研究数据。
+ * GUARDIAN 为未满 14 周岁的被测者上传时必需；RESEARCH_USE 决定能否进入去标识研究数据；
+ * AI_EXPLANATION 允许把去标识的结果发给第三方大模型生成解读（见 [Explanations.CONSENT_TEXT]）。
  */
 @Serializable
-enum class ConsentType { PRIVACY_POLICY, HEALTH_DATA_SYNC, GUARDIAN, RESEARCH_USE }
+enum class ConsentType { PRIVACY_POLICY, HEALTH_DATA_SYNC, GUARDIAN, RESEARCH_USE, AI_EXPLANATION }
 
 @Serializable
 data class ConsentInput(
@@ -201,4 +202,8 @@ object ErrorCodes {
     const val PAYLOAD_TOO_LARGE = "payload_too_large"
     const val RATE_LIMITED = "rate_limited"
     const val HTTPS_REQUIRED = "https_required"
+    /** 服务端未配置大模型或模型暂时不可用。 */
+    const val AI_UNAVAILABLE = "ai_unavailable"
+    /** 今日 AI 解读次数已用完。 */
+    const val AI_QUOTA_EXCEEDED = "ai_quota_exceeded"
 }

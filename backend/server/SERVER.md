@@ -1,6 +1,6 @@
 # backend/server — 账号与测试记录服务
 
-Ktor 3 API 服务：账号、家庭成员（被测者）及其健康资料、分项同意、测试记录同步、历史与对比、导出、注销、审计与保留期清理。
+Ktor 3 API 服务：账号、家庭成员（被测者）及其健康资料、分项同意、测试记录同步、历史与对比、导出、注销、审计与保留期清理，以及 AI 解读（知识库检索 + DeepSeek）。
 设计依据与路线见 [`docs/后端与智能评估设计-2026-10-15.md`](../../docs/后端与智能评估设计-2026-10-15.md)。
 
 ## 运行与测试
@@ -28,7 +28,10 @@ iOS 连本机服务：在「我的 → 云端同步 → 服务器地址」（已
 | `AuthService.kt` | 注册、登录、刷新令牌轮换与重用检测、登出 |
 | `ProfileService.kt` | 账号、被测者及其健康资料（原测试问卷，AES-256-GCM 加密，AAD 绑定成员与账号）、同意（追加式）、导出、注销 |
 | `RecordService.kt` | 幂等上传、同意与监护人检查、列表、详情、删除、历史、对比 |
-| `AuditLog.kt` / `RetentionJob.kt` | 审计（不含健康内容）；每日清理过期令牌、审计与（可选）过期记录 |
+| `AuditLog.kt` / `RetentionJob.kt` | 审计（不含健康内容）；每日清理过期令牌、审计与（可选）过期记录、30 天前的解读缓存 |
+| `ExplanationService.kt` | AI 解读：校验输入 → 「AI 解读」同意 → 缓存 → 每日额度 → 检索知识库 → 调模型 → 校验输出（诊断措辞、与等级矛盾、输入中没有的数字）→ 不合格重试一次；提示词 `ExplanationPrompt` |
+| `KnowledgeBase.kt` | 读取 `resources/knowledge/eye-knowledge.md`，中文二元切词 BM25 检索，按等级固定带上「就医 / 不确定 / 数据无效」条目 |
+| `LlmClient.kt` | 大模型端口与 `DeepSeekClient`（OpenAI 兼容 Chat Completions，JSON 输出、关闭思考；不记内容与密钥） |
 | `resources/db/migration` | Flyway 脚本；PostgreSQL 与 H2（PostgreSQL 模式）通用写法 |
 
 数据契约（DTO、记录摘要解析、错误代码）来自 `shared/sync`，与客户端是同一份代码。
@@ -49,6 +52,25 @@ iOS 连本机服务：在「我的 → 云端同步 → 服务器地址」（已
 | `EYE_AUTH_RATE_PER_MINUTE` | 20 | 每 IP 每分钟认证请求数 |
 | `EYE_RECORD_RETENTION_DAYS` | 不过期 | 按研究方案确定 |
 | `EYE_AUDIT_RETENTION_DAYS` | 1095 | |
+| `DEEPSEEK_API_KEY`（或 `EYE_LLM_API_KEY`） | 读 `llm.properties` 的 `apiKey`；都没有则 AI 解读返回 `ai_unavailable` | 必填才开启 AI 解读 |
+| `EYE_LLM_MODEL` / `EYE_LLM_BASE_URL` | `deepseek-v4-flash` / `https://api.deepseek.com` | |
+| `EYE_LLM_DAILY_LIMIT` | 20 | 每账号每天调用模型次数（命中缓存不计） |
+| `EYE_LLM_TIMEOUT_MS` / `EYE_LLM_DISABLE_THINKING` | 30000 / true | 换不支持 `thinking` 字段的模型时设 false |
+
+## AI 解读（`POST /v1/explanations`）
+
+本机试用：复制 `llm.properties.example` 为 `llm.properties`（已 gitignore）填入 DeepSeek API Key，或设环境变量后启动：
+
+```powershell
+$env:DEEPSEEK_API_KEY = "sk-..."; .\gradlew.bat -p backend/server run
+```
+
+- 输入 `ExplanationRequest`（`shared/sync` 的 `Explanations.fromRecord` 从本机记录抽取：等级、徽标、指标、依据、可靠性说明、年龄段、几项相关资料选项；不含姓名、账号、成员编号、逐帧数据）。
+- 风险等级只来自设备端规则；模型输出与等级矛盾、出现诊断性措辞或编造数字即判为不合格并重试一次，仍不合格返回 502。
+- 需 `AI_EXPLANATION` 同意（403 `consent_required`）；未配置密钥 503 `ai_unavailable`；超额度 429 `ai_quota_exceeded`；每账号每分钟限 6 次。
+- 缓存键 = 提示词版本 + 模型 + 知识库版本 + 输入哈希；改提示词时递增 `ExplanationService.PROMPT_VERSION`，改知识库时更新文件头「版本」。日志只记 token 数。
+- 费用参考：每次约 1.5k 输入 + 0.3k 输出 token，按 V4 Flash 公开价（约 1 元 / 2 元每百万 token）约 0.002 元；以 DeepSeek 官网价格为准。
+- 知识库条目为公开权威资料的转述，**上线前需眼科医生审核**（见知识库文件头）。迁移 `V3__ai_explanation.sql`。
 
 ## 约束
 
@@ -57,4 +79,4 @@ iOS 连本机服务：在「我的 → 云端同步 → 服务器地址」（已
 - 被测者：`POST /v1/subjects` 可带客户端生成的 UUID（离线新建的成员与云端同号）；更新用 `PATCH` 或 `PUT /v1/subjects/{id}`（安卓 HttpURLConnection 不支持 PATCH）。
 - 健康资料：`PUT /v1/subjects/{id}/profile`（`SubjectProfileInput`：键 → 答案 + 客户端修改时间），`GET /v1/subjects` 与导出返回解密后的资料。规则同记录：需 `HEALTH_DATA_SYNC`，儿童需该成员的 `GUARDIAN`；客户端修改时间早于云端已有版本返回 409，最多 64 项、值 ≤ 200 字。迁移 `V2__subject_profile.sql`。
 - 日志不得打印请求体、令牌、邮箱。新增读取原文的接口必须写审计。
-- 未部署：托管、TLS、KMS、短信登录、LLM 均待决策（设计文档 §9）。
+- 未部署：托管、TLS、KMS、短信登录均待决策（设计文档 §9）；LLM 已按 §5.4 接入 DeepSeek，正式启用前需完成数据处理协议与知识库医学审核。

@@ -6,7 +6,7 @@
 
 | 类型 | 说明 |
 |---|---|
-| `EyeNetworkDataSource` | 接口：注册、登录、刷新、登出、账号、同意、上传记录、导出、注销；结果为 `NetworkResult`（成功 / `HttpError` 带稳定错误代码 / `Unreachable`） |
+| `EyeNetworkDataSource` | 接口：注册、登录、刷新、登出、账号、同意、上传记录、导出、注销、AI 解读（`explain`）；结果为 `NetworkResult`（成功 / `HttpError` 带稳定错误代码 / `Unreachable`） |
 | `HttpEyeNetworkDataSource` | `HttpURLConnection` 实现，IO 线程执行；不记录请求体与令牌 |
 | `di/NetworkModule` | Hilt 绑定 |
 

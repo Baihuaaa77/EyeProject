@@ -485,7 +485,8 @@ private fun PursuitContent(s: ScreeningState, vm: ScreeningTestViewModel) {
 internal fun ScreeningResultContent(s: ScreeningState, vm: ScreeningTestViewModel) {
     val report = ResultReports.screening(s) ?: return
     val export = rememberRecordExport(s.savedFile) { vm.engine.lastRecordJson }
-    ResultReportView(report, export, actions = {
+    val aiCard by vm.explanation.collectAsStateWithLifecycle()
+    ResultReportView(report, export, aiCard = aiCard, onExplain = vm::explain, actions = {
         EyeButton("重新测试", if (report.level == ScreeningRiskLevel.UNCERTAIN || !report.valid) EyeButtonRole.PRIMARY else EyeButtonRole.SECONDARY,
             vm::restart, Modifier.fillMaxWidth())
     }) {

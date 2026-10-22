@@ -3,6 +3,8 @@ package com.zkyjss.eyeproject.core.network
 import com.zkyjss.eyeproject.core.sync.AccountDto
 import com.zkyjss.eyeproject.core.sync.ConsentDto
 import com.zkyjss.eyeproject.core.sync.ConsentInput
+import com.zkyjss.eyeproject.core.sync.ExplanationDto
+import com.zkyjss.eyeproject.core.sync.ExplanationRequest
 import com.zkyjss.eyeproject.core.sync.LoginRequest
 import com.zkyjss.eyeproject.core.sync.RecordSummaryDto
 import com.zkyjss.eyeproject.core.sync.RecordUpload
@@ -44,4 +46,6 @@ interface EyeNetworkDataSource {
     /** 返回服务端导出的原始 JSON 文本，由调用方写入用户选择的位置。 */
     suspend fun exportAll(accessToken: String): NetworkResult<String>
     suspend fun deleteAccount(accessToken: String): NetworkResult<Unit>
+    /** AI 解读：服务端检索知识库后由大模型生成（需「AI 解读」同意）。 */
+    suspend fun explain(accessToken: String, request: ExplanationRequest): NetworkResult<ExplanationDto>
 }

@@ -32,6 +32,8 @@ struct ResultReportView: View {
                     MetricGrid(metrics: report.metrics)
                     if !report.evidence.isEmpty { EvidenceCard(evidence: report.evidence) }
                 }
+                // 解读放在规则结论与依据之后：先看规则判了什么，再看通俗解释
+                if !runtime.string("savedFile").isEmpty { AiExplanationView(fileName: runtime.string("savedFile")) }
                 actions(report)
                 HStack(spacing: 10) {
                     Button("查看本次数据") { dataOpen = true }.buttonStyle(EyeButtonStyle(role: .secondary))

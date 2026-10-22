@@ -5,11 +5,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.zkyjss.eyeproject.core.data.account.AccountRepository
 import com.zkyjss.eyeproject.core.data.account.AccountResult
+import com.zkyjss.eyeproject.core.data.explanation.ExplanationRepository
 import com.zkyjss.eyeproject.core.data.record.RecordSyncStatus
 import com.zkyjss.eyeproject.core.data.record.RecordExportFormat
 import com.zkyjss.eyeproject.core.data.record.ScreeningRecordRepository
 import com.zkyjss.eyeproject.core.data.subject.SubjectRepository
 import com.zkyjss.eyeproject.core.sync.ConsentType
+import com.zkyjss.eyeproject.core.ui.component.AiCardState
 import com.zkyjss.eyeproject.feature.services.LocalRecordEntry
 import com.zkyjss.eyeproject.feature.services.SubjectProfile
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -37,6 +39,8 @@ sealed interface CloudSyncUiState {
         val status: RecordSyncStatus,
         val busy: Boolean,
         val message: String?,
+        /** 同意把去标识结果发给大模型生成解读。 */
+        val aiExplanation: Boolean = false,
     ) : CloudSyncUiState
 }
 
@@ -45,6 +49,7 @@ class MineViewModel @Inject constructor(
     private val accounts: AccountRepository,
     private val records: ScreeningRecordRepository,
     private val subjectRepository: SubjectRepository,
+    private val explanations: ExplanationRepository,
 ) : ViewModel() {
     private val busy = MutableStateFlow(false)
     private val message = MutableStateFlow<String?>(null)
@@ -65,7 +70,7 @@ class MineViewModel @Inject constructor(
                 !account.cloudConfigured -> CloudSyncUiState.NotConfigured(note)
                 account.email == null -> CloudSyncUiState.SignedOut(working, note)
                 else -> CloudSyncUiState.SignedIn(account.email!!, account.healthDataSync, account.guardian,
-                    account.researchUse, status, working || status.syncing, note ?: status.lastMessage)
+                    account.researchUse, status, working || status.syncing, note ?: status.lastMessage, account.aiExplanation)
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), CloudSyncUiState.Loading)
 
@@ -76,6 +81,18 @@ class MineViewModel @Inject constructor(
     /** 本机测试记录（最新在前）。 */
     val localRecords: StateFlow<List<LocalRecordEntry>> =
         records.localRecords.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    private val explanationCards = mutableMapOf<String, StateFlow<AiCardState?>>()
+
+    /** 一条记录的 AI 解读卡片状态（记录无法解读时为 null，不显示卡片）。 */
+    fun explanation(fileName: String): StateFlow<AiCardState?> = explanationCards.getOrPut(fileName) {
+        explanations.explanation(fileName).map { it.toCard() }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+    }
+
+    /** 生成解读；[agreeFirst] 为卡片内点了「同意并生成」。 */
+    fun explain(fileName: String, agreeFirst: Boolean = false) {
+        viewModelScope.launch { explanations.generate(fileName, agreeFirst) }
+    }
 
     /** 导出一条本机记录到用户选择的位置；[done] 在主线程回报是否成功。 */
     fun exportRecord(fileName: String, target: Uri, format: RecordExportFormat = RecordExportFormat.JSON, done: (Boolean) -> Unit) {

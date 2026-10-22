@@ -47,7 +47,8 @@ import java.util.Locale
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun LocalRecordsSheet(records: List<LocalRecordEntry>, onExport: (LocalRecordEntry) -> Unit,
-    onDismiss: () -> Unit, onExportReport: (LocalRecordEntry) -> Unit = {}) {
+    onDismiss: () -> Unit, onExportReport: (LocalRecordEntry) -> Unit = {},
+    aiCard: @Composable (LocalRecordEntry) -> Unit = {}) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = colors.appBackground,
@@ -62,14 +63,16 @@ internal fun LocalRecordsSheet(records: List<LocalRecordEntry>, onExport: (Local
             if (records.isEmpty()) item {
                 EyeText("还没有测试记录", Modifier.padding(vertical = 24.dp), style = typography.body, color = colors.textSecondary)
             }
-            items(records, key = { it.fileName }) { record -> RecordRow(record, { onExport(record) }, { onExportReport(record) }) }
+            items(records, key = { it.fileName }) { record ->
+                RecordRow(record, { onExport(record) }, { onExportReport(record) }) { aiCard(record) }
+            }
             item { Spacer(Modifier.height(28.dp)) }
         }
     }
 }
 
 @Composable
-private fun RecordRow(record: LocalRecordEntry, onExport: () -> Unit, onExportReport: () -> Unit) {
+private fun RecordRow(record: LocalRecordEntry, onExport: () -> Unit, onExportReport: () -> Unit, aiCard: @Composable () -> Unit) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
     var expanded by rememberSaveable(record.fileName) { mutableStateOf(false) }
@@ -91,6 +94,7 @@ private fun RecordRow(record: LocalRecordEntry, onExport: () -> Unit, onExportRe
         if (expanded) {
             if (record.advice.isNotBlank()) EyeText(record.advice, style = typography.body, color = colors.textPrimary)
             record.lines.forEach { EyeText("· $it", style = typography.bodySecondary, color = colors.textSecondary) }
+            aiCard()
             if (record.qualityNotes.isNotEmpty()) RecordSection("数据可靠性说明", record.qualityNotes.map { "" to it })
             record.sections.forEach { section -> RecordSection(section.title, section.rows.map { it.label to it.value }) }
             EyeText("评估版本 ${record.version}", style = typography.bodySecondary, color = colors.textSecondary)

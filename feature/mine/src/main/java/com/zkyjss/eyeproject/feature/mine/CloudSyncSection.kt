@@ -119,6 +119,7 @@ private fun SignedInPanel(state: CloudSyncUiState.SignedIn, actions: CloudSyncAc
     ToggleRow("云端保存测试记录与资料", state.healthDataSync, !state.busy) { actions.setConsent(ConsentType.HEALTH_DATA_SYNC, it) }
     ToggleRow("监护人同意（未满 14 岁）", state.guardian, !state.busy) { actions.setConsent(ConsentType.GUARDIAN, it) }
     ToggleRow("用于研究（可选，去标识）", state.researchUse, !state.busy) { actions.setConsent(ConsentType.RESEARCH_USE, it) }
+    ToggleRow("AI 解读（去标识结果发给大模型）", state.aiExplanation, !state.busy) { actions.setConsent(ConsentType.AI_EXPLANATION, it) }
     Note(statusLine(state.status, state.busy))
     state.message?.let { Note(it) }
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -156,6 +157,7 @@ internal val DATA_HANDLING = listOf(
     "传输加密，云端以独立密钥加密保存，查看、导出、删除都有审计记录。",
     "可随时关闭上传、导出全部云端数据，或注销账号删除云端数据；本机记录始终保留。",
     "未满 14 岁孩子的数据需监护人同意才上传；研究用途需单独同意。",
+    "AI 解读需单独同意：只发送结果等级、指标、判断依据、年龄段和几项相关资料选项，由第三方大模型生成解读，风险等级仍由测试规则决定。",
 )
 
 private fun statusLine(status: RecordSyncStatus, busy: Boolean): String = buildList {

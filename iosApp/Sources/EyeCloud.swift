@@ -23,6 +23,14 @@ final class CloudModel: ObservableObject {
     func recordSaved(_ fileName: String) { DispatchQueue.main.async { self.client.recordSaved(fileName: fileName) } }
     /// 成员资料在本机改动后排队同步。
     func subjectsChanged() { DispatchQueue.main.async { self.client.subjectsChanged() } }
+
+    /// 一条本机记录的 AI 解读状态（随 state 刷新重读）；见 CloudClient.explanationJson。
+    func explanation(_ fileName: String) -> [String: Any] {
+        _ = state
+        return EyeRuntime.object(client.explanationJson(fileName: fileName))
+    }
+    /// 生成解读；agreeFirst 为卡片内点了「同意并生成」。
+    func explain(_ fileName: String, agreeFirst: Bool) { client.explain(fileName: fileName, agreeFirst: agreeFirst) }
 }
 
 /// URLSession 实现的一次 HTTP 往返；请求体与令牌不写日志。
@@ -161,6 +169,7 @@ struct CloudSection: View {
             consent("云端保存测试记录与资料", "HEALTH_DATA_SYNC", "healthDataSync")
             consent("监护人同意（未满 14 岁）", "GUARDIAN", "guardian")
             consent("用于研究（可选，去标识）", "RESEARCH_USE", "researchUse")
+            consent("AI 解读（去标识结果发给大模型）", "AI_EXPLANATION", "aiExplanation")
             note(statusLine)
             if !message.isEmpty { note(message) }
             HStack(spacing: 12) {
@@ -202,6 +211,7 @@ struct CloudSection: View {
         "传输加密，云端以独立密钥加密保存，查看、导出、删除都有审计记录。",
         "可随时关闭上传、导出全部云端数据，或注销账号删除云端数据；本机记录始终保留。",
         "未满 14 岁孩子的数据需监护人同意才上传；研究用途需单独同意。",
+        "AI 解读需单独同意：只发送结果等级、指标、判断依据、年龄段和几项相关资料选项，由第三方大模型生成解读，风险等级仍由测试规则决定。",
     ]
 
     private var statusLine: String {

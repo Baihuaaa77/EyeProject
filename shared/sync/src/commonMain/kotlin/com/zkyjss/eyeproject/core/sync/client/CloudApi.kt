@@ -4,6 +4,8 @@ import com.zkyjss.eyeproject.core.sync.AccountDto
 import com.zkyjss.eyeproject.core.sync.ConsentDto
 import com.zkyjss.eyeproject.core.sync.ConsentInput
 import com.zkyjss.eyeproject.core.sync.ErrorBody
+import com.zkyjss.eyeproject.core.sync.ExplanationDto
+import com.zkyjss.eyeproject.core.sync.ExplanationRequest
 import com.zkyjss.eyeproject.core.sync.LoginRequest
 import com.zkyjss.eyeproject.core.sync.RecordSummaryDto
 import com.zkyjss.eyeproject.core.sync.RecordUpload
@@ -67,6 +69,9 @@ class CloudApi(private val baseUrl: () -> String, private val transport: HttpTra
     /** 服务端导出的原始 JSON 文本。 */
     suspend fun exportAll(token: String): ApiResult<String> = raw("GET", "/me/export", token, null)
     suspend fun deleteAccount(token: String) = call<Unit>("DELETE", "/me", token, null, null)
+    /** AI 解读（需「AI 解读」同意）。 */
+    suspend fun explain(token: String, request: ExplanationRequest) =
+        call("POST", "/explanations", token, encode(ExplanationRequest.serializer(), request), ExplanationDto.serializer())
 
     private fun <T> encode(serializer: KSerializer<T>, value: T) = json.encodeToString(serializer, value)
 

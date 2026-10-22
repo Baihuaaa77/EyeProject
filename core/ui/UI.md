@@ -34,6 +34,7 @@
 | `EyeSwitch` | 开关（Box + 动画），选中轨道主色；`onCheckedChange = null` 时仅展示（由外层整行切换） |
 | `EyeSegmentedRow` | 分段选择器，泛型 `SegmentedOption<T>`：浅色轨道 + 主色滑块弹簧滑动，RadioButton 语义 |
 | `EyeTextField` | 单行输入框（BasicTextField 自绘）：上方标签、浅底细边框、占位文字；`password` 遮挡输入 |
+| `AiExplanationCard` | AI 解读卡片，状态 `AiCardState`（Locked / Idle（可带同意说明，卡内展开）/ Loading（骨架 + 轮换进度语）/ Done（一句话总结、这说明、可以这样做、何时就医、参考资料、免责说明）/ Failed）；`embedded` 用于嵌在记录行里。苹果端 `AiExplanationView.swift` 同一排版 |
 | `EyeStatusChip` | 状态徽标，`StatusTone(NEUTRAL/SUCCESS/DANGER/WARNING)` 语义色；`live` 时带呼吸圆点 |
 
 ### 栏

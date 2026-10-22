@@ -27,6 +27,15 @@ data class ServerConfig(
     val recordRetentionDays: Int?,
     val auditRetentionDays: Int,
     val maxSubjectsPerAccount: Int,
+    /** AI 解读（DeepSeek 等 OpenAI 兼容接口）；没有密钥时解读接口返回 ai_unavailable，其余功能不受影响。 */
+    val llmApiKey: String? = null,
+    val llmBaseUrl: String = "https://api.deepseek.com",
+    val llmModel: String = "deepseek-v4-flash",
+    /** 每个账号每天调用大模型的次数上限（命中缓存不计）。 */
+    val llmDailyLimit: Int = 20,
+    val llmTimeoutMs: Long = 30_000,
+    /** 请求里带 `thinking: disabled`（DeepSeek V4 默认开启思考，解读不需要）；换不支持该字段的模型时设 false。 */
+    val llmDisableThinking: Boolean = true,
 ) {
     init {
         require(activeKeyId in dataKeys) { "EYE_ACTIVE_KEY_ID 不在 EYE_DATA_KEYS 中" }
@@ -64,8 +73,25 @@ data class ServerConfig(
                 recordRetentionDays = env["EYE_RECORD_RETENTION_DAYS"]?.toInt(),
                 auditRetentionDays = env["EYE_AUDIT_RETENTION_DAYS"]?.toInt() ?: 3 * 365,
                 maxSubjectsPerAccount = 10,
+                llmApiKey = (env["DEEPSEEK_API_KEY"] ?: env["EYE_LLM_API_KEY"])?.takeIf { it.isNotBlank() }
+                    ?: localLlmKey(env["EYE_LLM_KEY_FILE"] ?: "llm.properties"),
+                llmBaseUrl = env["EYE_LLM_BASE_URL"]?.takeIf { it.isNotBlank() }?.trimEnd('/') ?: "https://api.deepseek.com",
+                llmModel = env["EYE_LLM_MODEL"]?.takeIf { it.isNotBlank() } ?: "deepseek-v4-flash",
+                llmDailyLimit = env["EYE_LLM_DAILY_LIMIT"]?.toInt() ?: 20,
+                llmTimeoutMs = env["EYE_LLM_TIMEOUT_MS"]?.toLong() ?: 30_000,
+                llmDisableThinking = env["EYE_LLM_DISABLE_THINKING"]?.toBoolean() ?: true,
             )
         }
+
+        /**
+         * 本机试用：工作目录（backend/server）下未入库的 `llm.properties` 里的 `apiKey=...`。
+         * 环境变量优先；文件不存在时返回 null。
+         */
+        private fun localLlmKey(path: String): String? = runCatching {
+            val file = java.io.File(path)
+            if (!file.isFile) return null
+            java.util.Properties().apply { file.reader(Charsets.UTF_8).use(::load) }.getProperty("apiKey")?.trim()?.takeIf { it.isNotEmpty() }
+        }.getOrNull()
 
         /** 格式：`k1:<base64>,k2:<base64>`。 */
         fun parseKeys(text: String): Map<String, ByteArray> = text.split(',').filter { it.isNotBlank() }.associate { item ->
@@ -78,6 +104,7 @@ data class ServerConfig(
             "EYE_DB_URL" to "jdbc:h2:mem:$dbName;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1",
             "EYE_PBKDF2_ITERATIONS" to "1000",
             "EYE_AUTH_RATE_PER_MINUTE" to "1000",
+            "EYE_LLM_KEY_FILE" to "",
         ))
     }
 }

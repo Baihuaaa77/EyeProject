@@ -6,9 +6,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.zkyjss.eyeproject.core.camera.CameraController
 import com.zkyjss.eyeproject.core.camera.CameraIntrinsicsProvider
+import com.zkyjss.eyeproject.core.data.explanation.ExplanationRepository
 import com.zkyjss.eyeproject.core.data.record.ScreeningRecordRepository
 import com.zkyjss.eyeproject.core.data.subject.SubjectRepository
+import com.zkyjss.eyeproject.core.ui.component.AiCardState
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -23,6 +27,7 @@ class ScreeningTestViewModel @Inject constructor(
     intrinsics: CameraIntrinsicsProvider,
     records: ScreeningRecordRepository,
     subjectRepository: SubjectRepository,
+    private val explanations: ExplanationRepository,
 ) : ViewModel() {
     private val platform = AndroidScreeningPlatform(context, camera, intrinsics, records)
     val engine = ScreeningEngine(platform, viewModelScope)
@@ -55,5 +60,13 @@ class ScreeningTestViewModel @Inject constructor(
     fun startCamera(owner: LifecycleOwner) { platform.owner = owner; engine.startCamera() }
     fun retryCamera(owner: LifecycleOwner) { platform.owner = owner; engine.retryCamera() }
     fun stopCamera() = engine.stopCamera()
+    /** 结果页的 AI 解读卡片：跟随本次保存的记录；规则等级不变，模型只做解释。 */
+    val explanation: StateFlow<AiCardState?> = explanations.cardFor(engine.state.map { it.savedFile })
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+    /** [agreeFirst]：首次使用时在卡片内点了「同意并生成」。 */
+    fun explain(agreeFirst: Boolean = false) {
+        val file = state.value.savedFile ?: return
+        viewModelScope.launch { explanations.generate(file, agreeFirst) }
+    }
     override fun onCleared() { engine.close() }
 }

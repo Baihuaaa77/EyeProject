@@ -4,6 +4,9 @@ import com.zkyjss.eyeproject.core.sync.ConsentDto
 import com.zkyjss.eyeproject.core.sync.ConsentInput
 import com.zkyjss.eyeproject.core.sync.ConsentType
 import com.zkyjss.eyeproject.core.sync.ErrorCodes
+import com.zkyjss.eyeproject.core.sync.ExplanationDto
+import com.zkyjss.eyeproject.core.sync.ExplanationRequest
+import com.zkyjss.eyeproject.core.sync.Explanations
 import com.zkyjss.eyeproject.core.sync.LoginRequest
 import com.zkyjss.eyeproject.core.sync.OutboxEntry
 import com.zkyjss.eyeproject.core.sync.RecordOutbox
@@ -28,6 +31,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.MapSerializer
+import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -126,7 +131,7 @@ class CloudClient(
         null
     }
 
-    /** [type] 为 HEALTH_DATA_SYNC / GUARDIAN / RESEARCH_USE；GUARDIAN 指「本人」这一成员的监护人同意。 */
+    /** [type] 为 HEALTH_DATA_SYNC / GUARDIAN / RESEARCH_USE / AI_EXPLANATION；GUARDIAN 指「本人」这一成员的监护人同意。 */
     fun setConsent(type: String, granted: Boolean) = act(null) {
         val current = session ?: return@act "请先登录"
         val consentType = runCatching { ConsentType.valueOf(type) }.getOrNull() ?: return@act "未知的同意项"
@@ -134,7 +139,7 @@ class CloudClient(
         when (val result = authorized { api.recordConsent(it, ConsentInput(consentType, SyncContract.PRIVACY_POLICY_VERSION, granted, subject)) }) {
             is ApiResult.Ok -> {
                 session = session?.copy(consents = consentMap(result.value, current.defaultSubjectId))
-                if (granted && consentType != ConsentType.RESEARCH_USE) launchSync()
+                if (granted && consentType != ConsentType.RESEARCH_USE && consentType != ConsentType.AI_EXPLANATION) launchSync()
                 null
             }
             else -> describe(result)
@@ -194,6 +199,7 @@ class CloudClient(
             put("healthDataSync", s?.consents?.get(ConsentType.HEALTH_DATA_SYNC) == true)
             put("guardian", s?.consents?.get(ConsentType.GUARDIAN) == true)
             put("researchUse", s?.consents?.get(ConsentType.RESEARCH_USE) == true)
+            put("aiExplanation", s?.consents?.get(ConsentType.AI_EXPLANATION) == true)
             put("pending", entries.count { it.state == SyncState.PENDING })
             put("synced", entries.count { it.state == SyncState.SYNCED })
             put("failed", entries.count { it.state == SyncState.CONFLICT || it.state == SyncState.REJECTED })
@@ -205,6 +211,91 @@ class CloudClient(
             put("outcomeId", outcomeId)
             put("outcomeOk", outcomeOk)
         }.toString()
+    }
+
+    // endregion
+
+    // region AI 解读（与安卓 core:data ExplanationRepository 同一规则）
+
+    /** 生成过的解读：输入哈希 → 解读，存应用沙盒，离线或退出登录后仍可查看。 */
+    private var aiCache: Map<String, ExplanationDto> = platform.readValue(KEY_AI)
+        ?.let { runCatching { json.decodeFromString(AI_CACHE, it) }.getOrNull() } ?: emptyMap()
+    private val aiLoading = mutableSetOf<String>()
+    private val aiFailures = mutableMapOf<String, String>()
+    private val aiRequests = mutableMapOf<String, ExplanationRequest>()
+
+    /**
+     * 一条本机记录的 AI 解读状态（JSON）。`state` 为 unsupported / locked（message）/ consent（consentText）/
+     * ready / loading / failed（message）/ done（summary、meaning、suggestions、seeDoctor、sources、footnote、urgent）。
+     */
+    fun explanationJson(fileName: String): String = buildJsonObject {
+        val request = aiRequest(fileName)
+        val key = request?.let(Explanations::cacheKey)
+        val done = key?.let { aiCache[it] }
+        val s = session
+        when {
+            request == null -> put("state", "unsupported")
+            done != null -> {
+                put("state", "done")
+                put("summary", done.summary); put("seeDoctor", done.seeDoctor); put("footnote", done.disclaimer)
+                put("meaning", JsonArray(done.meaning.map(::JsonPrimitive)))
+                put("suggestions", JsonArray(done.suggestions.map(::JsonPrimitive)))
+                put("sources", JsonArray(done.sources.map { JsonPrimitive("${it.title}（${it.publisher}）") }))
+                put("urgent", done.riskLevel == "MEDIUM" || done.riskLevel == "HIGH")
+            }
+            key in aiLoading -> put("state", "loading")
+            key in aiFailures -> { put("state", "failed"); put("message", aiFailures[key]) }
+            !api.configured -> { put("state", "locked"); put("message", "连接云端服务并登录后，可用 AI 解读这次结果") }
+            s == null -> { put("state", "locked"); put("message", "在「我的 → 云端同步」登录后，可用 AI 解读这次结果") }
+            s.consents[ConsentType.AI_EXPLANATION] != true -> { put("state", "consent"); put("consentText", Explanations.CONSENT_TEXT) }
+            else -> put("state", "ready")
+        }
+    }.toString()
+
+    /** 生成解读；[agreeFirst] 为卡片内点了「同意并生成」，同意未能保存则不发送任何数据。状态经 onChange 通知。 */
+    fun explain(fileName: String, agreeFirst: Boolean) {
+        val request = aiRequest(fileName) ?: return
+        val key = Explanations.cacheKey(request)
+        if (key in aiCache || key in aiLoading) return
+        aiLoading += key; aiFailures -= key; onChange()
+        track(scope.launch {
+            val failure: String? = run {
+                if (agreeFirst) {
+                    val current = session ?: return@run "请先登录"
+                    when (val consent = authorized { api.recordConsent(it, ConsentInput(ConsentType.AI_EXPLANATION, SyncContract.PRIVACY_POLICY_VERSION, true)) }) {
+                        is ApiResult.Ok -> session = session?.copy(consents = consentMap(consent.value, current.defaultSubjectId))
+                        else -> return@run describe(consent)
+                    }
+                }
+                when (val result = authorized { api.explain(it, request) }) {
+                    is ApiResult.Ok -> {
+                        aiCache = (aiCache + (key to result.value)).entries.sortedByDescending { it.value.generatedAt }
+                            .take(MAX_AI_CACHED).associate { it.key to it.value }
+                        platform.writeValue(KEY_AI, json.encodeToString(AI_CACHE, aiCache))
+                        null
+                    }
+                    // 同意已在别处撤回：回到「需要同意」
+                    is ApiResult.Failed -> when {
+                        result.code == ErrorCodes.CONSENT_REQUIRED -> {
+                            session = session?.let { it.copy(consents = it.consents + (ConsentType.AI_EXPLANATION to false)) }
+                            null
+                        }
+                        result.status == 401 -> null
+                        else -> result.message
+                    }
+                    is ApiResult.Unreachable -> "无法连接云端服务，请检查网络后重试"
+                }
+            }
+            aiLoading -= key
+            if (failure != null) aiFailures[key] = failure
+            onChange()
+        })
+    }
+
+    private fun aiRequest(fileName: String): ExplanationRequest? {
+        if (!RECORD_NAME.matches(fileName)) return null
+        aiRequests[fileName]?.let { return it }
+        return platform.readRecord(fileName)?.let(Explanations::fromRecord)?.also { aiRequests[fileName] = it }
     }
 
     // endregion
@@ -495,6 +586,9 @@ class CloudClient(
         private const val KEY_SERVER = "cloud.serverUrl"
         private const val KEY_OUTBOX = "cloud.outbox"
         private const val KEY_BOOK = "cloud.subjectBook"
+        private const val KEY_AI = "cloud.aiExplanations"
+        private const val MAX_AI_CACHED = 200
+        private val AI_CACHE = MapSerializer(String.serializer(), ExplanationDto.serializer())
         private const val EXPIRY_MARGIN_MS = 30_000L
         private const val SELF = "SELF"
         private const val BIRTH_YEAR = "出生年份"

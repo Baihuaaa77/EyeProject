@@ -3,6 +3,7 @@ package com.zkyjss.eyeproject.server
 import com.zkyjss.eyeproject.core.sync.ConsentInput
 import com.zkyjss.eyeproject.core.sync.ErrorBody
 import com.zkyjss.eyeproject.core.sync.ErrorCodes
+import com.zkyjss.eyeproject.core.sync.ExplanationRequest
 import com.zkyjss.eyeproject.core.sync.SubjectProfileInput
 import com.zkyjss.eyeproject.core.sync.LoginRequest
 import com.zkyjss.eyeproject.core.sync.RefreshRequest
@@ -62,19 +63,27 @@ fun main() {
 /** 已认证账号。 */
 data class AccountPrincipal(val accountId: String)
 
-/** 服务端全部组件；测试可注入时钟。 */
-class Services(val config: ServerConfig, clock: () -> Long = System::currentTimeMillis) : AutoCloseable {
+/** 服务端全部组件；测试可注入大模型替身与时钟。 */
+class Services(
+    val config: ServerConfig,
+    llm: LlmClient? = config.llmApiKey?.let {
+        DeepSeekClient(config.llmBaseUrl, it, config.llmModel, config.llmTimeoutMs, config.llmDisableThinking)
+    },
+    clock: () -> Long = System::currentTimeMillis,
+) : AutoCloseable {
     val db = Database(config)
     val audit = AuditLog(IpHasher(config.auditSalt), clock)
     val auth = AuthService(db, config, audit, clock)
     val records = RecordService(db, PayloadCipher(config.dataKeys, config.activeKeyId), audit, clock)
     val profile = ProfileService(db, config, audit, records, PayloadCipher(config.dataKeys, config.activeKeyId), clock)
     val retention = RetentionJob(db, config, audit, clock)
+    val explanations = ExplanationService(db, config, audit, KnowledgeBase.load(), llm, clock)
     override fun close() = db.close()
 }
 
 fun Application.eyeProjectModule(config: ServerConfig, services: Services = Services(config), runJobs: Boolean = true) {
     val auth = RateLimitName("auth")
+    val ai = RateLimitName("ai")
     if (config.trustProxy) install(XForwardedHeaders)
     install(CallLogging) {
         level = Level.INFO
@@ -86,6 +95,11 @@ fun Application.eyeProjectModule(config: ServerConfig, services: Services = Serv
         register(auth) {
             rateLimiter(limit = config.authRatePerMinute, refillPeriod = 1.minutes)
             requestKey { call -> call.request.origin.remoteHost }
+        }
+        // 每个账号每分钟最多 6 次解读请求（另有每日额度），防止连点刷费用
+        register(ai) {
+            rateLimiter(limit = 6, refillPeriod = 1.minutes)
+            requestKey { call -> call.principal<AccountPrincipal>()?.accountId ?: call.request.origin.remoteHost }
         }
     }
     install(StatusPages) {
@@ -137,6 +151,11 @@ fun Application.eyeProjectModule(config: ServerConfig, services: Services = Serv
                 meRoutes(services)
                 subjectRoutes(services)
                 recordRoutes(services)
+                rateLimit(ai) {
+                    post("/explanations") {
+                        call.respond(services.explanations.explain(call.accountId, call.receive<ExplanationRequest>(), call.ip))
+                    }
+                }
             }
         }
     }
