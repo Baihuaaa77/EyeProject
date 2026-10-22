@@ -5,7 +5,13 @@ import kotlin.math.*
 
 /** MediaPipe 478 点的相同索引与图像坐标约定；输入已转正、不镜像的 RGB 图像。 */
 object LandmarkGeometry {
-    fun face(points: FloatArray, matrix: FloatArray, image: GrayImage): FaceMetrics? {
+    fun face(points: FloatArray, matrix: FloatArray, image: GrayImage): FaceMetrics? = face(points, matrix, image, optics = true)
+
+    /**
+     * [optics] 为 false 时不做瞳孔 / 角膜反光测量（只有斜视用到；干眼与眨眼对比用不到，省下每帧两次眼区像素计算），
+     * 两眼的光学测量为 null，其余几何不变。
+     */
+    fun face(points: FloatArray, matrix: FloatArray, image: GrayImage, optics: Boolean): FaceMetrics? {
         if (points.size < 478 * 3 || points.any { !it.isFinite() } || image.width <= 0 || image.height <= 0) return null
         fun point(i: Int) = Point2f(points[i * 3] * image.width, points[i * 3 + 1] * image.height)
         fun eye(label: String, ear: IntArray, iris: IntArray): EyeLandmarks {
@@ -22,6 +28,7 @@ object LandmarkGeometry {
             atan2(matrix[6] / scale, matrix[10] / scale) * (180f / PI.toFloat()),
             atan2(matrix[1] / scale, matrix[0] / scale) * (180f / PI.toFloat())) else null
         return FaceMetrics(BoundingBox(xy.minOf { it.x }, xy.minOf { it.y }, xy.maxOf { it.x }, xy.maxOf { it.y }),
-            left, right, EyeOpticalAlgorithm.measure(image,left), EyeOpticalAlgorithm.measure(image,right), pose)
+            left, right, if (optics) EyeOpticalAlgorithm.measure(image,left) else null,
+            if (optics) EyeOpticalAlgorithm.measure(image,right) else null, pose)
     }
 }

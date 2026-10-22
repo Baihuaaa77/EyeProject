@@ -110,6 +110,7 @@ final class BlinkCompareModel: ObservableObject {
 
     init() {
         if classifier == nil { error = "缺少 OCEC 模型权重，OCEC 一栏不会有读数。" }
+        camera.measureOptics = false
         // 判定在相机队列完成，事件随帧带出；主线程短暂繁忙时最多积压约 3 秒的帧，不丢事件也不无限滞后
         frames = FrameMailbox<BlinkFrame>(limit: 90) { [weak self] batch in self?.ingest(batch) }
         camera.onAnalyzedFrame = { [weak self] buffer, face, time in

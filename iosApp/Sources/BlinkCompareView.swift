@@ -50,15 +50,22 @@ struct BlinkCompareView: View {
     }
 
     private var header: some View {
-        HStack(spacing: 8) {
-            Button { EyeHaptics.tap(); model.stop(); dismiss() } label: {
-                Image(systemName: "xmark").font(.system(size: 17, weight: .semibold)).frame(width: 44, height: 44)
-            }.buttonStyle(.plain)
-            Text("眨眼检测对比").font(EyeStyle.subtitle)
-            Spacer()
-            Text(String(format: "%.0f 帧/秒 · OCEC %.1f ms", model.fps, model.latest?.ocecCostMs ?? 0)
-                 + (model.droppedFrames > 0 ? " · 丢 \(model.droppedFrames)" : ""))
+        let stats = model.camera.stats
+        return VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 8) {
+                Button { EyeHaptics.tap(); model.stop(); dismiss() } label: {
+                    Image(systemName: "xmark").font(.system(size: 17, weight: .semibold)).frame(width: 44, height: 44)
+                }.buttonStyle(.plain)
+                Text("眨眼检测对比").font(EyeStyle.subtitle)
+                Spacer()
+                Text(String(format: "%.0f 帧/秒", model.fps)).font(EyeStyle.chip).foregroundStyle(EyeStyle.secondary).monospacedDigit()
+            }
+            // 诊断：相机送来几帧、实际分析几帧、每帧检测与整帧耗时、推理后端；帧率低时据此判断瓶颈
+            Text(String(format: "相机 %.0f · 分析 %.0f 帧/秒 · 检测 %.0f ms · 整帧 %.0f ms · %@ · OCEC %.1f ms",
+                        stats.inputFps, stats.analyzedFps, stats.detectMs, stats.frameMs, stats.backend,
+                        model.latest?.ocecCostMs ?? 0) + (model.droppedFrames > 0 ? " · 丢 \(model.droppedFrames)" : ""))
                 .font(EyeStyle.chip).foregroundStyle(EyeStyle.secondary).monospacedDigit()
+                .lineLimit(1).minimumScaleFactor(0.6).padding(.leading, 52)
         }.padding(.horizontal, 8).padding(.vertical, 4)
     }
 

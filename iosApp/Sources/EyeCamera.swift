@@ -58,6 +58,15 @@ final class FrameMailbox<Frame> {
     }
 }
 
+/// 相机诊断读数（眨眼对比页显示）：相机送来的帧率、实际分析的帧率、每帧关键点检测与整帧耗时、推理后端。
+struct CameraStats {
+    var inputFps = 0.0
+    var analyzedFps = 0.0
+    var detectMs = 0.0
+    var frameMs = 0.0
+    var backend = ""
+}
+
 final class EyeCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
     /// 相机队列上已算好的一帧：关键点几何与光学测量、图像宽高、焦距、单调时间、亮度。
     var onFrame: ((FaceMetrics?, Int32, Int32, Float, Int64, Float) -> Void)?
@@ -68,6 +77,16 @@ final class EyeCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
     var onAnalyzedFrame: ((CVPixelBuffer, FaceMetrics?, Int64) -> Void)?
     /// 眨眼对比实验页的预览用；正式测试不显示预览。
     var captureSession: AVCaptureSession { session }
+    /// 是否测量瞳孔 / 角膜反光（斜视用；干眼与眨眼对比用不到，关掉省下每帧的眼区像素计算）。在 start 前设置。
+    var measureOptics = true
+    /// 最近一秒的诊断读数；相机队列写、界面读。
+    var stats: CameraStats { statsLock.lock(); defer { statsLock.unlock() }; return currentStats }
+    private let statsLock = NSLock()
+    private var currentStats = CameraStats()
+    private var windowStart: Int64 = 0
+    private var windowInput = 0
+    private var windowAnalyzed = 0
+    private var usingGpu = false
     private let queue = DispatchQueue(label: "eye.camera.analysis")
     private let session = AVCaptureSession()
     private var detector: FaceLandmarker?
@@ -142,15 +161,10 @@ final class EyeCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
         guard !active else { return }
         do {
             if detector == nil {
-                guard let model = Bundle.main.path(forResource: "face_landmarker", ofType: "task") else {
-                    throw NSError(domain: "EyeCamera", code: 1, userInfo: [NSLocalizedDescriptionKey: "缺少眼部检测模型"])
-                }
-                let options = FaceLandmarkerOptions()
-                options.baseOptions.modelAssetPath = model
-                options.runningMode = .video; options.numFaces = 1
-                options.minFaceDetectionConfidence = 0.5; options.minFacePresenceConfidence = 0.5
-                options.minTrackingConfidence = 0.5; options.outputFacialTransformationMatrixes = true
-                detector = try FaceLandmarker(options: options)
+                // 与安卓一致优先用 GPU：CPU 推理每帧约 60–70 ms，只有十几帧/秒，眨眼常常一帧都采不到；
+                // GPU 不可用（模拟器、旧机型）时退回 CPU。
+                do { detector = try Self.makeDetector(gpu: true); usingGpu = true }
+                catch { detector = try Self.makeDetector(gpu: false); usingGpu = false }
             }
             if session.inputs.isEmpty {
                 guard let front = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front) else {
@@ -181,24 +195,67 @@ final class EyeCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
             session.startRunning()
         } catch { onError?("相机启动失败：\(error.localizedDescription)") }
     }
+    private static func makeDetector(gpu: Bool) throws -> FaceLandmarker {
+        guard let model = Bundle.main.path(forResource: "face_landmarker", ofType: "task") else {
+            throw NSError(domain: "EyeCamera", code: 1, userInfo: [NSLocalizedDescriptionKey: "缺少眼部检测模型"])
+        }
+        let options = FaceLandmarkerOptions()
+        options.baseOptions.modelAssetPath = model
+        options.baseOptions.delegate = gpu ? .GPU : .CPU
+        options.runningMode = .video; options.numFaces = 1
+        options.minFaceDetectionConfidence = 0.5; options.minFacePresenceConfidence = 0.5
+        options.minTrackingConfidence = 0.5; options.outputFacialTransformationMatrixes = true
+        return try FaceLandmarker(options: options)
+    }
+
+    /// 每秒汇总一次诊断读数。
+    private func recordStats(analyzed: Bool, detectMs: Double = 0, frameMs: Double = 0, now: Int64) {
+        if windowStart == 0 { windowStart = now }
+        windowInput += 1
+        statsLock.lock()
+        if analyzed { windowAnalyzed += 1; currentStats.detectMs = detectMs; currentStats.frameMs = frameMs }
+        currentStats.backend = usingGpu ? "GPU" : "CPU"
+        if now - windowStart >= 1_000 {
+            let seconds = Double(now - windowStart) / 1000
+            currentStats.inputFps = Double(windowInput) / seconds
+            currentStats.analyzedFps = Double(windowAnalyzed) / seconds
+            windowStart = now; windowInput = 0; windowAnalyzed = 0
+        }
+        statsLock.unlock()
+    }
+
     func stop() {
         requestLock.lock(); requestNumber += 1; requestLock.unlock()
         queue.async { self.active = false; self.generation += 1; if self.session.isRunning { self.session.stopRunning() } }
     }
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
         let time = Int64(ProcessInfo.processInfo.systemUptime * 1000)
+        guard active else { return }
         // 约 30 帧/秒：眨眼只持续 100–150 ms，帧率过低会漏检；追随速度相关也需要足够的相邻帧。
-        guard active, time - lastTime >= 30, let buffer = CMSampleBufferGetImageBuffer(sampleBuffer), let detector = detector else { return }
+        guard time - lastTime >= 30, let buffer = CMSampleBufferGetImageBuffer(sampleBuffer), let detector = detector else {
+            recordStats(analyzed: false, now: time); return
+        }
         lastTime = time
+        let started = DispatchTime.now().uptimeNanoseconds
         do {
             let image = try MPImage(pixelBuffer: buffer, orientation: .up)
-            let result = try detector.detect(videoFrame: image, timestampInMilliseconds: Int(time))
+            let result: FaceLandmarkerResult
+            do { result = try detector.detect(videoFrame: image, timestampInMilliseconds: Int(time)) }
+            catch {
+                // GPU 推理在个别机型上运行时失败：换 CPU 重建一次，本帧丢弃；CPU 也失败才报错
+                guard usingGpu else { throw error }
+                self.detector = try Self.makeDetector(gpu: false); usingGpu = false
+                recordStats(analyzed: false, now: time); return
+            }
+            let detected = DispatchTime.now().uptimeNanoseconds
             let points = result.faceLandmarks.first ?? []
-            let array = KotlinFloatArray(size: Int32(points.count * 3))
+            // 关键点先写进 Swift 连续数组，再一次拷给 Kotlin（逐个跨桥写 1434 次会拖慢每帧）
+            var flat = [Float](repeating: 0, count: points.count * 3)
             for (i, point) in points.enumerated() {
-                array.set(index: Int32(i * 3), value: point.x)
-                array.set(index: Int32(i * 3 + 1), value: point.y)
-                array.set(index: Int32(i * 3 + 2), value: point.z)
+                flat[i * 3] = point.x; flat[i * 3 + 1] = point.y; flat[i * 3 + 2] = point.z
+            }
+            let array = flat.withUnsafeMutableBufferPointer { raw in
+                raw.baseAddress.map { BgraPixels.shared.floats(base: $0, count: Int32(raw.count)) } ?? KotlinFloatArray(size: 0)
             }
             let matrix = result.facialTransformationMatrixes.first
             let transform = KotlinFloatArray(size: matrix == nil ? 0 : 16)
@@ -220,9 +277,11 @@ final class EyeCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
             }
             focal *= distanceScale
             // 关键点几何与光学测量在相机队列完成，主线程只接收结果。
-            let face = points.isEmpty ? nil : LandmarkGeometry.shared.face(points: array, matrix: transform, image: frame)
+            let face = points.isEmpty ? nil : LandmarkGeometry.shared.face(points: array, matrix: transform, image: frame, optics: measureOptics)
             onAnalyzedFrame?(buffer, face, time)
             onFrame?(face, frame.width, frame.height, focal, time, frame.brightness())
+            let finished = DispatchTime.now().uptimeNanoseconds
+            recordStats(analyzed: true, detectMs: Double(detected - started) / 1_000_000, frameMs: Double(finished - started) / 1_000_000, now: time)
         } catch { onError?("眼部检测失败：\(error.localizedDescription)") }
     }
 }

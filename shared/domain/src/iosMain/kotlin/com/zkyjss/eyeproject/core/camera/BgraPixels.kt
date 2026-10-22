@@ -2,6 +2,7 @@
 package com.zkyjss.eyeproject.core.camera
 
 import kotlinx.cinterop.CPointer
+import kotlinx.cinterop.FloatVar
 import kotlinx.cinterop.UByteVar
 import kotlinx.cinterop.get
 import kotlin.math.roundToInt
@@ -12,6 +13,9 @@ import kotlin.math.roundToInt
  * 调用方须在返回前保持像素缓冲锁定。
  */
 object BgraPixels {
+    /** 把 Swift 连续内存里的 [count] 个浮点数一次拷进 Kotlin 数组（478 个关键点 × 3，逐个跨桥写要上千次调用）。 */
+    fun floats(base: CPointer<FloatVar>, count: Int): FloatArray = FloatArray(count) { base[it] }
+
     fun grayRegion(base: CPointer<UByteVar>, bytesPerRow: Int, left: Int, top: Int, width: Int, height: Int): IntArray =
         IntArray(width * height) { i ->
             val offset = (top + i / width) * bytesPerRow + (left + i % width) * 4

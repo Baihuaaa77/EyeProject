@@ -59,6 +59,8 @@ final class EyeRuntime: ObservableObject {
     private var frames: FrameMailbox<CameraSample>!
     init(kind: String) {
         self.kind = kind
+        // 干眼只用关键点与眨眼，不做瞳孔 / 角膜反光测量
+        camera.measureOptics = kind != "DRY_EYE"
         frames = FrameMailbox<CameraSample>(limit: 8) { [weak self] batch in
             guard let self = self, !self.closed else { return }
             for f in batch {
