@@ -22,6 +22,10 @@ struct BlinkCompareView: View {
                         Text(error).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.danger)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
+                    if let note = model.cameraNote {
+                        Text(note).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.warning)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                     live
                     BlinkCompareCard(title: "最近 8 秒", trailing: "绿 = 两者都判到 · 红 = 仅一方") {
                         BlinkTraceChart(model: model).frame(height: 220)
@@ -52,7 +56,8 @@ struct BlinkCompareView: View {
             }.buttonStyle(.plain)
             Text("眨眼检测对比").font(EyeStyle.subtitle)
             Spacer()
-            Text(String(format: "%.0f 帧/秒 · OCEC %.1f ms", model.fps, model.latest?.ocecCostMs ?? 0))
+            Text(String(format: "%.0f 帧/秒 · OCEC %.1f ms", model.fps, model.latest?.ocecCostMs ?? 0)
+                 + (model.droppedFrames > 0 ? " · 丢 \(model.droppedFrames)" : ""))
                 .font(EyeStyle.chip).foregroundStyle(EyeStyle.secondary).monospacedDigit()
         }.padding(.horizontal, 8).padding(.vertical, 4)
     }

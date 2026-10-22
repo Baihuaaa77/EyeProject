@@ -7,6 +7,8 @@ import EyeScreening
 final class EyeRuntime: ObservableObject {
     @Published var state: [String: Any] = [:]
     @Published var error: String?
+    /// 相机因发热降帧或可能暂停时的说明（优先于引擎的「未收到相机数据」显示）。
+    @Published var cameraNote: String?
     let camera = EyeCamera()
     let voice = EyeVoice()
     let feedback = EyeFeedback()
@@ -52,16 +54,22 @@ final class EyeRuntime: ObservableObject {
     static var recordsDirectory: URL {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("Screening", isDirectory: true)
     }
+    /// 相机帧经信箱成批送到主线程；主线程忙时最多积压 8 帧（约 0.27 秒），不会越积越慢。
+    /// 在 init 中建好（相机队列也会访问，不能用线程不安全的 lazy）。
+    private var frames: FrameMailbox<CameraSample>!
     init(kind: String) {
         self.kind = kind
-        camera.onFrame = { [weak self] face, width, height, focal, time, brightness in
-            guard let self = self else { return }
-            DispatchQueue.main.async {
-                guard !self.closed else { return }
-                self.controller.cameraFace(face: face, imageWidth: width, imageHeight: height,
-                    focalLengthPx: focal, timeMs: time, brightness: brightness)
+        frames = FrameMailbox<CameraSample>(limit: 8) { [weak self] batch in
+            guard let self = self, !self.closed else { return }
+            for f in batch {
+                self.controller.cameraFace(face: f.face, imageWidth: f.width, imageHeight: f.height,
+                    focalLengthPx: f.focal, timeMs: f.time, brightness: f.brightness)
             }
         }
+        camera.onFrame = { [weak self] face, width, height, focal, time, brightness in
+            self?.frames.post(CameraSample(face: face, width: width, height: height, focal: focal, time: time, brightness: brightness))
+        }
+        camera.onPressure = { [weak self] note in DispatchQueue.main.async { self?.cameraNote = note } }
         camera.onError = { [weak self] message in
             DispatchQueue.main.async { self?.error = message; self?.controller.cameraFailed(message: message) }
         }
@@ -172,7 +180,7 @@ final class EyeRuntime: ObservableObject {
     func interrupt() {
         isForeground = false
         feedback.stop(); _ = controller.feedbackJson(enabled: false)
-        promptWork?.cancel(); presentation.cancel(); voice.stop(); camera.stop(); controller.interrupt(); refresh()
+        promptWork?.cancel(); presentation.cancel(); voice.stop(); camera.stop(); frames.clear(); controller.interrupt(); refresh()
     }
     func resume() {
         isForeground = true; _ = controller.feedbackJson(enabled: false); lastPrompt = ""
@@ -187,12 +195,21 @@ final class EyeRuntime: ObservableObject {
     }
     func close() {
         guard !closed else { return }
-        closed = true; timer?.invalidate(); promptWork?.cancel(); presentation.cancel(); voice.close(); feedback.stop(); camera.stop(); controller.close()
+        closed = true; timer?.invalidate(); promptWork?.cancel(); presentation.cancel(); voice.close(); feedback.stop(); camera.stop(); frames.clear(); controller.close()
     }
     static func object(_ text: String) -> [String: Any] {
         guard let data = text.data(using: .utf8) else { return [:] }
         return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
     }
+}
+
+/// 相机队列上算好的一帧（见 EyeCamera.onFrame）。
+struct CameraSample {
+    let face: FaceMetrics?
+    let width: Int32, height: Int32
+    let focal: Float
+    let time: Int64
+    let brightness: Float
 }
 
 /// 与安卓的两次 withFrameNanos 对齐：经过两个显示刷新回调后才标记题目已呈现。

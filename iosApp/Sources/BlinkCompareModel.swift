@@ -78,13 +78,22 @@ final class BlinkCompareModel: ObservableObject {
     static let pairWindowMs: Int64 = 500
     static let roundKinds = ["自然眨眼", "快眨", "慢眨", "用力大眨", "轻微小眨", "不眨眼"]
 
-    @Published private(set) var latest: BlinkFrame?
-    @Published private(set) var trace: [BlinkFrame] = []
-    @Published private(set) var events: [BlinkEvent] = []
+    // 逐帧变化的数据不用 @Published：界面经 [publish] 最多每 80 ms 刷新一次（逐帧重绘整页会占满主线程、手机发热）
+    private(set) var latest: BlinkFrame?
+    private(set) var trace: [BlinkFrame] = []
+    private(set) var events: [BlinkEvent] = []
+    private(set) var fps: Double = 0
     @Published private(set) var round: BlinkRound?
     @Published private(set) var rounds: [BlinkRound] = []
-    @Published private(set) var fps: Double = 0
     @Published private(set) var error: String?
+    /// 相机因发热降帧或可能暂停时的说明
+    @Published private(set) var cameraNote: String?
+    /// 主线程来不及处理而丢弃的帧数（正常为 0）
+    var droppedFrames: Int { frames?.dropped ?? 0 }
+    static let publishIntervalNs: UInt64 = 80_000_000
+    private var frames: FrameMailbox<BlinkFrame>!
+    private var lastPublish: UInt64 = 0
+    private var publishScheduled = false
 
     let camera = EyeCamera()
     /// 相机队列独占：两个判据、分类器与闭眼起点
@@ -101,16 +110,18 @@ final class BlinkCompareModel: ObservableObject {
 
     init() {
         if classifier == nil { error = "缺少 OCEC 模型权重，OCEC 一栏不会有读数。" }
+        // 判定在相机队列完成，事件随帧带出；主线程短暂繁忙时最多积压约 3 秒的帧，不丢事件也不无限滞后
+        frames = FrameMailbox<BlinkFrame>(limit: 90) { [weak self] batch in self?.ingest(batch) }
         camera.onAnalyzedFrame = { [weak self] buffer, face, time in
             guard let self = self else { return }
-            let frame = self.analyze(buffer, face, time)
-            DispatchQueue.main.async { self.ingest(frame) }
+            self.frames.post(self.analyze(buffer, face, time))
         }
         camera.onError = { [weak self] message in DispatchQueue.main.async { self?.error = message } }
+        camera.onPressure = { [weak self] note in DispatchQueue.main.async { self?.cameraNote = note } }
     }
 
     func start() { camera.start() }
-    func stop() { camera.stop() }
+    func stop() { camera.stop(); frames.clear() }
 
     // MARK: 相机队列
 
@@ -184,20 +195,43 @@ final class BlinkCompareModel: ObservableObject {
 
     // MARK: 主线程
 
-    private func ingest(_ frame: BlinkFrame) {
-        if sessionStart == nil { sessionStart = frame.time }
-        latest = frame
-        trace.append(frame)
-        if let stale = trace.firstIndex(where: { $0.time >= frame.time - Self.traceWindowMs }), stale > 0 { trace.removeFirst(stale) }
-        let recent = trace.filter { $0.time > frame.time - 1_000 }
-        fps = Double(recent.count)
-        if let ms = frame.earBlinkMs { addEvent(.ear, time: frame.time, closedMs: ms) }
-        if let ms = frame.ocecBlinkMs { addEvent(.ocec, time: frame.time, closedMs: ms) }
+    private func ingest(_ batch: [BlinkFrame]) {
+        guard let newest = batch.last else { return }
+        let recording = round.map { $0.endedAt == nil } ?? false
+        for frame in batch {
+            if sessionStart == nil { sessionStart = frame.time }
+            trace.append(frame)
+            if let ms = frame.earBlinkMs { addEvent(.ear, time: frame.time, closedMs: ms) }
+            if let ms = frame.ocecBlinkMs { addEvent(.ocec, time: frame.time, closedMs: ms) }
+            if recording {
+                // CSV 只用数值：不留眼片图像，长时间一轮也不占内存
+                var kept = frame; kept.left.image = nil; kept.right.image = nil
+                roundFrames.append(kept)
+            }
+        }
+        latest = newest
+        if let stale = trace.firstIndex(where: { $0.time >= newest.time - Self.traceWindowMs }), stale > 0 { trace.removeFirst(stale) }
+        publishSoon()
+    }
+
+    /// 合并刷新：距上次刷新不足 80 ms 时延到届时再刷一次。
+    private func publishSoon() {
+        guard !publishScheduled else { return }
+        publishScheduled = true
+        let now = DispatchTime.now().uptimeNanoseconds
+        let wait = lastPublish + Self.publishIntervalNs > now ? lastPublish + Self.publishIntervalNs - now : 0
+        DispatchQueue.main.asyncAfter(deadline: .now() + .nanoseconds(Int(wait))) { [weak self] in self?.publish() }
+    }
+
+    private func publish() {
+        publishScheduled = false
+        lastPublish = DispatchTime.now().uptimeNanoseconds
+        if let newest = latest { fps = Double(trace.filter { $0.time > newest.time - 1_000 }.count) }
         if var current = round, current.endedAt == nil {
-            roundFrames.append(frame)
             current.counts = counts(from: current.startedAt, to: nil)
             round = current
         }
+        objectWillChange.send()
     }
 
     private func addEvent(_ method: BlinkMethod, time: Int64, closedMs: Int64) {
@@ -253,6 +287,7 @@ final class BlinkCompareModel: ObservableObject {
     func clear() {
         guard round == nil || round?.finished == true else { return }
         events = []; trace = []; nextEventId = 1
+        publish()
     }
 
     // MARK: 落盘（文件 App →「我的 iPhone / 眼健康助手 / BlinkCompare」可取）

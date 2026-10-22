@@ -78,13 +78,13 @@ struct EyeTestView: View {
                     runtime.prepare(pixelsPerMm: value)
                 }
             } else {
-                if isGazeTask { TestNoticeSlot(text: runtime.error ?? warningText) }
-                else { TestNotice(text: runtime.error ?? warningText) }
+                if isGazeTask { TestNoticeSlot(text: runtime.error ?? runtime.cameraNote ?? warningText) }
+                else { TestNotice(text: runtime.error ?? runtime.cameraNote ?? warningText) }
                 if isProfile { SubjectPickerView(runtime: runtime) }
                 else if isRunning { VStack(spacing: EyeStyle.spacing) { testContent }.modifier(TestStagePanel()) }
                 else { testContent }
             }
-        }.animation(.easeInOut(duration: 0.28), value: runtime.error ?? warningText)
+        }.animation(.easeInOut(duration: 0.28), value: runtime.error ?? runtime.cameraNote ?? warningText)
     }
     private var phase: String { runtime.string("phase") }
     private var warningText: String {

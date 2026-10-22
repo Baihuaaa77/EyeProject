@@ -14,7 +14,7 @@ final class CloudModel: ObservableObject {
     // 首次访问可能来自保存记录的后台线程：状态只在主线程更新
     private init() { DispatchQueue.main.async { self.refresh() } }
 
-    func refresh() { state = EyeRuntime.object(client.snapshotJson()) }
+    func refresh() { explanations = [:]; state = EyeRuntime.object(client.snapshotJson()) }
     func string(_ key: String) -> String { state[key] as? String ?? "" }
     func bool(_ key: String) -> Bool { state[key] as? Bool ?? false }
     func int(_ key: String) -> Int { (state[key] as? NSNumber)?.intValue ?? 0 }
@@ -24,10 +24,14 @@ final class CloudModel: ObservableObject {
     /// 成员资料在本机改动后排队同步。
     func subjectsChanged() { DispatchQueue.main.async { self.client.subjectsChanged() } }
 
-    /// 一条本机记录的 AI 解读状态（随 state 刷新重读）；见 CloudClient.explanationJson。
+    /// 一条本机记录的 AI 解读状态；见 CloudClient.explanationJson。按文件缓存到下次 [refresh]
+    /// （卡片每次重绘要读十几个字段，逐个重建 JSON 会白占主线程）。
+    private var explanations: [String: [String: Any]] = [:]
     func explanation(_ fileName: String) -> [String: Any] {
-        _ = state
-        return EyeRuntime.object(client.explanationJson(fileName: fileName))
+        if let cached = explanations[fileName] { return cached }
+        let value = EyeRuntime.object(client.explanationJson(fileName: fileName))
+        explanations[fileName] = value
+        return value
     }
     /// 生成解读；agreeFirst 为卡片内点了「同意并生成」。
     func explain(_ fileName: String, agreeFirst: Bool) { client.explain(fileName: fileName, agreeFirst: agreeFirst) }

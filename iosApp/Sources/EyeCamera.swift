@@ -28,10 +28,42 @@ final class CameraGrayImage: NSObject, GrayImage {
     }
 }
 
+/// 相机队列 → 主线程的帧信箱：主线程忙时不无限排队。
+/// 以前每帧各派发一次主线程任务，主线程跟不上时积压越来越多：画面处理越来越滞后（「迟钝」），
+/// 看门狗按帧时间判断「未收到相机数据」。现在同一时刻最多一次待执行的派发，一次取走全部积压；
+/// 积压超过 [limit] 帧时丢最旧的帧，延迟有上限。[dropped] 为累计丢弃数（诊断用）。
+final class FrameMailbox<Frame> {
+    private let lock = NSLock()
+    private var pending: [Frame] = []
+    private var scheduled = false
+    private var droppedCount = 0
+    private let limit: Int
+    private let deliver: ([Frame]) -> Void
+    init(limit: Int, deliver: @escaping ([Frame]) -> Void) { self.limit = limit; self.deliver = deliver }
+    var dropped: Int { lock.lock(); defer { lock.unlock() }; return droppedCount }
+    func post(_ frame: Frame) {
+        lock.lock()
+        pending.append(frame)
+        if pending.count > limit { droppedCount += pending.count - limit; pending.removeFirst(pending.count - limit) }
+        let schedule = !scheduled
+        scheduled = true
+        lock.unlock()
+        if schedule { DispatchQueue.main.async { [weak self] in self?.drain() } }
+    }
+    /// 丢弃尚未送达的帧（页面关闭、相机停止时）。
+    func clear() { lock.lock(); pending.removeAll(); lock.unlock() }
+    private func drain() {
+        lock.lock(); let batch = pending; pending.removeAll(); scheduled = false; lock.unlock()
+        if !batch.isEmpty { deliver(batch) }
+    }
+}
+
 final class EyeCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
     /// 相机队列上已算好的一帧：关键点几何与光学测量、图像宽高、焦距、单调时间、亮度。
     var onFrame: ((FaceMetrics?, Int32, Int32, Float, Int64, Float) -> Void)?
     var onError: ((String) -> Void)?
+    /// 系统压力（发热、耗电）提示：降帧时给一句说明，恢复后为 nil。在相机队列回调。
+    var onPressure: ((String?) -> Void)?
     /// 眨眼对比实验页用：同一帧的原始像素与共用几何结果，在相机队列上同步回调（回调返回前像素缓冲有效）。
     var onAnalyzedFrame: ((CVPixelBuffer, FaceMetrics?, Int64) -> Void)?
     /// 眨眼对比实验页的预览用；正式测试不显示预览。
@@ -45,6 +77,49 @@ final class EyeCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
     private var generation = 0
     private let requestLock = NSLock()
     private var requestNumber = 0
+    private var pressureObservation: NSKeyValueObservation?
+    private var pressureThrottled = false
+    private var notificationTokens: [NSObjectProtocol] = []
+
+    override init() {
+        super.init()
+        // 运行中出错（如媒体服务重置）或被打断（来电、其他应用占用相机）后恢复采集；未在使用相机时不重启。
+        let center = NotificationCenter.default
+        notificationTokens.append(center.addObserver(forName: AVCaptureSession.runtimeErrorNotification, object: session, queue: nil) { [weak self] _ in
+            self?.queue.asyncAfter(deadline: .now() + 0.5) { self?.resumeIfNeeded() }
+        })
+        notificationTokens.append(center.addObserver(forName: AVCaptureSession.interruptionEndedNotification, object: session, queue: nil) { [weak self] _ in
+            self?.queue.async { self?.resumeIfNeeded() }
+        })
+    }
+    deinit { for token in notificationTokens { NotificationCenter.default.removeObserver(token) } }
+
+    private func resumeIfNeeded() {
+        guard active, !session.isRunning else { return }
+        lastTime = 0
+        session.startRunning()
+    }
+
+    /// 系统压力升到 serious / critical 时主动降到每秒 15 帧（苹果建议的做法，避免相机被系统直接停掉），
+    /// 回到 nominal / fair 时恢复默认帧率。眨眼最短约 100 ms，15 帧仍能至少采到一帧闭眼。
+    private func applyPressure(_ level: AVCaptureDevice.SystemPressureState.Level) {
+        guard let device = device else { return }
+        let throttle = level == .serious || level == .critical || level == .shutdown
+        if throttle != pressureThrottled,
+           !throttle || device.activeFormat.videoSupportedFrameRateRanges.contains(where: { $0.minFrameRate <= 15 }) {
+            do {
+                try device.lockForConfiguration()
+                let duration = throttle ? CMTime(value: 1, timescale: 15) : CMTime.invalid
+                device.activeVideoMinFrameDuration = duration
+                device.activeVideoMaxFrameDuration = duration
+                device.unlockForConfiguration()
+                pressureThrottled = throttle
+            } catch {}
+        }
+        onPressure?(level == .nominal || level == .fair ? nil
+            : level == .serious ? "手机较热，相机已降为每秒 15 帧，测试可继续。"
+            : "手机过热，相机可能暂停。请停止充电、取下手机壳，稍候再测。")
+    }
     var distanceScale: Float {
         get { let value = UserDefaults.standard.float(forKey: "eye.distanceScale"); return value > 0 ? value : 1 }
         set { UserDefaults.standard.set(newValue, forKey: "eye.distanceScale") }
@@ -82,6 +157,10 @@ final class EyeCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
                     throw NSError(domain: "EyeCamera", code: 2, userInfo: [NSLocalizedDescriptionKey: "没有前置摄像头"])
                 }
                 device = front
+                pressureObservation = front.observe(\.systemPressureState, options: [.initial, .new]) { [weak self] device, _ in
+                    let level = device.systemPressureState.level
+                    self?.queue.async { self?.applyPressure(level) }
+                }
                 session.beginConfiguration(); session.sessionPreset = .hd1280x720
                 let input = try AVCaptureDeviceInput(device: front)
                 guard session.canAddInput(input) else { session.commitConfiguration(); return }
