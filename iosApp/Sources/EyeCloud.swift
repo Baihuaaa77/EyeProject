@@ -250,9 +250,12 @@ private struct ServerRow: View {
         HStack(spacing: 8) {
             TextField("服务器地址，如 http://192.168.1.5:8080", text: $text)
                 .keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled().textFieldStyle(.roundedBorder)
-            Button("保存") { EyeHaptics.tap(); _ = cloud.client.setServer(url: text) }
-                .font(EyeStyle.button).foregroundStyle(EyeStyle.primary).frame(minWidth: 56, minHeight: 44)
-                .disabled(busy || text.trimmingCharacters(in: .whitespaces) == cloud.string("serverUrl"))
+            // 与当前生效地址相同时显示灰色「已保存」，改动后才是可点的「保存」（原先禁用时颜色不变，像是点了没反应）
+            let saved = text.trimmingCharacters(in: .whitespaces) == cloud.string("serverUrl")
+            Button(saved && !text.isEmpty ? "已保存" : "保存") { EyeHaptics.tap(); _ = cloud.client.setServer(url: text) }
+                .font(EyeStyle.button).foregroundStyle(saved || busy ? EyeStyle.secondary : EyeStyle.primary)
+                .frame(minWidth: 56, minHeight: 44)
+                .disabled(busy || saved)
         }
     }
 }

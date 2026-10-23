@@ -87,7 +87,10 @@ private fun ServerRow(serverUrl: String, busy: Boolean, onSave: (String) -> Unit
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         EyeTextField(text, { text = it }, label = "服务器地址", Modifier.weight(1f), placeholder = "http://192.168.1.5:8080",
             keyboardType = KeyboardType.Uri, enabled = !busy)
-        EyeButton("保存", EyeButtonRole.SECONDARY, { haptics.tap(); onSave(text) }, enabled = !busy && text.trim() != serverUrl)
+        // 与当前生效地址相同时显示「已保存」，改动后才可点「保存」（与苹果端一致）
+        val saved = text.trim() == serverUrl
+        EyeButton(if (saved && text.isNotEmpty()) "已保存" else "保存", EyeButtonRole.SECONDARY, { haptics.tap(); onSave(text) },
+            enabled = !busy && !saved)
     }
 }
 
