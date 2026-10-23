@@ -24,6 +24,8 @@ data class LocalRecordEntry(
     val advice: String = "",
     val qualityNotes: List<String> = emptyList(),
     val sections: List<ResultSection> = emptyList(),
+    /** 被测者关系代码（SELF / CHILD …）；旧记录未选成员时为 null */
+    val subjectRelation: String? = null,
 ) {
     /** 只转写保存时的内容，不用当前评估规则重算历史结论。时间由平台按用户时区格式化。 */
     fun reportText(testedAtLabel: String): String = buildString {
@@ -110,7 +112,7 @@ object LocalRecordCatalog {
             version = snapshot?.string("version") ?: root.string("assessmentVersion") ?: assessment?.string("modelVersion") ?: "未记录（旧版本）",
             subjectLabel = subject?.string("name") ?: subject?.string("relation")?.let(SubjectProfiles::relationLabel) ?: "未选择成员",
             advice = snapshot?.string("advice") ?: root.string("advice").orEmpty(),
-            qualityNotes = notes, sections = sections,
+            qualityNotes = notes, sections = sections, subjectRelation = subject?.string("relation"),
         )
     }
 

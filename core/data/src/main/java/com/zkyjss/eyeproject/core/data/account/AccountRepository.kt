@@ -33,6 +33,8 @@ data class AccountState(
     val researchUse: Boolean = false,
     /** 同意把去标识的结果发给大模型生成通俗解读。 */
     val aiExplanation: Boolean = false,
+    /** 同意把去标识的用眼概况发给大模型生成综合建议。 */
+    val aiAdvice: Boolean = false,
     /** 当前服务器地址；空表示未配置。 */
     val serverUrl: String = "",
 )
@@ -77,6 +79,7 @@ internal class DefaultAccountRepository @Inject constructor(
             guardian = session?.consents?.get(ConsentType.GUARDIAN) == true,
             researchUse = session?.consents?.get(ConsentType.RESEARCH_USE) == true,
             aiExplanation = session?.consents?.get(ConsentType.AI_EXPLANATION) == true,
+            aiAdvice = session?.consents?.get(ConsentType.AI_ADVICE) == true,
         )
     }
 
@@ -113,7 +116,7 @@ internal class DefaultAccountRepository @Inject constructor(
             is NetworkResult.Success -> {
                 sessions.update { it.copy(consents = consentMap(result.value, it.defaultSubjectId)) }
                 // 开启云端存储或补上监护人同意后，把积压的记录传上去
-                if (granted && type != ConsentType.RESEARCH_USE && type != ConsentType.AI_EXPLANATION) requestSyncIfConsented()
+                if (granted && type != ConsentType.RESEARCH_USE && type != ConsentType.AI_EXPLANATION && type != ConsentType.AI_ADVICE) requestSyncIfConsented()
                 AccountResult.Success
             }
             else -> result.failure()

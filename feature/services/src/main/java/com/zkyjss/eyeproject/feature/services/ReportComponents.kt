@@ -21,11 +21,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -53,9 +48,12 @@ import com.zkyjss.eyeproject.core.ui.component.AiCardState
 import com.zkyjss.eyeproject.core.ui.component.AiExplanationCard
 import com.zkyjss.eyeproject.core.ui.component.EyeButton
 import com.zkyjss.eyeproject.core.ui.component.EyeButtonRole
+import com.zkyjss.eyeproject.core.ui.component.EyeFullScreenPage
+import com.zkyjss.eyeproject.core.ui.component.EyeSubPage
+import com.zkyjss.eyeproject.core.ui.component.MascotMood
+import com.zkyjss.eyeproject.core.ui.component.XiaoTong
 import com.zkyjss.eyeproject.core.ui.component.EyeIcon
 import com.zkyjss.eyeproject.core.ui.component.EyeText
-import com.zkyjss.eyeproject.core.ui.component.drawMascot
 
 /*
  * 三项测试共用的结果页，内容来自共享的 [ResultReport]（与苹果端同一份）：
@@ -88,7 +86,6 @@ private val EvidenceStatus.metricLabel get() = if (this == EvidenceStatus.UNAVAI
  * 完整结果页。[actions] 放病种特有的主操作（延长、复测、重新测试）；[onExport] 为空时不显示导出；
  * [extraData] 追加到数据底板末尾（如干眼的眨眼分布图）；[aiCard] 为空时不显示 AI 解读。
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun ResultReportView(
     report: ResultReport,
@@ -135,12 +132,9 @@ internal fun ResultReportView(
         EyeText(ResultReports.FOOTNOTE, Modifier.fillMaxWidth().padding(vertical = 4.dp),
             style = LocalEyeTypography.current.bodySecondary, color = LocalEyeColors.current.textSecondary)
     }
-    if (dataOpen) {
-        val colors = LocalEyeColors.current
-        ModalBottomSheet(onDismissRequest = { dataOpen = false }, containerColor = colors.appBackground,
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
-            DataSheetContent(report, onExport, extraData)
-        }
+    // 「查看本次数据」：盖在结果页上的完整页面（不用底部弹窗），与苹果端同一排版
+    if (dataOpen) EyeFullScreenPage({ dataOpen = false }) {
+        EyeSubPage("本次测试数据", { dataOpen = false }) { DataSheetContent(report, onExport, extraData) }
     }
 }
 
@@ -170,18 +164,10 @@ private fun ResultHero(report: ResultReport) {
     }
 }
 
+/** 结果页小瞳：神情随等级（放心 / 思考 / 担心 / 没测好犯困），带待机动画，点一下有互动。 */
 @Composable
 private fun Mascot(mood: ResultMood, modifier: Modifier) {
-    val colors = LocalEyeColors.current
-    Canvas(modifier) {
-        val s = size.minDimension
-        when (mood) {
-            ResultMood.HAPPY -> drawMascot(colors, Offset(s / 2, s * 0.58f), s * 0.8f, smile = true)
-            ResultMood.THINKING -> drawMascot(colors, Offset(s / 2, s * 0.58f), s * 0.8f, gaze = Offset(0.6f, -0.4f), smile = false)
-            ResultMood.CONCERNED -> drawMascot(colors, Offset(s / 2, s * 0.58f), s * 0.8f, wide = 1.15f, smile = false)
-            ResultMood.SLEEPY -> drawMascot(colors, Offset(s / 2, s * 0.58f), s * 0.8f, lid = 0.85f, smile = true)
-        }
-    }
+    XiaoTong(MascotMood.of(mood.name), modifier, greet = mood == ResultMood.HAPPY, headScale = 0.76f)
 }
 
 /** 关键指标 2×2：名称、大号数值、状态小标签；状态色只用在标签和数值上，卡片本身保持干净。 */
@@ -286,19 +272,13 @@ private fun ProblemCard(problems: List<String>) {
     }
 }
 
-/** 「本次测试数据」底板：判断依据明细 + 各分区原始数值 + 问卷；顶部可直接导出。 */
+/** 「本次测试数据」页：判断依据明细 + 各分区原始数值 + 问卷；顶部可直接导出。 */
 @Composable
 private fun DataSheetContent(report: ResultReport, onExport: (() -> Unit)?, extraData: @Composable ColumnScope.() -> Unit) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
-    Column(
-        Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 28.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            EyeText("本次测试数据", Modifier.weight(1f), style = typography.title, color = colors.textPrimary)
-            if (onExport != null) EyeButton("导出", EyeButtonRole.PRIMARY, onExport)
-        }
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        if (onExport != null) EyeButton("导出完整数据", EyeButtonRole.PRIMARY, onExport, Modifier.fillMaxWidth())
         if (report.evidence.isNotEmpty()) DataPanel("判断依据") {
             report.evidence.forEach { e ->
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {

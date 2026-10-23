@@ -1,5 +1,8 @@
 package com.zkyjss.eyeproject.core.sync.client
 
+import com.zkyjss.eyeproject.core.sync.AdviceDto
+import com.zkyjss.eyeproject.core.sync.AdviceRequest
+import com.zkyjss.eyeproject.core.sync.Advices
 import com.zkyjss.eyeproject.core.sync.ConsentDto
 import com.zkyjss.eyeproject.core.sync.ConsentInput
 import com.zkyjss.eyeproject.core.sync.ConsentType
@@ -131,7 +134,7 @@ class CloudClient(
         null
     }
 
-    /** [type] 为 HEALTH_DATA_SYNC / GUARDIAN / RESEARCH_USE / AI_EXPLANATION；GUARDIAN 指「本人」这一成员的监护人同意。 */
+    /** [type] 为 HEALTH_DATA_SYNC / GUARDIAN / RESEARCH_USE / AI_EXPLANATION / AI_ADVICE；GUARDIAN 指「本人」这一成员的监护人同意。 */
     fun setConsent(type: String, granted: Boolean) = act(null) {
         val current = session ?: return@act "请先登录"
         val consentType = runCatching { ConsentType.valueOf(type) }.getOrNull() ?: return@act "未知的同意项"
@@ -139,7 +142,7 @@ class CloudClient(
         when (val result = authorized { api.recordConsent(it, ConsentInput(consentType, SyncContract.PRIVACY_POLICY_VERSION, granted, subject)) }) {
             is ApiResult.Ok -> {
                 session = session?.copy(consents = consentMap(result.value, current.defaultSubjectId))
-                if (granted && consentType != ConsentType.RESEARCH_USE && consentType != ConsentType.AI_EXPLANATION) launchSync()
+                if (granted && consentType !in NO_SYNC_CONSENTS) launchSync()
                 null
             }
             else -> describe(result)
@@ -200,6 +203,7 @@ class CloudClient(
             put("guardian", s?.consents?.get(ConsentType.GUARDIAN) == true)
             put("researchUse", s?.consents?.get(ConsentType.RESEARCH_USE) == true)
             put("aiExplanation", s?.consents?.get(ConsentType.AI_EXPLANATION) == true)
+            put("aiAdvice", s?.consents?.get(ConsentType.AI_ADVICE) == true)
             put("pending", entries.count { it.state == SyncState.PENDING })
             put("synced", entries.count { it.state == SyncState.SYNCED })
             put("failed", entries.count { it.state == SyncState.CONFLICT || it.state == SyncState.REJECTED })
@@ -297,6 +301,86 @@ class CloudClient(
         aiRequests[fileName]?.let { return it }
         return platform.readRecord(fileName)?.let(Explanations::fromRecord)?.also { aiRequests[fileName] = it }
     }
+
+    // endregion
+
+    // region AI 综合建议（与安卓 core:data AdviceRepository 同一规则）
+
+    /** 生成过的综合建议：概况哈希 → 建议，存应用沙盒。 */
+    private var adviceCache: Map<String, AdviceDto> = platform.readValue(KEY_ADVICE)
+        ?.let { runCatching { json.decodeFromString(ADVICE_CACHE, it) }.getOrNull() } ?: emptyMap()
+    private val adviceLoading = mutableSetOf<String>()
+    private val adviceFailures = mutableMapOf<String, String>()
+
+    /**
+     * 综合建议的状态（JSON），[requestJson] 为共用 EyeCareAdvice.requestJson 给出的概况。`state` 为 locked（message）/
+     * consent（consentText）/ ready / loading / failed（message）/ done（summary、priorities、habits、seeDoctor、sources、footnote、urgent）。
+     */
+    fun adviceJson(requestJson: String): String = buildJsonObject {
+        val request = adviceRequest(requestJson)
+        val key = request?.let(Advices::cacheKey)
+        val done = key?.let { adviceCache[it] }
+        val s = session
+        when {
+            request == null -> { put("state", "locked"); put("message", "正在汇总今天的用眼数据") }
+            done != null -> {
+                put("state", "done")
+                put("summary", done.summary); put("seeDoctor", done.seeDoctor); put("footnote", done.disclaimer)
+                put("priorities", JsonArray(done.priorities.map(::JsonPrimitive)))
+                put("habits", JsonArray(done.habits.map(::JsonPrimitive)))
+                put("sources", JsonArray(done.sources.map { JsonPrimitive("${it.title}（${it.publisher}）") }))
+                put("urgent", done.fatigueLevel == "HIGH")
+            }
+            key in adviceLoading -> put("state", "loading")
+            key in adviceFailures -> { put("state", "failed"); put("message", adviceFailures[key]) }
+            !api.configured -> { put("state", "locked"); put("message", "连接云端服务并登录后，小瞳可以结合大模型给你综合建议") }
+            s == null -> { put("state", "locked"); put("message", "登录账户后，小瞳可以结合大模型给你综合建议") }
+            s.consents[ConsentType.AI_ADVICE] != true -> { put("state", "consent"); put("consentText", Advices.CONSENT_TEXT) }
+            else -> put("state", "ready")
+        }
+    }.toString()
+
+    /** 生成综合建议；[agreeFirst] 为卡片内点了「同意并生成」，同意未能保存则不发送任何数据。状态经 onChange 通知。 */
+    fun advise(requestJson: String, agreeFirst: Boolean) {
+        val request = adviceRequest(requestJson) ?: return
+        val key = Advices.cacheKey(request)
+        if (key in adviceCache || key in adviceLoading) return
+        adviceLoading += key; adviceFailures -= key; onChange()
+        track(scope.launch {
+            val failure: String? = run {
+                if (agreeFirst) {
+                    val current = session ?: return@run "请先登录"
+                    when (val consent = authorized { api.recordConsent(it, ConsentInput(ConsentType.AI_ADVICE, SyncContract.PRIVACY_POLICY_VERSION, true)) }) {
+                        is ApiResult.Ok -> session = session?.copy(consents = consentMap(consent.value, current.defaultSubjectId))
+                        else -> return@run describe(consent)
+                    }
+                }
+                when (val result = authorized { api.advise(it, request) }) {
+                    is ApiResult.Ok -> {
+                        adviceCache = (adviceCache + (key to result.value)).entries.sortedByDescending { it.value.generatedAt }
+                            .take(MAX_ADVICE_CACHED).associate { it.key to it.value }
+                        platform.writeValue(KEY_ADVICE, json.encodeToString(ADVICE_CACHE, adviceCache))
+                        null
+                    }
+                    is ApiResult.Failed -> when {
+                        result.code == ErrorCodes.CONSENT_REQUIRED -> {
+                            session = session?.let { it.copy(consents = it.consents + (ConsentType.AI_ADVICE to false)) }
+                            null
+                        }
+                        result.status == 401 -> null
+                        else -> result.message
+                    }
+                    is ApiResult.Unreachable -> "无法连接云端服务，请检查网络后重试"
+                }
+            }
+            adviceLoading -= key
+            if (failure != null) adviceFailures[key] = failure
+            onChange()
+        })
+    }
+
+    private fun adviceRequest(requestJson: String): AdviceRequest? =
+        runCatching { json.decodeFromString(AdviceRequest.serializer(), requestJson) }.getOrNull()
 
     // endregion
 
@@ -589,6 +673,11 @@ class CloudClient(
         private const val KEY_AI = "cloud.aiExplanations"
         private const val MAX_AI_CACHED = 200
         private val AI_CACHE = MapSerializer(String.serializer(), ExplanationDto.serializer())
+        private const val KEY_ADVICE = "cloud.aiAdvice"
+        private const val MAX_ADVICE_CACHED = 30
+        private val ADVICE_CACHE = MapSerializer(String.serializer(), AdviceDto.serializer())
+        /** 研究用途与两项 AI 同意打开时不触发上传。 */
+        private val NO_SYNC_CONSENTS = setOf(ConsentType.RESEARCH_USE, ConsentType.AI_EXPLANATION, ConsentType.AI_ADVICE)
         private const val EXPIRY_MARGIN_MS = 30_000L
         private const val SELF = "SELF"
         private const val BIRTH_YEAR = "出生年份"

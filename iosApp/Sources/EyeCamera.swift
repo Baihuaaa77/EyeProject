@@ -89,7 +89,7 @@ final class EyeCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
     var onPressure: ((String?) -> Void)?
     /// 眨眼对比实验页用：同一帧的原始像素与共用几何结果，在相机队列上同步回调（回调返回前像素缓冲有效）。
     var onAnalyzedFrame: ((CVPixelBuffer, FaceMetrics?, Int64) -> Void)?
-    /// 眨眼对比实验页的预览用；正式测试不显示预览。
+    /// 首页实时检测的预览用；正式测试不显示预览。预览层只能在会话空闲时（首次 start 之前）挂上，见 EyeLiveModel。
     var captureSession: AVCaptureSession { session }
     /// 是否测量瞳孔 / 角膜反光（斜视用；干眼与眨眼对比用不到，关掉省下每帧的眼区像素计算）。在 start 前设置。
     var measureOptics = true
@@ -128,7 +128,18 @@ final class EyeCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
             self?.queue.async { self?.resumeIfNeeded() }
         })
     }
-    deinit { for token in notificationTokens { NotificationCenter.default.removeObserver(token) } }
+    /// 会话与 MediaPipe 检测器交给相机队列停止并释放，不在调用方（通常是主线程）析构：
+    /// 主线程析构会话或检测器时要等相机队列上正在进行的 stopRunning / 推理结束，而 stopRunning 有时反过来要等主线程，
+    /// 两边互等即整个界面卡死（退出测试、离开首页实时检测时偶发）。
+    deinit {
+        for token in notificationTokens { NotificationCenter.default.removeObserver(token) }
+        pressureObservation?.invalidate()
+        let session = self.session, detector = self.detector
+        queue.async {
+            if session.isRunning { session.stopRunning() }
+            withExtendedLifetime(detector) {}
+        }
+    }
 
     private func resumeIfNeeded() {
         guard active, !session.isRunning else { return }

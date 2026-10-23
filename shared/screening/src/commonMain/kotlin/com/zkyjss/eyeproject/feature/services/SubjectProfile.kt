@@ -79,7 +79,7 @@ object SubjectProfiles {
             Question("睡眠时长", "每天大约睡多久？", listOf("不到 6 小时", "6–8 小时", "8 小时以上"), optional = true),
             Question("是否眼部化妆", "平时化眼妆（眼线、睫毛膏）吗？", listOf("不化", "偶尔", "经常"), optional = true),
         )),
-        ProfileSection("近期状况（有变化时请更新）", listOf(
+        ProfileSection("近期状况", listOf(
             Question("干眼症状", "最近眼睛有这些感觉吗？",
                 listOf("眼睛发干、发涩", "像进了沙子", "有烧灼感", "看东西模糊，时好时坏", "怕光", "容易累", DRY_EYE_NO_SYMPTOM),
                 multiple = true, optional = true),

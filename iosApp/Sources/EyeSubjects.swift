@@ -88,40 +88,44 @@ func subjectSummary(_ s: SubjectProfileItem) -> String {
     return parts.joined(separator: " · ")
 }
 
-/// 「家庭成员」：每人一行（头像字 · 称呼 · 关系与年龄），点开编辑资料；末行添加成员。与安卓同一排版。
-struct SubjectsSection: View {
+/// 「我的 → 家庭成员」完整页面：每人一行（头像字 · 称呼 · 关系与年龄），点开编辑资料；末行添加成员。与安卓 SubjectsScreen 同一排版。
+struct SubjectsPage: View {
     @ObservedObject var store = SubjectStore.shared
-    @State private var editing: SubjectProfileItem?
+    /// 编辑某位成员；nil 为新建
+    let edit: (String?) -> Void
+    private static let help = "每位家人一份资料（年龄、戴镜、眼病史等）。测试开始时只需选「这次测谁」，资料自动带入，结果也归到这个人名下。"
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text("家庭成员").font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text).padding(.bottom, 4)
-            ForEach(store.subjects) { s in
-                memberRow({ editing = s }) {
-                    Text(String(s.displayName.prefix(1))).font(EyeStyle.subtitle).foregroundStyle(EyeStyle.primary)
-                        .frame(width: 40, height: 40).background(EyeStyle.primarySoft, in: Circle())
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(s.displayName).font(EyeStyle.body).foregroundStyle(EyeStyle.text)
-                        Text(subjectSummary(s)).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
-                    }
-                    Spacer()
-                    Image(systemName: "chevron.right").font(.system(size: 14, weight: .semibold)).foregroundStyle(EyeStyle.secondary)
+        SubPage(title: "家庭成员") {
+            HStack(spacing: 0) {
+                Text("共 \(store.subjects.count) 人").font(EyeStyle.body).foregroundStyle(EyeStyle.secondary)
+                HelpButton(title: "家庭成员", text: Self.help)
+            }.padding(.leading, 4)
+            ListGroup {
+                ForEach(store.subjects) { s in
+                    Button { EyeHaptics.tap(); edit(s.id) } label: {
+                        VStack(spacing: 0) {
+                            HStack(spacing: 12) {
+                                Text(String(s.displayName.prefix(1))).font(EyeStyle.subtitle).foregroundStyle(EyeStyle.primary)
+                                    .frame(width: 40, height: 40).background(EyeStyle.primarySoft, in: Circle())
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(s.displayName).font(EyeStyle.body).foregroundStyle(EyeStyle.text)
+                                    Text(subjectSummary(s)).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
+                                }.frame(maxWidth: .infinity, alignment: .leading)
+                                Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(EyeStyle.secondary.opacity(0.7))
+                            }.padding(.horizontal, 16).padding(.vertical, 10).frame(minHeight: 64)
+                            Rectangle().fill(EyeStyle.borderSubtle).frame(height: 1).padding(.leading, 68)
+                        }.contentShape(Rectangle())
+                    }.buttonStyle(RowPressStyle())
                 }
+                Button { EyeHaptics.tap(); edit(nil) } label: {
+                    HStack(spacing: 12) {
+                        Text("添加家庭成员").font(EyeStyle.body).foregroundStyle(EyeStyle.primary).frame(maxWidth: .infinity, alignment: .leading)
+                        Text("+").font(EyeStyle.title).foregroundStyle(EyeStyle.primary)
+                            .frame(width: 36, height: 36).background(EyeStyle.primarySoft, in: Circle())
+                    }.padding(.horizontal, 16).padding(.vertical, 10).frame(minHeight: 60).contentShape(Rectangle())
+                }.buttonStyle(RowPressStyle())
             }
-            memberRow({ editing = SubjectStore.newMember() }) {
-                Text("+").font(EyeStyle.title).foregroundStyle(EyeStyle.primary)
-                    .frame(width: 40, height: 40).background(EyeStyle.background, in: Circle())
-                Text("添加家庭成员").font(EyeStyle.body).foregroundStyle(EyeStyle.primary)
-                Spacer()
-            }
-        }.padding(16).frame(maxWidth: .infinity, alignment: .leading)
-            .background(EyeStyle.panel, in: RoundedRectangle(cornerRadius: EyeStyle.radius))
-            .sheet(item: $editing) { SubjectEditView(item: $0) }
-    }
-
-    private func memberRow<Content: View>(_ action: @escaping () -> Void, @ViewBuilder _ content: () -> Content) -> some View {
-        Button { EyeHaptics.tap(); action() } label: {
-            HStack(spacing: 12) { content() }.frame(maxWidth: .infinity, minHeight: 60, alignment: .leading).contentShape(Rectangle())
-        }.buttonStyle(.plain)
+        }
     }
 }
 
@@ -131,17 +135,20 @@ extension SubjectStore {
     }
 }
 
-/// 资料编辑：题目分组与追问（如选了白内障手术才出现人工晶体类型）由共用 editorJson 给出。
+/// 资料编辑（完整页面）：题目分组与追问（如选了白内障手术才出现人工晶体类型）由共用 editorJson 给出。
+/// 从「我的」推入时用系统返回；测试开始页缺资料时以全屏呈现（[modal]），左上角「取消」。
 struct SubjectEditView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var draft: SubjectProfileItem
     @State private var confirmDelete = false
     @State private var error: String?
     private let isNew: Bool
+    private let modal: Bool
 
-    init(item: SubjectProfileItem) {
+    init(item: SubjectProfileItem, modal: Bool = false) {
         _draft = State(initialValue: item)
         isNew = !SubjectStore.shared.subjects.contains { $0.id == item.id }
+        self.modal = modal
     }
 
     private var sections: [[String: Any]] {
@@ -150,8 +157,7 @@ struct SubjectEditView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
+        ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     card("成员") {
                         TextField(draft.relation == "SELF" ? "我" : "称呼，如：小明、妈妈", text: $draft.nickname).textFieldStyle(.roundedBorder)
@@ -180,10 +186,14 @@ struct SubjectEditView: View {
                         Button("保存") { EyeHaptics.tap(); save() }.buttonStyle(EyeButtonStyle())
                     }
                 }.padding(20)
-            }.background(EyeStyle.background)
+            }.background(EyeStyle.background.ignoresSafeArea())
                 .navigationTitle(isNew ? "添加家庭成员" : "\(draft.displayName)的资料").navigationBarTitleDisplayMode(.inline)
-                .toolbar { Button("取消") { dismiss() } }
-        }
+                .toolbarBackground(EyeStyle.background, for: .navigationBar)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        if modal { Button("取消") { dismiss() } }
+                    }
+                }
     }
 
     private func save() {
@@ -305,6 +315,8 @@ struct SubjectPickerView: View {
                     .font(EyeStyle.body).foregroundStyle(EyeStyle.primary).frame(minHeight: 44)
                 Text("不选成员时，依赖年龄和症状的判断会注明无法评估。").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
             }.frame(maxWidth: .infinity)
-        }.sheet(item: $editing) { SubjectEditView(item: $0) }
+        }.fullScreenCover(item: $editing) { item in
+            NavigationStack { SubjectEditView(item: item, modal: true) }.tint(EyeStyle.primary)
+        }
     }
 }

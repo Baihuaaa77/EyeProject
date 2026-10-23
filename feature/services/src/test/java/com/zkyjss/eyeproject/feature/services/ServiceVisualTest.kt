@@ -256,7 +256,7 @@ class ServiceVisualTest {
         compose.setContent {
             EyeProjectTheme {
                 TestSessionLayout("老视自测", {}, { open = true }, true) { OptotypeAnswerPad(0, 40.dp, true) {} }
-                if (open) TestSettingsSheet(settings, voice, { open = false })
+                if (open) TestSettingsPage(settings, voice, { open = false })
             }
         }
         compose.onNodeWithText("语音播报").assertDoesNotExist()
@@ -280,6 +280,15 @@ class ServiceVisualTest {
         compose.onNodeWithText("完成").performClick()
         compose.onNodeWithText("语音播报").assertDoesNotExist()
         compose.onNodeWithText("语音作答").assertDoesNotExist()
+    }
+
+    @Test @org.robolectric.annotation.Config(qualifiers = "zh-rCN-w390dp-h1900dp-mdpi")
+    fun systemSettingsIsAFullPageWithAbout() {
+        compose.setContent { EyeProjectTheme { SystemSettingsScreen(onBack = {}) } }
+        compose.onNodeWithText("关于").assertExists()
+        compose.onNodeWithText("眼健康助手").assertExists()
+        compose.onNodeWithText("版本").assertExists()
+        capture("21-系统设置")
     }
 
     @Test fun smallScreenKeepsWarningsAndArrowActionsVisible() {
@@ -593,8 +602,11 @@ class ServiceVisualTest {
                 view.draw(android.graphics.Canvas(it))
             }
         }
-        val output = File("build/reports/ui/$name.png")
-        output.parentFile?.mkdirs()
-        output.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        val dirs = listOf("build/reports/ui") + if (name.first().isDigit()) listOf("../../docs/界面截图-2026-10-23/安卓") else emptyList()
+        for (dir in dirs) {
+            val output = File("$dir/$name.png")
+            output.parentFile?.mkdirs()
+            output.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        }
     }
 }

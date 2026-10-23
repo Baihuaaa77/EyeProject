@@ -1,4 +1,8 @@
-plugins { kotlin("multiplatform") }
+plugins {
+    kotlin("multiplatform")
+    // 主动护眼账本与报告（core.eyecare）用 @Serializable 读写本机 JSON
+    kotlin("plugin.serialization")
+}
 kotlin {
     jvm { compilerOptions.jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) }
     listOf(iosArm64(), iosSimulatorArm64()).forEach {

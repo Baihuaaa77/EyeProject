@@ -9,11 +9,10 @@ struct EyeProjectApp: App {
     }
 }
 
-/// 测试记录：与安卓同一份列表（共用 LocalRecordCatalog 解析）。每行为测试名、时间与结论徽标，
-/// 点开看要点，并可把完整记录（JSON）分享给医生或开发者。
-struct RecordsView: View {
-    @Environment(\.dismiss) private var dismiss
-    private let records = RecordsView.load()
+/// 「我的 → 测试记录」完整页面：与安卓同一份列表（共用 LocalRecordCatalog 解析）。每张卡为测试名、时间 · 成员与结论徽标，
+/// 点开看当时的建议、要点、AI 解读与明细，并可导出报告或把完整记录（JSON）分享给医生或开发者。
+struct RecordsPage: View {
+    private let records = RecordsPage.load()
 
     struct Entry: Identifiable {
         let url: URL, title: String, testedAt: Date?, level: String, badge: String, lines: [String]
@@ -22,11 +21,15 @@ struct RecordsView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            List {
-                if records.isEmpty { Text("还没有测试记录").foregroundStyle(EyeStyle.secondary) }
-                ForEach(records) { RecordRow(entry: $0) }
-            }.navigationTitle("测试记录").toolbar { Button("完成") { EyeHaptics.tap(); dismiss() } }
+        SubPage(title: "测试记录") {
+            if records.isEmpty {
+                VStack(spacing: 10) {
+                    MascotStage(mood: .thinking).frame(width: 120, height: 120)
+                    Text("还没有测试记录").font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text)
+                    Text("在「服务」里做一次自测，结果会保存在这里。").font(EyeStyle.body).foregroundStyle(EyeStyle.secondary)
+                }.padding(28).frame(maxWidth: .infinity).background(EyeStyle.panel, in: RoundedRectangle(cornerRadius: 22))
+            }
+            ForEach(records) { RecordRow(entry: $0) }
         }
     }
 
@@ -58,7 +61,7 @@ struct RecordsView: View {
 }
 
 private struct RecordRow: View {
-    let entry: RecordsView.Entry
+    let entry: RecordsPage.Entry
     @State private var expanded = false
     @State private var exportingReport = false
     @State private var exportError: String?
@@ -74,8 +77,34 @@ private struct RecordRow: View {
         }
     }
     var body: some View {
-        DisclosureGroup(isExpanded: $expanded) {
-            if !entry.advice.isEmpty { Text(entry.advice).font(EyeStyle.body) }
+        VStack(alignment: .leading, spacing: 10) {
+            Button { EyeHaptics.tap(); withAnimation(.easeOut(duration: 0.22)) { expanded.toggle() } } label: {
+                HStack(spacing: 10) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(entry.title).font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text)
+                        Text((entry.testedAt.map { Self.formatter.string(from: $0) } ?? entry.url.lastPathComponent) + " · " + entry.subjectLabel)
+                            .font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
+                    }
+                    Spacer()
+                    Text(entry.badge).font(EyeStyle.chip).foregroundStyle(tone)
+                        .padding(.horizontal, 10).padding(.vertical, 4).background(tone.opacity(0.12), in: Capsule())
+                    Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(EyeStyle.secondary)
+                        .rotationEffect(.degrees(expanded ? 90 : 0))
+                }.frame(minHeight: 44).contentShape(Rectangle())
+            }.buttonStyle(.plain)
+            if expanded { details }
+        }
+        .padding(16).frame(maxWidth: .infinity, alignment: .leading)
+        .background(EyeStyle.panel, in: RoundedRectangle(cornerRadius: EyeStyle.radiusLarge))
+        .fileExporter(isPresented: $exportingReport, document: RecordReportDocument(text: entry.reportText), contentType: .plainText,
+                      defaultFilename: entry.url.deletingPathExtension().lastPathComponent + "_报告.txt") { result in
+            if case .failure = result { exportError = "导出失败，请换个位置再试"; EyeHaptics.failure() } else { exportError = nil; EyeHaptics.success() }
+        }
+    }
+
+    @ViewBuilder private var details: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if !entry.advice.isEmpty { Text(entry.advice).font(EyeStyle.body).foregroundStyle(EyeStyle.text) }
             ForEach(Array(entry.lines.enumerated()), id: \.offset) { _, line in
                 Text("· \(line)").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
             }
@@ -99,23 +128,7 @@ private struct RecordRow: View {
                 ShareLink(item: entry.url) { Text("导出原始数据") }.simultaneousGesture(TapGesture().onEnded { EyeHaptics.tap() })
             }.buttonStyle(EyeButtonStyle(role: .secondary))
             if let exportError { Text(exportError).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.danger) }
-        } label: {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(entry.title).font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text)
-                    Text((entry.testedAt.map { Self.formatter.string(from: $0) } ?? entry.url.lastPathComponent) + " · " + entry.subjectLabel)
-                        .font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
-                }
-                Spacer()
-                Text(entry.badge).font(EyeStyle.chip).foregroundStyle(tone)
-                    .padding(.horizontal, 10).padding(.vertical, 4).background(tone.opacity(0.12), in: Capsule())
-            }
-        }
-        .onChange(of: expanded) { _ in EyeHaptics.tap() }
-        .fileExporter(isPresented: $exportingReport, document: RecordReportDocument(text: entry.reportText), contentType: .plainText,
-                      defaultFilename: entry.url.deletingPathExtension().lastPathComponent + "_报告.txt") { result in
-            if case .failure = result { exportError = "导出失败，请换个位置再试"; EyeHaptics.failure() } else { exportError = nil; EyeHaptics.success() }
-        }
+        }.transition(.opacity)
     }
 }
 

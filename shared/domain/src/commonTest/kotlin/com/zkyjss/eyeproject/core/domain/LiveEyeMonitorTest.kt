@@ -43,6 +43,30 @@ class LiveEyeMonitorTest {
         assertTrue(later.fps in 29f..31f)
     }
 
+    @Test fun summarisesTheSessionForEyeCare() {
+        val monitor = LiveEyeMonitor()
+        // 虹膜 20 px、焦距 600 px → 11.7 × 600 / 20 / 10 = 35.1 cm
+        val focal = 600f
+        var t = 0L
+        repeat(30) { monitor.update(face(0.3f), 720, 1280, t, focal); t += 33 }
+        assertNull(monitor.session(), "不足 20 秒不计入统计")
+        // 约 30 秒里眨 6 次 → 约 12 次/分钟
+        repeat(6) {
+            repeat(3) { monitor.update(face(0.05f), 720, 1280, t, focal); t += 33 }
+            repeat(150) { monitor.update(face(0.3f), 720, 1280, t, focal); t += 33 }
+        }
+        val session = monitor.session()!!
+        assertEquals(6, session.blinks)
+        assertTrue(session.blinksPerMinute in 11f..13f, "实际 ${session.blinksPerMinute}")
+        assertEquals(35.1f, session.meanDistanceCm!!, 0.1f)
+        assertEquals(0f, session.closeFraction)
+        assertEquals(35.1f, monitor.snapshot(t).distanceCm!!, 0.1f)
+        assertNull(session.meanHeadOffsetDeg, "没有头姿矩阵时不估计")
+        // 中途看不到双眼的时段不计入时长
+        repeat(300) { monitor.update(null, 720, 1280, t, focal); t += 33 }
+        assertEquals(session.trackedMs, monitor.session()!!.trackedMs)
+    }
+
     @Test fun reportsMissingEyesAndStaleCamera() {
         val monitor = LiveEyeMonitor()
         assertTrue(monitor.snapshot(0).waiting)

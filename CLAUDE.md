@@ -32,17 +32,17 @@ core/
   model/        纯 Kotlin 领域模型（零 Android 依赖）
   common/       格式化纯函数
   domain/       算法（BlinkDetector/DepthFromIris）+ app 实现的端口接口
-  data/         休息提醒偏好 + 账号/同意 + 测试记录离线优先保存与云端同步（WorkManager）
+  data/         休息提醒偏好 + 账号/同意 + 测试记录离线优先保存与云端同步（WorkManager）+ 护眼账本/用屏统计 + AI 综合建议
   network/      云端接口数据源（HttpURLConnection，地址由 eyeproject.apiBaseUrl 构建期注入，缺省不联网）
   camera/       相机管线唯一绑定点（预览可选）+ MediaPipe FaceLandmarker + 相机内参
   notifications/ Notifier 抽象 + 渠道 + NotifierModule
   designsystem/ 设计令牌 + EyeProjectTheme（唯一视觉事实源）
   ui/           自绘通用组件（EyeButton/EyeText/…）
 feature/
-  home/         首页：品牌、实时眼部检测视窗（关键点 + 眨眼曲线）、休息提醒、模型测试入口
+  home/         首页 = 主动护眼闭环（负荷评估、打卡、推荐、多源感知、实时检测开关）+ 趋势 / AI 建议 / 亮度二级页、休息提醒、模型测试入口
   services/     干眼/老视/斜视自检
   testmodel/    实验页：主导航 + gaze/（FaceDetector + LiteRT L2CS-Net 注视估计）+ blink/（FaceLandmarker EAR 眨眼检测）
-  mine/         「我的」：家庭成员资料、测试记录、云端同步（登录、分项同意、导出、注销）
+  mine/         「我的」入口页 + 二级页：账户、测试记录、家庭成员资料、云端同步（分项同意、导出）、权限与通知
   agent/        占位页
 shared/sync/    KMP 同步契约 + 记录摘要 + 同步引擎（安卓与服务端共用）
 backend/server/ Ktor 服务端（见其 SERVER.md）；backend/screening_model.py 为离线训练脚本

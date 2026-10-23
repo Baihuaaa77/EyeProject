@@ -7,63 +7,82 @@ enum TopLevelTab: CaseIterable { case home, services, mine
     var icon: NavIcon { switch self { case .home: .home; case .services: .services; case .mine: .mine } }
 }
 
+/// 二级完整页面（NavigationStack 推入，替代系统底部弹窗）；与安卓各 feature 的路由一一对应。
+enum AppRoute: Hashable {
+    case account, settings, records, subjects, cloud, permissions, trend, advice, brightness
+    /// 编辑成员资料；nil 为新建家庭成员
+    case subjectEdit(String?)
+}
+
 struct EyeRootView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var tab = TopLevelTab.home
+    @State private var path: [AppRoute] = []
     @State private var selectedTest: String?
-    @State private var settingsOpen = false
-    /// 顶层页右上角齿轮打开的「系统设置」：与测试页同一份偏好（保存在本机，测试开始时读取）
+    /// 冷启动的启动动画：盖在已经创建好的首页上，结束后移除
+    @State private var splash = true
+    /// 「系统设置」：与测试页同一份偏好（保存在本机，测试开始时读取）
     @StateObject private var voice = EyeVoice()
     @StateObject private var feedback = EyeFeedback()
+
     var body: some View {
-        VStack(spacing: 0) {
-            ZStack {
-                switch tab {
-                case .home: HomePage { settingsOpen = true }
-                case .services: ServicesPage(open: { selectedTest = $0 }) { settingsOpen = true }
-                case .mine: MinePage { settingsOpen = true }
+        ZStack {
+            NavigationStack(path: $path) {
+                VStack(spacing: 0) {
+                    ZStack {
+                        switch tab {
+                        case .home: HomePage(navigate: navigate, openTest: openTest)
+                        case .services: ServicesPage(open: openTest, navigate: navigate)
+                        case .mine: MinePage(navigate: navigate)
+                        }
+                    }.frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .transition(.opacity)
+                        .animation(.easeOut(duration: 0.2), value: tab)
+                    EyeBottomBar(selected: $tab)
                 }
-            }.frame(maxWidth: .infinity, maxHeight: .infinity)
-                .transition(.opacity)
-                .animation(.easeOut(duration: 0.2), value: tab)
-            EyeBottomBar(selected: $tab)
-        }.background(EyeStyle.background.ignoresSafeArea())
-            // 测试全屏呈现：不用卡片式弹窗，避免顶部留出灵动岛下方的空隙和下滑误关。
-            .fullScreenCover(item: Binding(get: { selectedTest.map(TestSelection.init) }, set: { selectedTest = $0?.id })) { test in
-                EyeTestView(kind: test.id)
+                .background(EyeStyle.background.ignoresSafeArea())
+                .toolbar(.hidden, for: .navigationBar)
+                .navigationDestination(for: AppRoute.self) { destination($0) }
             }
-            .sheet(isPresented: $settingsOpen) { TestSettingsView(voice: voice, feedback: feedback) }
-            // 回到前台时补传离线期间保存的记录与资料（未登录或未同意时不联网）
-            .onChange(of: scenePhase) { phase in if phase == .active { CloudModel.shared.client.syncNow(userInitiated: false) } }
+            if splash { SplashView { splash = false }.transition(.opacity).zIndex(1) }
+        }
+        // 测试全屏呈现：不用卡片式弹窗，避免顶部留出灵动岛下方的空隙和下滑误关。
+        .fullScreenCover(item: Binding(get: { selectedTest.map(TestSelection.init) }, set: { selectedTest = $0?.id })) { test in
+            EyeTestView(kind: test.id)
+        }
+        .onAppear { EyeCareStore.shared.appBecameActive() }
+        .onChange(of: scenePhase) { phase in
+            if phase == .active {
+                // 回到前台时补传离线期间保存的记录与资料（未登录或未同意时不联网）
+                CloudModel.shared.client.syncNow(userInitiated: false)
+                EyeCareStore.shared.appBecameActive()
+            } else if phase == .background {
+                EyeCareStore.shared.appResignedActive()
+            }
+        }
+    }
+
+    private func navigate(_ route: AppRoute) { path.append(route) }
+    private func openTest(_ kind: String) { selectedTest = kind }
+
+    @ViewBuilder private func destination(_ route: AppRoute) -> some View {
+        switch route {
+        case .account: AccountPage(openCloudSync: { navigate(.cloud) })
+        case .settings: SystemSettingsPage(voice: voice, feedback: feedback)
+        case .records: RecordsPage()
+        case .subjects: SubjectsPage(edit: { navigate(.subjectEdit($0)) })
+        case .cloud: CloudSyncPage(openAccount: { navigate(.account) })
+        case .permissions: PermissionsPage()
+        case .trend: TrendPage()
+        case .advice: AdvicePage(openTest: openTest)
+        case .brightness: BrightnessPage()
+        case .subjectEdit(let id):
+            SubjectEditView(item: id.flatMap { id in SubjectStore.shared.subjects.first { $0.id == id } } ?? SubjectStore.newMember())
+        }
     }
 }
 
 private struct TestSelection: Identifiable { let id: String; init(_ id: String) { self.id = id } }
-
-/// 顶层页右上角常驻的「系统设置」齿轮（与测试页顶栏同一图标），与安卓一致。
-private struct SettingsGear: View {
-    let action: () -> Void
-    var body: some View {
-        Button { EyeHaptics.tap(); action() } label: {
-            Image(systemName: "gearshape.fill").font(.system(size: 22)).foregroundStyle(EyeStyle.primary)
-                .frame(width: 44, height: 44).background(EyeStyle.panel, in: Circle())
-                .overlay { Circle().stroke(EyeStyle.borderSubtle, lineWidth: 1) }
-        }.buttonStyle(.plain).accessibilityLabel("系统设置")
-    }
-}
-
-/// 顶层页标题行：大标题 + 右上角齿轮。
-private struct PageHeader: View {
-    let title: String
-    let openSettings: () -> Void
-    var body: some View {
-        HStack {
-            Text(title).font(EyeStyle.headline).foregroundStyle(EyeStyle.text)
-            Spacer()
-            SettingsGear(action: openSettings)
-        }.padding(.vertical, 16)
-    }
-}
 
 /// 白底细上边框；选中项图标后方的浅主色胶囊以弹簧展开，图标与文字同步变色并轻微放大。
 private struct EyeBottomBar: View {
@@ -72,7 +91,7 @@ private struct EyeBottomBar: View {
         HStack(spacing: 0) {
             ForEach(TopLevelTab.allCases, id: \.self) { tab in
                 let active = tab == selected
-                Button { selected = tab } label: {
+                Button { if !active { EyeHaptics.tap() }; selected = tab } label: {
                     VStack(spacing: 4) {
                         ZStack {
                             Capsule().fill(EyeStyle.primarySoft).frame(width: active ? 56 : 0, height: 30)
@@ -90,28 +109,14 @@ private struct EyeBottomBar: View {
     }
 }
 
-/// 页面骨架：浅色背景、左右 20 内边距、竖向滚动。
-private struct PageScroll<Content: View>: View {
+/// 顶层页骨架：浅色背景、左右 20 内边距、竖向滚动。
+struct PageScroll<Content: View>: View {
     @ViewBuilder let content: Content
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: EyeStyle.spacing) { content }
+            VStack(alignment: .leading, spacing: 14) { content }
                 .padding(.horizontal, 20).padding(.bottom, 24)
         }.background(EyeStyle.background)
-    }
-}
-
-/// 分区卡片：白底圆角面板 + 细边框 + 可选标题（安卓 EyeSectionCard）。
-private struct SectionCard<Content: View>: View {
-    var title: String?
-    @ViewBuilder let content: Content
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if let title { Text(title).font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text) }
-            content
-        }.padding(16).frame(maxWidth: .infinity, alignment: .leading)
-            .background(EyeStyle.panel, in: RoundedRectangle(cornerRadius: 22))
-            .overlay { RoundedRectangle(cornerRadius: 22).stroke(EyeStyle.borderSubtle, lineWidth: 1) }
     }
 }
 
@@ -122,7 +127,7 @@ private struct SelectCard<Leading: View>: View {
     @ViewBuilder let leading: Leading
     let action: () -> Void
     var body: some View {
-        Button(action: action) {
+        Button { EyeHaptics.tap(); action() } label: {
             HStack(spacing: 14) {
                 leading.frame(width: 48, height: 48).background(EyeStyle.primarySoft, in: RoundedRectangle(cornerRadius: EyeStyle.radiusMedium))
                 VStack(alignment: .leading, spacing: 2) {
@@ -133,86 +138,7 @@ private struct SelectCard<Leading: View>: View {
             }.padding(.horizontal, 20).padding(.vertical, 16).frame(minHeight: 80)
                 .background(EyeStyle.panel, in: RoundedRectangle(cornerRadius: 22))
                 .contentShape(RoundedRectangle(cornerRadius: 22))
-        }.buttonStyle(PressScaleStyle())
-    }
-}
-
-private struct PressScaleStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label.scaleEffect(configuration.isPressed ? 0.98 : 1).animation(EyeStyle.pressSpring, value: configuration.isPressed)
-    }
-}
-
-/// 整行可点的开关行（安卓 toggleable Row + 仅展示的 EyeSwitch）。
-private struct SwitchRow: View {
-    let title: String
-    let detail: String
-    @Binding var isOn: Bool
-    var body: some View {
-        Toggle(isOn: $isOn) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(EyeStyle.body).foregroundStyle(EyeStyle.text)
-                Text(detail).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
-            }
-        }.tint(EyeStyle.primary).frame(minHeight: 48)
-    }
-}
-
-// MARK: 首页
-
-/// 首页：品牌顶栏（右上角系统设置）+ 实时眼部检测视窗 + 护眼设置（休息提醒），与安卓同一顺序。
-private struct HomePage: View {
-    let openSettings: () -> Void
-    @StateObject private var reminder = EyeReminder()
-    private let today: String = {
-        let formatter = DateFormatter(); formatter.locale = Locale(identifier: "zh_CN"); formatter.dateFormat = "M月d日 EEEE"
-        return formatter.string(from: Date())
-    }()
-    var body: some View {
-        PageScroll {
-            HStack(spacing: 12) {
-                BrandMarkView().frame(width: 44, height: 44)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("眼健康助手").font(EyeStyle.headline).foregroundStyle(EyeStyle.text).minimumScaleFactor(0.7).lineLimit(1)
-                    Text(today).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
-                }.frame(maxWidth: .infinity, alignment: .leading)
-                SettingsGear(action: openSettings)
-            }.padding(.vertical, 16)
-            EyeLiveCard()
-            SectionCard(title: "护眼设置") {
-                SwitchRow(title: "休息提醒",
-                    detail: reminder.enabled ? "每 \(reminder.intervalMinutes) 分钟提醒一次" : "按间隔提醒你远眺放松",
-                    isOn: Binding(get: { reminder.enabled }, set: { reminder.setEnabled($0) }))
-                IntervalPicker(selected: reminder.intervalMinutes) { reminder.setInterval($0) }
-                if let notice = reminder.notice { Text(notice).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.warning) }
-            }
-        }
-    }
-}
-
-/// 分段选择器：浅色轨道 + 主色滑块弹簧滑动（安卓 EyeSegmentedRow）。
-private struct IntervalPicker: View {
-    let selected: Int
-    let onSelect: (Int) -> Void
-    private let options = [20, 30, 60]
-    var body: some View {
-        GeometryReader { geometry in
-            let width = (geometry.size.width - 8) / CGFloat(options.count)
-            let index = CGFloat(options.firstIndex(of: selected) ?? 0)
-            ZStack(alignment: .leading) {
-                RoundedRectangle(cornerRadius: 12).fill(EyeStyle.primary).frame(width: width).offset(x: width * index)
-                    .animation(.spring(response: 0.35, dampingFraction: 0.8), value: selected)
-                HStack(spacing: 0) {
-                    ForEach(options, id: \.self) { minutes in
-                        Button { onSelect(minutes) } label: {
-                            Text("\(minutes)分钟").font(EyeStyle.body)
-                                .foregroundStyle(minutes == selected ? EyeStyle.panel : EyeStyle.text)
-                                .frame(maxWidth: .infinity, maxHeight: .infinity).contentShape(Rectangle())
-                        }.buttonStyle(.plain)
-                    }
-                }
-            }.padding(4)
-        }.frame(height: 52).background(EyeStyle.surfaceVariant, in: RoundedRectangle(cornerRadius: EyeStyle.radiusMedium))
+        }.buttonStyle(PressScale(scale: 0.98))
     }
 }
 
@@ -259,13 +185,13 @@ final class EyeReminder: ObservableObject {
 
 // MARK: 服务
 
-/// 服务页：标题（右上角系统设置）+ 品牌欢迎卡 + 三个自测入口（顺序、文案、图标与安卓一致）。
+/// 服务页：标题（右上角账户与系统设置）+ 小瞳欢迎卡 + 三个自测入口（顺序、文案、图标与安卓一致）。
 private struct ServicesPage: View {
     let open: (String) -> Void
-    let openSettings: () -> Void
+    let navigate: (AppRoute) -> Void
     var body: some View {
         PageScroll {
-            PageHeader(title: "服务", openSettings: openSettings)
+            PageHeader(title: "服务", openAccount: { navigate(.account) }, openSettings: { navigate(.settings) })
             MascotHeroCard()
             Text("选择一项自测").font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text).padding(.top, 4)
             SelectCard(title: "干眼自测", subtitle: "约 2 分钟 · 自然眨眼与睁眼观察") {
@@ -282,73 +208,16 @@ private struct ServicesPage: View {
     }
 }
 
-/// 欢迎卡：小瞳待机，偶尔眨眼、左右张望（5.2 秒一轮，与安卓相同时间点）；减弱动态效果时静止。
+/// 欢迎卡：小瞳待机（眨眼、张望、呼吸），点一下会互动。
 private struct MascotHeroCard: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var body: some View {
         HStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 6) {
                 Text("我是小瞳").font(EyeStyle.title).foregroundStyle(EyeStyle.text)
                 Text("每项测试前，我会先示范一遍怎么做。跟着做就好。").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
             }.frame(maxWidth: .infinity, alignment: .leading)
-            TimelineView(.animation(paused: reduceMotion)) { timeline in
-                let p = reduceMotion ? 0 : timeline.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 5.2) / 5.2
-                MascotView(gazeX: Self.gaze(p), lid: Self.blink(p)).frame(width: 112, height: 112)
-            }
+            MascotStage(mood: .happy, headScale: 0.72).frame(width: 112, height: 112)
         }.padding(.leading, 20).padding(.trailing, 8).padding(.vertical, 16)
             .background(EyeStyle.primarySoft, in: RoundedRectangle(cornerRadius: 22))
-    }
-    private static func blink(_ p: Double) -> CGFloat { CGFloat(max(1 - abs(p - 0.3) / 0.025, 1 - abs(p - 0.36) / 0.025, 0)) }
-    private static func gaze(_ p: Double) -> CGFloat {
-        switch p {
-        case ..<0.5: 0
-        case ..<0.65: CGFloat(-(p - 0.5) / 0.15)
-        case ..<0.8: CGFloat(-1 + (p - 0.65) / 0.15 * 2)
-        case ..<0.9: CGFloat(1 - (p - 0.8) / 0.1)
-        default: 0
-        }
-    }
-}
-
-// MARK: 我的
-
-//// 我的：家庭成员、测试记录、云端同步、权限与通知、关于与免责声明（与安卓同一顺序与文案）。
-private struct MinePage: View {
-    let openSettings: () -> Void
-    @State private var showRecords = false
-    @State private var recordCount = 0
-    private let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
-    var body: some View {
-        PageScroll {
-            PageHeader(title: "我的", openSettings: openSettings)
-            SubjectsSection()
-            SelectCard(title: "测试记录", subtitle: recordCount == 0 ? "暂无记录" : "共 \(recordCount) 条") {
-                Image(systemName: "doc.text").font(.system(size: 22)).foregroundStyle(EyeStyle.primary)
-            } action: { EyeHaptics.tap(); showRecords = true }
-            CloudSection()
-            SelectCard(title: "权限与通知") {
-                Image(systemName: "checkmark.shield").font(.system(size: 22)).foregroundStyle(EyeStyle.primary)
-            } action: {
-                EyeHaptics.tap()
-                if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
-            }
-            SectionCard {
-                HStack(spacing: 12) {
-                    BrandMarkView().frame(width: 44, height: 44)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("眼健康助手").font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text)
-                        Text("守护每一次注视").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
-                    }
-                }.padding(.bottom, 4)
-                Text(((version.isEmpty ? [] : ["版本 \(version)"]) + ["结果仅供参考，不能替代眼科检查"]).joined(separator: " · "))
-                    .font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
-            }
-        }.sheet(isPresented: $showRecords, onDismiss: recount) { RecordsView() }
-            .onAppear(perform: recount)
-    }
-
-    private func recount() {
-        recordCount = ((try? FileManager.default.contentsOfDirectory(atPath: EyeRuntime.recordsDirectory.path)) ?? [])
-            .filter { $0.hasSuffix(".json") }.count
     }
 }

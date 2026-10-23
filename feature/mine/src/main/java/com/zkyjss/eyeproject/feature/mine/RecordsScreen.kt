@@ -11,11 +11,19 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.rememberModalBottomSheetState
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.zkyjss.eyeproject.core.data.record.RecordExportFormat
+import com.zkyjss.eyeproject.core.ui.component.AiExplanationCard
+import com.zkyjss.eyeproject.core.ui.component.EyeSubPage
+import com.zkyjss.eyeproject.core.ui.component.MascotMood
+import com.zkyjss.eyeproject.core.ui.component.XiaoTong
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -41,33 +49,57 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * 「测试记录」底板：与苹果端同一份列表（共用 LocalRecordCatalog）。
- * 每行为测试名、时间与结论徽标；点开看要点并可导出完整记录（JSON）。
+ * 「我的 → 测试记录」完整页面：与苹果端同一份列表（共用 LocalRecordCatalog）。
+ * 每行为测试名、时间 · 成员与结论徽标；点开看当时的建议、要点、AI 解读与明细，并可导出报告或原始数据。
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun LocalRecordsSheet(records: List<LocalRecordEntry>, onExport: (LocalRecordEntry) -> Unit,
-    onDismiss: () -> Unit, onExportReport: (LocalRecordEntry) -> Unit = {},
-    aiCard: @Composable (LocalRecordEntry) -> Unit = {}) {
+fun RecordsScreen(onBack: () -> Unit, viewModel: RecordsViewModel = hiltViewModel()) {
+    val context = LocalContext.current
+    val records by viewModel.localRecords.collectAsStateWithLifecycle()
+    val haptics = rememberEyeHaptics()
+    var exporting by rememberSaveable { mutableStateOf<String?>(null) }
+    val recordExport = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        val file = exporting
+        if (uri != null && file != null) viewModel.exportRecord(file, uri) { ok ->
+            if (ok) haptics.success() else haptics.failure()
+            Toast.makeText(context, if (ok) "已导出测试记录" else "导出失败，请换个位置再试", Toast.LENGTH_SHORT).show()
+        }
+    }
+    val reportExport = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
+        val file = exporting
+        if (uri != null && file != null) viewModel.exportRecord(file, uri, RecordExportFormat.TEXT) { ok ->
+            if (ok) haptics.success() else haptics.failure()
+            Toast.makeText(context, if (ok) "已导出文字报告" else "导出失败，请换个位置再试", Toast.LENGTH_SHORT).show()
+        }
+    }
+    RecordsContent(records, onBack,
+        onExport = { exporting = it.fileName; recordExport.launch(it.fileName) },
+        onExportReport = { exporting = it.fileName; reportExport.launch(it.fileName.removeSuffix(".json") + "_报告.txt") },
+        aiCard = { record ->
+            val card by remember(record.fileName) { viewModel.explanation(record.fileName) }.collectAsStateWithLifecycle()
+            card?.let {
+                AiExplanationCard(it, onGenerate = { viewModel.explain(record.fileName) },
+                    onAgree = { viewModel.explain(record.fileName, agreeFirst = true) }, embedded = true)
+            }
+        })
+}
+
+/** 无副作用的页面内容，供界面检查复用。 */
+@Composable
+internal fun RecordsContent(records: List<LocalRecordEntry>, onBack: () -> Unit, onExport: (LocalRecordEntry) -> Unit,
+    onExportReport: (LocalRecordEntry) -> Unit = {}, aiCard: @Composable (LocalRecordEntry) -> Unit = {}) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = colors.appBackground,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
-        LazyColumn(
-            Modifier.fillMaxWidth().padding(horizontal = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            item {
-                EyeText("测试记录", style = typography.title, color = colors.textPrimary)
+    EyeSubPage("测试记录", onBack) {
+        if (records.isEmpty()) {
+            Column(Modifier.fillMaxWidth().clip(EyeShapes.panel).background(colors.panelBackground).padding(28.dp),
+                horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                XiaoTong(MascotMood.THINKING, Modifier.size(120.dp))
+                EyeText("还没有测试记录", style = typography.subtitle, color = colors.textPrimary)
+                EyeText("在「服务」里做一次自测，结果会保存在这里。", style = typography.body, color = colors.textSecondary)
             }
-            if (records.isEmpty()) item {
-                EyeText("还没有测试记录", Modifier.padding(vertical = 24.dp), style = typography.body, color = colors.textSecondary)
-            }
-            items(records, key = { it.fileName }) { record ->
-                RecordRow(record, { onExport(record) }, { onExportReport(record) }) { aiCard(record) }
-            }
-            item { Spacer(Modifier.height(28.dp)) }
         }
+        records.forEach { record -> RecordRow(record, { onExport(record) }, { onExportReport(record) }) { aiCard(record) } }
     }
 }
 

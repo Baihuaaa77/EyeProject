@@ -4,6 +4,8 @@ import com.zkyjss.eyeproject.core.sync.AccountDto
 import com.zkyjss.eyeproject.core.sync.ConsentDto
 import com.zkyjss.eyeproject.core.sync.ConsentInput
 import com.zkyjss.eyeproject.core.sync.ErrorBody
+import com.zkyjss.eyeproject.core.sync.AdviceDto
+import com.zkyjss.eyeproject.core.sync.AdviceRequest
 import com.zkyjss.eyeproject.core.sync.ExplanationDto
 import com.zkyjss.eyeproject.core.sync.ExplanationRequest
 import com.zkyjss.eyeproject.core.sync.LoginRequest
@@ -72,6 +74,9 @@ class CloudApi(private val baseUrl: () -> String, private val transport: HttpTra
     /** AI 解读（需「AI 解读」同意）。 */
     suspend fun explain(token: String, request: ExplanationRequest) =
         call("POST", "/explanations", token, encode(ExplanationRequest.serializer(), request), ExplanationDto.serializer())
+    /** AI 综合建议（需「AI 综合建议」同意）。 */
+    suspend fun advise(token: String, request: AdviceRequest) =
+        call("POST", "/advice", token, encode(AdviceRequest.serializer(), request), AdviceDto.serializer())
 
     private fun <T> encode(serializer: KSerializer<T>, value: T) = json.encodeToString(serializer, value)
 

@@ -3,76 +3,73 @@ import SwiftUI
 import UIKit
 import EyeScreening
 
-/// 首页「实时眼部检测」视窗：镜像预览叠加双眼关键点（眼睑 6 点 + 虹膜圈），旁边是眨眼次数与当前状态，
-/// 下方是最近 8 秒的 EAR 曲线，每次眨眼画一条绿线。一眼看出相机、关键点和眨眼检测都在正常工作。
-/// 已授权相机时进入首页自动开启；离开首页、退到后台即关闭相机。与安卓 LiveEyeCard 同一排版。
-struct EyeLiveCard: View {
-    @StateObject private var model = EyeLiveModel()
+/// 首页「视觉行为」卡里的实时检测：默认关闭，打开后镜像预览叠加双眼关键点（眼睑 6 点 + 虹膜圈），
+/// 旁边是眨眼次数、观看距离与当前状态，下方是最近 8 秒的 EAR 曲线，每次眨眼画一条绿线。
+/// 离开首页、退到后台即关闭相机；关闭时本次的眨眼频率与观看距离记入主动护眼账本。与安卓 LiveEyeSection 同一排版。
+/// [startRequests] 每增加一次（「为你推荐」里点了「去检测」）就打开一次。
+struct LiveEyeSection: View {
+    @ObservedObject private var model = EyeLiveModel.shared
     @Environment(\.scenePhase) private var scenePhase
-    /// 用户希望开启：已授权时默认开启，点「暂停」后关闭，直到再次点「开始检测」
-    @State private var wanted = AVCaptureDevice.authorizationStatus(for: .video) == .authorized
+    var startRequests = 0
+
+    static let help = "用前置摄像头实时检测双眼关键点：数眨眼次数、估计眼睛到屏幕的距离和头部姿态，结果计入「视觉行为」。画面只在本机实时处理，不保存、不上传；关闭开关或离开首页即停止相机。"
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                Text("实时眼部检测").font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text)
-                Spacer()
-                statusChip
-            }
-            if model.running { live } else { idle }
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 0) {
+                        Text("实时检测").font(EyeStyle.button).foregroundStyle(EyeStyle.text)
+                        HelpButton(title: "实时检测", text: Self.help)
+                    }
+                    if !model.running {
+                        Text("打开前置摄像头，看看眨眼和观看距离").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
+                    }
+                }.frame(maxWidth: .infinity, alignment: .leading)
+                if model.running { statusChip }
+                Toggle("", isOn: Binding(get: { model.running }, set: { on in
+                    EyeHaptics.toggle()
+                    model.wanted = on
+                    if on { model.start() } else { model.stop() }
+                })).labelsHidden().tint(EyeStyle.primary)
+            }.frame(minHeight: 48)
+            if model.running { live }
             if let message = model.error ?? model.cameraNote {
                 Text(message).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.warning)
             }
-        }.padding(16).frame(maxWidth: .infinity, alignment: .leading)
-            .background(EyeStyle.panel, in: RoundedRectangle(cornerRadius: EyeStyle.radius))
-            .onAppear { if wanted { model.start() } }
-            .onDisappear { model.stop() }
-            .onChange(of: scenePhase) { phase in
-                if phase == .background { model.stop() } else if phase == .active, wanted { model.start() }
-            }
-    }
-
-    private var idle: some View {
-        VStack(spacing: 14) {
-            HStack(spacing: 14) {
-                Image(systemName: "eye").font(.system(size: 26, weight: .medium)).foregroundStyle(EyeStyle.primary)
-                    .frame(width: 52, height: 52).background(EyeStyle.primarySoft, in: Circle())
-                Text("打开前置摄像头，实时查看眼部关键点和眨眼检测").font(EyeStyle.body).foregroundStyle(EyeStyle.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            Button("开始检测") { EyeHaptics.tap(); wanted = true; model.start() }.buttonStyle(EyeButtonStyle())
         }
+        .onAppear { if model.wanted { model.start() } }
+        .onDisappear { model.stop() }
+        .onChange(of: scenePhase) { phase in
+            if phase == .background { model.stop() } else if phase == .active, model.wanted { model.start() }
+        }
+        .onChange(of: startRequests) { _ in model.wanted = true; model.start() }
     }
 
     private var live: some View {
         let s = model.snapshot
         let aspect: CGFloat = s.map { $0.imageWidth > 0 && $0.imageHeight > 0 ? CGFloat($0.imageWidth) / CGFloat($0.imageHeight) : 9.0 / 16 } ?? 9.0 / 16
-        return VStack(alignment: .leading, spacing: 14) {
+        return VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .top, spacing: 14) {
                 ZStack {
-                    LivePreview(session: model.camera.captureSession)
+                    LivePreview(view: model.previewView)
                     EyeLandmarkOverlay(snapshot: s)
-                }.aspectRatio(aspect, contentMode: .fit).frame(width: 128)
+                }.aspectRatio(aspect, contentMode: .fit).frame(width: 120)
                     .clipShape(RoundedRectangle(cornerRadius: EyeStyle.radiusMedium))
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 8) {
                     HStack(alignment: .firstTextBaseline, spacing: 4) {
-                        Text("\(s?.blinkCount ?? 0)").font(.system(size: 44, weight: .semibold, design: .rounded))
-                            .foregroundStyle(EyeStyle.text).monospacedDigit()
+                        Text("\(s?.blinkCount ?? 0)").font(EyeStyle.headline).foregroundStyle(EyeStyle.text).monospacedDigit()
                         Text("次眨眼").font(EyeStyle.body).foregroundStyle(EyeStyle.secondary)
                     }
-                    Text("近 1 分钟 \(s?.blinksLastMinute ?? 0) 次").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
+                    Text("近 1 分钟 \(s?.blinksLastMinute ?? 0) 次").font(EyeStyle.body).foregroundStyle(EyeStyle.secondary)
                     eyeState(s)
-                    Text(String(format: "EAR %@ · 阈值 %.2f", s?.ear.map { String(format: "%.2f", $0.floatValue) } ?? "—", s?.threshold ?? 0))
+                    Text("距离 \(s?.distanceCm.map { String(format: "%.0f 厘米", $0.floatValue) } ?? "—")")
+                        .font(EyeStyle.body).foregroundStyle(EyeStyle.secondary).monospacedDigit()
+                    Text(String(format: "EAR %@ · %.0f 帧/秒", s?.ear.map { String(format: "%.2f", $0.floatValue) } ?? "—", s?.fps ?? 0))
                         .font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary).monospacedDigit()
-                    Text(String(format: "%.0f 帧/秒 · %@", s?.fps ?? 0, model.camera.stats.backend))
-                        .font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary).monospacedDigit()
-                    Spacer(minLength: 0)
-                    Button("暂停") { EyeHaptics.tap(); wanted = false; model.stop() }
-                        .font(EyeStyle.button).foregroundStyle(EyeStyle.primary).frame(minHeight: 44)
                 }.frame(maxWidth: .infinity, alignment: .leading)
             }
             EarTraceChart(snapshot: s).frame(height: 116)
-            Text("画面只在本机实时处理，不保存、不上传").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
         }
     }
 
@@ -89,7 +86,6 @@ struct EyeLiveCard: View {
     private var statusChip: some View {
         let s = model.snapshot
         let (text, color): (String, Color) = {
-            guard model.running else { return ("已暂停", EyeStyle.secondary) }
             guard let s = s, !s.waiting else { return ("启动中", EyeStyle.secondary) }
             if s.stale { return ("画面中断", EyeStyle.warning) }
             if !s.faceFound { return ("未检测到人脸", EyeStyle.warning) }
@@ -105,20 +101,29 @@ struct EyeLiveCard: View {
     }
 }
 
-/// 前置相机预览（系统自动镜像，呈自拍视角）。
+/// 前置相机预览：把常驻的预览视图（EyeLiveModel.previewView）放进容器。离开界面时只把它从容器里摘下，
+/// 不析构预览层、不碰会话——主线程析构预览层要等相机队列上的 stopRunning，是退出检测偶发卡死的原因。
 private struct LivePreview: UIViewRepresentable {
-    let session: AVCaptureSession
-    func makeUIView(context: Context) -> PreviewView {
-        let view = PreviewView()
-        view.previewLayer.session = session
-        view.previewLayer.videoGravity = .resizeAspectFill
-        view.backgroundColor = UIColor(EyeStyle.ink)
-        return view
+    let view: LivePreviewView
+    func makeUIView(context: Context) -> UIView {
+        let container = UIView()
+        container.backgroundColor = UIColor(EyeStyle.ink)
+        container.clipsToBounds = true
+        attach(to: container)
+        return container
     }
-    func updateUIView(_ uiView: PreviewView, context: Context) {}
-    final class PreviewView: UIView {
-        override class var layerClass: AnyClass { AVCaptureVideoPreviewLayer.self }
-        var previewLayer: AVCaptureVideoPreviewLayer { layer as! AVCaptureVideoPreviewLayer }
+    func updateUIView(_ uiView: UIView, context: Context) {
+        if view.superview !== uiView { attach(to: uiView) }
+    }
+    static func dismantleUIView(_ uiView: UIView, coordinator: ()) {
+        // 预览视图可能已被新的容器接走，这里只摘下仍挂在本容器上的
+        for sub in uiView.subviews { sub.removeFromSuperview() }
+    }
+    private func attach(to container: UIView) {
+        view.removeFromSuperview()
+        view.frame = container.bounds
+        view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        container.addSubview(view)
     }
 }
 

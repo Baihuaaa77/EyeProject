@@ -202,7 +202,7 @@ fun DryEyeScreen(
         }
         if (distanceMatters) DistanceEdgeGlow(distance.zone)
     }
-    if (settingsOpen) TestSettingsSheet(settings, voiceAnswer, { settingsOpen = false },
+    if (settingsOpen) TestSettingsPage(settings, voiceAnswer, { settingsOpen = false },
         speechAvailable = voice.available,
         onStop = if (running) { { viewModel.backToSetup("已停止，本次结果不计入") } } else null,
     ) {

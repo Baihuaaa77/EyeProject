@@ -1,5 +1,7 @@
 package com.zkyjss.eyeproject.core.network
 
+import com.zkyjss.eyeproject.core.sync.AdviceDto
+import com.zkyjss.eyeproject.core.sync.AdviceRequest
 import com.zkyjss.eyeproject.core.sync.AccountDto
 import com.zkyjss.eyeproject.core.sync.ConsentDto
 import com.zkyjss.eyeproject.core.sync.ConsentInput
@@ -48,4 +50,6 @@ interface EyeNetworkDataSource {
     suspend fun deleteAccount(accessToken: String): NetworkResult<Unit>
     /** AI 解读：服务端检索知识库后由大模型生成（需「AI 解读」同意）。 */
     suspend fun explain(accessToken: String, request: ExplanationRequest): NetworkResult<ExplanationDto>
+    /** AI 综合建议：去标识的用眼概况由大模型生成建议（需「AI 综合建议」同意）。 */
+    suspend fun advise(accessToken: String, request: AdviceRequest): NetworkResult<AdviceDto>
 }

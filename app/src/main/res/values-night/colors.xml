@@ -3,4 +3,6 @@
     <color name="app_background">#FF0B1211</color>
     <color name="primary">#FF4FD1C5</color>
     <color name="brand_start">#FF2CC3B5</color>
+    <!-- 系统启动页底色 = 启动动画顶部的浅主色（primarySoft），两段衔接不闪 -->
+    <color name="splash_background">#FF123A37</color>
 </resources>

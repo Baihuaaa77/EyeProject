@@ -44,7 +44,8 @@ struct ResultReportView: View {
                 Text(report.footnote).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .sheet(isPresented: $dataOpen) { ReportDataSheet(report: report, exportURL: exportURL) }
+            // 「查看本次数据」以完整页面呈现（不用底部弹窗）
+            .fullScreenCover(isPresented: $dataOpen) { ReportDataSheet(report: report, exportURL: exportURL) }
         }
     }
 
@@ -154,20 +155,11 @@ private struct ResultHero: View {
     }
 }
 
-/// 小瞳的神情：放心（笑）、思考（看向一侧）、担心（睁大）、没测好（眯眼）。
+/// 小瞳的神情随等级：放心（开心蹦一下）、思考（冒问号）、担心（冒汗）、没测好（犯困），带待机动画，点一下会互动。
 private struct MoodMascot: View {
     let mood: String
     var body: some View {
-        Canvas { context, size in
-            let s = min(size.width, size.height)
-            let center = CGPoint(x: size.width / 2, y: size.height * 0.58)
-            switch mood {
-            case "THINKING": Cartoon.mascot(context, center: center, size: s * 0.8, gaze: CGPoint(x: 0.6, y: -0.4), smile: false)
-            case "CONCERNED": Cartoon.mascot(context, center: center, size: s * 0.8, wide: 1.15, smile: false)
-            case "SLEEPY": Cartoon.mascot(context, center: center, size: s * 0.8, lid: 0.85)
-            default: Cartoon.mascot(context, center: center, size: s * 0.8)
-            }
-        }.accessibilityLabel("小瞳")
+        MascotStage(mood: MascotMood(code: mood), greet: mood == "HAPPY", headScale: 0.76)
     }
 }
 
@@ -318,7 +310,6 @@ private struct ReportDataSheet: View {
             }
         }
         .foregroundStyle(EyeStyle.text).tint(EyeStyle.primary)
-        .presentationDetents([.large])
     }
 }
 

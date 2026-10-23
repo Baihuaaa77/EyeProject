@@ -18,6 +18,9 @@ dependencies {
     implementation(project(":core:common"))
     implementation(project(":core:domain"))
     implementation(project(":core:model"))
+    // 主动护眼：本机账本、系统用屏统计、本人资料与本机记录
+    implementation(project(":core:data"))
+    implementation(libs.androidx.core.ktx)
     // 首页实时眼部检测视窗：与测试共用同一条相机管线
     implementation(project(":core:camera"))
     implementation(libs.androidx.camera.core)

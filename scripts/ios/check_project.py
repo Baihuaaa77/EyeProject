@@ -57,8 +57,18 @@ for name in set(re.findall(r'"(eye_[a-z]+)"', feedback_source.read_text(encoding
             if (sound.getnchannels(), sound.getsampwidth(), sound.getframerate()) != (1, 2, 22050) or sound.getnframes() / 22050 > 0.35:
                 errors.append('Invalid short feedback sound: ' + name)
     except (OSError, wave.Error): errors.append('Missing feedback sound: ' + name)
-if '../../shared/feedback/res' not in (root / 'feature/services/build.gradle.kts').read_text(encoding='utf-8'):
-    errors.append('Android feedback sounds must use the shared asset directory')
+# 小瞳互动音：两端引用的音效都要在共用目录，格式同提示音
+mascot_sources = [root / 'core/ui/src/main/java/com/zkyjss/eyeproject/core/ui/component/XiaoTong.kt', root / 'iosApp/Sources/MascotStage.swift']
+for name in sorted({n for f in mascot_sources for n in re.findall(r'"(eye_[a-z]+)"', f.read_text(encoding='utf-8'))}):
+    path = root / 'shared/feedback/res/raw' / (name + '.wav')
+    try:
+        with wave.open(str(path)) as sound:
+            if (sound.getnchannels(), sound.getsampwidth(), sound.getframerate()) != (1, 2, 22050) or sound.getnframes() / 22050 > 0.35:
+                errors.append('Invalid mascot sound: ' + name)
+    except (OSError, wave.Error): errors.append('Missing mascot sound: ' + name)
+for module in ('feature/services', 'core/ui'):
+    if '../../shared/feedback/res' not in (root / module / 'build.gradle.kts').read_text(encoding='utf-8'):
+        errors.append('Android sounds must use the shared asset directory: ' + module)
 if '../shared/feedback/res/raw' not in (root / 'iosApp/project.yml').read_text(encoding='utf-8'):
     errors.append('iOS feedback sounds must use the shared asset directory')
 

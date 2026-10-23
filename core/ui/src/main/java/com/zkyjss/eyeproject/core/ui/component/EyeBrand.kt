@@ -25,6 +25,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeColors
+import com.zkyjss.eyeproject.core.designsystem.theme.LightEyeColors
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
 
@@ -74,6 +75,23 @@ fun EyeBrandLockup(modifier: Modifier = Modifier, tagline: String? = "守护每�
     }
 }
 
+/**
+ * 应用图标（与桌面图标同一构图）：浅薄荷绿圆角底上的彩色小瞳，几何同 scripts/generate_app_icon.py 的 iOS 图标
+ * （108 单位画布取中心 80 单位，头宽 54、头部中心 (54, 57)）。图标颜色固定为亮色令牌，深色模式下也与桌面一致。
+ */
+@Composable
+fun EyeAppIcon(modifier: Modifier = Modifier, size: Dp = 64.dp) {
+    Canvas(modifier.size(size).semantics { contentDescription = "眼健康助手图标" }) {
+        drawAppIcon(this.size.minDimension)
+    }
+}
+
+fun DrawScope.drawAppIcon(side: Float, origin: Offset = Offset.Zero) {
+    val colors = LightEyeColors
+    drawRoundRect(colors.primarySoft, origin, Size(side, side), CornerRadius(side * 0.2237f))
+    drawMascot(colors, Offset(origin.x + side * 0.5f, origin.y + side * 0.5375f), side * 0.675f)
+}
+
 fun DrawScope.drawBrandMark(colors: EyeColors, s: Float, origin: Offset = Offset.Zero) {
     // 108dp 启动图标视口 → 本画布：可见区 18..90 映射到 0..s
     val k = s / 72f
@@ -120,13 +138,22 @@ fun DrawScope.drawBrandMark(colors: EyeColors, s: Float, origin: Offset = Offset
 fun mascotEyeCenter(center: Offset, size: Float, side: Int): Offset =
     Offset(center.x + side * size * 0.19f, center.y - size * 0.02f)
 
+/** 小瞳的眼睛：豆豆眼 / 笑眯眯（弯弯的 ^ ^）/ 眨一只眼（画面右侧那只弯起）。 */
+enum class MascotEyes { DOT, HAPPY, WINK }
+
+/** 小瞳的嘴：微笑 / 小圆口（惊讶、思考）/ 张嘴大笑 / 一字 / 波浪（担心）。 */
+enum class MascotMouth { SMILE, ROUND, GRIN, FLAT, WOBBLY }
+
 /**
  * 画吉祥物小瞳（v2 团子造型）。
  * @param size 头宽
  * @param gaze 看向（-1..1，x/y）：豆豆眼整体平移
  * @param lid 闭眼程度 0 睁开 .. 1 闭合（≥0.8 画成闭眼弧线）
  * @param wide 睁大程度（>1 眼睛更大），用于「保持睁眼」
- * @param smile false 时嘴巴是小圆口（用力 / 惊讶）
+ * @param smile false 时嘴巴是小圆口（用力 / 惊讶）；指定 [mouth] 时以 [mouth] 为准
+ * @param eyes 眼睛样式（互动表情）
+ * @param blush 腮红浓度 0..1（害羞时加深）
+ * @param leafSway 嫩芽额外摆动角度（度）
  */
 fun DrawScope.drawMascot(
     colors: EyeColors,
@@ -136,22 +163,28 @@ fun DrawScope.drawMascot(
     lid: Float = 0f,
     wide: Float = 1f,
     smile: Boolean = true,
+    eyes: MascotEyes = MascotEyes.DOT,
+    mouth: MascotMouth? = null,
+    blush: Float = 0.75f,
+    leafSway: Float = 0f,
 ) {
     val s = size
     val top = center.y - s * 0.42f
-    // 双叶嫩芽
-    drawPath(
-        Path().apply {
-            moveTo(center.x, top + s * 0.02f)
-            quadraticBezierTo(center.x + s * 0.005f, top - s * 0.05f, center.x + s * 0.015f, top - s * 0.1f)
-        },
-        colors.brandStart, style = Stroke(width = s * 0.035f, cap = StrokeCap.Round)
-    )
-    rotate(25f, Offset(center.x - s * 0.06f, top - s * 0.11f)) {
-        drawOval(colors.brandStart, Offset(center.x - s * 0.15f, top - s * 0.155f), Size(s * 0.18f, s * 0.09f))
-    }
-    rotate(-30f, Offset(center.x + s * 0.09f, top - s * 0.14f)) {
-        drawOval(colors.brandStart, Offset(center.x - s * 0.01f, top - s * 0.19f), Size(s * 0.2f, s * 0.1f))
+    // 双叶嫩芽（随 leafSway 绕茎根摆动）
+    rotate(leafSway, Offset(center.x, top + s * 0.02f)) {
+        drawPath(
+            Path().apply {
+                moveTo(center.x, top + s * 0.02f)
+                quadraticBezierTo(center.x + s * 0.005f, top - s * 0.05f, center.x + s * 0.015f, top - s * 0.1f)
+            },
+            colors.brandStart, style = Stroke(width = s * 0.035f, cap = StrokeCap.Round)
+        )
+        rotate(25f, Offset(center.x - s * 0.06f, top - s * 0.11f)) {
+            drawOval(colors.brandStart, Offset(center.x - s * 0.15f, top - s * 0.155f), Size(s * 0.18f, s * 0.09f))
+        }
+        rotate(-30f, Offset(center.x + s * 0.09f, top - s * 0.14f)) {
+            drawOval(colors.brandStart, Offset(center.x - s * 0.01f, top - s * 0.19f), Size(s * 0.2f, s * 0.1f))
+        }
     }
     // 团子头 + 顶部柔光
     drawRoundRect(
@@ -167,6 +200,18 @@ fun DrawScope.drawMascot(
     val open = (1f - lid).coerceIn(0f, 1f)
     for (side in listOf(-1, 1)) {
         val base = mascotEyeCenter(center, s, side)
+        val happy = eyes == MascotEyes.HAPPY || (eyes == MascotEyes.WINK && side == 1)
+        if (happy) {
+            // 笑眯眯：向上弯的弧线 ^
+            drawPath(
+                Path().apply {
+                    moveTo(base.x - s * 0.055f, base.y + s * 0.015f)
+                    quadraticBezierTo(base.x, base.y - s * 0.055f, base.x + s * 0.055f, base.y + s * 0.015f)
+                },
+                colors.ink, style = Stroke(width = s * 0.03f, cap = StrokeCap.Round)
+            )
+            continue
+        }
         if (open < 0.2f) {
             drawPath(
                 Path().apply {
@@ -184,23 +229,60 @@ fun DrawScope.drawMascot(
         if (open > 0.5f) drawCircle(colors.white, s * 0.02f * wide, Offset(c.x + rx * 0.4f, c.y - ry * 0.45f))
     }
     // 腮红
+    val blushScale = 1f + (blush - 0.75f).coerceAtLeast(0f) * 0.8f
     for (side in listOf(-1, 1)) {
         val c = Offset(center.x + side * s * 0.31f, center.y + s * 0.11f)
-        drawOval(colors.accent.copy(alpha = 0.75f), Offset(c.x - s * 0.055f, c.y - s * 0.032f), Size(s * 0.11f, s * 0.064f))
+        val w = s * 0.11f * blushScale
+        val h = s * 0.064f * blushScale
+        drawOval(colors.accent.copy(alpha = blush.coerceIn(0f, 1f)), Offset(c.x - w / 2, c.y - h / 2), Size(w, h))
     }
     // 嘴
     val mouthY = center.y + s * 0.1f
-    if (smile) {
-        drawPath(
+    when (mouth ?: if (smile) MascotMouth.SMILE else MascotMouth.ROUND) {
+        MascotMouth.SMILE -> drawPath(
             Path().apply {
                 moveTo(center.x - s * 0.05f, mouthY)
                 quadraticBezierTo(center.x, mouthY + s * 0.05f, center.x + s * 0.05f, mouthY)
             },
             colors.ink, style = Stroke(width = s * 0.024f, cap = StrokeCap.Round)
         )
-    } else {
-        drawCircle(colors.ink, s * 0.024f, Offset(center.x, mouthY + s * 0.02f))
+        MascotMouth.ROUND -> drawCircle(colors.ink, s * 0.024f, Offset(center.x, mouthY + s * 0.02f))
+        MascotMouth.GRIN -> {
+            // 张嘴大笑：上沿平、下沿圆的半月，里面一点舌头
+            val mouthPath = Path().apply {
+                moveTo(center.x - s * 0.07f, mouthY - s * 0.005f)
+                quadraticBezierTo(center.x, mouthY + s * 0.11f, center.x + s * 0.07f, mouthY - s * 0.005f)
+                close()
+            }
+            drawPath(mouthPath, colors.ink)
+            clipPath(mouthPath) {
+                drawOval(colors.accent, Offset(center.x - s * 0.035f, mouthY + s * 0.025f), Size(s * 0.07f, s * 0.05f))
+            }
+        }
+        MascotMouth.FLAT -> drawLine(colors.ink, Offset(center.x - s * 0.04f, mouthY + s * 0.02f),
+            Offset(center.x + s * 0.04f, mouthY + s * 0.02f), s * 0.022f, StrokeCap.Round)
+        MascotMouth.WOBBLY -> drawPath(
+            Path().apply {
+                moveTo(center.x - s * 0.06f, mouthY + s * 0.025f)
+                quadraticBezierTo(center.x - s * 0.03f, mouthY, center.x, mouthY + s * 0.025f)
+                quadraticBezierTo(center.x + s * 0.03f, mouthY + s * 0.05f, center.x + s * 0.06f, mouthY + s * 0.025f)
+            },
+            colors.ink, style = Stroke(width = s * 0.022f, cap = StrokeCap.Round)
+        )
     }
+}
+
+/** 四角闪光（小瞳开心时的点缀），[size] 为半径。 */
+fun DrawScope.drawSparkle(color: Color, center: Offset, size: Float, alpha: Float = 1f) {
+    val w = size * 0.28f
+    drawPath(Path().apply {
+        moveTo(center.x, center.y - size)
+        quadraticBezierTo(center.x + w * 0.3f, center.y - w * 0.3f, center.x + size, center.y)
+        quadraticBezierTo(center.x + w * 0.3f, center.y + w * 0.3f, center.x, center.y + size)
+        quadraticBezierTo(center.x - w * 0.3f, center.y + w * 0.3f, center.x - size, center.y)
+        quadraticBezierTo(center.x - w * 0.3f, center.y - w * 0.3f, center.x, center.y - size)
+        close()
+    }, color, alpha = alpha.coerceIn(0f, 1f))
 }
 
 /**

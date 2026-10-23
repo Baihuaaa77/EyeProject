@@ -3,6 +3,7 @@ package com.zkyjss.eyeproject.server
 import com.zkyjss.eyeproject.core.sync.ConsentInput
 import com.zkyjss.eyeproject.core.sync.ErrorBody
 import com.zkyjss.eyeproject.core.sync.ErrorCodes
+import com.zkyjss.eyeproject.core.sync.AdviceRequest
 import com.zkyjss.eyeproject.core.sync.ExplanationRequest
 import com.zkyjss.eyeproject.core.sync.SubjectProfileInput
 import com.zkyjss.eyeproject.core.sync.LoginRequest
@@ -77,7 +78,9 @@ class Services(
     val records = RecordService(db, PayloadCipher(config.dataKeys, config.activeKeyId), audit, clock)
     val profile = ProfileService(db, config, audit, records, PayloadCipher(config.dataKeys, config.activeKeyId), clock)
     val retention = RetentionJob(db, config, audit, clock)
-    val explanations = ExplanationService(db, config, audit, KnowledgeBase.load(), llm, clock)
+    private val knowledge = KnowledgeBase.load()
+    val explanations = ExplanationService(db, config, audit, knowledge, llm, clock)
+    val advice = AdviceService(db, config, audit, knowledge, llm, clock)
     override fun close() = db.close()
 }
 
@@ -154,6 +157,9 @@ fun Application.eyeProjectModule(config: ServerConfig, services: Services = Serv
                 rateLimit(ai) {
                     post("/explanations") {
                         call.respond(services.explanations.explain(call.accountId, call.receive<ExplanationRequest>(), call.ip))
+                    }
+                    post("/advice") {
+                        call.respond(services.advice.advise(call.accountId, call.receive<AdviceRequest>(), call.ip))
                     }
                 }
             }

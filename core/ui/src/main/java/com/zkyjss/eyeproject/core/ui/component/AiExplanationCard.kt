@@ -58,6 +58,28 @@ import kotlinx.coroutines.delay
 /** 参考资料一行：名称 + 发布机构。 */
 data class AiSource(val title: String, val publisher: String)
 
+/** 卡片文案：「AI 解读」与「AI 综合建议」共用同一张卡片，只换标题、说明与两组要点的名称。 */
+data class AiCardText(
+    val title: String = "AI 解读",
+    val help: String = "依据眼科知识库，用通俗的话解释这次结果并给出建议。风险等级仍以测试规则为准，不是诊断。",
+    val intro: String = "用大白话说说这次结果意味着什么，以及接下来可以怎么做。",
+    val action: String = "生成解读",
+    val firstGroup: String = "这说明",
+    val secondGroup: String = "可以这样做",
+) {
+    companion object {
+        /** 首页「健康建议」里的 AI 综合建议。 */
+        val ADVICE = AiCardText(
+            title = "AI 综合建议",
+            help = "小瞳把今天的用眼概况、自测结果和你记录的感受交给大模型，结合眼科知识库给出建议。用眼负荷仍以规则为准，不是诊断。",
+            intro = "结合今天的用眼情况，说说最该先做的事和值得养成的习惯。",
+            action = "生成建议",
+            firstGroup = "先做这些",
+            secondGroup = "养成习惯",
+        )
+    }
+}
+
 /** AI 解读卡片的展示状态（各页面由数据层状态映射而来）。 */
 sealed interface AiCardState {
     /** 需要云端账号：只显示一句如何开启，不放按钮。 */
@@ -80,7 +102,7 @@ sealed interface AiCardState {
 
 /**
  * 「AI 解读」卡片：结果页与测试记录共用（与苹果端 AiExplanationView 同一排版与文案）。
- * 排版：标题行（渐变星标 + AI 解读 + 「依据眼科知识库」）→ 按状态显示：
+ * 排版：标题行（渐变星标 + 标题 + 问号说明）→ 按状态显示：
  * 一句说明 + 生成按钮 / 卡内同意说明 / 三行骨架 + 轮换进度语 / 一句话总结 + 「这说明」「可以这样做」+ 就医提示 + 参考资料。
  */
 @Composable
@@ -91,6 +113,7 @@ fun AiExplanationCard(
     modifier: Modifier = Modifier,
     /** 嵌在测试记录行里：换用页面底色区分层级，并吞掉点按，避免点正文时收起整行。 */
     embedded: Boolean = false,
+    text: AiCardText = AiCardText(),
 ) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
@@ -103,9 +126,10 @@ fun AiExplanationCard(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             AiBadge(Modifier.size(30.dp))
-            EyeText("AI 解读", Modifier.weight(1f), style = typography.subtitle, color = colors.textPrimary)
-            EyeText("依据眼科知识库", style = typography.chip, color = colors.primary,
-                modifier = Modifier.clip(EyeShapes.chip).background(colors.primarySoft).padding(horizontal = 10.dp, vertical = 4.dp))
+            Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                EyeText(text.title, style = typography.subtitle, color = colors.textPrimary)
+                EyeHelpButton(text.title, text.help)
+            }
         }
         AnimatedContent(
             targetState = state,
@@ -115,9 +139,9 @@ fun AiExplanationCard(
         ) { current ->
             when (current) {
                 is AiCardState.Locked -> EyeText(current.message, style = typography.body, color = colors.textSecondary)
-                is AiCardState.Idle -> IdleContent(current.consentText, onGenerate, onAgree)
+                is AiCardState.Idle -> IdleContent(current.consentText, onGenerate, onAgree, text)
                 AiCardState.Loading -> LoadingContent()
-                is AiCardState.Done -> DoneContent(current)
+                is AiCardState.Done -> DoneContent(current, text)
                 is AiCardState.Failed -> Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     EyeText(current.message, style = typography.body, color = colors.textSecondary)
                     EyeButton("重试", EyeButtonRole.SECONDARY, onGenerate, Modifier.fillMaxWidth())
@@ -128,13 +152,13 @@ fun AiExplanationCard(
 }
 
 @Composable
-private fun IdleContent(consentText: String?, onGenerate: () -> Unit, onAgree: () -> Unit) {
+private fun IdleContent(consentText: String?, onGenerate: () -> Unit, onAgree: () -> Unit, text: AiCardText) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
     val haptics = rememberEyeHaptics()
     var asking by rememberSaveable { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        EyeText("用大白话说说这次结果意味着什么，以及接下来可以怎么做。", style = typography.body, color = colors.textSecondary)
+        EyeText(text.intro, style = typography.body, color = colors.textSecondary)
         AnimatedVisibility(
             visible = asking && consentText != null,
             enter = expandVertically(tween(EyeMotion.MEDIUM, easing = EyeMotion.Standard)) + fadeIn(tween(EyeMotion.MEDIUM)),
@@ -150,7 +174,7 @@ private fun IdleContent(consentText: String?, onGenerate: () -> Unit, onAgree: (
                 }
             }
         }
-        if (!(asking && consentText != null)) EyeButton("生成解读", EyeButtonRole.PRIMARY, {
+        if (!(asking && consentText != null)) EyeButton(text.action, EyeButtonRole.PRIMARY, {
             haptics.tap()
             if (consentText != null) asking = true else onGenerate()
         }, Modifier.fillMaxWidth())
@@ -181,15 +205,15 @@ private fun LoadingContent() {
 }
 
 @Composable
-private fun DoneContent(done: AiCardState.Done) {
+private fun DoneContent(done: AiCardState.Done, text: AiCardText) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
     val haptics = rememberEyeHaptics()
     var sourcesOpen by rememberSaveable { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
         EyeText(done.summary, style = typography.subtitle, color = colors.textPrimary)
-        if (done.meaning.isNotEmpty()) BulletGroup("这说明", done.meaning, colors.textSecondary)
-        if (done.suggestions.isNotEmpty()) BulletGroup("可以这样做", done.suggestions, colors.primary)
+        if (done.meaning.isNotEmpty()) BulletGroup(text.firstGroup, done.meaning, colors.textSecondary)
+        if (done.suggestions.isNotEmpty()) BulletGroup(text.secondGroup, done.suggestions, colors.primary)
         if (done.seeDoctor.isNotBlank()) {
             val (strong, soft) = if (done.urgent) colors.warning to colors.warningSoft else colors.primary to colors.primarySoft
             Row(Modifier.fillMaxWidth().clip(EyeShapes.medium).background(soft).padding(14.dp),

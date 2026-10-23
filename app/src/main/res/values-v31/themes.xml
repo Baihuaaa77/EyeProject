@@ -5,7 +5,7 @@
         <item name="android:colorAccent">@color/primary</item>
         <item name="android:windowNoTitle">true</item>
         <item name="android:windowBackground">@color/app_background</item>
-        <!-- Android 12+ 系统启动页：应用底色 + 品牌图标 -->
-        <item name="android:windowSplashScreenBackground">@color/app_background</item>
+        <!-- Android 12+ 系统启动页：浅主色底 + 应用图标，随后衔接应用内启动动画（EyeSplash） -->
+        <item name="android:windowSplashScreenBackground">@color/splash_background</item>
     </style>
 </resources>

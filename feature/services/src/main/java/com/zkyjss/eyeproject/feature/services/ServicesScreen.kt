@@ -37,7 +37,8 @@ import com.zkyjss.eyeproject.core.designsystem.util.screenHorizontalPaddingLarge
 import com.zkyjss.eyeproject.core.ui.component.EyePageHeader
 import com.zkyjss.eyeproject.core.ui.component.EyeSelectCard
 import com.zkyjss.eyeproject.core.ui.component.EyeText
-import com.zkyjss.eyeproject.core.ui.component.drawMascot
+import com.zkyjss.eyeproject.core.ui.component.MascotMood
+import com.zkyjss.eyeproject.core.ui.component.XiaoTong
 import com.zkyjss.eyeproject.core.ui.component.drawTumblingE
 import com.zkyjss.eyeproject.core.ui.component.leafEyePath
 import kotlin.math.abs
@@ -50,6 +51,7 @@ fun ServicesScreen(
     onStrabismusClick: () -> Unit,
     modifier: Modifier = Modifier,
     onOpenSettings: () -> Unit = {},
+    onOpenAccount: (() -> Unit)? = null,
 ) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
@@ -63,7 +65,7 @@ fun ServicesScreen(
             .screenHorizontalPaddingLarge(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        EyePageHeader("服务", onOpenSettings)
+        EyePageHeader("服务", onOpenSettings, onOpenAccount = onOpenAccount)
         HeroCard()
         Spacer(Modifier.height(4.dp))
         EyeText("选择一项自测", style = typography.subtitle, color = colors.textPrimary)
@@ -95,15 +97,11 @@ fun ServicesScreen(
     }
 }
 
-/** 欢迎卡：吉祥物小瞳待机（偶尔眨眼、左右张望）+ 一句引导。 */
+/** 欢迎卡：吉祥物小瞳待机（眨眼、张望、呼吸），点一下会互动 + 一句引导。 */
 @Composable
 private fun HeroCard() {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
-    val reduced = rememberReducedMotion()
-    val idle = rememberInfiniteTransition(label = "小瞳待机").animateFloat(
-        0f, 1f, infiniteRepeatable(tween(5200, easing = LinearEasing)), label = "待机进度"
-    )
     Row(
         Modifier
             .fillMaxWidth()
@@ -120,20 +118,7 @@ private fun HeroCard() {
                 color = colors.textSecondary
             )
         }
-        Canvas(Modifier.size(112.dp)) {
-            val p = if (reduced) 0f else idle.value
-            val blink = maxOf(1f - abs(p - 0.3f) / 0.025f, 1f - abs(p - 0.36f) / 0.025f, 0f)
-            // 张望：0.5~0.9 之间看向左、再看向右
-            val gazeX = when {
-                p < 0.5f -> 0f
-                p < 0.65f -> -(p - 0.5f) / 0.15f
-                p < 0.8f -> -1f + (p - 0.65f) / 0.15f * 2f
-                p < 0.9f -> 1f - (p - 0.8f) / 0.1f
-                else -> 0f
-            }
-            val s = size.minDimension
-            drawMascot(colors, Offset(s / 2, s * 0.56f), s * 0.8f, gaze = Offset(gazeX, 0f), lid = blink)
-        }
+        XiaoTong(MascotMood.HAPPY, Modifier.size(112.dp), headScale = 0.72f)
     }
 }
 

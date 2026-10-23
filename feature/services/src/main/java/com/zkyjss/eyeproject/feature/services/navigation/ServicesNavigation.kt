@@ -8,6 +8,7 @@ import com.zkyjss.eyeproject.feature.services.DryEyeScreen
 import com.zkyjss.eyeproject.feature.services.PresbyopiaScreen
 import com.zkyjss.eyeproject.feature.services.ServicesScreen
 import com.zkyjss.eyeproject.feature.services.StrabismusScreen
+import com.zkyjss.eyeproject.feature.services.SystemSettingsScreen
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -21,6 +22,10 @@ data object PresbyopiaRoute
 
 @Serializable
 data object StrabismusRoute
+
+/** 顶层页右上角齿轮打开的「系统设置」完整页面。 */
+@Serializable
+data object SystemSettingsRoute
 
 fun NavController.navigateToServices(navOptions: NavOptions? = null) {
     navigate(ServicesRoute, navOptions)
@@ -38,11 +43,20 @@ fun NavController.navigateToStrabismus() {
     navigate(StrabismusRoute)
 }
 
+fun NavController.navigateToSystemSettings() {
+    navigate(SystemSettingsRoute) { launchSingleTop = true }
+}
+
+fun NavGraphBuilder.systemSettingsScreen(onBack: () -> Unit) {
+    composable<SystemSettingsRoute> { SystemSettingsScreen(onBack = onBack) }
+}
+
 fun NavGraphBuilder.servicesScreen(
     onDryEyeClick: () -> Unit,
     onPresbyopiaClick: () -> Unit,
     onStrabismusClick: () -> Unit,
     onOpenSettings: () -> Unit = {},
+    onOpenAccount: () -> Unit = {},
 ) {
     composable<ServicesRoute> {
         ServicesScreen(
@@ -50,6 +64,7 @@ fun NavGraphBuilder.servicesScreen(
             onPresbyopiaClick = onPresbyopiaClick,
             onStrabismusClick = onStrabismusClick,
             onOpenSettings = onOpenSettings,
+            onOpenAccount = onOpenAccount,
         )
     }
 }

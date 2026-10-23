@@ -1,5 +1,6 @@
 package com.zkyjss.eyeproject.server
 
+import com.zkyjss.eyeproject.core.sync.AdviceRequest
 import com.zkyjss.eyeproject.core.sync.ExplanationRequest
 import com.zkyjss.eyeproject.core.sync.KnowledgeSourceDto
 import kotlin.math.ln
@@ -31,6 +32,30 @@ class KnowledgeBase(val version: String, val sources: Map<String, KnowledgeSourc
             .filter { it.second > 0 }
             .sortedByDescending { it.second }
             .map { it.first }
+        return (pinned + ranked).take(limit)
+    }
+
+    /**
+     * AI 综合建议的检索：只在通用与干眼条目中找（用屏、眨眼、距离、夜间、儿童用眼），固定带上用屏习惯；
+     * 有危险信号或自测中高风险时带上危险信号与科室条目。
+     */
+    fun searchAdvice(request: AdviceRequest, limit: Int = 6): List<Entry> {
+        val candidates = entries.filter { GENERAL in it.kinds || "DRY_EYE" in it.kinds }
+        val urgent = request.symptoms.any { it in RED_FLAG_SYMPTOMS } || request.tests.any { it.riskLevel in setOf("MEDIUM", "HIGH") }
+        val pinned = (listOf("gen-screen-habits") + if (urgent) listOf("gen-red-flags", "gen-departments") else emptyList()).mapNotNull(::entry)
+        val query = tokenize(buildList {
+            add("屏幕 用眼 习惯 休息")
+            addAll(request.factors)
+            addAll(request.symptoms)
+            request.occupation?.let(::add)
+            request.blinksPerMinute?.let { add("眨眼") }
+            request.viewingDistanceCm?.let { add("距离") }
+            if ((request.nightUseDays ?: 0) > 0 || request.factors.any { "夜间" in it }) add("夜间 睡眠 蓝光 夜间模式")
+            request.ageGroup?.takeWhile { it.isDigit() }?.toIntOrNull()?.let { if (it < 18) add("儿童 户外 近视") }
+            request.tests.forEach { add(KIND_WORDS[it.kind].orEmpty()) }
+        }.joinToString(" "))
+        val ranked = candidates.filter { it !in pinned }.map { it to score(it, query) }.filter { it.second > 0 }
+            .sortedByDescending { it.second }.map { it.first }
         return (pinned + ranked).take(limit)
     }
 
@@ -80,6 +105,7 @@ class KnowledgeBase(val version: String, val sources: Map<String, KnowledgeSourc
         private const val B = 0.75
         private const val RESOURCE = "/knowledge/eye-knowledge.md"
 
+        private val RED_FLAG_SYMPTOMS = setOf("眼睛疼痛", "突然重影或看不清")
         private val KIND_WORDS = mapOf(
             "DRY_EYE" to "干眼 泪膜 眨眼",
             "PRESBYOPIA" to "老视 老花 调节 看近",

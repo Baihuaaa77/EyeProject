@@ -54,16 +54,30 @@ import androidx.navigation.navOptions
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
 import com.zkyjss.eyeproject.core.designsystem.util.borderTop
 import com.zkyjss.eyeproject.feature.agent.navigation.agentScreen
+import com.zkyjss.eyeproject.feature.home.HomeNavigation
 import com.zkyjss.eyeproject.feature.home.navigation.HomeRoute
+import com.zkyjss.eyeproject.feature.home.navigation.eyeCareScreens
 import com.zkyjss.eyeproject.feature.home.navigation.homeScreen
+import com.zkyjss.eyeproject.feature.home.navigation.navigateToEyeAdvice
+import com.zkyjss.eyeproject.feature.home.navigation.navigateToEyeBrightness
+import com.zkyjss.eyeproject.feature.home.navigation.navigateToEyeTrend
 import com.zkyjss.eyeproject.feature.home.navigation.navigateToHome
+import com.zkyjss.eyeproject.feature.mine.MineNavigation
 import com.zkyjss.eyeproject.feature.mine.navigation.MineRoute
+import com.zkyjss.eyeproject.feature.mine.navigation.mineScreen
+import com.zkyjss.eyeproject.feature.mine.navigation.mineSubScreens
+import com.zkyjss.eyeproject.feature.mine.navigation.navigateToAccount
+import com.zkyjss.eyeproject.feature.mine.navigation.navigateToCloudSync
+import com.zkyjss.eyeproject.feature.mine.navigation.navigateToMine
+import com.zkyjss.eyeproject.feature.mine.navigation.navigateToPermissions
+import com.zkyjss.eyeproject.feature.mine.navigation.navigateToRecords
+import com.zkyjss.eyeproject.feature.mine.navigation.navigateToSubjectEdit
+import com.zkyjss.eyeproject.feature.mine.navigation.navigateToSubjects
+import com.zkyjss.eyeproject.feature.mine.navigation.subjectEditScreen
 import com.zkyjss.eyeproject.feature.services.navigation.ServicesRoute
 import com.zkyjss.eyeproject.feature.services.navigation.dryEyeScreen
-import com.zkyjss.eyeproject.feature.mine.navigation.mineScreen
-import com.zkyjss.eyeproject.feature.mine.navigation.navigateToSubjectEdit
-import com.zkyjss.eyeproject.feature.mine.navigation.subjectEditScreen
-import com.zkyjss.eyeproject.feature.mine.navigation.navigateToMine
+import com.zkyjss.eyeproject.feature.services.navigation.navigateToSystemSettings
+import com.zkyjss.eyeproject.feature.services.navigation.systemSettingsScreen
 import com.zkyjss.eyeproject.feature.services.navigation.navigateToDryEye
 import com.zkyjss.eyeproject.feature.services.navigation.navigateToPresbyopia
 import com.zkyjss.eyeproject.feature.services.navigation.navigateToServices
@@ -71,7 +85,6 @@ import com.zkyjss.eyeproject.feature.services.navigation.navigateToStrabismus
 import com.zkyjss.eyeproject.feature.services.navigation.presbyopiaScreen
 import com.zkyjss.eyeproject.feature.services.navigation.servicesScreen
 import com.zkyjss.eyeproject.feature.services.navigation.strabismusScreen
-import com.zkyjss.eyeproject.feature.services.SystemSettingsSheet
 import com.zkyjss.eyeproject.feature.testmodel.navigation.blinkTestScreen
 import com.zkyjss.eyeproject.feature.testmodel.navigation.gazeScreen
 import com.zkyjss.eyeproject.feature.testmodel.navigation.navigateToBlinkTest
@@ -88,10 +101,17 @@ fun EyeProjectNavHost(
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = backStackEntry?.destination
     val colors = LocalEyeColors.current
-    // 三个顶层页右上角齿轮共用的「系统设置」面板
-    var settingsOpen by rememberSaveable { mutableStateOf(false) }
-    val openSettings = { settingsOpen = true }
-    if (settingsOpen) SystemSettingsSheet(onDismiss = { settingsOpen = false })
+    // 三个顶层页右上角：账户（人像）与系统设置（齿轮），都是完整页面
+    val openSettings = { navController.navigateToSystemSettings() }
+    val openAccount = { navController.navigateToAccount() }
+    val back: () -> Unit = { navController.navigateUp() }
+    val openTest: (String) -> Unit = { kind ->
+        when (kind) {
+            "DRY_EYE" -> navController.navigateToDryEye()
+            "PRESBYOPIA" -> navController.navigateToPresbyopia()
+            "STRABISMUS" -> navController.navigateToStrabismus()
+        }
+    }
 
     Scaffold(
         modifier = modifier,
@@ -113,17 +133,37 @@ fun EyeProjectNavHost(
             popEnterTransition = { fadeIn(tween(EyeMotion.MEDIUM)) },
             popExitTransition = { fadeOut(tween(EyeMotion.SHORT)) + slideOutVertically(tween(EyeMotion.MEDIUM)) { it / 24 } },
         ) {
-            homeScreen(
-                onNavigateToTestModel = { navController.navigateToTestModel() },
+            homeScreen(HomeNavigation(
+                onOpenAccount = openAccount,
                 onOpenSettings = openSettings,
-            )
+                onNavigateToTestModel = { navController.navigateToTestModel() },
+                onOpenTest = openTest,
+                onEditProfile = { navController.navigateToSubjectEdit(it) },
+                onOpenTrend = { navController.navigateToEyeTrend() },
+                onOpenAdvice = { navController.navigateToEyeAdvice() },
+                onOpenBrightness = { navController.navigateToEyeBrightness() },
+            ))
+            eyeCareScreens(onBack = back, onOpenTest = openTest)
             servicesScreen(
                 onDryEyeClick = { navController.navigateToDryEye() },
                 onPresbyopiaClick = { navController.navigateToPresbyopia() },
                 onStrabismusClick = { navController.navigateToStrabismus() },
                 onOpenSettings = openSettings,
+                onOpenAccount = openAccount,
             )
-            mineScreen(onEditSubject = { navController.navigateToSubjectEdit(it) }, onOpenSettings = openSettings)
+            mineScreen(MineNavigation(
+                onOpenSettings = openSettings,
+                onOpenAccount = openAccount,
+                onEditSubject = { navController.navigateToSubjectEdit(it) },
+                onOpenRecords = { navController.navigateToRecords() },
+                onOpenSubjects = { navController.navigateToSubjects() },
+                onOpenCloudSync = { navController.navigateToCloudSync() },
+                onOpenPermissions = { navController.navigateToPermissions() },
+                onOpenTrend = { navController.navigateToEyeTrend() },
+            ))
+            mineSubScreens(onBack = back, onOpenAccount = openAccount, onOpenCloudSync = { navController.navigateToCloudSync() },
+                onEditSubject = { navController.navigateToSubjectEdit(it) })
+            systemSettingsScreen(onBack = back)
             subjectEditScreen(onBack = { navController.navigateUp() })
             agentScreen(onBack = { navController.navigateUp() })
             testModelScreen(

@@ -47,7 +47,10 @@ struct EyeTestView: View {
         }.foregroundStyle(EyeStyle.text).tint(EyeStyle.primary)
             // 全屏呈现：背景铺满到灵动岛与底部，内容留在安全区内。
             .background(EyeStyle.background.ignoresSafeArea())
-            .sheet(isPresented: $settingsOpen) { TestSettingsView(voice: runtime.voice, feedback: runtime.feedback) }
+            // 系统设置以完整页面盖在测试上（不用底部弹窗），右上角「完成」回到测试
+            .fullScreenCover(isPresented: $settingsOpen) {
+                NavigationStack { SystemSettingsPage(voice: runtime.voice, feedback: runtime.feedback, inTest: true) }.tint(EyeStyle.primary)
+            }
             .onChange(of: settingsOpen) { runtime.setSettingsPresented($0) }
             .onAppear {
                 brightness = UIScreen.main.brightness; UIScreen.main.brightness = 1

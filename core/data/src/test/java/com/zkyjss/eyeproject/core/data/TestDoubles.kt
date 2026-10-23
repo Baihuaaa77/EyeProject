@@ -95,6 +95,13 @@ internal class FakeNetwork : EyeNetworkDataSource {
     }
     override suspend fun exportAll(accessToken: String): NetworkResult<String> = error("未使用")
     override suspend fun deleteAccount(accessToken: String): NetworkResult<Unit> = error("未使用")
+    val advices = mutableListOf<com.zkyjss.eyeproject.core.sync.AdviceRequest>()
+    override suspend fun advise(accessToken: String, request: com.zkyjss.eyeproject.core.sync.AdviceRequest):
+        NetworkResult<com.zkyjss.eyeproject.core.sync.AdviceDto> {
+        advices += request
+        return NetworkResult.Success(com.zkyjss.eyeproject.core.sync.AdviceDto("今天有点累", listOf("现在休息一下"), listOf("打开休息提醒"),
+            "不适持续时就医", fatigueLevel = request.fatigueLevel, model = "fake", generatedAt = 1L), 200)
+    }
     override suspend fun explain(accessToken: String, request: ExplanationRequest): NetworkResult<ExplanationDto> {
         explainError?.let { return it }
         explanations += request

@@ -1,12 +1,12 @@
 # backend/server — 账号与测试记录服务
 
-Ktor 3 API 服务：账号、家庭成员（被测者）及其健康资料、分项同意、测试记录同步、历史与对比、导出、注销、审计与保留期清理，以及 AI 解读（知识库检索 + DeepSeek）。
+Ktor 3 API 服务：账号、家庭成员（被测者）及其健康资料、分项同意、测试记录同步、历史与对比、导出、注销、审计与保留期清理，以及 AI 解读与 AI 综合建议（知识库检索 + DeepSeek）。
 设计依据与路线见 [`docs/后端与智能评估设计-2026-10-15.md`](../../docs/后端与智能评估设计-2026-10-15.md)。
 
 ## 运行与测试
 
 ```powershell
-.\gradlew.bat -p backend/server test   # 16 项接口与安全测试（内存 H2）
+.\gradlew.bat -p backend/server test   # 27 项接口、安全与 AI 输出校验测试（内存 H2）
 .\gradlew.bat -p backend/server run    # 开发模式：http://localhost:8080，数据在 backend/server/data/
 ```
 
@@ -30,6 +30,7 @@ iOS 连本机服务：在「我的 → 云端同步 → 服务器地址」（已
 | `RecordService.kt` | 幂等上传、同意与监护人检查、列表、详情、删除、历史、对比 |
 | `AuditLog.kt` / `RetentionJob.kt` | 审计（不含健康内容）；每日清理过期令牌、审计与（可选）过期记录、30 天前的解读缓存 |
 | `ExplanationService.kt` | AI 解读：校验输入 → 「AI 解读」同意 → 缓存 → 每日额度 → 检索知识库 → 调模型 → 校验输出（诊断措辞、与等级矛盾、输入中没有的数字）→ 不合格重试一次；提示词 `ExplanationPrompt` |
+| `AdviceService.kt` | AI 综合建议：「AI 综合建议」同意 → 缓存（与解读同表，键前缀 `advice-a1`）→ 共用每日额度 → 检索知识库 → 调模型 → 校验输出（`AdviceOutput`，复用解读的禁用词与编造数字检查）→ 不合格重试一次；提示词 `AdvicePrompt` |
 | `KnowledgeBase.kt` | 读取 `resources/knowledge/eye-knowledge.md`，中文二元切词 BM25 检索，按等级固定带上「就医 / 不确定 / 数据无效」条目 |
 | `LlmClient.kt` | 大模型端口与 `DeepSeekClient`（OpenAI 兼容 Chat Completions，JSON 输出、关闭思考；不记内容与密钥）。用 OkHttp：域名解析出多个地址时，连不上的地址 4 秒后自动换下一个（有的网络里 api.deepseek.com 的个别地址不通，JDK HttpClient 只连第一个地址会整次超时） |
 | `resources/db/migration` | Flyway 脚本；PostgreSQL 与 H2（PostgreSQL 模式）通用写法 |
@@ -71,6 +72,15 @@ $env:DEEPSEEK_API_KEY = "sk-..."; .\gradlew.bat -p backend/server run
 - 缓存键 = 提示词版本 + 模型 + 知识库版本 + 输入哈希；改提示词时递增 `ExplanationService.PROMPT_VERSION`，改知识库时更新文件头「版本」。日志只记 token 数。
 - 费用参考：每次约 1.5k 输入 + 0.3k 输出 token，按 V4 Flash 公开价（约 1 元 / 2 元每百万 token）约 0.002 元；以 DeepSeek 官网价格为准。
 - 知识库条目为公开权威资料的转述，**上线前需眼科医生审核**（见知识库文件头）。迁移 `V3__ai_explanation.sql`。
+
+## AI 综合建议（`POST /v1/advice`）
+
+- 输入 `AdviceRequest`（`shared/sync`，由设备端共用 `EyeCareAdvice.request` 生成）：负荷等级与分数、主要原因、年龄段、职业、矫正方式、眼病史选项、
+  近 7 天平均屏幕时间 / 最长连续 / 夜间使用天数 / 休息次数（仅安卓）、实时检测的眨眼频率 / 观看距离 / 头部偏转、环境光与亮度等级、各项自测风险等级、今日症状。
+  不含姓名、账号、成员编号、具体日期、照片或视频。数据清单已经用户确认（2026-10-23）。
+- 需 `AI_ADVICE` 同意（不触发记录同步）；与 AI 解读共用每日额度与每分钟限速；审计动作 `AI_ADVICE`。
+- 输出：一句话总结、优先做的事、日常习惯、何时就医（有红旗症状或自测中 / 高风险时固定带上「就医」条目）、参考资料与免责说明；措辞不得诊断，等级只来自设备端。
+- 知识库 2026-10-23 版新增 `gen-screen-breaks` / `gen-screen-distance` / `gen-night-screen` / `gen-fatigue` / `gen-child-screen` 与来源 `moe-myopia-2018`，**上线前需眼科医生审核**。
 
 ## 约束
 

@@ -13,7 +13,7 @@ internal object HealthProfileFields {
     private val medication: (Map<String, String>) -> Boolean = { it["近期眼部用药"] in setOf("人工泪液", "其他眼药水") }
     private val contacts: (Map<String, String>) -> Boolean = { it["佩戴隐形眼镜史"] in setOf("以前戴过", "现在在戴") }
 
-    val measurements = ProfileSection("视力与验光记录（选填，照检查单填写）", buildList {
+    val measurements = ProfileSection("视力与验光记录", buildList {
         add(date("验光日期"))
         for (eye in listOf("右眼", "左眼")) {
             add(decimal("${eye}裸眼视力", "${eye}裸眼视力（小数视力）", 0.01..3.0, "如：0.5；不是 4.7"))
@@ -24,7 +24,7 @@ internal object HealthProfileFields {
                 placeholder = "如：90", maxLength = 3, validate = { it.toIntOrNull() in 0..180 }))
         }
     })
-    val histories = ProfileSection("用药、隐形眼镜与家族史（选填）", listOf(
+    val histories = ProfileSection("用药、隐形眼镜与家族史", listOf(
         Question("眼药水名称", optional = true, visibleWhen = medication, placeholder = "照药盒填写，不清楚可留空", maxLength = 100),
         Question("眼药水使用频次", optional = true, visibleWhen = medication, placeholder = "如：每日 3 次", maxLength = 100),
         date("眼药水开始日期", medication), date("眼药水结束日期", medication),

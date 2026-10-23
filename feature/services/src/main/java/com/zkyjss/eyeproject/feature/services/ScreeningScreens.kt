@@ -214,7 +214,7 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, onEditSubje
         }
         distance?.let { DistanceEdgeGlow(it.zone) }
     }
-    if (settingsOpen) TestSettingsSheet(settings, voiceAnswer, { settingsOpen = false }, speechAvailable = voice.available) {
+    if (settingsOpen) TestSettingsPage(settings, voiceAnswer, { settingsOpen = false }, speechAvailable = voice.available) {
         EyeDisclosure("测量详情") {
             EyeText(s.trackingStatus, typography.bodySecondary, colors.textSecondary)
             EyeText("距离 ${if (s.distanceCm > 0f) "%.1f cm".format(s.distanceCm) else "—"} · 光照 ${lightingLabel(s)}", typography.bodySecondary, colors.textSecondary)

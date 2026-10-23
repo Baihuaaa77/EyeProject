@@ -36,14 +36,19 @@ class RecordsAndProfileTest {
         var exportedText = false
         var exportedJson = false
         compose.setContent { EyeProjectTheme {
-            LocalRecordsSheet(listOf(entry), onExport = { exportedJson = true }, onDismiss = {}, onExportReport = { exportedText = true })
+            RecordsContent(listOf(entry), onBack = {}, onExport = { exportedJson = true }, onExportReport = { exportedText = true })
         } }
         compose.onNodeWithText("干眼自测").performClick()
         compose.onNodeWithText("小明", substring = true).assertIsDisplayed()
-        capture("record-details", modal = true)
+        capture("record-details")
         compose.onNodeWithText("导出报告").performScrollTo().performClick()
         compose.onNodeWithText("导出原始数据").performScrollTo().performClick()
         assertTrue(exportedText); assertTrue(exportedJson)
+    }
+
+    @Test fun emptyRecordsShowTheMascot() {
+        compose.setContent { EyeProjectTheme { RecordsContent(emptyList(), onBack = {}, onExport = {}) } }
+        compose.onNodeWithText("还没有测试记录").assertIsDisplayed()
     }
 
     @Test fun signedPrescriptionAndOptionalHistoryRenderInTheMemberEditor() {
@@ -59,10 +64,10 @@ class RecordsAndProfileTest {
         capture("member-history")
     }
 
-    private fun capture(name: String, modal: Boolean = false) {
+    private fun capture(name: String) {
         compose.mainClock.advanceTimeBy(700)
         val bitmap = compose.runOnIdle {
-            val view = if (modal) android.view.inspector.WindowInspector.getGlobalWindowViews().last() else compose.activity.window.decorView
+            val view = compose.activity.window.decorView
             Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888).also { view.draw(android.graphics.Canvas(it)) }
         }
         val output = File("build/reports/ui/$name.png")

@@ -23,7 +23,6 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
-import com.zkyjss.eyeproject.core.designsystem.util.getTopStatusBarPadding
 import com.zkyjss.eyeproject.core.designsystem.util.screenHorizontalPaddingLarge
 import com.zkyjss.eyeproject.core.ui.component.EyeButton
 import com.zkyjss.eyeproject.core.ui.component.EyeButtonRole
@@ -71,8 +70,8 @@ internal fun SubjectEditContent(
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
     val haptics = rememberEyeHaptics()
     LaunchedEffect(error) { if (error != null) haptics.failure() }
-    Column(Modifier.fillMaxSize().background(colors.appBackground).padding(top = getTopStatusBarPadding())) {
-        TopBackBar(title = if (isNew) "添加家庭成员" else "${draft.nickname.ifBlank { "成员" }}的资料", onBackClick = onBack)
+    Column(Modifier.fillMaxSize().background(colors.appBackground)) {
+        TopBackBar(title = if (isNew) "添加家庭成员" else "${draft.nickname.ifBlank { "成员" }}的资料", noText = true, onBackClick = onBack)
         Column(
             Modifier.weight(1f).verticalScroll(rememberScrollState()).screenHorizontalPaddingLarge(),
             verticalArrangement = Arrangement.spacedBy(12.dp),

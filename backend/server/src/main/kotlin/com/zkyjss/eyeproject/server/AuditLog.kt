@@ -9,6 +9,8 @@ enum class AuditAction {
     RECORD_UPLOAD, RECORD_VIEW, RECORD_DELETE, EXPORT, ACCOUNT_DELETE, RETENTION_PURGE,
     /** AI 解读：结果为 OK / CACHED / QUOTA / FAILED / INVALID_OUTPUT，不记内容。 */
     AI_EXPLAIN,
+    /** AI 综合建议：结果同上，不记内容。 */
+    AI_ADVICE,
 }
 
 class AuditLog(private val ipHasher: IpHasher, private val clock: () -> Long) {
