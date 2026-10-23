@@ -1,6 +1,7 @@
 package com.zkyjss.eyeproject.server
 
-import kotlinx.coroutines.future.await
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -11,10 +12,10 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonObject
-import java.net.URI
-import java.net.http.HttpClient
-import java.net.http.HttpRequest
-import java.net.http.HttpResponse
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import java.time.Duration
 
 /** 一次大模型回复；token 数用于记录费用（不记内容）。 */
@@ -39,7 +40,15 @@ class DeepSeekClient(
     private val timeoutMs: Long,
     private val disableThinking: Boolean,
 ) : LlmClient {
-    private val http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build()
+    /**
+     * 域名常解析出多个地址，个别网络里其中一个连不通：JDK HttpClient 只连第一个地址，轮到坏地址就整次超时。
+     * OkHttp 每个地址最多等 [CONNECT_SECONDS] 秒，连不上自动换下一个；整次调用仍以 [timeoutMs] 封顶。
+     */
+    private val http = OkHttpClient.Builder()
+        .connectTimeout(Duration.ofSeconds(CONNECT_SECONDS))
+        .readTimeout(Duration.ofMillis(timeoutMs))
+        .callTimeout(Duration.ofMillis(timeoutMs + CONNECT_SECONDS * 2_000))
+        .build()
     private val json = Json { ignoreUnknownKeys = true }
 
     override suspend fun complete(system: String, user: String): LlmReply {
@@ -55,25 +64,23 @@ class DeepSeekClient(
             put("max_tokens", 1024)
             put("stream", false)
         }
-        val request = HttpRequest.newBuilder(URI.create("$baseUrl/chat/completions"))
-            .timeout(Duration.ofMillis(timeoutMs))
+        val request = Request.Builder().url("$baseUrl/chat/completions")
             .header("Authorization", "Bearer $apiKey")
-            .header("Content-Type", "application/json")
-            .POST(HttpRequest.BodyPublishers.ofString(body.toString(), Charsets.UTF_8))
+            .post(body.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
             .build()
-        val response = try {
-            http.sendAsync(request, HttpResponse.BodyHandlers.ofString(Charsets.UTF_8)).await()
+        val (status, text) = try {
+            withContext(Dispatchers.IO) { http.newCall(request).execute().use { it.code to it.body?.string().orEmpty() } }
         } catch (error: Exception) {
             throw LlmException("连接大模型失败：${error.javaClass.simpleName}")
         }
-        if (response.statusCode() !in 200..299) {
+        if (status !in 200..299) {
             // 只取错误说明（如余额不足、密钥无效），不回显请求
             val reason = runCatching {
-                (json.parseToJsonElement(response.body()).jsonObject["error"] as? JsonObject)?.get("message")?.let { (it as JsonPrimitive).content }
+                (json.parseToJsonElement(text).jsonObject["error"] as? JsonObject)?.get("message")?.let { (it as JsonPrimitive).content }
             }.getOrNull()
-            throw LlmException("大模型返回 ${response.statusCode()}${reason?.let { "：${it.take(120)}" }.orEmpty()}")
+            throw LlmException("大模型返回 $status${reason?.let { "：${it.take(120)}" }.orEmpty()}")
         }
-        val root = runCatching { json.parseToJsonElement(response.body()).jsonObject }.getOrElse { throw LlmException("大模型回复无法解析") }
+        val root = runCatching { json.parseToJsonElement(text).jsonObject }.getOrElse { throw LlmException("大模型回复无法解析") }
         val content = runCatching {
             (root["choices"]!!.jsonArray[0].jsonObject["message"]!!.jsonObject["content"] as JsonPrimitive).content
         }.getOrElse { throw LlmException("大模型回复缺少内容") }
@@ -81,4 +88,6 @@ class DeepSeekClient(
         return LlmReply(content, (usage?.get("prompt_tokens") as? JsonPrimitive)?.intOrNull,
             (usage?.get("completion_tokens") as? JsonPrimitive)?.intOrNull)
     }
+
+    private companion object { const val CONNECT_SECONDS = 4L }
 }

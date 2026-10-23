@@ -31,7 +31,7 @@ iOS 连本机服务：在「我的 → 云端同步 → 服务器地址」（已
 | `AuditLog.kt` / `RetentionJob.kt` | 审计（不含健康内容）；每日清理过期令牌、审计与（可选）过期记录、30 天前的解读缓存 |
 | `ExplanationService.kt` | AI 解读：校验输入 → 「AI 解读」同意 → 缓存 → 每日额度 → 检索知识库 → 调模型 → 校验输出（诊断措辞、与等级矛盾、输入中没有的数字）→ 不合格重试一次；提示词 `ExplanationPrompt` |
 | `KnowledgeBase.kt` | 读取 `resources/knowledge/eye-knowledge.md`，中文二元切词 BM25 检索，按等级固定带上「就医 / 不确定 / 数据无效」条目 |
-| `LlmClient.kt` | 大模型端口与 `DeepSeekClient`（OpenAI 兼容 Chat Completions，JSON 输出、关闭思考；不记内容与密钥） |
+| `LlmClient.kt` | 大模型端口与 `DeepSeekClient`（OpenAI 兼容 Chat Completions，JSON 输出、关闭思考；不记内容与密钥）。用 OkHttp：域名解析出多个地址时，连不上的地址 4 秒后自动换下一个（有的网络里 api.deepseek.com 的个别地址不通，JDK HttpClient 只连第一个地址会整次超时） |
 | `resources/db/migration` | Flyway 脚本；PostgreSQL 与 H2（PostgreSQL 模式）通用写法 |
 
 数据契约（DTO、记录摘要解析、错误代码）来自 `shared/sync`，与客户端是同一份代码。

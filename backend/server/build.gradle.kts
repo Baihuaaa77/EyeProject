@@ -32,6 +32,8 @@ dependencies {
     implementation("org.postgresql:postgresql:42.7.14")
     implementation("com.h2database:h2:2.5.252")
     implementation("ch.qos.logback:logback-classic:1.6.5")
+    // 调大模型：一个解析地址连不上时自动换下一个（JDK HttpClient 只连第一个地址）
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
     testImplementation(kotlin("test"))
     testImplementation("io.ktor:ktor-server-test-host:$ktor")
