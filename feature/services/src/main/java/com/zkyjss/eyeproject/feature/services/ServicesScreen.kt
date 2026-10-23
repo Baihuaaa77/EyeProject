@@ -34,6 +34,7 @@ import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
 import com.zkyjss.eyeproject.core.designsystem.theme.rememberReducedMotion
 import com.zkyjss.eyeproject.core.designsystem.util.getTopStatusBarPadding
 import com.zkyjss.eyeproject.core.designsystem.util.screenHorizontalPaddingLarge
+import com.zkyjss.eyeproject.core.ui.component.EyePageHeader
 import com.zkyjss.eyeproject.core.ui.component.EyeSelectCard
 import com.zkyjss.eyeproject.core.ui.component.EyeText
 import com.zkyjss.eyeproject.core.ui.component.drawMascot
@@ -48,6 +49,7 @@ fun ServicesScreen(
     onPresbyopiaClick: () -> Unit,
     onStrabismusClick: () -> Unit,
     modifier: Modifier = Modifier,
+    onOpenSettings: () -> Unit = {},
 ) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
@@ -61,12 +63,7 @@ fun ServicesScreen(
             .screenHorizontalPaddingLarge(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        EyeText(
-            text = "视力与眼健康",
-            style = typography.headline,
-            color = colors.textPrimary,
-            modifier = Modifier.padding(vertical = 16.dp)
-        )
+        EyePageHeader("服务", onOpenSettings)
         HeroCard()
         Spacer(Modifier.height(4.dp))
         EyeText("选择一项自测", style = typography.subtitle, color = colors.textPrimary)

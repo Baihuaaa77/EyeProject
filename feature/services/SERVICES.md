@@ -16,7 +16,8 @@
 
 | 类型 | 说明 |
 |---|---|
-| `ServicesScreen` | 服务首页：三个 `EyeSelectCard` 入口 |
+| `ServicesScreen` | 服务首页：标题「服务」+ 右上角系统设置齿轮（`EyePageHeader`）、小瞳欢迎卡、三个 `EyeSelectCard` 入口 |
+| `SystemSettingsSheet` | 顶层页齿轮打开的「系统设置」：与测试页 `TestSettingsSheet` 同一面板与本机偏好，不收听语音、没有「停止测试」；app 持有显示状态 |
 | `DryEyeScreen` | 干眼自测页（动画引导、距离门控、两阶段记录、折叠结果曲线） |
 | `SubjectPicker` | 三项测试的开始页「这次测谁？」：替代原逐题问卷，资料在「我的」维护；成员缺本测试必需项（`SubjectProfiles.missing`）时点开即经 app 导航去补充；可「暂不选择，直接测试」（记录 `profileSkipped`）。记录写入 `subject`（本机成员编号与关系），云端同步时据此归属成员 |
 | `ScreeningScreens` | 老视 / 斜视选人页（老视再选戴镜方式）、环境检查、大字及语音引导、无预览测试与感知结果页 |

@@ -1,6 +1,7 @@
 # feature:testmodel
 
 > 模型测试页（实验性质）：MediaPipe FaceDetector + LiteRT 双路线（C++ SDK / Android API）跑 L2CS-Net 注视估计；另有 FaceLandmarker 眨眼检测独立测试页。
+> 原「全替换眨眼检测」（BlazeFace + OCEC）页面已随 EAR / OCEC 对比结束删除（2026-10-23），眨眼统一用 EAR；研究记录见 `results/`。
 
 ## 职责
 
@@ -46,18 +47,6 @@
 | `BlinkTestScreen` | 眨眼测试页 UI（数据面板：L/R/avg EAR、睁/闭眼、眨眼数、fps、耗时、录制进度/保存文件名；重置计数 + 60秒检测按钮） |
 | `navigation/BlinkTestNavigation` | `BlinkTestRoute` + `navigateToBlinkTest()` + `NavGraphBuilder.blinkTestScreen(onBack)` |
 
-### 全替换眨眼测试页（standalone/，无 MediaPipe）
-
-| 类型 | 说明 |
-|---|---|
-| `BlazeOCECAnalyzer` | BlazeFace short-range（128×128 tflite，896 anchors）人脸检测 + OCEC-P（24×40 tflite）睁闭眼分类，双 LiteRT Interpreter；解码公式按 MediaPipe 官方源码实现并经官方 FaceDetector 输出对齐验证（PC 端残差 <0.003 归一化）；含概率版眨眼状态机（连续 3 帧）与结果侧 1s 窗口 fps |
-| `StandaloneBlinkViewModel` / `StandaloneBlinkUiState` | 绑定预览 + 分析，60s 录制（`standalone_blink_*.csv`：t_s/prob_left/prob_right/prob_avg/blink_count/det_ms/cls_ms/fps） |
-| `StandaloneOverlay` | 人脸框 + 双眼框覆盖层（睁眼 success / 闭眼 warning），FILL_CENTER + 前置镜像 |
-| `StandaloneBlinkScreen` | 数据面板（L/R 概率、眨眼数、fps、det/cls 耗时、录制进度）+ 重置/60s 按钮 |
-| `navigation/StandaloneBlinkNavigation` | `StandaloneBlinkRoute` + `navigateToStandaloneBlink()` + `NavGraphBuilder.standaloneBlinkScreen(onBack)` |
-
-**关键预处理差异（易错）**：BlazeFace 输入 128×128 letterbox、RGB **[-1,1]**；OCEC 输入 24×40、RGB **/255**——两者不同。anchor 为 fixed_anchor_size（尺寸恒 1.0），解码 = `anchor_c + raw/128` 线性式。模型来源与验证记录见 `results/ocec-standalone-pipeline-research.md`。
-
 ### 60s 检测（blink/）
 
 `BlinkTestViewModel.startRecording()` / `stopRecording()`：录制期间逐帧记录
@@ -92,7 +81,7 @@ latency 与 fps 统计；`--plot` 生成 EAR（含阈值线）/耗时/帧率三�
 
 - **依赖**：`core:model`、`core:designsystem`、`core:ui`；CameraX、MediaPipe tasks-vision、`com.google.ai.edge.litert:litert:2.1.1`
 - **被依赖**：`app`（NavHost 挂 testModelScreen）
-- 资产：`l2cs_net.tflite`、`blaze_face_short_range.tflite`、`ocec_p.tflite`、`face_landmarker.task`、`shaders/`；`jniLibs/arm64-v8a` 内嵌 LiteRT `.so`
+- 资产：`l2cs_net.tflite`、`blaze_face_short_range.tflite`、`face_landmarker.task`、`shaders/`；`jniLibs/arm64-v8a` 内嵌 LiteRT `.so`
 
 ## 注意事项
 

@@ -17,6 +17,11 @@ android {
 dependencies {
     implementation(project(":core:common"))
     implementation(project(":core:domain"))
+    implementation(project(":core:model"))
+    // 首页实时眼部检测视窗：与测试共用同一条相机管线
+    implementation(project(":core:camera"))
+    implementation(libs.androidx.camera.core)
+    implementation(libs.androidx.camera.view)
     implementation(project(":core:designsystem"))
     implementation(project(":core:ui"))
 

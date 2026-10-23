@@ -8,8 +8,14 @@ import UIKit
 /// 与安卓一致：音效与播报走媒体音量，不被静音键阻断；收听时仍允许触觉与音效。
 enum EyeAudioSession {
     private static var recording: Bool?
+    /// 停止录音引擎、停用会话这类可能阻塞数秒的操作放在后台串行队列，退出测试时主线程不被卡住。
+    static let teardown = DispatchQueue(label: "eye.audio.teardown", qos: .userInitiated)
+    /// 每次激活加一：排在后台的停用若晚于新的激活（刚退出又马上进入下一项测试），就不再执行。
+    private static let lock = NSLock()
+    private static var activation = 0
 
     static func activate(recording wanted: Bool) {
+        lock.lock(); activation += 1; lock.unlock()
         let session = AVAudioSession.sharedInstance()
         do {
             if recording != wanted {
@@ -25,9 +31,19 @@ enum EyeAudioSession {
         } catch { recording = nil }
     }
 
-    static func deactivate() {
+    /// 退出测试时调用：在后台停用会话，让其他应用的声音恢复。[engine] 为要先停下的录音引擎（停用前必须停止 I/O，否则会阻塞）。
+    static func deactivate(after engine: AVAudioEngine? = nil, removeTap: Bool = false) {
         recording = nil
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        lock.lock(); let ticket = activation; lock.unlock()
+        teardown.async {
+            if let engine = engine {
+                if engine.isRunning { engine.stop() }
+                if removeTap { engine.inputNode.removeTap(onBus: 0) }
+            }
+            lock.lock(); let current = activation; lock.unlock()
+            guard current == ticket else { return }
+            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        }
     }
 }
 

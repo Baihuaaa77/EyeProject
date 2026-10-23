@@ -34,6 +34,7 @@ import java.util.Locale
 fun HomeScreen(
     modifier: Modifier = Modifier,
     onNavigateToTestModel: () -> Unit,
+    onOpenSettings: () -> Unit = {},
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -52,7 +53,8 @@ fun HomeScreen(
         }
     }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.refresh() }
-    HomeContent(state, onNavigateToTestModel, viewModel::toggleReminder, viewModel::selectReminderInterval, modifier)
+    HomeContent(state, onNavigateToTestModel, viewModel::toggleReminder, viewModel::selectReminderInterval, modifier,
+        onOpenSettings = onOpenSettings, liveEye = { LiveEyeCard() })
 }
 
 @Composable
@@ -62,6 +64,8 @@ internal fun HomeContent(
     onToggleReminder: () -> Unit,
     onSelectReminderInterval: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    onOpenSettings: () -> Unit = {},
+    liveEye: @Composable () -> Unit = {},
 ) {
     val colors = LocalEyeColors.current
     Column(
@@ -69,9 +73,10 @@ internal fun HomeContent(
             .padding(top = getTopStatusBarPadding()).screenHorizontalPaddingLarge(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        EyeTopBar(title = "眼健康助手", statusText = "首页", statusTone = StatusTone.NEUTRAL,
+        EyeTopBar(title = "眼健康助手",
             subtitle = remember { LocalDate.now().format(DateTimeFormatter.ofPattern("M月d日 EEEE", Locale.CHINA)) },
-            leading = { EyeBrandMark(size = 44.dp) })
+            leading = { EyeBrandMark(size = 44.dp) }, trailing = { EyeSettingsGear(onOpenSettings) })
+        liveEye()
         ReminderSection(state, onToggleReminder, onSelectReminderInterval)
         EyeDisclosure("开发者工具") {
             EyeButton(text = "模型测试", role = EyeButtonRole.SECONDARY,

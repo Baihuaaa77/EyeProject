@@ -1,0 +1,137 @@
+package com.zkyjss.eyeproject.core.domain
+
+import com.zkyjss.eyeproject.core.model.EyeLandmarks
+import com.zkyjss.eyeproject.core.model.FaceMetrics
+
+/**
+ * 首页「实时眼部检测」视窗的状态（安卓与苹果共用）：逐帧喂入关键点几何，给出最近 [windowMs] 的 EAR 曲线、
+ * 眨眼事件、帧率与当前双眼关键点，让人一眼看出相机、关键点和眨眼检测都在正常工作。
+ * 眨眼判据与干眼测试同一份 [BlinkDetector.dryEyeEar]（按时间判定 + 个人自适应阈值）。
+ *
+ * [update] 在相机分析线程调用，[snapshot] 在界面线程读取，内部加锁。
+ */
+class LiveEyeMonitor(private val windowMs: Long = DEFAULT_WINDOW_MS) {
+    /** 一帧读数：[ear] 为双眼平均（看不到双眼时为 null）；[closed] 为基线建立后低于当帧阈值。 */
+    data class Sample(val timeMs: Long, val ear: Float?, val threshold: Float, val closed: Boolean)
+
+    data class Snapshot(
+        /** 最近 [windowMs] 的逐帧读数（时间升序） */
+        val samples: List<Sample>,
+        /** 窗口内每次眨眼完成（睁开那一帧）的时间 */
+        val blinkTimesMs: List<Long>,
+        /** 本次开启以来累计眨眼次数 */
+        val blinkCount: Int,
+        /** 最近 60 秒内的眨眼次数 */
+        val blinksLastMinute: Int,
+        /** 最近一次眨眼的闭眼时长（毫秒） */
+        val lastClosedMs: Long?,
+        val faceFound: Boolean,
+        val eyesFound: Boolean,
+        val ear: Float?,
+        val threshold: Float,
+        /** 睁眼基线已建立（前约 15 帧只采集、不判定） */
+        val ready: Boolean,
+        val closed: Boolean,
+        /** 最近一秒实际分析的帧数 */
+        val fps: Float,
+        val leftEye: EyeLandmarks?,
+        val rightEye: EyeLandmarks?,
+        /** 关键点所在图像（已转正、未镜像）的宽高 */
+        val imageWidth: Int,
+        val imageHeight: Int,
+        /** 最新一帧距 [snapshot] 传入的时刻已超过 [STALE_MS]：相机没有送来新画面 */
+        val stale: Boolean,
+        /** 还没收到任何一帧 */
+        val waiting: Boolean,
+    )
+
+    private val lock = DomainLock()
+    private var detector = BlinkDetector.dryEyeEar()
+    private val samples = ArrayDeque<Sample>()
+    private val blinks = ArrayDeque<Long>()
+    private var blinkCount = 0
+    private var earSamples = 0
+    private var belowSince = -1L
+    private var lastClosedMs: Long? = null
+    private var latestMs = -1L
+    private var faceFound = false
+    private var leftEye: EyeLandmarks? = null
+    private var rightEye: EyeLandmarks? = null
+    private var imageWidth = 0
+    private var imageHeight = 0
+
+    /** 喂入一帧（[timeMs] 单调递增的毫秒时间，与 [snapshot] 的 nowMs 同一时钟）。 */
+    fun update(face: FaceMetrics?, imageWidth: Int, imageHeight: Int, timeMs: Long) = lock.withLock {
+        val left = face?.leftEye
+        val right = face?.rightEye
+        val ear = if (left != null && right != null) BlinkDetector.averageEar(left, right) else null
+        val threshold = detector.threshold
+        if (ear != null) {
+            val before = detector.blinkCount
+            detector.update(ear, timeMs)
+            earSamples++
+            val below = ear < threshold
+            if (below && belowSince < 0) belowSince = timeMs
+            if (detector.blinkCount != before) {
+                blinkCount++
+                blinks.addLast(timeMs)
+                lastClosedMs = if (belowSince >= 0) timeMs - belowSince else null
+            }
+            if (!below) belowSince = -1L
+        } else {
+            // 与干眼测试同一喂法：看不到双眼时中断本次闭眼计时，不累计
+            detector.interrupt()
+            belowSince = -1L
+        }
+        samples.addLast(Sample(timeMs, ear, threshold, ear != null && earSamples >= READY_SAMPLES && ear < threshold))
+        while (samples.isNotEmpty() && samples.first().timeMs < timeMs - windowMs) samples.removeFirst()
+        while (blinks.isNotEmpty() && blinks.first() < timeMs - MINUTE_MS) blinks.removeFirst()
+        latestMs = timeMs
+        faceFound = face != null
+        leftEye = left
+        rightEye = right
+        this.imageWidth = imageWidth
+        this.imageHeight = imageHeight
+    }
+
+    fun snapshot(nowMs: Long): Snapshot = lock.withLock {
+        val last = samples.lastOrNull()
+        Snapshot(
+            samples = samples.toList(),
+            blinkTimesMs = blinks.filter { latestMs - it <= windowMs },
+            blinkCount = blinkCount,
+            blinksLastMinute = blinks.size,
+            lastClosedMs = lastClosedMs,
+            faceFound = faceFound,
+            eyesFound = leftEye != null && rightEye != null,
+            ear = last?.ear,
+            threshold = last?.threshold ?: detector.threshold,
+            ready = earSamples >= READY_SAMPLES,
+            closed = last?.closed == true,
+            fps = samples.count { it.timeMs > latestMs - 1_000 }.toFloat(),
+            leftEye = leftEye,
+            rightEye = rightEye,
+            imageWidth = imageWidth,
+            imageHeight = imageHeight,
+            stale = latestMs >= 0 && nowMs - latestMs > STALE_MS,
+            waiting = latestMs < 0,
+        )
+    }
+
+    /** 清零重来（重新开启视窗时）。 */
+    fun reset() = lock.withLock {
+        detector = BlinkDetector.dryEyeEar()
+        samples.clear(); blinks.clear()
+        blinkCount = 0; earSamples = 0; belowSince = -1L; lastClosedMs = null; latestMs = -1L
+        faceFound = false; leftEye = null; rightEye = null; imageWidth = 0; imageHeight = 0
+    }
+
+    companion object {
+        const val DEFAULT_WINDOW_MS = 8_000L
+        /** 超过这么久没有新帧即视为画面中断 */
+        const val STALE_MS = 1_500L
+        /** 与 BlinkDetector 自适应阈值的最少样本数一致 */
+        private const val READY_SAMPLES = 15
+        private const val MINUTE_MS = 60_000L
+    }
+}

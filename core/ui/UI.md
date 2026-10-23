@@ -41,7 +41,8 @@
 
 | 组件 | 说明 |
 |---|---|
-| `EyeTopBar` | 顶栏：可选前置标志 + 标题/副标题 + 状态徽标 |
+| `EyeTopBar` | 顶栏：可选前置标志 + 标题/副标题 + 右侧状态徽标或自定义内容（`trailing`，首页放系统设置齿轮） |
+| `EyePageHeader` / `EyeSettingsGear` | 顶层页标题行：大标题 + 右上角常驻「系统设置」齿轮（服务、我的；首页齿轮在 `EyeTopBar` 右侧）；与苹果端 PageHeader / SettingsGear 一致 |
 | `TopAppBar` | 通用顶栏（含状态栏 padding 处理） |
 | `TopBackBar` | 返回顶栏（背景覆盖状态栏，支持渐变/标题/无文字模式） |
 

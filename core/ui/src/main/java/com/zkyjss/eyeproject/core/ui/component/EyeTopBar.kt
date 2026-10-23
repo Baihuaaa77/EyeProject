@@ -11,16 +11,17 @@ import androidx.compose.ui.unit.dp
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
 
-/** 自定义顶栏：可选前置标志 + 标题/副标题 + 状态徽标（可带实时呼吸点）。 */
+/** 自定义顶栏：可选前置标志 + 标题/副标题 + 右侧状态徽标（可带实时呼吸点）或自定义内容（如系统设置齿轮）。 */
 @Composable
 fun EyeTopBar(
     title: String,
     subtitle: String,
-    statusText: String,
-    statusTone: StatusTone,
     modifier: Modifier = Modifier,
+    statusText: String? = null,
+    statusTone: StatusTone = StatusTone.NEUTRAL,
     statusLive: Boolean = false,
-    leading: (@Composable () -> Unit)? = null
+    leading: (@Composable () -> Unit)? = null,
+    trailing: (@Composable () -> Unit)? = null,
 ) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
@@ -48,6 +49,9 @@ fun EyeTopBar(
                 color = colors.textSecondary
             )
         }
-        EyeStatusChip(text = statusText, tone = statusTone, live = statusLive)
+        when {
+            trailing != null -> trailing()
+            statusText != null -> EyeStatusChip(text = statusText, tone = statusTone, live = statusLive)
+        }
     }
 }

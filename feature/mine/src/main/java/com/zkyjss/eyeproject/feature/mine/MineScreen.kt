@@ -32,6 +32,7 @@ import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
 import com.zkyjss.eyeproject.core.designsystem.util.getTopStatusBarPadding
 import com.zkyjss.eyeproject.core.designsystem.util.screenHorizontalPaddingLarge
 import com.zkyjss.eyeproject.core.ui.component.EyeBrandLockup
+import com.zkyjss.eyeproject.core.ui.component.EyePageHeader
 import com.zkyjss.eyeproject.core.ui.component.EyeSectionCard
 import com.zkyjss.eyeproject.core.ui.component.EyeSelectCard
 import com.zkyjss.eyeproject.core.ui.component.EyeText
@@ -46,6 +47,7 @@ import com.zkyjss.eyeproject.core.data.record.RecordExportFormat
 fun MineScreen(
     onEditSubject: (String?) -> Unit,
     modifier: Modifier = Modifier,
+    onOpenSettings: () -> Unit = {},
     viewModel: MineViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
@@ -109,6 +111,7 @@ fun MineScreen(
         subjects = subjects,
         onEditSubject = onEditSubject,
         onOpenRecords = { haptics.tap(); recordsOpen = true },
+        onOpenSettings = onOpenSettings,
         onOpenAppSettings = {
             haptics.tap()
             context.startActivity(
@@ -134,6 +137,7 @@ internal fun MineContent(
     modifier: Modifier = Modifier,
     serverUrl: String = "",
     recordCount: Int = 0,
+    onOpenSettings: () -> Unit = {},
 ) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
@@ -146,7 +150,7 @@ internal fun MineContent(
             .screenHorizontalPaddingLarge(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        EyeText("我的", style = typography.headline, color = colors.textPrimary, modifier = Modifier.padding(vertical = 16.dp))
+        EyePageHeader("我的", onOpenSettings)
 
         SubjectsSection(subjects, onEditSubject)
 

@@ -7,6 +7,7 @@ import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.core.UseCase
+import androidx.camera.core.resolutionselector.AspectRatioStrategy
 import androidx.camera.core.resolutionselector.ResolutionSelector
 import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
@@ -152,12 +153,18 @@ class CameraController @Inject constructor(
         releaseCamera()
     }
 
-    /** 预览可缺省：只有在需要把画面显示出来时才绑定 `Preview`。 */
+    /**
+     * 预览可缺省：只有在需要把画面显示出来时才绑定 `Preview`。预览与分析同为 16:9（分析 1280×720），
+     * 关键点叠加在预览上不会因裁切比例不同而错位。
+     */
     private fun buildUseCases(previewView: PreviewView?, analysis: ImageAnalysis): Array<UseCase> =
         buildList {
             previewView?.let { view ->
                 add(
                     Preview.Builder()
+                        .setResolutionSelector(ResolutionSelector.Builder()
+                            .setAspectRatioStrategy(AspectRatioStrategy.RATIO_16_9_FALLBACK_AUTO_STRATEGY)
+                            .build())
                         .build()
                         .also { it.setSurfaceProvider(view.surfaceProvider) }
                 )

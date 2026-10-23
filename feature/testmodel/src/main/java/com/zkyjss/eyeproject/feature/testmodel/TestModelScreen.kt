@@ -23,7 +23,6 @@ fun TestModelScreen(
     onBack: () -> Unit,
     onGazeClick: () -> Unit,
     onBlinkTestClick: () -> Unit,
-    onStandaloneClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = LocalEyeColors.current
@@ -46,7 +45,6 @@ fun TestModelScreen(
             Spacer(Modifier.height(4.dp))
             EyeSelectCard(content = "视线估计", onClick = onGazeClick)
             EyeSelectCard(content = "眨眼检测", onClick = onBlinkTestClick)
-            EyeSelectCard(content = "全替换眨眼检测", onClick = onStandaloneClick)
         }
     }
 }

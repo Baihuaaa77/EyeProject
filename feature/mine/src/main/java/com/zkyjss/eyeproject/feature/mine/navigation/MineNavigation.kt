@@ -23,9 +23,9 @@ fun NavController.navigateToSubjectEdit(id: String?) {
     navigate(SubjectEditRoute(id))
 }
 
-fun NavGraphBuilder.mineScreen(onEditSubject: (String?) -> Unit) {
+fun NavGraphBuilder.mineScreen(onEditSubject: (String?) -> Unit, onOpenSettings: () -> Unit = {}) {
     composable<MineRoute> {
-        MineScreen(onEditSubject = onEditSubject)
+        MineScreen(onEditSubject = onEditSubject, onOpenSettings = onOpenSettings)
     }
 }
 

@@ -19,9 +19,6 @@ targets:
       - Sources
       - path: ../core/camera/src/main/assets/face_landmarker.task
         buildPhase: resources
-      # OCEC-P 权重（scripts/ios/export_ocec_weights.py 由 ocec_p_float32.tflite 导出），眨眼对比实验页用
-      - path: Models/ocec_p_weights.bin
-        buildPhase: resources
       - path: ../shared/feedback/res/raw
         buildPhase: resources
     info:

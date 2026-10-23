@@ -37,6 +37,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -68,13 +71,12 @@ import com.zkyjss.eyeproject.feature.services.navigation.navigateToStrabismus
 import com.zkyjss.eyeproject.feature.services.navigation.presbyopiaScreen
 import com.zkyjss.eyeproject.feature.services.navigation.servicesScreen
 import com.zkyjss.eyeproject.feature.services.navigation.strabismusScreen
+import com.zkyjss.eyeproject.feature.services.SystemSettingsSheet
 import com.zkyjss.eyeproject.feature.testmodel.navigation.blinkTestScreen
 import com.zkyjss.eyeproject.feature.testmodel.navigation.gazeScreen
 import com.zkyjss.eyeproject.feature.testmodel.navigation.navigateToBlinkTest
 import com.zkyjss.eyeproject.feature.testmodel.navigation.navigateToGaze
-import com.zkyjss.eyeproject.feature.testmodel.navigation.navigateToStandaloneBlink
 import com.zkyjss.eyeproject.feature.testmodel.navigation.navigateToTestModel
-import com.zkyjss.eyeproject.feature.testmodel.navigation.standaloneBlinkScreen
 import com.zkyjss.eyeproject.feature.testmodel.navigation.testModelScreen
 
 /** 对标 NIA 的 NiaNavHost：持有 NavHost 与底部导航栏。 */
@@ -86,6 +88,10 @@ fun EyeProjectNavHost(
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = backStackEntry?.destination
     val colors = LocalEyeColors.current
+    // 三个顶层页右上角齿轮共用的「系统设置」面板
+    var settingsOpen by rememberSaveable { mutableStateOf(false) }
+    val openSettings = { settingsOpen = true }
+    if (settingsOpen) SystemSettingsSheet(onDismiss = { settingsOpen = false })
 
     Scaffold(
         modifier = modifier,
@@ -108,25 +114,25 @@ fun EyeProjectNavHost(
             popExitTransition = { fadeOut(tween(EyeMotion.SHORT)) + slideOutVertically(tween(EyeMotion.MEDIUM)) { it / 24 } },
         ) {
             homeScreen(
-                onNavigateToTestModel = { navController.navigateToTestModel() }
+                onNavigateToTestModel = { navController.navigateToTestModel() },
+                onOpenSettings = openSettings,
             )
             servicesScreen(
                 onDryEyeClick = { navController.navigateToDryEye() },
                 onPresbyopiaClick = { navController.navigateToPresbyopia() },
                 onStrabismusClick = { navController.navigateToStrabismus() },
+                onOpenSettings = openSettings,
             )
-            mineScreen(onEditSubject = { navController.navigateToSubjectEdit(it) })
+            mineScreen(onEditSubject = { navController.navigateToSubjectEdit(it) }, onOpenSettings = openSettings)
             subjectEditScreen(onBack = { navController.navigateUp() })
             agentScreen(onBack = { navController.navigateUp() })
             testModelScreen(
                 onBack = { navController.navigateUp() },
                 onGazeClick = { navController.navigateToGaze() },
                 onBlinkTestClick = { navController.navigateToBlinkTest() },
-                onStandaloneClick = { navController.navigateToStandaloneBlink() }
             )
             gazeScreen(onBack = { navController.navigateUp() })
             blinkTestScreen(onBack = { navController.navigateUp() })
-            standaloneBlinkScreen(onBack = { navController.navigateUp() })
             // 测试开始页缺资料时去「我的」的资料编辑页，保存后返回测试
             dryEyeScreen(onBack = { navController.navigateUp() }, onEditSubject = { navController.navigateToSubjectEdit(it) })
             presbyopiaScreen(onBack = { navController.navigateUp() }, onEditSubject = { navController.navigateToSubjectEdit(it) })

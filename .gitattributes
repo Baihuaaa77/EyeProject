@@ -4,6 +4,3 @@ feature/services/src/main/assets/vosk-model-small-cn-0.22/** -text -diff
 # macOS / Linux 构建脚本必须保留 LF。
 gradlew text eol=lf
 scripts/ios/*.sh text eol=lf
-
-# OCEC 手写推理权重（float32 小端二进制）
-iosApp/Models/*.bin binary

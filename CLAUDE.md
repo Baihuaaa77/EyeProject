@@ -39,7 +39,7 @@ core/
   designsystem/ 设计令牌 + EyeProjectTheme（唯一视觉事实源）
   ui/           自绘通用组件（EyeButton/EyeText/…）
 feature/
-  home/         首页：品牌、休息提醒、模型测试入口
+  home/         首页：品牌、实时眼部检测视窗（关键点 + 眨眼曲线）、休息提醒、模型测试入口
   services/     干眼/老视/斜视自检
   testmodel/    实验页：主导航 + gaze/（FaceDetector + LiteRT L2CS-Net 注视估计）+ blink/（FaceLandmarker EAR 眨眼检测）
   mine/         「我的」：家庭成员资料、测试记录、云端同步（登录、分项同意、导出、注销）

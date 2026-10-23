@@ -42,12 +42,14 @@ fun NavGraphBuilder.servicesScreen(
     onDryEyeClick: () -> Unit,
     onPresbyopiaClick: () -> Unit,
     onStrabismusClick: () -> Unit,
+    onOpenSettings: () -> Unit = {},
 ) {
     composable<ServicesRoute> {
         ServicesScreen(
             onDryEyeClick = onDryEyeClick,
             onPresbyopiaClick = onPresbyopiaClick,
             onStrabismusClick = onStrabismusClick,
+            onOpenSettings = onOpenSettings,
         )
     }
 }

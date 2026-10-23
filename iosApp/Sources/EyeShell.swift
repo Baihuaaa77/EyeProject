@@ -11,13 +11,17 @@ struct EyeRootView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var tab = TopLevelTab.home
     @State private var selectedTest: String?
+    @State private var settingsOpen = false
+    /// 顶层页右上角齿轮打开的「系统设置」：与测试页同一份偏好（保存在本机，测试开始时读取）
+    @StateObject private var voice = EyeVoice()
+    @StateObject private var feedback = EyeFeedback()
     var body: some View {
         VStack(spacing: 0) {
             ZStack {
                 switch tab {
-                case .home: HomePage()
-                case .services: ServicesPage { selectedTest = $0 }
-                case .mine: MinePage()
+                case .home: HomePage { settingsOpen = true }
+                case .services: ServicesPage(open: { selectedTest = $0 }) { settingsOpen = true }
+                case .mine: MinePage { settingsOpen = true }
                 }
             }.frame(maxWidth: .infinity, maxHeight: .infinity)
                 .transition(.opacity)
@@ -28,12 +32,38 @@ struct EyeRootView: View {
             .fullScreenCover(item: Binding(get: { selectedTest.map(TestSelection.init) }, set: { selectedTest = $0?.id })) { test in
                 EyeTestView(kind: test.id)
             }
+            .sheet(isPresented: $settingsOpen) { TestSettingsView(voice: voice, feedback: feedback) }
             // 回到前台时补传离线期间保存的记录与资料（未登录或未同意时不联网）
             .onChange(of: scenePhase) { phase in if phase == .active { CloudModel.shared.client.syncNow(userInitiated: false) } }
     }
 }
 
 private struct TestSelection: Identifiable { let id: String; init(_ id: String) { self.id = id } }
+
+/// 顶层页右上角常驻的「系统设置」齿轮（与测试页顶栏同一图标），与安卓一致。
+private struct SettingsGear: View {
+    let action: () -> Void
+    var body: some View {
+        Button { EyeHaptics.tap(); action() } label: {
+            Image(systemName: "gearshape.fill").font(.system(size: 22)).foregroundStyle(EyeStyle.primary)
+                .frame(width: 44, height: 44).background(EyeStyle.panel, in: Circle())
+                .overlay { Circle().stroke(EyeStyle.borderSubtle, lineWidth: 1) }
+        }.buttonStyle(.plain).accessibilityLabel("系统设置")
+    }
+}
+
+/// 顶层页标题行：大标题 + 右上角齿轮。
+private struct PageHeader: View {
+    let title: String
+    let openSettings: () -> Void
+    var body: some View {
+        HStack {
+            Text(title).font(EyeStyle.headline).foregroundStyle(EyeStyle.text)
+            Spacer()
+            SettingsGear(action: openSettings)
+        }.padding(.vertical, 16)
+    }
+}
 
 /// 白底细上边框；选中项图标后方的浅主色胶囊以弹簧展开，图标与文字同步变色并轻微放大。
 private struct EyeBottomBar: View {
@@ -130,10 +160,10 @@ private struct SwitchRow: View {
 
 // MARK: 首页
 
-/// 首页：品牌顶栏 + 护眼设置（休息提醒）+ 开发者工具（眨眼检测对比实验页）。
+/// 首页：品牌顶栏（右上角系统设置）+ 实时眼部检测视窗 + 护眼设置（休息提醒），与安卓同一顺序。
 private struct HomePage: View {
+    let openSettings: () -> Void
     @StateObject private var reminder = EyeReminder()
-    @State private var showBlinkCompare = false
     private let today: String = {
         let formatter = DateFormatter(); formatter.locale = Locale(identifier: "zh_CN"); formatter.dateFormat = "M月d日 EEEE"
         return formatter.string(from: Date())
@@ -146,9 +176,9 @@ private struct HomePage: View {
                     Text("眼健康助手").font(EyeStyle.headline).foregroundStyle(EyeStyle.text).minimumScaleFactor(0.7).lineLimit(1)
                     Text(today).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
                 }.frame(maxWidth: .infinity, alignment: .leading)
-                Text("首页").font(EyeStyle.chip).foregroundStyle(EyeStyle.secondary)
-                    .padding(.horizontal, 12).padding(.vertical, 6).background(EyeStyle.neutralSoft, in: Capsule())
+                SettingsGear(action: openSettings)
             }.padding(.vertical, 16)
+            EyeLiveCard()
             SectionCard(title: "护眼设置") {
                 SwitchRow(title: "休息提醒",
                     detail: reminder.enabled ? "每 \(reminder.intervalMinutes) 分钟提醒一次" : "按间隔提醒你远眺放松",
@@ -156,11 +186,7 @@ private struct HomePage: View {
                 IntervalPicker(selected: reminder.intervalMinutes) { reminder.setInterval($0) }
                 if let notice = reminder.notice { Text(notice).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.warning) }
             }
-            Text("开发者工具").font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text).padding(.top, 4)
-            SelectCard(title: "眨眼检测对比", subtitle: "EAR 与 OCEC 同屏实时对比 · 实验") {
-                Image(systemName: "eye").font(.system(size: 22)).foregroundStyle(EyeStyle.primary)
-            } action: { EyeHaptics.tap(); showBlinkCompare = true }
-        }.fullScreenCover(isPresented: $showBlinkCompare) { BlinkCompareView() }
+        }
     }
 }
 
@@ -233,12 +259,13 @@ final class EyeReminder: ObservableObject {
 
 // MARK: 服务
 
-/// 服务页：品牌欢迎卡 + 三个自测入口（顺序、文案、图标与安卓一致）。
+/// 服务页：标题（右上角系统设置）+ 品牌欢迎卡 + 三个自测入口（顺序、文案、图标与安卓一致）。
 private struct ServicesPage: View {
     let open: (String) -> Void
+    let openSettings: () -> Void
     var body: some View {
         PageScroll {
-            Text("视力与眼健康").font(EyeStyle.headline).foregroundStyle(EyeStyle.text).padding(.vertical, 16)
+            PageHeader(title: "服务", openSettings: openSettings)
             MascotHeroCard()
             Text("选择一项自测").font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text).padding(.top, 4)
             SelectCard(title: "干眼自测", subtitle: "约 2 分钟 · 自然眨眼与睁眼观察") {
@@ -287,19 +314,20 @@ private struct MascotHeroCard: View {
 
 //// 我的：家庭成员、测试记录、云端同步、权限与通知、关于与免责声明（与安卓同一顺序与文案）。
 private struct MinePage: View {
+    let openSettings: () -> Void
     @State private var showRecords = false
     @State private var recordCount = 0
     private let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
     var body: some View {
         PageScroll {
-            Text("我的").font(EyeStyle.headline).foregroundStyle(EyeStyle.text).padding(.vertical, 16)
+            PageHeader(title: "我的", openSettings: openSettings)
             SubjectsSection()
             SelectCard(title: "测试记录", subtitle: recordCount == 0 ? "暂无记录" : "共 \(recordCount) 条") {
                 Image(systemName: "doc.text").font(.system(size: 22)).foregroundStyle(EyeStyle.primary)
             } action: { EyeHaptics.tap(); showRecords = true }
             CloudSection()
             SelectCard(title: "权限与通知") {
-                Image(systemName: "gearshape").font(.system(size: 22)).foregroundStyle(EyeStyle.primary)
+                Image(systemName: "checkmark.shield").font(.system(size: 22)).foregroundStyle(EyeStyle.primary)
             } action: {
                 EyeHaptics.tap()
                 if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }

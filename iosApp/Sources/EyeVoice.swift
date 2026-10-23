@@ -187,5 +187,13 @@ final class EyeVoice: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
         if hasTap { audio.inputNode.removeTap(onBus: 0); hasTap = false }
     }
     func stop() { queued = nil; synthesizer.stopSpeaking(at: .immediate); stopListening(); echoUntil = Date().addingTimeInterval(0.6) }
-    func close() { wanted = false; stop(); EyeAudioSession.deactivate() }
+    /// 退出测试：主线程只做停播报、取消识别这类即时操作；停录音引擎、移除收音、停用音频会话交给后台串行队列，
+    /// 避免录音 I/O 未停就停用会话时主线程被阻塞（表现为退出测试后整页无响应）。
+    func close() {
+        wanted = false; queued = nil; generation += 1
+        synthesizer.stopSpeaking(at: .immediate)
+        task?.cancel(); task = nil; request?.endAudio(); request = nil
+        let tap = hasTap; hasTap = false
+        EyeAudioSession.deactivate(after: audio, removeTap: tap)
+    }
 }

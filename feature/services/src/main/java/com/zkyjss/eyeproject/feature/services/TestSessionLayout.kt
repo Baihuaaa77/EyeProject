@@ -192,6 +192,17 @@ private fun TestProgressBar(progress: TestProgress?) {
     }
 }
 
+/**
+ * 顶层页（首页 / 服务 / 我的）右上角齿轮打开的「系统设置」：与测试页同一面板、同一份本机偏好；
+ * 不在测试中，所以不收听语音、没有「停止测试」。显示状态由 app 持有。
+ */
+@Composable
+fun SystemSettingsSheet(onDismiss: () -> Unit) {
+    val settings = rememberTestSettings()
+    val voiceAnswer = rememberVoiceAnswer(active = false, voice = null, enabled = settings.answersEnabled) {}
+    TestSettingsSheet(settings, voiceAnswer, onDismiss)
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun TestSettingsSheet(

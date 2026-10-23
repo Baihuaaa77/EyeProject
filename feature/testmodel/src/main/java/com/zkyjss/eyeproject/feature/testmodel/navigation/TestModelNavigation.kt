@@ -17,14 +17,12 @@ fun NavGraphBuilder.testModelScreen(
     onBack: () -> Unit,
     onGazeClick: () -> Unit,
     onBlinkTestClick: () -> Unit,
-    onStandaloneClick: () -> Unit,
 ) {
     composable<TestModelRoute> {
         TestModelScreen(
             onBack = onBack,
             onGazeClick = onGazeClick,
             onBlinkTestClick = onBlinkTestClick,
-            onStandaloneClick = onStandaloneClick
         )
     }
 }
