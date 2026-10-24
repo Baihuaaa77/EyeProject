@@ -24,7 +24,6 @@ struct HomePage: View {
     @StateObject private var reminder = EyeReminder()
     @State private var breakOpen = false
     @State private var liveRequests = 0
-    @State private var dismissed: [String] = []
 
     private var greeting: String {
         switch Calendar.current.component(.hour, from: Date()) {
@@ -45,14 +44,12 @@ struct HomePage: View {
         ScrollViewReader { proxy in
             PageScroll {
                 PageHeader(title: greeting, subtitle: today, openAccount: { navigate(.account) }, openSettings: { navigate(.settings) })
-                HeroCard(report: report)
-                CheckInCard(report: report) { store.checkIn($0) }
-                RecommendCard(report: report, dismissed: $dismissed) { action in
-                    switch action.kind {
+                HeroCard(report: report) { tip in
+                    switch tip.kind {
                     case "BREAK": breakOpen = true
-                    case "REMINDER": reminder.setInterval(action.value ?? 20); reminder.setEnabled(true)
+                    case "REMINDER": reminder.setInterval(tip.value ?? 20); reminder.setEnabled(true)
                     case "BRIGHTNESS", "NIGHT": navigate(.brightness)
-                    case "TEST": if let target = action.target { openTest(target) }
+                    case "TEST": if let target = tip.target { openTest(target) }
                     case "PROFILE": navigate(.subjectEdit(selfId))
                     case "LIVE":
                         liveRequests += 1
@@ -60,10 +57,10 @@ struct HomePage: View {
                     default: break
                     }
                 }
+                CheckInCard(report: report) { store.checkIn($0) }
                 SectionTitle(title: "多源感知", help: perceptionHelp)
                 if report.signals("BASIC").contains(where: { $0.id != "brightness" }) { BasicCard(report: report) }
                 BehaviorCard(report: report, liveRequests: liveRequests).id("behavior")
-                ProfileCard(report: report) { navigate(.subjectEdit(selfId)) }
                 SectionTitle(title: "主动服务", help: nil)
                 ReminderCard(reminder: reminder, suggested: report.loaded ? report.suggestedReminderMinutes : nil)
                 ServiceTiles(report: report, navigate: navigate)
@@ -88,8 +85,10 @@ private struct SectionTitle: View {
 
 // MARK: - 今日用眼
 
+/// 今日用眼：负荷分圆环 + 会说话的小瞳（随机弹出今天的提醒，可执行的点气泡直接去做；负荷越高嫩芽越蔫）+ 一句话 + 闭环五步进度。
 private struct HeroCard: View {
     let report: CareReport
+    let onTip: (CareReport.Tip) -> Void
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 0) {
@@ -98,10 +97,14 @@ private struct HeroCard: View {
                 Spacer()
                 StatusChip(text: report.label, color: levelColor(report.level), filled: true)
             }
-            HStack(spacing: 8) {
-                ScoreRing(score: report.score, color: ringColor(report.level)).frame(width: 124, height: 124)
-                MascotStage(mood: MascotMood(code: report.mood), headScale: 0.74).frame(maxWidth: .infinity).frame(height: 136)
-            }
+            ZStack(alignment: .bottomLeading) {
+                MascotTalk(mood: MascotMood(code: report.mood), lines: report.tips.map { MascotLine(text: $0.text, action: $0.action) },
+                           headScale: 0.8, wilt: report.score.map { CGFloat(min(1, max(0, Double($0 - 30) / 50))) },
+                           bubbleHeight: 84, tail: .end, mascotFraction: 0.5) { index in
+                    if report.tips.indices.contains(index) { onTip(report.tips[index]) }
+                }
+                ScoreRing(score: report.score, color: ringColor(report.level)).frame(width: 124, height: 124).padding(.bottom, 6)
+            }.frame(height: 220)
             Text(report.headline).font(EyeStyle.body).foregroundStyle(EyeStyle.text).fixedSize(horizontal: false, vertical: true)
             LoopStrip(stages: report.loop)
         }
@@ -197,7 +200,7 @@ struct FlowLayout: Layout {
     }
 }
 
-/// 今日感受打卡：没打卡时展开选项；打卡后收成一行，可修改。
+/// 今日感受打卡：与「视觉行为」同样的卡片标题；没打卡时展开选项，打卡后收成一行，可修改。
 private struct CheckInCard: View {
     let report: CareReport
     let onCheckIn: ([String]) -> Void
@@ -205,22 +208,23 @@ private struct CheckInCard: View {
     @State private var selected: [String] = []
     var body: some View {
         Panel {
-            if report.checkedInToday && !editing {
-                HStack(spacing: 12) {
-                    IconTile(glyph: .eye, tone: report.todaySymptoms.isEmpty ? .success : .accent)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("今日感受").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
-                        Text(report.todaySymptoms.isEmpty ? noDiscomfort : report.todaySymptoms.joined(separator: "、"))
-                            .font(EyeStyle.body).foregroundStyle(EyeStyle.text)
-                    }.frame(maxWidth: .infinity, alignment: .leading)
-                    Button("修改") {
-                        EyeHaptics.tap()
-                        selected = report.todaySymptoms.isEmpty ? [noDiscomfort] : report.todaySymptoms
+            let checked = report.checkedInToday && !editing
+            let fine = report.todaySymptoms.isEmpty
+            HStack(spacing: 10) {
+                IconTile(glyph: .heart, tone: report.checkedInToday && !fine ? .accent : .success, size: 32)
+                Text("今日感受").font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text).frame(maxWidth: .infinity, alignment: .leading)
+                if checked {
+                    PillButton(label: "修改", primary: false) {
+                        selected = fine ? [noDiscomfort] : report.todaySymptoms
                         editing = true
-                    }.font(EyeStyle.body).foregroundStyle(EyeStyle.primary).frame(minHeight: 44)
+                    }
                 }
+            }
+            if checked {
+                Text(fine ? noDiscomfort : report.todaySymptoms.joined(separator: "、"))
+                    .font(EyeStyle.subtitle).foregroundStyle(fine ? EyeStyle.text : EyeStyle.warning)
             } else {
-                Text("今天眼睛感觉怎么样？").font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text)
+                Text("今天眼睛感觉怎么样？").font(EyeStyle.body).foregroundStyle(EyeStyle.secondary)
                 FlowLayout(spacing: 8) {
                     ForEach([noDiscomfort] + EyeCareBridge.shared.symptoms, id: \.self) { label in
                         ChoiceChip(label: label, selected: selected.contains(label)) { toggle(label) }
@@ -242,7 +246,7 @@ private struct CheckInCard: View {
     }
 }
 
-// MARK: - 为你推荐（干预）
+// MARK: - 干预（图标）
 
 func glyphFor(_ kind: String) -> (EyeGlyph, TileTone) {
     switch kind {
@@ -257,51 +261,6 @@ func glyphFor(_ kind: String) -> (EyeGlyph, TileTone) {
     case "PROFILE": return (.person, .primary)
     case "LIVE": return (.camera, .primary)
     default: return (.info, .neutral)
-    }
-}
-
-private func buttonFor(_ kind: String) -> String {
-    switch kind {
-    case "BREAK": return "开始"
-    case "REMINDER": return "开启"
-    case "BRIGHTNESS", "NIGHT": return "查看"
-    case "TEST": return "去测"
-    case "PROFILE": return "完善"
-    case "LIVE": return "去检测"
-    default: return "知道了"
-    }
-}
-
-/// 为你推荐：最多三件可以马上做的事（不含今日感受）。「知道了」类建议点后本次收起。
-private struct RecommendCard: View {
-    let report: CareReport
-    @Binding var dismissed: [String]
-    let act: (CareReport.Action) -> Void
-    var body: some View {
-        let items = Array(report.actions.filter { $0.kind != "CHECK_IN" && !dismissed.contains($0.id) }.prefix(3))
-        if !items.isEmpty {
-            VStack(alignment: .leading, spacing: 0) {
-                Text("为你推荐").font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text).padding(.leading, 18).padding(.top, 16).padding(.bottom, 4)
-                ForEach(Array(items.enumerated()), id: \.element.id) { i, action in
-                    let (glyph, tone) = glyphFor(action.kind)
-                    let label = buttonFor(action.kind)
-                    HStack(spacing: 12) {
-                        IconTile(glyph: glyph, tone: tone, size: 40)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(action.title).font(EyeStyle.button).foregroundStyle(EyeStyle.text)
-                            Text(action.detail).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary).fixedSize(horizontal: false, vertical: true)
-                        }.frame(maxWidth: .infinity, alignment: .leading)
-                        PillButton(label: label, primary: label != "知道了") {
-                            if label == "知道了" { withAnimation { dismissed.append(action.id) } } else { act(action) }
-                        }
-                    }.padding(.horizontal, 18).padding(.vertical, 10)
-                    if i < items.count - 1 { Rectangle().fill(EyeStyle.borderSubtle).frame(height: 1).padding(.leading, 70).padding(.trailing, 18) }
-                }
-                Spacer().frame(height: 6)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(EyeStyle.panel, in: RoundedRectangle(cornerRadius: 22))
-        }
     }
 }
 
@@ -372,25 +331,6 @@ private struct BehaviorCard: View {
             SignalGrid(signals: signals, columns: 3)
             Rectangle().fill(EyeStyle.borderSubtle).frame(height: 1)
             LiveEyeSection(startRequests: liveRequests)
-        }
-    }
-}
-
-/// 个体档案：年龄、职业、视力状况、历史病症、使用反馈；点「完善」去编辑本人资料。
-private struct ProfileCard: View {
-    let report: CareReport
-    let edit: () -> Void
-    var body: some View {
-        let signals = report.signals("PROFILE")
-        let missing = signals.contains { $0.status == "UNAVAILABLE" && $0.id != "feedback" }
-        Panel {
-            HStack(spacing: 10) {
-                IconTile(glyph: .person, tone: .accent, size: 32)
-                Text("个体档案").font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text).frame(maxWidth: .infinity, alignment: .leading)
-                PillButton(label: missing ? "完善" : "编辑", primary: false, action: edit)
-            }
-            SignalGrid(signals: signals.filter { $0.id != "feedback" }, columns: 2)
-            if let feedback = report.signal("feedback") { SignalCell(signal: feedback) }
         }
     }
 }

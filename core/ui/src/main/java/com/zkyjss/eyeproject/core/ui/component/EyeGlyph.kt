@@ -21,7 +21,7 @@ import kotlin.math.sin
  */
 enum class EyeGlyph {
     DOCUMENT, FAMILY, CLOUD, SHIELD, BELL, SUN, CHART, BULB, EYE, CLOCK, PERSON, INFO, MOON, EXPORT, SYNC,
-    LOGOUT, TRASH, SERVER, CAMERA, MIC, HOURGLASS, CHAT, RULER, COFFEE, GEAR,
+    LOGOUT, TRASH, SERVER, CAMERA, MIC, HOURGLASS, CHAT, RULER, COFFEE, GEAR, HEART,
 }
 
 @Composable
@@ -103,6 +103,8 @@ fun DrawScope.drawEyeGlyph(glyph: EyeGlyph, tint: Color) {
         EyeGlyph.CLOCK -> { ring(12f, 12f, 8.5f); poly(12f, 7.5f, 12f, 12f, 15.5f, 14f) }
         EyeGlyph.PERSON -> { ring(12f, 8.5f, 3.8f); arc(12f, 20.5f, 7.5f, 6.5f, 200f, 140f) }
         EyeGlyph.INFO -> { ring(12f, 12f, 8.5f); seg(12f, 11f, 12f, 16.5f); dot(12f, 7.8f, 1.15f) }
+        EyeGlyph.HEART -> curve(12f, 20f, 5f, 15.5f, 3f, 12f, 3f, 8.8f, 3f, 6f, 5.2f, 4f, 7.8f, 4f, 9.6f, 4f, 11.1f, 5f, 12f, 6.6f,
+            12.9f, 5f, 14.4f, 4f, 16.2f, 4f, 18.8f, 4f, 21f, 6f, 21f, 8.8f, 21f, 12f, 19f, 15.5f, 12f, 20f, close = true)
         EyeGlyph.MOON -> curve(14.5f, 4.2f, 10.5f, 5f, 8.2f, 8.7f, 8.9f, 12.8f, 9.6f, 16.6f, 13.2f, 19.3f, 17f, 18.8f,
             15.6f, 20.3f, 13.6f, 21f, 11.6f, 21f, 6.9f, 20.8f, 3.2f, 16.9f, 3.3f, 12.2f, 3.4f, 7.8f, 6.9f, 4.2f, 11.4f, 4f,
             12.5f, 3.95f, 13.5f, 4.05f, 14.5f, 4.2f, close = true)

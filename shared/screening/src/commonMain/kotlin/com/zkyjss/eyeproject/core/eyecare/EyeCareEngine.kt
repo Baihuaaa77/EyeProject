@@ -56,6 +56,12 @@ data class EyeFactor(val key: String, val title: String, val detail: String, val
 @Serializable
 data class EyeAction(val key: String, val title: String, val detail: String, val kind: String, val target: String? = null, val value: Int? = null)
 
+/**
+ * 小瞳的气泡提醒（首页随机弹出，不朗读）：一句短话；可执行的附带动作类型与按钮文字（与 [EyeAction.kind] 同一套）。
+ */
+@Serializable
+data class EyeTip(val text: String, val kind: String? = null, val target: String? = null, val value: Int? = null, val action: String? = null)
+
 /** 专业咨询建议。 */
 @Serializable
 data class EyeConsult(val title: String, val detail: String, val department: String, val urgent: Boolean)
@@ -94,12 +100,14 @@ data class EyeCareReport(
     val score: Int? = null,
     val label: String,
     val headline: String,
-    /** 小瞳神情：HAPPY / THINKING / SLEEPY / CONCERNED */
+    /** 小瞳神情：HAPPY / THINKING / SLEEPY（深夜）/ TIRED（负荷偏高，嫩芽打蔫）/ CONCERNED（危险信号） */
     val mood: String,
     val loop: List<LoopStage>,
     val signals: List<EyeSignal>,
     val factors: List<EyeFactor>,
     val actions: List<EyeAction>,
+    /** 小瞳气泡依次说的话：先是针对今天的提醒，再是日常小贴士。 */
+    val tips: List<EyeTip> = emptyList(),
     val consults: List<EyeConsult>,
     val trend: EyeTrend,
     val checkedInToday: Boolean,
@@ -164,8 +172,9 @@ object EyeCareEngine {
             },
             mood = when {
                 redFlag -> "CONCERNED"
+                level == "HIGH" -> "TIRED"
+                context.hour >= 23 || context.hour < 5 -> "SLEEPY"
                 level == "LOW" -> "HAPPY"
-                level == "HIGH" -> "SLEEPY"
                 else -> "THINKING"
             },
             loop = listOf(
@@ -175,7 +184,7 @@ object EyeCareEngine {
                 LoopStage("INTERVENE", "干预", actions.isNotEmpty(), if (actions.isEmpty()) "暂无" else "${actions.size} 条建议"),
                 LoopStage("FEEDBACK", "反馈", checkIn != null, if (checkIn != null) "今日已打卡" else "待打卡"),
             ),
-            signals = signals, factors = factors, actions = actions, consults = consults, trend = trend,
+            signals = signals, factors = factors, actions = actions, tips = tips(actions, factors, level, redFlag), consults = consults, trend = trend,
             checkedInToday = checkIn != null, todaySymptoms = symptoms, suggestedReminderMinutes = suggested,
         )
     }
@@ -324,6 +333,36 @@ object EyeCareEngine {
         if (missing > 0) add(EyeAction("profile", "完善个人档案", "还差 $missing 项，建议会更贴合你", "PROFILE"))
         if (!checkedIn) add(EyeAction("check-in", "记录今天的感受", "眼睛舒服吗？点一下就好", "CHECK_IN"))
     }
+
+    /** 气泡提醒：危险信号最先；再把今天的建议换成小瞳的口吻（可执行的带按钮），最后补几句日常小贴士。 */
+    private fun tips(actions: List<EyeAction>, factors: List<EyeFactor>, level: String, redFlag: Boolean): List<EyeTip> = buildList {
+        if (redFlag) add(EyeTip("眼睛疼或突然看不清，要尽快去医院哦"))
+        if (level == "HIGH") add(EyeTip("眼睛累坏啦，闭上眼歇一会儿吧", "BREAK", action = "去休息"))
+        actions.forEach { a ->
+            when (a.key) {
+                "break" -> add(EyeTip("看了好久啦，看看远处 20 秒吧", "BREAK", action = "去休息"))
+                "reminder" -> add(EyeTip(if (a.title.startsWith("缩短")) "提醒改成每 ${a.value} 分钟一次吧" else "开个休息提醒，我来叫你歇一歇",
+                    "REMINDER", value = a.value, action = "开启"))
+                "blink" -> add(EyeTip("多眨眨眼，眼睛会舒服些"))
+                "distance" -> add(EyeTip("把屏幕拿远一点"))
+                "brightness" -> add(EyeTip("屏幕有点亮，调暗一点吧", "BRIGHTNESS", action = "去调节"))
+                "night" -> add(EyeTip("夜深了，早点休息吧"))
+                "outdoor" -> add(EyeTip("白天多去户外玩一玩"))
+                "test-dry" -> add(EyeTip("眼睛发干？来做个干眼自测吧", "TEST", target = "DRY_EYE", action = "去自测"))
+                "test-presbyopia" -> add(EyeTip("看近吃力吗？做个老视自测吧", "TEST", target = "PRESBYOPIA", action = "去自测"))
+                "usage" -> add(EyeTip("开启用屏统计，我就知道你看了多久", "USAGE_ACCESS", action = "去开启"))
+                "live" -> add(EyeTip("打开实时检测，看看你眨眼多不多", "LIVE", action = "去检测"))
+                "profile" -> add(EyeTip("把档案填完整，建议会更贴合你", "PROFILE", action = "去完善"))
+            }
+        }
+        val keys = factors.map { it.key }.toSet()
+        if (level == "LOW") add(EyeTip("今天用眼很棒，继续保持！"))
+        if ("distance" !in keys) add(EyeTip("屏幕别贴太近，保持一臂远"))
+        if ("posture" !in keys) add(EyeTip("坐直一点，别低头太久"))
+        add(EyeTip("每 20 分钟，看看 6 米外 20 秒"))
+        if (level == "MEDIUM" || level == "HIGH") add(EyeTip("喝口水，伸个懒腰吧"))
+        add(EyeTip("看看窗外的绿色吧"))
+    }.distinctBy { it.text }
 
     private fun consults(ledger: LedgerData, c: EyeCareContext, symptoms: List<String>, redFlag: Boolean, child: Boolean): List<EyeConsult> = buildList {
         if (redFlag) add(EyeConsult("尽快就医", "眼睛疼痛、突然重影或看不清，不要等待自测，请尽快到医院检查。", "眼科急诊或眼科门诊", true))

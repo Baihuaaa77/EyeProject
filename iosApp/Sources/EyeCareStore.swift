@@ -7,6 +7,8 @@ struct CareReport {
     struct Signal: Identifiable { let id: String; let group: String; let label: String; let value: String; let status: String; let note: String }
     struct Factor: Identifiable { let id: String; let title: String; let detail: String; let points: Int }
     struct Action: Identifiable { let id: String; let title: String; let detail: String; let kind: String; let target: String?; let value: Int? }
+    /// 小瞳的气泡提醒（共用 EyeTip）：一句话；可执行的附带动作类型与按钮文字。
+    struct Tip { let text: String; let kind: String?; let target: String?; let value: Int?; let action: String? }
     struct Consult: Identifiable { let id: Int; let title: String; let detail: String; let department: String; let urgent: Bool }
     struct Stage: Identifiable { let id: String; let label: String; let done: Bool; let summary: String }
     struct Day: Identifiable {
@@ -22,6 +24,7 @@ struct CareReport {
     var signals: [Signal] = []
     var factors: [Factor] = []
     var actions: [Action] = []
+    var tips: [Tip] = []
     var consults: [Consult] = []
     var days: [Day] = []
     var summary: [String] = []
@@ -51,6 +54,8 @@ struct CareReport {
             value: $0["value"] as? String ?? "—", status: $0["status"] as? String ?? "UNAVAILABLE", note: $0["note"] as? String ?? "") }
         factors = list("factors", o).map { Factor(id: $0["key"] as? String ?? UUID().uuidString, title: $0["title"] as? String ?? "", detail: $0["detail"] as? String ?? "",
             points: $0["points"] as? Int ?? 0) }
+        tips = list("tips", o).map { Tip(text: $0["text"] as? String ?? "", kind: $0["kind"] as? String, target: $0["target"] as? String,
+            value: $0["value"] as? Int, action: $0["action"] as? String) }
         actions = list("actions", o).map { Action(id: $0["key"] as? String ?? UUID().uuidString, title: $0["title"] as? String ?? "", detail: $0["detail"] as? String ?? "",
             kind: $0["kind"] as? String ?? "", target: $0["target"] as? String, value: $0["value"] as? Int) }
         consults = list("consults", o).enumerated().map { i, c in Consult(id: i, title: c["title"] as? String ?? "", detail: c["detail"] as? String ?? "",

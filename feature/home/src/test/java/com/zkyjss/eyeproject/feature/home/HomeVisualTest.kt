@@ -77,16 +77,24 @@ class HomeVisualTest {
         var reminder = false
         var trend = false
         var openedModel = false
+        // 小瞳的气泡靠无限动画轮换，自动推进的测试时钟会停掉它，先用手动时钟
+        compose.mainClock.autoAdvance = false
         compose.setContent {
             EyeProjectTheme {
                 HomeContent(demoState(), HomeNavigation(onNavigateToTestModel = { openedModel = true }, onOpenTrend = { trend = true }),
                     HomeActions(toggleReminder = { reminder = true }))
             }
         }
+        compose.mainClock.advanceTimeBy(100)
         compose.onNodeWithText("今日用眼").assertExists()
         compose.onNodeWithText("留意", useUnmergedTree = true).assertExists()
-        compose.onNodeWithText("为你推荐").assertExists()
-        capture("01-首页-首屏")
+        compose.onNodeWithText("为你推荐").assertDoesNotExist()
+        compose.onNodeWithText("个体档案").assertDoesNotExist()
+        // 第一句气泡是今天最该做的事
+        compose.mainClock.advanceTimeBy(1_400)
+        compose.onNodeWithText("看了好久啦，看看远处 20 秒吧").assertExists()
+        capture("01-首页-首屏", advance = false)
+        compose.mainClock.autoAdvance = true
         compose.onNodeWithText("休息提醒").performScrollTo().performClick()
         assertTrue(reminder)
         compose.onNodeWithText("用眼趋势报告").performScrollTo().performClick()
@@ -96,10 +104,22 @@ class HomeVisualTest {
         assertTrue(openedModel)
     }
 
+    /** 点可执行的气泡直接去做：「去休息」打开 20 秒休息页。 */
+    @Test fun tappingAnActionableBubbleStartsIt() {
+        compose.mainClock.autoAdvance = false
+        compose.setContent { EyeProjectTheme { HomeContent(demoState(), HomeNavigation(), HomeActions()) } }
+        compose.mainClock.advanceTimeBy(1_500)
+        compose.onNodeWithText("去休息 ›").performClick()
+        compose.mainClock.advanceTimeBy(500)
+        compose.onNodeWithText("提前结束").assertExists()
+    }
+
     @Test @Config(qualifiers = "zh-rCN-w390dp-h2600dp-mdpi")
     fun fullHomePage() {
+        compose.mainClock.autoAdvance = false
         compose.setContent { EyeProjectTheme { HomeContent(demoState(), HomeNavigation(), HomeActions()) } }
-        capture("02-首页-整页")
+        compose.mainClock.advanceTimeBy(1_500)
+        capture("02-首页-整页", advance = false)
     }
 
     @Test @Config(qualifiers = "zh-rCN-w390dp-h2600dp-mdpi")
@@ -111,6 +131,20 @@ class HomeVisualTest {
         }
         compose.onNodeWithText("今天眼睛感觉怎么样？").assertExists()
         capture("03-首页-深色-还没有数据")
+    }
+
+    /** 负荷偏高的一天：小瞳疲惫（眼皮耷拉、黑眼圈、嫩芽打蔫），第一句气泡劝你闭眼歇会儿。 */
+    @Test fun tiredXiaoTongWhenLoadIsHigh() {
+        val usage = UsageDay(today, screenMinutes = 7 * 60, longestSessionMinutes = 130, nightMinutes = 70, breaks = 2)
+        val ledger = LedgerData().withSession(today, 1L, LiveEyeMonitor.Session(120_000, 12, 6f, 24f, 0.8f, 10f))
+            .withCheckIn(today, listOf("眼睛干涩"), 3L)
+        val report = EyeCareEngine.report(ledger, EyeCareContext(today, 16, systemUsage = listOf(usage),
+            usageAccess = EyeCareEngine.ACCESS_GRANTED, ambientLux = 20f, ambientSupported = true, screenBrightness = 0.8f, age = 30))
+        compose.mainClock.autoAdvance = false
+        compose.setContent { EyeProjectTheme { HomeContent(HomeUiState(report = report), HomeNavigation(), HomeActions()) } }
+        compose.mainClock.advanceTimeBy(2_400)
+        compose.onNodeWithText("眼睛累坏啦，闭上眼歇一会儿吧").assertExists()
+        capture("01b-首页-负荷偏高", advance = false)
     }
 
     @Test fun checkInRecordsSymptoms() {
@@ -141,7 +175,7 @@ class HomeVisualTest {
                 }
             }
         }
-        compose.onNodeWithText("打开前置摄像头，看看眨眼和观看距离").assertExists()
+        compose.onNodeWithText("打开前置摄像头，看看眨眼和观看距离").assertDoesNotExist()
         compose.onNodeWithText("实时检测").performClick()
         compose.onNodeWithText("运行正常").assertExists()
         compose.onNodeWithText("睁眼").assertExists()
@@ -193,10 +227,19 @@ class HomeVisualTest {
         showSplash = false
         // 待机周期 6 秒：避开 0.3 处的眨眼，停在 0.4 左右
         compose.mainClock.advanceTimeBy(2_400)
-        capture("10-小瞳四种心情", advance = false)
-        compose.onAllNodesWithContentDescription("小瞳，点一下和它互动")[0].performClick()
+        capture("10-小瞳五种心情", advance = false)
+        val first = compose.onAllNodesWithContentDescription("小瞳，点一下和它互动，长按摸摸头")[0]
+        first.performClick()
         compose.mainClock.advanceTimeBy(400)
-        capture("11-小瞳点按蹦跳", advance = false)
+        capture("11-小瞳点按互动", advance = false)
+        compose.mainClock.advanceTimeBy(1_600)
+        repeat(5) { first.performClick(); compose.mainClock.advanceTimeBy(60) }
+        compose.mainClock.advanceTimeBy(500)
+        capture("11b-小瞳连点转晕", advance = false)
+        compose.mainClock.advanceTimeBy(1_600)
+        first.performTouchInput { longClick() }
+        compose.mainClock.advanceTimeBy(600)
+        capture("11c-小瞳长按比心", advance = false)
     }
 
     /** 眼裂宽 100 px、上下各偏 h 的 6 点（EAR = 2h / 100 × 100），落在画面中部；虹膜直径 36 px。 */
@@ -217,7 +260,11 @@ class HomeVisualTest {
         for (dir in listOf("build/reports/ui", "../../docs/界面截图-2026-10-23/安卓")) {
             val output = File("$dir/$name.png")
             output.parentFile?.mkdirs()
-            output.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+            // Windows 上截图可能正被预览程序映射占用，稍等重试几次
+            for (attempt in 1..5) {
+                try { output.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }; break }
+                catch (e: java.io.IOException) { if (attempt == 5) throw e; Thread.sleep(300) }
+            }
         }
     }
 }

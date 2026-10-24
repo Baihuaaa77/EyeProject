@@ -54,7 +54,7 @@ import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
 import com.zkyjss.eyeproject.core.designsystem.util.getTopStatusBarPadding
 import com.zkyjss.eyeproject.core.designsystem.util.screenHorizontalPaddingLarge
-import com.zkyjss.eyeproject.core.eyecare.EyeAction
+import com.zkyjss.eyeproject.core.eyecare.EyeTip
 import com.zkyjss.eyeproject.core.eyecare.EyeCareEngine
 import com.zkyjss.eyeproject.core.eyecare.EyeCareReport
 import com.zkyjss.eyeproject.core.eyecare.EyeSignal
@@ -147,23 +147,21 @@ internal fun HomeContent(
     ) {
         EyePageHeader(greeting(), navigation.onOpenSettings, onOpenAccount = navigation.onOpenAccount,
             subtitle = remember { LocalDate.now().format(DateTimeFormatter.ofPattern("M月d日 EEEE", Locale.CHINA)) })
-        EyeCareHero(report)
-        CheckInCard(report, actions.checkIn)
-        RecommendCard(report, onAct = { action ->
-            when (action.kind) {
+        EyeCareHero(report) { tip ->
+            when (tip.kind) {
                 "BREAK" -> breakOpen = true
-                "REMINDER" -> actions.enableReminder(action.value ?: 20)
+                "REMINDER" -> actions.enableReminder(tip.value ?: 20)
                 "BRIGHTNESS", "NIGHT" -> navigation.onOpenBrightness()
-                "TEST" -> action.target?.let(navigation.onOpenTest)
+                "TEST" -> tip.target?.let(navigation.onOpenTest)
                 "PROFILE" -> navigation.onEditProfile(state.selfId)
                 "USAGE_ACCESS" -> actions.openUsageAccess()
                 "LIVE" -> { liveRequests++; scrollTarget = behavior }
             }
-        })
+        }
+        CheckInCard(report, actions.checkIn)
         SectionTitle("多源感知", PERCEPTION_HELP)
         BasicDataCard(state, actions, Modifier.bringIntoViewRequester(basic))
         BehaviorCard(report, Modifier.bringIntoViewRequester(behavior)) { liveEye(liveRequests) }
-        ProfileCard(report) { navigation.onEditProfile(state.selfId) }
         SectionTitle("主动服务", null)
         ReminderCard(state, actions)
         ServiceTiles(state, navigation)
@@ -208,9 +206,11 @@ internal fun EyeColors.ringTone(level: String?): Color = when (level) {
     else -> borderSubtle
 }
 
-/** 今日用眼：负荷分圆环 + 会动的小瞳 + 一句话 + 闭环五步进度。 */
+/**
+ * 今日用眼：负荷分圆环 + 会说话的小瞳（随机弹出今天的提醒，可执行的点气泡直接去做；负荷越高嫩芽越蔫）+ 一句话 + 闭环五步进度。
+ */
 @Composable
-private fun EyeCareHero(report: EyeCareReport?) {
+private fun EyeCareHero(report: EyeCareReport?, onTip: (EyeTip) -> Unit) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
     val (strong, soft) = colors.levelTone(report?.level)
@@ -227,10 +227,12 @@ private fun EyeCareHero(report: EyeCareReport?) {
             EyeText(report?.label ?: "读取中", style = typography.chip, color = colors.onStatus, fontWeight = FontWeight.Bold,
                 modifier = Modifier.clip(EyeShapes.chip).background(strong).padding(horizontal = 12.dp, vertical = 6.dp))
         }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            ScoreRing(report?.score, colors.ringTone(report?.level), Modifier.size(124.dp))
-            Spacer(Modifier.width(8.dp))
-            XiaoTong(MascotMood.of(report?.mood), Modifier.weight(1f).height(136.dp), headScale = 0.74f)
+        val tips = remember(report?.tips) { report?.tips.orEmpty().map { MascotTip(it.text, it.action, it) } }
+        Box(Modifier.fillMaxWidth().height(220.dp)) {
+            XiaoTongTalk(MascotMood.of(report?.mood), tips, Modifier.fillMaxSize(), headScale = 0.8f,
+                wilt = report?.score?.let { ((it - 30) / 50f).coerceIn(0f, 1f) }, bubbleHeight = 84.dp, tail = BubbleTail.END,
+                mascotFraction = 0.5f) { tip -> (tip.payload as? EyeTip)?.let(onTip) }
+            ScoreRing(report?.score, colors.ringTone(report?.level), Modifier.align(Alignment.BottomStart).padding(bottom = 6.dp).size(124.dp))
         }
         EyeText(report?.headline ?: "正在汇总今天的用眼数据…", style = typography.body, color = colors.textPrimary)
         LoopStrip(report?.loop.orEmpty())
@@ -293,7 +295,7 @@ private fun LoopStrip(stages: List<LoopStage>) {
 
 private const val NO_DISCOMFORT = "没有不适"
 
-/** 今日感受打卡：没打卡时展开选项；打卡后收成一行，可修改。 */
+/** 今日感受打卡：与「视觉行为」同样的卡片标题；没打卡时展开选项，打卡后收成一行，可修改。 */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun CheckInCard(report: EyeCareReport?, onCheckIn: (List<String>) -> Unit) {
@@ -307,20 +309,15 @@ private fun CheckInCard(report: EyeCareReport?, onCheckIn: (List<String>) -> Uni
     }
     Column(Modifier.fillMaxWidth().clip(EyeShapes.panel).background(colors.panelBackground).animateContentSize().padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        val fine = report?.todaySymptoms.isNullOrEmpty()
+        CardHeader("今日感受", EyeGlyph.HEART, if (checked && !fine) EyeTileTone.ACCENT else EyeTileTone.SUCCESS) {
+            if (checked && !editing) PillButton("修改", primary = false) { editing = true }
+        }
         if (checked && !editing) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                EyeIconTile(EyeGlyph.EYE, if (report?.todaySymptoms.isNullOrEmpty()) EyeTileTone.SUCCESS else EyeTileTone.ACCENT)
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
-                    EyeText("今日感受", style = typography.bodySecondary, color = colors.textSecondary)
-                    EyeText(report?.todaySymptoms?.joinToString("、")?.ifEmpty { NO_DISCOMFORT } ?: NO_DISCOMFORT,
-                        style = typography.body, color = colors.textPrimary)
-                }
-                EyeText("修改", Modifier.clip(EyeShapes.chip).clickable(role = Role.Button) { haptics.tap(); editing = true }
-                    .padding(horizontal = 12.dp, vertical = 10.dp), style = typography.body, color = colors.primary)
-            }
+            EyeText(report?.todaySymptoms?.joinToString("、")?.ifEmpty { NO_DISCOMFORT } ?: NO_DISCOMFORT,
+                style = typography.subtitle, color = if (fine) colors.textPrimary else colors.warning)
         } else {
-            EyeText("今天眼睛感觉怎么样？", style = typography.subtitle, color = colors.textPrimary)
+            EyeText("今天眼睛感觉怎么样？", style = typography.body, color = colors.textSecondary)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 (listOf(NO_DISCOMFORT) + EyeCareEngine.SYMPTOMS).forEach { label ->
                     val on = label in selected
@@ -355,7 +352,7 @@ internal fun ChoiceChip(label: String, selected: Boolean, onClick: () -> Unit) {
 
 // endregion
 
-// region 为你推荐（干预）
+// region 干预（图标与小号按钮）
 
 internal fun glyphFor(kind: String): Pair<EyeGlyph, EyeTileTone> = when (kind) {
     "BREAK" -> EyeGlyph.COFFEE to EyeTileTone.SUCCESS
@@ -370,48 +367,6 @@ internal fun glyphFor(kind: String): Pair<EyeGlyph, EyeTileTone> = when (kind) {
     "USAGE_ACCESS" -> EyeGlyph.HOURGLASS to EyeTileTone.BLUE
     "LIVE" -> EyeGlyph.CAMERA to EyeTileTone.PRIMARY
     else -> EyeGlyph.INFO to EyeTileTone.NEUTRAL
-}
-
-internal fun buttonFor(action: EyeAction): String = when (action.kind) {
-    "BREAK" -> "开始"
-    "REMINDER" -> "开启"
-    "BRIGHTNESS", "NIGHT" -> "查看"
-    "TEST" -> "去测"
-    "PROFILE" -> "完善"
-    "USAGE_ACCESS" -> "去开启"
-    "LIVE" -> "去检测"
-    else -> "知道了"
-}
-
-/** 为你推荐：最多三件可以马上做的事（不含今日感受，它在上面单独一张卡）。「知道了」类建议点后本次收起。 */
-@Composable
-private fun RecommendCard(report: EyeCareReport?, onAct: (EyeAction) -> Unit) {
-    val colors = LocalEyeColors.current
-    val typography = LocalEyeTypography.current
-    var dismissed by rememberSaveable { mutableStateOf(listOf<String>()) }
-    val items = report?.actions.orEmpty().filter { it.kind != "CHECK_IN" && it.key !in dismissed }.take(3)
-    if (items.isEmpty()) return
-    Column(Modifier.fillMaxWidth().clip(EyeShapes.panel).background(colors.panelBackground).animateContentSize()) {
-        EyeText("为你推荐", Modifier.padding(start = 18.dp, top = 16.dp, bottom = 4.dp), style = typography.subtitle, color = colors.textPrimary)
-        items.forEachIndexed { i, action ->
-            val (glyph, tone) = glyphFor(action.kind)
-            Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                EyeIconTile(glyph, tone, 40.dp)
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
-                    EyeText(action.title, style = typography.body, color = colors.textPrimary, fontWeight = FontWeight.SemiBold)
-                    EyeText(action.detail, style = typography.bodySecondary, color = colors.textSecondary)
-                }
-                Spacer(Modifier.width(8.dp))
-                val label = buttonFor(action)
-                PillButton(label, primary = label != "知道了") {
-                    if (label == "知道了") dismissed = dismissed + action.key else onAct(action)
-                }
-            }
-            if (i < items.lastIndex) Box(Modifier.padding(start = 70.dp, end = 18.dp).fillMaxWidth().height(1.dp).background(colors.borderSubtle))
-        }
-        Spacer(Modifier.height(6.dp))
-    }
 }
 
 /** 小号胶囊按钮（列表行右侧的操作）。 */
@@ -505,21 +460,6 @@ private fun BehaviorCard(report: EyeCareReport?, modifier: Modifier, live: @Comp
         SignalGrid(signals, columns = 3)
         Box(Modifier.fillMaxWidth().height(1.dp).background(colors.borderSubtle))
         live()
-    }
-}
-
-/** 个体眼健康档案：年龄、职业、视力状况、历史病症、使用反馈；点「完善」去编辑本人资料。 */
-@Composable
-private fun ProfileCard(report: EyeCareReport?, onEdit: () -> Unit) {
-    val colors = LocalEyeColors.current
-    val signals = report?.signals.orEmpty().filter { it.group == "PROFILE" }
-    Column(Modifier.fillMaxWidth().clip(EyeShapes.panel).background(colors.panelBackground).padding(18.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        CardHeader("个体档案", EyeGlyph.PERSON, EyeTileTone.ACCENT) {
-            PillButton(if (signals.any { it.status == "UNAVAILABLE" && it.key != "feedback" }) "完善" else "编辑", primary = false, onClick = onEdit)
-        }
-        SignalGrid(signals.filter { it.key != "feedback" }, columns = 2)
-        signals.firstOrNull { it.key == "feedback" }?.let { SignalCell(it, Modifier.fillMaxWidth()) }
     }
 }
 

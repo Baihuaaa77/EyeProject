@@ -96,6 +96,13 @@ private struct GuideStage: View {
     }
 }
 
+/// 由外部给进度的无文字演示舞台（服务页轮播示范用）。
+struct GuideFrame: View {
+    let motion: GuideMotion
+    let phase: Double
+    var body: some View { GuideStage(scene: GuideScene.scene(motion), phase: phase) }
+}
+
 /// 分镜行：当前步骤主色高亮，已完成步骤弱化。
 private struct GuideBeatRow: View {
     let label: String

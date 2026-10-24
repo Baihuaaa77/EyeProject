@@ -16,7 +16,7 @@
 
 | 类型 | 说明 |
 |---|---|
-| `ServicesScreen` | 服务首页：标题「服务」+ 右上角账户头像与系统设置齿轮（`EyePageHeader`）、会互动的小瞳欢迎卡（`XiaoTong`）、三个 `EyeSelectCard` 入口 |
+| `ServicesScreen` | 服务首页：标题「服务」+ 右上角账户头像与系统设置齿轮（`EyePageHeader`）、小瞳示范舞台、三个 `EyeSelectCard` 入口。示范舞台随机轮流播放干眼（BLINK）/ 眼位（COVER）/ 老视（NEAR）的演示动画（`TestGuide.kt` 的 `GuideFrame`，每种两遍），上方气泡先说是哪项测试、再说「跟着我一起做吧」；点舞台换下一个 |
 | `SystemSettings.kt` | 「系统设置」完整页面（不用底部弹窗）：`SystemSettingsScreen`（路由 `SystemSettingsRoute`，顶层页齿轮进入，分组「反馈 / 语音 / 关于」，关于里是应用图标、版本与免责声明）；测试中的 `TestSettingsPage` 盖在测试页上（不离开测试），同一份 `TestSettingsContent`，底部可停止测试。各项说明收进「?」（`FEEDBACK_HELP` / `VOICE_HELP` / `ANSWER_HELP`）。苹果端 `SystemSettingsPage` 同一排版 |
 | `DryEyeScreen` | 干眼自测页（动画引导、距离门控、两阶段记录、折叠结果曲线） |
 | `SubjectPicker` | 三项测试的开始页「这次测谁？」：替代原逐题问卷，资料在「我的」维护；成员缺本测试必需项（`SubjectProfiles.missing`）时点开即经 app 导航去补充；可「暂不选择，直接测试」（记录 `profileSkipped`）。记录写入 `subject`（本机成员编号与关系），云端同步时据此归属成员 |

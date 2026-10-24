@@ -47,8 +47,9 @@
 
 | 组件 | 说明 |
 |---|---|
-| `XiaoTong` | 会动的吉祥物：待机眨眼与叶子摆动，`MascotMood`（开心 / 思考 / 担心 / 困倦，`MascotMood.of(code)` 取共用核心给出的神情，按结果等级换表情），可点按随机蹦跳 / 眨眼 / 咯咯笑 / 惊讶 / 害羞并配音效 |
-| `MascotSounds` | 小瞳音效（`shared/feedback/res/raw` 的 `eye_boop/hop/giggle/wow`，SoundPool），跟随系统设置的音效开关与音量 |
+| `XiaoTong` | 会动的吉祥物：待机呼吸、眨眼、张望，每 14 秒自己做一两个小动作（蹦一下、打哈欠…，无声）；`MascotMood`（开心 / 思考 / 担心 / 困倦 / 疲惫，`MascotMood.of(code)` 取共用核心给出的神情）。点一下随机一种反应（蹦跳 / 眨眼 / 咯咯笑 / 惊讶 / 害羞 / 转圈 / 比心；疲惫时被戳会打起精神再蔫下去、打哈欠），长按比心飘爱心，连点五下转晕（螺旋眼 + 绕头星星），各配音效。`wilt` 为头顶嫩芽打蔫程度（茎弯、叶片下垂变小、变黄），默认按心情 |
+| `MascotBubble` / `XiaoTongTalk` | 对话气泡（白底圆角 + 底边尾巴，正文字号，可带按钮字）；会说话的小瞳：上方气泡区每约 9 秒弹出一句、显示约 5 秒，点小瞳换下一句，`mascotFraction` 让小瞳只占右侧、气泡用整行宽 |
+| `MascotSounds` | 小瞳音效（`shared/feedback/res/raw` 的 `eye_boop/hop/giggle/wow/spin/heart/dizzy/yawn/pop/sigh`，SoundPool），跟随系统设置的音效开关与音量 |
 | `EyeSplash` | 冷启动约 1.4 秒的启动动画：小瞳 + 渐变进度条 +「你的主动眼健康助手」，盖在已加载的首页上，不阻塞启动；系统减弱动态效果时缩短 |
 
 ### 栏

@@ -20,6 +20,8 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
@@ -138,11 +140,11 @@ fun DrawScope.drawBrandMark(colors: EyeColors, s: Float, origin: Offset = Offset
 fun mascotEyeCenter(center: Offset, size: Float, side: Int): Offset =
     Offset(center.x + side * size * 0.19f, center.y - size * 0.02f)
 
-/** 小瞳的眼睛：豆豆眼 / 笑眯眯（弯弯的 ^ ^）/ 眨一只眼（画面右侧那只弯起）。 */
-enum class MascotEyes { DOT, HAPPY, WINK }
+/** 小瞳的眼睛：豆豆眼 / 笑眯眯（弯弯的 ^ ^）/ 眨一只眼（画面右侧那只弯起）/ 转圈圈（晕乎乎）。 */
+enum class MascotEyes { DOT, HAPPY, WINK, SPIRAL }
 
-/** 小瞳的嘴：微笑 / 小圆口（惊讶、思考）/ 张嘴大笑 / 一字 / 波浪（担心）。 */
-enum class MascotMouth { SMILE, ROUND, GRIN, FLAT, WOBBLY }
+/** 小瞳的嘴：微笑 / 小圆口（惊讶、思考）/ 张嘴大笑 / 一字 / 波浪（担心）/ 打哈欠（张大的椭圆）。 */
+enum class MascotMouth { SMILE, ROUND, GRIN, FLAT, WOBBLY, YAWN }
 
 /**
  * 画吉祥物小瞳（v2 团子造型）。
@@ -154,6 +156,7 @@ enum class MascotMouth { SMILE, ROUND, GRIN, FLAT, WOBBLY }
  * @param eyes 眼睛样式（互动表情）
  * @param blush 腮红浓度 0..1（害羞时加深）
  * @param leafSway 嫩芽额外摆动角度（度）
+ * @param wilt 嫩芽打蔫程度 0 精神 .. 1 枯萎（茎弯、叶片下垂变小、颜色发黄），用眼负荷越高越蔫
  */
 fun DrawScope.drawMascot(
     colors: EyeColors,
@@ -167,23 +170,32 @@ fun DrawScope.drawMascot(
     mouth: MascotMouth? = null,
     blush: Float = 0.75f,
     leafSway: Float = 0f,
+    wilt: Float = 0f,
 ) {
     val s = size
     val top = center.y - s * 0.42f
-    // 双叶嫩芽（随 leafSway 绕茎根摆动）
-    rotate(leafSway, Offset(center.x, top + s * 0.02f)) {
+    val w = wilt.coerceIn(0f, 1f)
+    val leafColor = lerp(colors.brandStart, colors.warning, w * 0.7f)
+    // 双叶嫩芽（随 leafSway 绕茎根摆动；打蔫时整株歪向一侧、茎弯下、两片叶子耷拉）
+    rotate(leafSway + w * 20f, Offset(center.x, top + s * 0.02f)) {
+        val dx = w * s * 0.035f
+        val dy = w * s * 0.035f
         drawPath(
             Path().apply {
                 moveTo(center.x, top + s * 0.02f)
-                quadraticBezierTo(center.x + s * 0.005f, top - s * 0.05f, center.x + s * 0.015f, top - s * 0.1f)
+                quadraticBezierTo(center.x + s * 0.005f, top - s * 0.05f - w * s * 0.01f, center.x + s * 0.015f + dx, top - s * 0.1f + dy)
             },
-            colors.brandStart, style = Stroke(width = s * 0.035f, cap = StrokeCap.Round)
+            leafColor, style = Stroke(width = s * 0.035f, cap = StrokeCap.Round)
         )
-        rotate(25f, Offset(center.x - s * 0.06f, top - s * 0.11f)) {
-            drawOval(colors.brandStart, Offset(center.x - s * 0.15f, top - s * 0.155f), Size(s * 0.18f, s * 0.09f))
+        val shrink = 1f - 0.15f * w
+        // 平移之后的坐标系里，旋转支点仍是叶片原来的连接处
+        val left = Offset(center.x - s * 0.06f, top - s * 0.11f)
+        withTransform({ translate(dx, dy); rotate(25f - w * 60f, left); scale(shrink, shrink, left) }) {
+            drawOval(leafColor, Offset(center.x - s * 0.15f, top - s * 0.155f), Size(s * 0.18f, s * 0.09f))
         }
-        rotate(-30f, Offset(center.x + s * 0.09f, top - s * 0.14f)) {
-            drawOval(colors.brandStart, Offset(center.x - s * 0.01f, top - s * 0.19f), Size(s * 0.2f, s * 0.1f))
+        val right = Offset(center.x + s * 0.09f, top - s * 0.14f)
+        withTransform({ translate(dx, dy); rotate(-30f + w * 65f, right); scale(shrink, shrink, right) }) {
+            drawOval(leafColor, Offset(center.x - s * 0.01f, top - s * 0.19f), Size(s * 0.2f, s * 0.1f))
         }
     }
     // 团子头 + 顶部柔光
@@ -200,6 +212,18 @@ fun DrawScope.drawMascot(
     val open = (1f - lid).coerceIn(0f, 1f)
     for (side in listOf(-1, 1)) {
         val base = mascotEyeCenter(center, s, side)
+        if (eyes == MascotEyes.SPIRAL) {
+            // 晕乎乎：由内向外转三圈的螺旋
+            drawPath(Path().apply {
+                for (i in 0..36) {
+                    val a = i * 0.52f * side
+                    val r = s * (0.006f + 0.0015f * i)
+                    val q = Offset(base.x + r * kotlin.math.cos(a), base.y + r * kotlin.math.sin(a))
+                    if (i == 0) moveTo(q.x, q.y) else lineTo(q.x, q.y)
+                }
+            }, colors.ink, style = Stroke(width = s * 0.018f, cap = StrokeCap.Round))
+            continue
+        }
         val happy = eyes == MascotEyes.HAPPY || (eyes == MascotEyes.WINK && side == 1)
         if (happy) {
             // 笑眯眯：向上弯的弧线 ^
@@ -258,6 +282,12 @@ fun DrawScope.drawMascot(
             clipPath(mouthPath) {
                 drawOval(colors.accent, Offset(center.x - s * 0.035f, mouthY + s * 0.025f), Size(s * 0.07f, s * 0.05f))
             }
+        }
+        MascotMouth.YAWN -> {
+            // 打哈欠：张大的竖椭圆，里面一点舌头
+            val oval = Path().apply { addOval(androidx.compose.ui.geometry.Rect(center.x - s * 0.05f, mouthY - s * 0.025f, center.x + s * 0.05f, mouthY + s * 0.1f)) }
+            drawPath(oval, colors.ink)
+            clipPath(oval) { drawOval(colors.accent, Offset(center.x - s * 0.035f, mouthY + s * 0.05f), Size(s * 0.07f, s * 0.06f)) }
         }
         MascotMouth.FLAT -> drawLine(colors.ink, Offset(center.x - s * 0.04f, mouthY + s * 0.02f),
             Offset(center.x + s * 0.04f, mouthY + s * 0.02f), s * 0.022f, StrokeCap.Round)

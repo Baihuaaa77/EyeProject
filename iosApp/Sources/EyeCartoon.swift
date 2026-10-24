@@ -1,10 +1,10 @@
 import SwiftUI
 
-/// 小瞳的眼睛：豆豆眼 / 笑眯眯（弯弯的 ^ ^）/ 眨一只眼（画面右侧那只弯起）。
-enum MascotEyes { case dot, happy, wink }
+/// 小瞳的眼睛：豆豆眼 / 笑眯眯（弯弯的 ^ ^）/ 眨一只眼（画面右侧那只弯起）/ 转圈圈（晕乎乎）。
+enum MascotEyes { case dot, happy, wink, spiral }
 
-/// 小瞳的嘴：微笑 / 小圆口（惊讶、思考）/ 张嘴大笑 / 一字 / 波浪（担心）。
-enum MascotMouth { case smile, round, grin, flat, wobbly }
+/// 小瞳的嘴：微笑 / 小圆口（惊讶、思考）/ 张嘴大笑 / 一字 / 波浪（担心）/ 打哈欠（张大的椭圆）。
+enum MascotMouth { case smile, round, grin, flat, wobbly, yawn }
 
 /// 卡通绘制原语：逐项移植安卓 core:ui EyeBrand.kt（drawMascot / drawMitten / drawCartoonPhone / drawTumblingE），
 /// 小瞳形象、测试演示与注视目标共用，保证两端一致。
@@ -28,21 +28,33 @@ enum Cartoon {
 
     /// 小瞳：[size] 为头宽；[gaze] −1…1 平移豆豆眼；[lid] 0 睁开…1 闭合（<0.2 睁开度画闭眼弧线）；[wide] >1 睁大。
     /// [eyes] / [mouth] 为互动表情（与安卓 MascotEyes / MascotMouth 一致，mouth 为 nil 时按 smile 画微笑或小圆口）；
-    /// [blush] 腮红浓度，[leafSway] 嫩芽额外摆动角度（度）。
+    /// [blush] 腮红浓度，[leafSway] 嫩芽额外摆动角度（度），[wilt] 嫩芽打蔫程度 0 精神…1 枯萎（茎弯、叶片下垂变小、颜色发黄）。
     static func mascot(_ ctx: GraphicsContext, center c: CGPoint, size s: CGFloat, gaze: CGPoint = .zero,
                        lid: CGFloat = 0, wide: CGFloat = 1, smile: Bool = true, eyes: MascotEyes = .dot,
-                       mouth: MascotMouth? = nil, blush: CGFloat = 0.75, leafSway: Double = 0) {
+                       mouth: MascotMouth? = nil, blush: CGFloat = 0.75, leafSway: Double = 0, wilt: CGFloat = 0) {
         let top = c.y - s * 0.42
-        // 双叶嫩芽（随 leafSway 绕茎根摆动）
-        rotated(ctx, leafSway, around: CGPoint(x: c.x, y: top + s * 0.02)) { sprout in
+        let w = min(1, max(0, wilt))
+        let dx = w * s * 0.035, dy = w * s * 0.035
+        let shrink = 1 - 0.15 * w
+        // 叶色：主色上叠一层琥珀色，越蔫越黄（与安卓 lerp(brandStart, warning, 0.7·wilt) 一致）
+        func paint(_ layer: GraphicsContext, _ path: Path) {
+            layer.fill(path, with: .color(EyeStyle.brandStart))
+            if w > 0 { layer.fill(path, with: .color(EyeStyle.warning.opacity(Double(w * 0.7)))) }
+        }
+        // 双叶嫩芽（随 leafSway 绕茎根摆动；打蔫时整株歪向一侧、茎弯下、两片叶子耷拉）
+        rotated(ctx, leafSway + Double(w * 20), around: CGPoint(x: c.x, y: top + s * 0.02)) { sprout in
             var stem = Path(); stem.move(to: CGPoint(x: c.x, y: top + s * 0.02))
-            stem.addQuadCurve(to: CGPoint(x: c.x + s * 0.015, y: top - s * 0.1), control: CGPoint(x: c.x + s * 0.005, y: top - s * 0.05))
-            sprout.stroke(stem, with: .color(EyeStyle.brandStart), style: StrokeStyle(lineWidth: s * 0.035, lineCap: .round))
-            rotated(sprout, 25, around: CGPoint(x: c.x - s * 0.06, y: top - s * 0.11)) {
-                $0.fill(oval(CGPoint(x: c.x - s * 0.15, y: top - s * 0.155), CGSize(width: s * 0.18, height: s * 0.09)), with: .color(EyeStyle.brandStart))
+            stem.addQuadCurve(to: CGPoint(x: c.x + s * 0.015 + dx, y: top - s * 0.1 + dy), control: CGPoint(x: c.x + s * 0.005, y: top - s * 0.05 - w * s * 0.01))
+            let stroke = StrokeStyle(lineWidth: s * 0.035, lineCap: .round)
+            sprout.stroke(stem, with: .color(EyeStyle.brandStart), style: stroke)
+            if w > 0 { sprout.stroke(stem, with: .color(EyeStyle.warning.opacity(Double(w * 0.7))), style: stroke) }
+            let left = CGPoint(x: c.x - s * 0.06 + dx, y: top - s * 0.11 + dy)
+            leaf(sprout, pivot: left, degrees: Double(25 - w * 60), scale: shrink, offset: CGSize(width: dx, height: dy)) {
+                paint($0, oval(CGPoint(x: c.x - s * 0.15, y: top - s * 0.155), CGSize(width: s * 0.18, height: s * 0.09)))
             }
-            rotated(sprout, -30, around: CGPoint(x: c.x + s * 0.09, y: top - s * 0.14)) {
-                $0.fill(oval(CGPoint(x: c.x - s * 0.01, y: top - s * 0.19), CGSize(width: s * 0.2, height: s * 0.1)), with: .color(EyeStyle.brandStart))
+            let right = CGPoint(x: c.x + s * 0.09 + dx, y: top - s * 0.14 + dy)
+            leaf(sprout, pivot: right, degrees: Double(-30 + w * 65), scale: shrink, offset: CGSize(width: dx, height: dy)) {
+                paint($0, oval(CGPoint(x: c.x - s * 0.01, y: top - s * 0.19), CGSize(width: s * 0.2, height: s * 0.1)))
             }
         }
         // 团子头 + 顶部柔光
@@ -56,6 +68,18 @@ enum Cartoon {
         let open = min(1, max(0, 1 - lid))
         for side: CGFloat in [-1, 1] {
             let base = mascotEyeCenter(c, s, side)
+            if eyes == .spiral {
+                // 晕乎乎：由内向外转三圈的螺旋
+                var spiral = Path()
+                for i in 0...36 {
+                    let a = CGFloat(i) * 0.52 * side
+                    let r = s * (0.006 + 0.0015 * CGFloat(i))
+                    let q = CGPoint(x: base.x + r * cos(a), y: base.y + r * sin(a))
+                    if i == 0 { spiral.move(to: q) } else { spiral.addLine(to: q) }
+                }
+                ctx.stroke(spiral, with: .color(EyeStyle.ink), style: StrokeStyle(lineWidth: s * 0.018, lineCap: .round, lineJoin: .round))
+                continue
+            }
             let happy = eyes == .happy || (eyes == .wink && side == 1)
             if happy {
                 // 笑眯眯：向上弯的弧线 ^
@@ -105,6 +129,13 @@ enum Cartoon {
             var inner = ctx
             inner.clip(to: path)
             inner.fill(oval(CGPoint(x: c.x - s * 0.035, y: mouthY + s * 0.025), CGSize(width: s * 0.07, height: s * 0.05)), with: .color(EyeStyle.accent))
+        case .yawn:
+            // 打哈欠：张大的竖椭圆，里面一点舌头
+            let path = Path(ellipseIn: CGRect(x: c.x - s * 0.05, y: mouthY - s * 0.025, width: s * 0.1, height: s * 0.125))
+            ctx.fill(path, with: .color(EyeStyle.ink))
+            var inner = ctx
+            inner.clip(to: path)
+            inner.fill(oval(CGPoint(x: c.x - s * 0.035, y: mouthY + s * 0.05), CGSize(width: s * 0.07, height: s * 0.06)), with: .color(EyeStyle.accent))
         case .flat:
             var path = Path(); path.move(to: CGPoint(x: c.x - s * 0.04, y: mouthY + s * 0.02)); path.addLine(to: CGPoint(x: c.x + s * 0.04, y: mouthY + s * 0.02))
             ctx.stroke(path, with: .color(EyeStyle.ink), style: StrokeStyle(lineWidth: s * 0.022, lineCap: .round))
@@ -114,6 +145,16 @@ enum Cartoon {
             path.addQuadCurve(to: CGPoint(x: c.x + s * 0.06, y: mouthY + s * 0.025), control: CGPoint(x: c.x + s * 0.03, y: mouthY + s * 0.05))
             ctx.stroke(path, with: .color(EyeStyle.ink), style: StrokeStyle(lineWidth: s * 0.022, lineCap: .round))
         }
+    }
+
+    /// 叶片变换：先随弯下的茎平移 [offset]，再绕 [pivot] 旋转并缩放。
+    private static func leaf(_ ctx: GraphicsContext, pivot: CGPoint, degrees: Double, scale: CGFloat, offset: CGSize,
+                             _ draw: (GraphicsContext) -> Void) {
+        var layer = ctx
+        layer.translateBy(x: offset.width, y: offset.height)
+        let p = CGPoint(x: pivot.x - offset.width, y: pivot.y - offset.height)
+        layer.translateBy(x: p.x, y: p.y); layer.rotate(by: .degrees(degrees)); layer.scaleBy(x: scale, y: scale); layer.translateBy(x: -p.x, y: -p.y)
+        draw(layer)
     }
 
     /// 四角闪光（小瞳开心时的点缀），[size] 为半径。

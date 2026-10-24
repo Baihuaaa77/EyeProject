@@ -104,12 +104,9 @@ internal fun LiveEyeContent(
         Row(Modifier.fillMaxWidth().heightIn(min = 48.dp)
             .toggleable(state.running, role = Role.Switch) { on -> haptics.toggle(on); if (on) onStart() else onPause() },
             verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    EyeText("实时检测", style = typography.body, color = colors.textPrimary, fontWeight = FontWeight.SemiBold)
-                    EyeHelpButton("实时检测", LIVE_HELP)
-                }
-                if (!state.running) EyeText("打开前置摄像头，看看眨眼和观看距离", style = typography.bodySecondary, color = colors.textSecondary)
+            Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                EyeText("实时检测", style = typography.body, color = colors.textPrimary, fontWeight = FontWeight.SemiBold)
+                EyeHelpButton("实时检测", LIVE_HELP)
             }
             if (state.running) {
                 val (label, tone) = status(state)

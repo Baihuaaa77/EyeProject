@@ -17,14 +17,9 @@ struct LiveEyeSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 0) {
-                        Text("实时检测").font(EyeStyle.button).foregroundStyle(EyeStyle.text)
-                        HelpButton(title: "实时检测", text: Self.help)
-                    }
-                    if !model.running {
-                        Text("打开前置摄像头，看看眨眼和观看距离").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
-                    }
+                HStack(spacing: 0) {
+                    Text("实时检测").font(EyeStyle.button).foregroundStyle(EyeStyle.text)
+                    HelpButton(title: "实时检测", text: Self.help)
                 }.frame(maxWidth: .infinity, alignment: .leading)
                 if model.running { statusChip }
                 Toggle("", isOn: Binding(get: { model.running }, set: { on in

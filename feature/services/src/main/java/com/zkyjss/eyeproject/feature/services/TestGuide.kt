@@ -220,6 +220,17 @@ internal fun GuideIllustration(motion: GuideMotion, description: String, modifie
     GuideStage(scene, { if (reduced) scene.keyframe else live.value }, description, modifier.fillMaxWidth().height(200.dp))
 }
 
+/** 某个场景一遍的时长（毫秒），供轮播示范排时间。 */
+internal fun guideCycleMs(motion: GuideMotion): Int = sceneFor(motion).cycleMs
+
+/** 由外部给进度的无文字演示舞台（服务页轮播示范用）；系统「移除动画」时停在关键帧。 */
+@Composable
+internal fun GuideFrame(motion: GuideMotion, phase: () -> Float, description: String, modifier: Modifier = Modifier) {
+    val scene = remember(motion) { sceneFor(motion) }
+    val reduced = rememberReducedMotion()
+    GuideStage(scene, { if (reduced) scene.keyframe else phase() }, description, modifier)
+}
+
 // region 时间工具
 
 private fun clamp01(t: Float) = t.coerceIn(0f, 1f)

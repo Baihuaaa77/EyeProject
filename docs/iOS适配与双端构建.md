@@ -58,6 +58,17 @@ chmod +x gradlew scripts/ios/*.sh
 
 免费签名 7 天后失效，重新用 Sideloadly 安装即可，本机测试记录在覆盖安装时保留；同一 Apple ID 最多同时 3 个此类应用。应用只用相机、麦克风、语音识别，不需要付费账号才有的权限。
 
+## 首页减字、小瞳气泡与示范舞台（2026-10-24）
+
+- 首页去掉「个体档案」卡与「为你推荐」卡；「今日感受」改为与「视觉行为」同样的卡片标题；实时检测标题下的小字删除。
+- 推荐改为小瞳的对话气泡（不朗读）：共用 `EyeCareEngine` 生成 `tips`（先是今天的提醒，再是日常小贴士），每句约 5 秒，
+  可执行的带按钮字，点气泡直接去做；点小瞳换下一句。负荷分越高头顶嫩芽越蔫，负荷偏高时小瞳为新的「疲惫」神情（眼皮耷拉、黑眼圈）。
+- 小瞳更活泼：待机时自己蹦一下、打哈欠；点一下随机反应（新增转圈、比心），长按比心飘爱心，连点五下转晕；新增 6 个音效
+  （`eye_spin/heart/dizzy/yawn/pop/sigh`，`scripts/generate_feedback_sounds.py` 生成）。
+- 服务页去掉「我是小瞳」与说明文字，改为示范舞台：随机轮流播放三项自测的演示动画，气泡说「干眼自测：像平时一样眨眨眼」「跟着我一起做吧」等。
+- 两端对应：安卓 `core:ui` 的 `XiaoTong` / `XiaoTongTalk` / `MascotBubble`、`feature:services` 的 `DemoHero`；
+  苹果 `MascotStage.swift` 的 `MascotStage` / `MascotTalk` / `MascotBubble`、`EyeShell.swift` 的 `DemoHeroCard`。
+
 ## 首页与「我的」改版、主动护眼、小瞳与启动动画（2026-10-23）
 
 两端同一排版与文案，截图见 `docs/界面截图-2026-10-23/安卓/`。

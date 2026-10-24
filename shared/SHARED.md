@@ -14,7 +14,8 @@
   AI 解读 `explanationJson` / `explain` 与安卓 `ExplanationRepository` 同一规则；规则与安卓 `core:data` 一致；平台只实现 `HttpTransport`（URLSession）与 `CloudPlatform`（钥匙串、沙盒文件、本机记录与成员资料）。
   端到端测试在 `backend/server` 的 `CloudClientEndToEndTest`，直接对接真实服务端。
 - `screening/core/eyecare`：**主动护眼**（首页「感知 → 评估 → 归因 → 干预 → 反馈」）。`EyeCareLedger`（本机账本 JSON 格式，两端一致）、`EyeCareEngine.report`（`EyeCareContext` → `EyeCareReport`：
-  负荷分 0–100 与等级、闭环五段、读数、主要原因、推荐动作、就医建议、近 7 天趋势）、`EyeCareAdvice`（AI 综合建议的去标识摘要）、`EyeCareBridge`（苹果端 JSON 门面）、`EyeCareDays`（本地日期换算）。
+  负荷分 0–100 与等级、闭环五段、读数、主要原因、推荐动作、小瞳气泡提醒 `tips`、就医建议、近 7 天趋势；
+  神情：危险信号 CONCERNED、负荷偏高 TIRED、深夜 SLEEPY、轻松 HAPPY、其余 THINKING）、`EyeCareAdvice`（AI 综合建议的去标识摘要）、`EyeCareBridge`（苹果端 JSON 门面）、`EyeCareDays`（本地日期换算）。
   平台读不到的数据（`usageAccess = UNSUPPORTED`、`ambientSupported = false`）对应读数、规则与摘要字段整项不出现。
   负荷分为各因素加分之和（<30 轻松、<60 留意、其余偏累），**阈值是工程默认值，待眼科专家确认**：屏幕时间成人 4/6/8 小时（儿童 2/3/4 小时）加 10/18/25，最长连续 40/60/120 分钟（儿童 20/40/60）加 8/15/20，
   用屏 ≥2 小时且平均每 2 小时休息（白天离屏 ≥5 分钟）不到 1 次加 8，夜间（22 点后）用屏 ≥20/≥60 分钟加 5/10，眨眼 <12/<8 次每分加 8/15，观看距离 <30/<25 cm 加 8/12，头部偏转 >25° 加 4，每项不适 6（上限 18）；

@@ -291,6 +291,16 @@ class ServiceVisualTest {
         capture("21-系统设置")
     }
 
+    /** 服务页：没有「我是小瞳」的介绍文字，舞台轮流示范三项自测，上方气泡说这是哪项测试。 */
+    @Test fun servicesHeroPlaysTestDemosWithBubbles() {
+        compose.mainClock.autoAdvance = false
+        compose.setContent { EyeProjectTheme { ServicesScreen({}, {}, {}) } }
+        compose.mainClock.advanceTimeBy(1_500)
+        compose.onNodeWithText("我是小瞳").assertDoesNotExist()
+        compose.onNodeWithText("自测：", substring = true).assertExists()
+        capture("22-服务-小瞳示范")
+    }
+
     @Test fun smallScreenKeepsWarningsAndArrowActionsVisible() {
         compose.setContent {
             EyeProjectTheme {

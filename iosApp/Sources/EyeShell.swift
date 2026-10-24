@@ -192,7 +192,7 @@ private struct ServicesPage: View {
     var body: some View {
         PageScroll {
             PageHeader(title: "服务", openAccount: { navigate(.account) }, openSettings: { navigate(.settings) })
-            MascotHeroCard()
+            DemoHeroCard()
             Text("选择一项自测").font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text).padding(.top, 4)
             SelectCard(title: "干眼自测", subtitle: "约 2 分钟 · 自然眨眼与睁眼观察") {
                 ServiceGlyphView(glyph: .dryEye).frame(width: 28, height: 28)
@@ -208,16 +208,62 @@ private struct ServicesPage: View {
     }
 }
 
-/// 欢迎卡：小瞳待机（眨眼、张望、呼吸），点一下会互动。
-private struct MascotHeroCard: View {
+/// 示范舞台：小瞳随机轮流演示三项自测的做法（每种连播两遍），上方气泡先说这是哪项测试、再说「跟着我一起做吧」。
+/// 点舞台换下一个示范。与安卓 DemoHero 同一排版与文案；系统「减弱动态效果」时停在关键帧、气泡常显。
+private struct DemoHeroCard: View {
+    private struct Clip { let motion: GuideMotion; let name: String; let lines: [String] }
+    private static let clips = [
+        Clip(motion: .blink, name: "干眼自测", lines: ["干眼自测：像平时一样眨眨眼", "跟着我一起做吧"]),
+        Clip(motion: .cover, name: "眼位自测", lines: ["眼位自测：遮住一只眼，再移开", "找家人帮忙一起做哦"]),
+        Clip(motion: .near, name: "老视自测", lines: ["老视自测：看清 E 的开口朝哪边", "跟着我一起做吧"]),
+    ]
+    /// 每种示范连播的遍数。
+    private static let repeats: Double = 2
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var order = DemoHeroCard.clips.shuffled()
+    @State private var start = Date()
+    @State private var skip = 0
+
     var body: some View {
-        HStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("我是小瞳").font(EyeStyle.title).foregroundStyle(EyeStyle.text)
-                Text("每项测试前，我会先示范一遍怎么做。跟着做就好。").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
-            }.frame(maxWidth: .infinity, alignment: .leading)
-            MascotStage(mood: .happy, headScale: 0.72).frame(width: 112, height: 112)
-        }.padding(.leading, 20).padding(.trailing, 8).padding(.vertical, 16)
+        let lengths = order.map { GuideScene.scene($0.motion).cycle * Self.repeats }
+        TimelineView(.animation(paused: reduceMotion)) { timeline in
+            let (segment, elapsed) = segmentAt(timeline.date.timeIntervalSince(start), lengths)
+            let clip = order[(segment + skip) % order.count]
+            let scene = GuideScene.scene(clip.motion)
+            let k = elapsed / lengths[segment]
+            let line = reduceMotion ? 0 : (k >= 0.03 && k <= 0.42 ? 0 : (k >= 0.52 && k <= 0.92 ? 1 : -1))
+            let key = line >= 0 ? "\(clip.name)\(line)" : ""
+            VStack(spacing: 0) {
+                ZStack(alignment: .bottomLeading) {
+                    Color.clear
+                    if line >= 0 {
+                        MascotBubble(line: MascotLine(text: clip.lines[line]), tail: .start)
+                            .id(key)
+                            .transition(reduceMotion ? .opacity : .scale(scale: 0.6, anchor: UnitPoint(x: 0.15, y: 1)).combined(with: .opacity))
+                    }
+                }
+                .frame(height: 60).padding(.leading, 4)
+                .animation(reduceMotion ? .easeOut(duration: 0.18) : .spring(response: 0.35, dampingFraction: 0.55), value: key)
+                GuideFrame(motion: clip.motion, phase: reduceMotion ? scene.keyframe : elapsed.truncatingRemainder(dividingBy: scene.cycle) / scene.cycle)
+                    .contentShape(Rectangle())
+                    .onTapGesture { skip += 1; MascotSound.shared.play("eye_pop") }
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("小瞳正在示范\(clip.name)，点一下换下一个示范")
+                    .accessibilityAddTraits(.isButton)
+            }
+            .padding(12)
             .background(EyeStyle.primarySoft, in: RoundedRectangle(cornerRadius: 22))
+        }
+    }
+
+    /// 轮播时钟 [seconds] 落在第几段、该段已播多少秒。
+    private func segmentAt(_ seconds: Double, _ lengths: [Double]) -> (Int, Double) {
+        let total = lengths.reduce(0, +)
+        var t = max(0, seconds).truncatingRemainder(dividingBy: total)
+        for (i, length) in lengths.enumerated() {
+            if t < length || i == lengths.count - 1 { return (i, t) }
+            t -= length
+        }
+        return (0, 0)
     }
 }

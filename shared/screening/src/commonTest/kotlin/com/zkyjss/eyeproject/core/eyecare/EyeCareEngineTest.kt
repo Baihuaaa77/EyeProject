@@ -69,7 +69,11 @@ class EyeCareEngineTest {
         // 18 用屏 + 20 连续 + 8 休息少 + 10 夜间 + 15 眨眼少 + 12 太近 + 6 不适 + 6 暗处过亮 = 95
         assertEquals(95, report.score)
         assertEquals("HIGH", report.level)
-        assertEquals("SLEEPY", report.mood)
+        assertEquals("TIRED", report.mood)
+        assertEquals("眼睛累坏啦，闭上眼歇一会儿吧", report.tips.first().text)
+        assertTrue(report.tips.any { it.text == "把屏幕拿远一点" })
+        assertTrue(report.tips.filter { it.kind != null }.all { it.action != null })
+        assertEquals(report.tips.size, report.tips.map { it.text }.toSet().size)
         assertEquals("连续用眼太久", report.factors.first().title)
         val kinds = report.actions.map { it.kind }
         assertTrue(listOf("BREAK", "REMINDER", "BLINK", "DISTANCE", "BRIGHTNESS", "NIGHT", "TEST").all { it in kinds }, "$kinds")
