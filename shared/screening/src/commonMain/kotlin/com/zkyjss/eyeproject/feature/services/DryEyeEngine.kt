@@ -54,9 +54,18 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
     // region 被测者
 
     /** 选定被测者：带入其资料（含由出生年份换算的年龄），不再逐题填写问卷。 */
+    /** 选定被测者：带入长期资料，留在开始页回答测前快问（[PreTestCheck]），答完 [confirmCheck] 再进入准备。 */
     fun useSubject(profile: SubjectProfile) = _uiState.update {
-        it.copy(phase = DryEyePhase.Setup, fields = SubjectProfiles.testFields(profile, platform.epochMs()),
+        it.copy(fields = SubjectProfiles.testFields(profile, platform.epochMs()),
             subject = TestSubject(profile.id, profile.nickname, profile.relation), profileSkipped = false, error = null)
+    }
+
+    /** 测前快问答完：本次答案并入测试字段（只写入这次记录），进入准备。没答完返回 false。 */
+    fun confirmCheck(answers: Map<String, String>): Boolean {
+        val state = _uiState.value
+        if (state.phase != DryEyePhase.Profile || state.subject == null || !PreTestCheck.complete("DRY_EYE", answers)) return false
+        _uiState.update { it.copy(phase = DryEyePhase.Setup, fields = it.fields + PreTestCheck.clean("DRY_EYE", answers), error = null) }
+        return true
     }
 
     /** 不选成员直接测试；症状相关的风险判断按「未报告症状」处理，记录中注明跳过。 */

@@ -10,7 +10,6 @@ internal object HealthProfileFields {
         key, optional = true, inputKind = QuestionInput.DATE, placeholder = "如：2026-10-20", maxLength = 10,
         visibleWhen = visible, validate = ::validDate,
     )
-    private val medication: (Map<String, String>) -> Boolean = { it["近期眼部用药"] in setOf("人工泪液", "其他眼药水") }
     private val contacts: (Map<String, String>) -> Boolean = { it["佩戴隐形眼镜史"] in setOf("以前戴过", "现在在戴") }
 
     val measurements = ProfileSection("视力与验光记录", buildList {
@@ -25,9 +24,10 @@ internal object HealthProfileFields {
         }
     })
     val histories = ProfileSection("用药、隐形眼镜与家族史", listOf(
-        Question("眼药水名称", optional = true, visibleWhen = medication, placeholder = "照药盒填写，不清楚可留空", maxLength = 100),
-        Question("眼药水使用频次", optional = true, visibleWhen = medication, placeholder = "如：每日 3 次", maxLength = 100),
-        date("眼药水开始日期", medication), date("眼药水结束日期", medication),
+        // 常用眼药水的长期记录（这几天是否在用改为测前现问，见 PreTestCheck）
+        Question("眼药水名称", "常用眼药水名称", optional = true, placeholder = "照药盒填写，没有可留空", maxLength = 100),
+        Question("眼药水使用频次", optional = true, placeholder = "如：每日 3 次", maxLength = 100),
+        date("眼药水开始日期"), date("眼药水结束日期"),
         Question("隐形眼镜类型", options = listOf("软性镜片", "硬性透气镜片（RGP）", "角膜塑形镜（OK 镜）", "不清楚"), optional = true, visibleWhen = contacts),
         Question("隐形眼镜更换周期", options = listOf("日抛", "双周抛", "月抛", "季抛", "年抛", "其他", "不清楚"), optional = true, visibleWhen = contacts),
         Question("隐形眼镜每日佩戴时长", "隐形眼镜每天戴多久？", options = listOf("不到 4 小时", "4–8 小时", "8 小时以上", "仅夜间佩戴", "不清楚"), optional = true, visibleWhen = contacts),

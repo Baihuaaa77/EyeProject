@@ -135,7 +135,17 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
     fun useSubject(profile: SubjectProfile) {
         _state.update { it.copy(fields = SubjectProfiles.testFields(profile, platform.epochMs()),
             subject = TestSubject(profile.id, profile.nickname, profile.relation), profileSkipped = false, warning = null) }
-        if (_state.value.kind != ScreeningKind.PRESBYOPIA) nextFromProfile()
+        // 老视还要选戴镜方式；有测前快问的（眼位）答完 [confirmCheck] 再继续
+        if (_state.value.kind != ScreeningKind.PRESBYOPIA && !PreTestCheck.needed(_state.value.kind.name)) nextFromProfile()
+    }
+
+    /** 测前快问答完：本次答案并入测试字段（只写入这次记录），进入环境检查。没答完返回 false。 */
+    fun confirmCheck(answers: Map<String, String>): Boolean {
+        val kind = _state.value.kind.name
+        if (_state.value.step != ScreeningStep.PROFILE || _state.value.subject == null || !PreTestCheck.complete(kind, answers)) return false
+        _state.update { it.copy(fields = it.fields + PreTestCheck.clean(kind, answers)) }
+        nextFromProfile()
+        return _state.value.step == ScreeningStep.ENVIRONMENT
     }
 
     fun nextFromProfile() {

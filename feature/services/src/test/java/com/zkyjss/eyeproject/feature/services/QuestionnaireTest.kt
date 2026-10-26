@@ -37,7 +37,7 @@ class QuestionnaireTest {
         verifyMultipleChoice("既往眼病", "没有")
 
     private fun verifyMultipleChoice(key: String, none: String) {
-        val question = SubjectProfiles.questions.single { it.key == key }
+        val question = (SubjectProfiles.questions + PreTestCheck.questions("DRY_EYE")).single { it.key == key }
         val options = question.options!!
         val first = options[0]
         val second = options[1]

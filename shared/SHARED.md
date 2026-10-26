@@ -8,7 +8,7 @@
 - `domain`：原 core:domain 的眨眼、虹膜测距及系统端口；共用瞳孔／反光点算法、478 点索引与头姿转换。锁分别用 JVM synchronized 和 iOS NSRecursiveLock。
   `LiveEyeMonitor`：首页实时眼部检测视窗的状态（最近 8 秒 EAR 曲线、眨眼事件与次数、帧率、双眼关键点、断流判断、虹膜测距与头部偏转），眨眼判据与干眼测试同一份 `BlinkDetector.dryEyeEar()`；`session()` 汇总本次会话（≥20 秒：眨眼频率、平均距离、过近 <30 cm 占比、平均头部偏转）供主动护眼账本记录。两端首页共用。
   OCEC 睁闭眼模型的对比实验已结束（实测 EAR 足够），相关判据与代码已删除。
-- `screening`：被测者资料（原三项问卷合并，`SubjectProfiles`）、本机记录摘要（`LocalRecordCatalog`）、完整状态机、质量门控、分级、注视监督、视标尺寸、语音指令解析和记录格式。
+- `screening`：被测者资料（原三项问卷合并，`SubjectProfiles`，只放长期信息）、测前快问（`PreTestCheck`：干眼、眼位开始前现问两三个会随时间变化的问题，答案只写入本次记录；旧资料里存的这些值不再带入测试）、本机记录摘要（`LocalRecordCatalog`）、完整状态机、质量门控、分级、注视监督、视标尺寸、语音指令解析和记录格式。
 - `sync`：云端同步契约（v1 DTO、错误代码）、`RecordSummaries`（从记录 JSON 抽取病种/版本/风险/质量/特征/问卷年龄）、纯 Kotlin `Sha256`、`RecordSyncEngine`（端口 `RecordOutbox` / `RecordRemote`）、`Explanations`（AI 解读的去标识输入抽取、年龄段、缓存键与同意文案）。安卓 `core:network`/`core:data` 与 `backend/server` 共用；经 `screening` 导出到 iOS framework。
   `client/`：苹果端云端客户端 `CloudClient`（登录与令牌刷新、分项同意、成员与资料双向同步、记录按成员归属上传、导出、注销），
   AI 解读 `explanationJson` / `explain` 与安卓 `ExplanationRepository` 同一规则；规则与安卓 `core:data` 一致；平台只实现 `HttpTransport`（URLSession）与 `CloudPlatform`（钥匙串、沙盒文件、本机记录与成员资料）。

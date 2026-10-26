@@ -174,6 +174,22 @@ final class EyeRuntime: ObservableObject {
         _ = controller.useSubject(profileJson: s.jsonText)
         refresh()
     }
+    /// 当前测试有没有测前快问（共用 PreTestCheck；老视没有）。
+    var checkNeeded: Bool { controller.checkNeeded() }
+    /// 按已选答案应显示的测前快问题目（与资料编辑页同一题目格式）。
+    func checkQuestions(_ answers: [String: String]) -> [[String: Any]] {
+        (try? JSONSerialization.jsonObject(with: Data(controller.checkQuestionsJson(answersJson: Self.json(answers)).utf8))) as? [[String: Any]] ?? []
+    }
+    func checkComplete(_ answers: [String: String]) -> Bool { controller.checkComplete(answersJson: Self.json(answers)) }
+    /// 测前快问答完：答案只写入本次记录，进入准备页。
+    func confirmCheck(_ answers: [String: String]) {
+        error = nil
+        if !controller.confirmCheck(answersJson: Self.json(answers)) { error = "请先回答完这几个问题，并确认资料里已填出生年份。" }
+        refresh()
+    }
+    private static func json(_ answers: [String: String]) -> String {
+        (try? JSONSerialization.data(withJSONObject: answers)).flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
+    }
     func proceed(mode: String) {
         controller.setMode(mode: mode)
         if !controller.proceedFromProfile() { error = "请先在资料里填好必需项，并选择这次戴哪副眼镜。" }

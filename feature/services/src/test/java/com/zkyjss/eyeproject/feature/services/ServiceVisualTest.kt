@@ -291,6 +291,33 @@ class ServiceVisualTest {
         capture("21-系统设置")
     }
 
+    /** 测前快问：选好人后只问这几天的情况（干眼两三题），答完才能开始；答案原样交给引擎。 */
+    @Test @Config(qualifiers = "zh-rCN-w390dp-h1400dp-mdpi")
+    fun preTestQuestionsAskOnlyWhatChanges() {
+        val me = SubjectProfile("me", "SELF", "我", mapOf("出生年份" to "1990"), 0L)
+        var confirmed: Map<String, String>? = null
+        compose.setContent {
+            EyeProjectTheme {
+                Column(Modifier.fillMaxSize().background(LocalEyeColors.current.appBackground).verticalScroll(rememberScrollState()).padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    SubjectPicker("DRY_EYE", listOf(me), "me", {}, {}, {}, nowMs = 1_792_000_000_000L)
+                    PreTestQuestions("DRY_EYE", "me") { confirmed = it }
+                }
+            }
+        }
+        compose.onNodeWithText("这几天眼睛有这些感觉吗？（可多选）").assertExists()
+        compose.onNodeWithText("这些感觉多久出现一次？").assertDoesNotExist()
+        compose.onNodeWithText("开始测试").assertIsNotEnabled()
+        compose.onNodeWithText("怕光").performScrollTo().performClick()
+        compose.onNodeWithText("这些感觉多久出现一次？").assertExists()
+        compose.onNodeWithText("有时").performScrollTo().performClick()
+        compose.onNodeWithText("比平时多").performScrollTo().performClick()
+        compose.onNodeWithText("人工泪液").performScrollTo().performClick()
+        capture("23-干眼-测前快问")
+        compose.onNodeWithText("开始测试").performScrollTo().performClick()
+        assertEquals(mapOf("干眼症状" to "怕光", "症状频率" to "有时", "近期用眼情况" to "比平时多", "近期眼部用药" to "人工泪液"), confirmed)
+    }
+
     /** 服务页：没有「我是小瞳」的介绍文字，舞台轮流示范三项自测，上方气泡说这是哪项测试。 */
     @Test fun servicesHeroPlaysTestDemosWithBubbles() {
         compose.mainClock.autoAdvance = false

@@ -32,7 +32,6 @@ class HealthProfileFieldsTest {
         val fields = mapOf("近期眼部用药" to "人工泪液", "眼药水开始日期" to "2026-10-20", "眼药水结束日期" to "2026-10-19")
         assertEquals("眼药水结束日期不能早于开始日期", SubjectProfiles.validationError(fields))
         assertNull(SubjectProfiles.validationError(fields + ("眼药水结束日期" to "2026-10-20")))
-        assertNull(SubjectProfiles.validationError(fields + ("近期眼部用药" to "没有")), "隐藏的历史输入不阻止清理和保存")
         val profile = SubjectProfile("me", "SELF", "我", fields, 0)
         val json = SubjectProfiles.toJson(listOf(profile))
         assertEquals(profile, SubjectProfiles.fromJson(json).single())
@@ -45,9 +44,9 @@ class HealthProfileFieldsTest {
         assertNull(SubjectProfiles.validationError(emptyMap()))
         val old = SubjectProfile("old", "SELF", "我", mapOf("出生年份" to "1980", "干眼症状" to "都没有"), 0)
         assertTrue(SubjectProfiles.missing("DRY_EYE", old, 1_792_000_000_000L).isEmpty())
-        val editor = SubjectProfiles.editorJson("""{"近期眼部用药":"人工泪液","佩戴隐形眼镜史":"现在在戴"}""")
-        assertTrue("眼药水名称" in editor); assertTrue("隐形眼镜类型" in editor)
+        val editor = SubjectProfiles.editorJson("""{"佩戴隐形眼镜史":"现在在戴"}""")
+        assertTrue("眼药水名称" in editor, "常用眼药水是长期记录，直接可填"); assertTrue("隐形眼镜类型" in editor)
         assertTrue("\"inputKind\":\"DECIMAL\"" in editor)
-        assertFalse("眼药水名称" in SubjectProfiles.editorJson("{}"))
+        assertFalse("隐形眼镜类型" in SubjectProfiles.editorJson("{}"))
     }
 }

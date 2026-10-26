@@ -64,12 +64,27 @@ class MobileScreeningController(
 
     /**
      * 选定被测者（[profileJson] 为 [SubjectProfiles.toJson] 数组中的一个对象），带入其资料。
-     * 老视还需 [setMode] 后调用 [proceedFromProfile]；其余测试直接进入准备页。返回是否已进入准备页。
+     * 老视还需 [setMode] 后调用 [proceedFromProfile]；有测前快问的测试答完调用 [confirmCheck]；
+     * 其余直接进入准备页。返回是否已进入准备页。
      */
     fun useSubject(profileJson: String): Boolean {
         val profile = SubjectProfiles.fromJson("[$profileJson]").firstOrNull() ?: return false
         if (kind == "DRY_EYE") dry.useSubject(profile) else screening.useSubject(profile)
-        return kind != "PRESBYOPIA" && proceedFromProfile()
+        return kind != "PRESBYOPIA" && !PreTestCheck.needed(kind) && proceedFromProfile()
+    }
+
+    /** 当前测试的测前快问（应显示的题目，JSON）；为空数组表示没有这一步。[answersJson] 为已选答案。 */
+    fun checkQuestionsJson(answersJson: String): String = PreTestCheck.questionsJson(kind, answersJson)
+
+    fun checkNeeded(): Boolean = PreTestCheck.needed(kind)
+
+    fun checkComplete(answersJson: String): Boolean = PreTestCheck.completeJson(kind, answersJson)
+
+    /** 测前快问答完：答案写入本次记录并进入准备页。没答完或资料不全返回 false。 */
+    fun confirmCheck(answersJson: String): Boolean {
+        val answers = PreTestCheck.decode(answersJson)
+        val ok = if (kind == "DRY_EYE") dry.confirmCheck(answers) else screening.confirmCheck(answers)
+        return ok && proceedFromProfile()
     }
 
     /** 这位成员做当前测试还缺的资料项（JSON 字符串数组）；为空可以开始。 */

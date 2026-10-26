@@ -38,7 +38,10 @@ object SubjectProfiles {
     const val BIRTH_YEAR = "出生年份"
     private const val AGE = "年龄"
 
-    /** 资料题目分组（编辑页按组显示）。全部可选；某项测试必需的见 [requiredKeys]。 */
+    /**
+     * 资料题目分组（编辑页按组显示）：只放长期不变的信息。全部可选；某项测试必需的见 [requiredKeys]。
+     * 症状、用药等会随时间变化的问题改在每次测试前现问，见 [PreTestCheck]。
+     */
     val sections: List<ProfileSection> = listOf(
         ProfileSection("基本信息", listOf(
             Question(BIRTH_YEAR, "出生年份", numeric = true, optional = true,
@@ -79,16 +82,6 @@ object SubjectProfiles {
             Question("睡眠时长", "每天大约睡多久？", listOf("不到 6 小时", "6–8 小时", "8 小时以上"), optional = true),
             Question("是否眼部化妆", "平时化眼妆（眼线、睫毛膏）吗？", listOf("不化", "偶尔", "经常"), optional = true),
         )),
-        ProfileSection("近期状况", listOf(
-            Question("干眼症状", "最近眼睛有这些感觉吗？",
-                listOf("眼睛发干、发涩", "像进了沙子", "有烧灼感", "看东西模糊，时好时坏", "怕光", "容易累", DRY_EYE_NO_SYMPTOM),
-                multiple = true, optional = true),
-            Question("症状频率", "这些感觉多久出现一次？", listOf("偶尔", "有时", "经常", "几乎总是"), optional = true,
-                visibleWhen = { f -> f["干眼症状"].orEmpty().split("、").any { it.isNotBlank() && it != DRY_EYE_NO_SYMPTOM } }),
-            Question("近期用眼情况", "最近用眼比平时多吗？", listOf("比平时少", "差不多", "比平时多", "多很多"), optional = true),
-            Question("近期眼部用药", "最近在用眼药水吗？", listOf("没有", "人工泪液", "其他眼药水", "不清楚"), optional = true),
-            Question("协助测试者", "测试时谁来帮忙？（孩子测眼位需要有人协助遮眼）", listOf("家长", "医生或护士", "自己完成", "其他"), optional = true),
-        )),
         HealthProfileFields.measurements,
         HealthProfileFields.histories,
     )
@@ -103,7 +96,7 @@ object SubjectProfiles {
         if (invalid != null) return "「${invalid.title}」填写有误，请按输入提示填写"
         val start = fields["眼药水开始日期"].orEmpty()
         val end = fields["眼药水结束日期"].orEmpty()
-        if (fields["近期眼部用药"] in setOf("人工泪液", "其他眼药水") && start.isNotBlank() && end.isNotBlank() && end < start)
+        if (start.isNotBlank() && end.isNotBlank() && end < start)
             return "眼药水结束日期不能早于开始日期"
         return null
     }
@@ -116,13 +109,10 @@ object SubjectProfiles {
         }.toMap()
     }.getOrDefault(emptyMap())
 
-    /** 各项测试开始前必须填好的项（评估规则会用到的）；其余项缺失时如实记为未填。 */
-    fun requiredKeys(kind: String, fields: Map<String, String>): List<String> = buildList {
+    /** 各项测试开始前资料里必须填好的项（评估规则会用到的长期信息）；症状等测前现问，见 [PreTestCheck]。 */
+    fun requiredKeys(kind: String, @Suppress("UNUSED_PARAMETER") fields: Map<String, String>): List<String> = buildList {
         add(BIRTH_YEAR)
-        when (kind) {
-            "DRY_EYE" -> { add("干眼症状"); if (questions.first { it.key == "症状频率" }.visibleWhen(fields)) add("症状频率") }
-            "PRESBYOPIA" -> { add("日常矫正方式"); add("屈光情况") }
-        }
+        if (kind == "PRESBYOPIA") { add("日常矫正方式"); add("屈光情况") }
     }
 
     /** 各项测试的适用年龄（与原问卷一致）。 */
@@ -153,9 +143,10 @@ object SubjectProfiles {
         return if (gaps.isEmpty() && age != null && age !in range) listOf("年龄 $age 岁不在本测试适用范围（${range.first} 岁以上）") else gaps
     }
 
-    /** 送进测试与记录的字段：资料原样 + 换算出的「年龄」。 */
+    /** 送进测试与记录的字段：资料原样 + 换算出的「年龄」；旧资料里存的随时变化项不带入（改为测前现问）。 */
     fun testFields(profile: SubjectProfile, nowMs: Long): Map<String, String> =
-        profile.fields.filterValues { it.isNotBlank() } + (age(profile.fields, nowMs)?.let { mapOf(AGE to it.toString()) } ?: emptyMap())
+        profile.fields.filter { (key, value) -> value.isNotBlank() && key !in PreTestCheck.VOLATILE_KEYS } +
+            (age(profile.fields, nowMs)?.let { mapOf(AGE to it.toString()) } ?: emptyMap())
 
     // region JSON（苹果端本机存储、资料编辑页与跨端传递）
 
@@ -167,14 +158,7 @@ object SubjectProfiles {
             (v as? JsonPrimitive)?.takeIf { it.isString }?.content?.let { k to it } }.toMap() }.getOrDefault(emptyMap())
         return RecordArray(sections.map { section -> RecordObject().apply {
             put("title", section.title)
-            put("questions", RecordArray(section.questions.filter { it.visibleWhen(fields) }.map { q -> RecordObject().apply {
-                put("key", q.key); put("title", q.title); put("options", q.options?.let(::RecordArray))
-                put("multiple", q.multiple); put("numeric", q.numeric)
-                put("inputKind", q.inputKind.name); put("placeholder", q.placeholder); put("maxLength", q.maxLength)
-                put("hints", RecordObject(q.hints)); put("exclusive", RecordArray(q.exclusive.toList()))
-                val value = fields[q.key].orEmpty()
-                put("valid", value.isBlank() || q.validate(value))
-            } }))
+            put("questions", RecordArray(section.questions.filter { it.visibleWhen(fields) }.map { it.editorJson(fields) }))
         } }).toString()
     }
 

@@ -15,7 +15,7 @@
   新记录展示保存时的报告快照和规则版本，旧记录只读已保存数值，均不重新评估历史风险。
 - `SubjectsScreen`：家庭成员列表（头像字、称呼、关系 · 年龄，未填资料时加「资料待完善」），点开进入 `SubjectEditScreen`；末行「添加家庭成员」。
 - `SubjectEditScreen` / `SubjectEditViewModel`：路由 `SubjectEditRoute(id)`（id 为空即新建）；称呼、关系 + 共享 `SubjectProfiles.sections` 分组题目（`EyeChoiceList`），追问随答案出现；
-  可删除家庭成员（「本人」不可删）。测试开始页缺资料时也由 app 导航到这里。选填验光记录、用药 / 隐形眼镜 / 家族史、近期状况，校验由共享 `HealthProfileFields` / `SubjectProfiles.validationError` 定义。
+  可删除家庭成员（「本人」不可删）。测试开始页缺资料时也由 app 导航到这里。选填验光记录、常用眼药水 / 隐形眼镜 / 家族史（只放长期信息；症状、用药等随时变化的问题改为每次测试前现问，见共用 `PreTestCheck`），校验由共享 `HealthProfileFields` / `SubjectProfiles.validationError` 定义。
 - `PermissionsScreen`：相机、麦克风、通知、精确闹钟、用屏统计（使用情况访问）逐项显示用途与是否已允许，点一下去系统对应设置页；回到本页自动刷新。
 - navigation/MineNavigation：`MineRoute`、`SubjectEditRoute`、`AccountRoute`、`RecordsRoute`、`SubjectsRoute`、`CloudSyncRoute`、`PermissionsRoute`；
   `mineScreen(navigation)`、`subjectEditScreen(onBack)`、`mineSubScreens(onBack, onOpenAccount, onOpenCloudSync, onEditSubject)`。

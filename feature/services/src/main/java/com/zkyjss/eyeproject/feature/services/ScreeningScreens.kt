@@ -234,13 +234,14 @@ private fun lightingLabel(s: ScreeningState): String = when {
     else -> "读取中"
 }
 
-/** 开始页：先选「这次测谁」（资料在「我的」维护）；老视选好人后再选这次戴哪副眼镜。 */
+/** 开始页：先选「这次测谁」（资料在「我的」维护）；眼位选好人后回答测前快问，老视选好人后再选这次戴哪副眼镜。 */
 @Composable
 internal fun ProfileContent(kind: ScreeningKind, s: ScreeningState, vm: ScreeningTestViewModel, onEditSubject: (String?) -> Unit) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
     val subjects by vm.subjects.collectAsStateWithLifecycle()
     SubjectPicker(kind.name, subjects, s.subject?.id, vm::useSubject, onEditSubject, vm::skipProfile)
+    if (PreTestCheck.needed(kind.name)) s.subject?.let { subject -> PreTestQuestions(kind.name, subject.id) { vm.confirmCheck(it) } }
     if (kind == ScreeningKind.PRESBYOPIA && s.subject != null) {
         Column(
             Modifier.fillMaxWidth().clip(EyeShapes.panel).background(colors.panelBackground).padding(20.dp),

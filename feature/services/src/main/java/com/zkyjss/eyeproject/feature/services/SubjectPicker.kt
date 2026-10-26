@@ -8,7 +8,15 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -19,12 +27,13 @@ import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
 import com.zkyjss.eyeproject.core.ui.component.EyeButton
 import com.zkyjss.eyeproject.core.ui.component.EyeButtonRole
+import com.zkyjss.eyeproject.core.ui.component.EyeChoiceList
 import com.zkyjss.eyeproject.core.ui.component.EyeOptionRow
 import com.zkyjss.eyeproject.core.ui.component.EyeText
 
 /**
- * 测试开始页「这次测谁？」：替代原先的逐题问卷。资料在「我的 → 家庭成员」维护；
- * 缺少本测试必需项的成员点开即去补充，补好返回本页即可开始。与苹果端一致。
+ * 测试开始页「这次测谁？」：长期资料在「我的 → 家庭成员」维护，测试时自动带入；
+ * 缺少本测试必需项的成员点开即去补充。会随时间变化的几个问题选人后在下方现问（[PreTestQuestions]）。与苹果端一致。
  */
 @Composable
 internal fun SubjectPicker(
@@ -61,5 +70,34 @@ internal fun SubjectPicker(
             }
             EyeText("不选成员时，依赖年龄和症状的判断会注明无法评估。", style = typography.bodySecondary, color = colors.textSecondary)
         }
+    }
+}
+
+/**
+ * 测前快问（[PreTestCheck]）：选好人后在开始页下方问两三个这几天的情况，答完「开始测试」。
+ * 答案只写入这次记录；换人时清空重答。与苹果端 PreTestCheckView 同一排版与文案。
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+internal fun PreTestQuestions(kind: String, subjectId: String, onConfirm: (Map<String, String>) -> Unit) {
+    val colors = LocalEyeColors.current
+    val typography = LocalEyeTypography.current
+    var answers by remember(subjectId) { mutableStateOf(emptyMap<String, String>()) }
+    val requester = remember { BringIntoViewRequester() }
+    LaunchedEffect(subjectId) { requester.bringIntoView() }
+    Column(
+        Modifier.fillMaxWidth().bringIntoViewRequester(requester).clip(EyeShapes.panel).background(colors.panelBackground).padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        EyeText("这次的情况", style = typography.title, color = colors.textPrimary)
+        PreTestCheck.visible(kind, answers).forEach { question ->
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                EyeText(question.title + if (question.multiple) "（可多选）" else "", style = typography.subtitle, color = colors.textPrimary)
+                EyeChoiceList(question.options.orEmpty(), answers[question.key].orEmpty(), question.multiple,
+                    { value -> answers = answers + (question.key to value) }, question.hints, question.exclusive)
+            }
+        }
+        EyeButton("开始测试", EyeButtonRole.PRIMARY, { onConfirm(PreTestCheck.clean(kind, answers)) }, Modifier.fillMaxWidth(),
+            enabled = PreTestCheck.complete(kind, answers))
     }
 }

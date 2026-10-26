@@ -77,7 +77,8 @@ class DryEyeProtocolTest {
 
     /** 原文研究内容一（1）的问卷条目，现在都在「我的」资料里（年龄由出生年份换算）。 */
     @Test fun profileCoversDocumentItems() {
-        val labels = SubjectProfiles.questions.map { it.key }
+        // 长期资料在「我的」维护，症状、用眼、用药为测前快问
+        val labels = (SubjectProfiles.questions + PreTestCheck.questions("DRY_EYE")).map { it.key }
         listOf("出生年份", "性别", "既往眼病", "眼部手术", "眼外伤史", "佩戴隐形眼镜史", "近期眼部用药", "日常矫正方式",
             "屈光情况", "基础视力", "近期用眼情况", "每日电子产品使用", "是否眼部化妆", "睡眠时长", "全身疾病", "干眼症状")
             .forEach { assertTrue("缺少 $it", it in labels) }

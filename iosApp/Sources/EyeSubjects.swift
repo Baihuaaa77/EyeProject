@@ -275,7 +275,8 @@ struct SubjectEditView: View {
     }
 }
 
-/// 测试开始页「这次测谁？」：替代原先的逐题问卷；缺必需项的成员点开即去补充。与安卓一致。
+/// 测试开始页「这次测谁？」：长期资料自动带入，缺必需项的成员点开即去补充；
+/// 会随时间变化的几个问题选人后在下方现问（PreTestCheckView）。与安卓一致。
 struct SubjectPickerView: View {
     @ObservedObject var runtime: EyeRuntime
     @ObservedObject var store = SubjectStore.shared
@@ -302,6 +303,9 @@ struct SubjectPickerView: View {
                 }.buttonStyle(EyeCardButtonStyle(selected: chosenId == s.id))
             }
             Button("添加家庭成员") { editing = SubjectStore.newMember() }.buttonStyle(EyeButtonStyle(role: .secondary))
+            if let chosenId, runtime.checkNeeded {
+                PreTestCheckView(runtime: runtime).id(chosenId)
+            }
             if runtime.kind == "PRESBYOPIA" && chosenId != nil {
                 Text("这次测试戴哪副眼镜？").font(EyeStyle.subtitle)
                 Picker("测试模式", selection: $mode) {
@@ -317,6 +321,58 @@ struct SubjectPickerView: View {
             }.frame(maxWidth: .infinity)
         }.fullScreenCover(item: $editing) { item in
             NavigationStack { SubjectEditView(item: item, modal: true) }.tint(EyeStyle.primary)
+        }
+    }
+}
+
+/// 测前快问（共用 PreTestCheck）：选好人后问两三个这几天的情况，答完「开始测试」。答案只写入这次记录；
+/// 换人时整块重建、清空重答。与安卓 PreTestQuestions 同一排版与文案。
+struct PreTestCheckView: View {
+    @ObservedObject var runtime: EyeRuntime
+    @State private var answers: [String: String] = [:]
+
+    var body: some View {
+        let questions = runtime.checkQuestions(answers)
+        VStack(alignment: .leading, spacing: 16) {
+            Text("这次的情况").font(EyeStyle.title).foregroundStyle(EyeStyle.text)
+            ForEach(Array(questions.enumerated()), id: \.offset) { _, q in question(q) }
+            if let error = runtime.error { Text(error).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.danger) }
+            Button("开始测试") { EyeHaptics.tap(); runtime.confirmCheck(answers) }
+                .buttonStyle(EyeButtonStyle()).disabled(!runtime.checkComplete(answers))
+        }
+        .padding(20).frame(maxWidth: .infinity, alignment: .leading)
+        .background(EyeStyle.panel, in: RoundedRectangle(cornerRadius: 22))
+    }
+
+    @ViewBuilder private func question(_ q: [String: Any]) -> some View {
+        let key = q["key"] as? String ?? ""
+        let value = answers[key] ?? ""
+        let options = q["options"] as? [String] ?? []
+        let multiple = q["multiple"] as? Bool == true
+        VStack(alignment: .leading, spacing: 8) {
+            Text((q["title"] as? String ?? key) + (multiple ? "（可多选）" : "")).font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text)
+            ForEach(options, id: \.self) { option in
+                let selected = ("、" + value + "、").contains("、" + option + "、")
+                Button {
+                    EyeHaptics.tap()
+                    if multiple {
+                        let exclusive = Set(q["exclusive"] as? [String] ?? [])
+                        var chosen = options.filter { ("、" + value + "、").contains("、" + $0 + "、") }
+                        if selected { chosen.removeAll { $0 == option } }
+                        else if exclusive.contains(option) { chosen = [option] }
+                        else { chosen.removeAll { exclusive.contains($0) }; chosen.append(option) }
+                        answers[key] = chosen.joined(separator: "、")
+                    } else {
+                        answers[key] = selected ? "" : option
+                    }
+                } label: {
+                    HStack {
+                        Text(option).foregroundStyle(EyeStyle.text)
+                        Spacer()
+                        if selected { Image(systemName: "checkmark").foregroundStyle(EyeStyle.primary) }
+                    }
+                }.buttonStyle(EyeCardButtonStyle(selected: selected))
+            }
         }
     }
 }

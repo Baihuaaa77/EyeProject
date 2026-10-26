@@ -38,6 +38,7 @@ class DryEyeTestViewModel @Inject constructor(
         subjectRepository.subjects.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     fun useSubject(profile: SubjectProfile) = engine.useSubject(profile)
     fun skipProfile() = engine.skipProfile()
+    fun confirmCheck(answers: Map<String, String>) = engine.confirmCheck(answers)
     fun permissionDenied() = engine.permissionDenied()
     fun markTrialPresented(trialId: Int, timestampMs: Long) = engine.markTrialPresented(trialId, timestampMs)
     fun startTest() = engine.startTest()
