@@ -2,6 +2,7 @@ package com.zkyjss.eyeproject.feature.home
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.view.PreviewView
@@ -41,9 +42,9 @@ import com.zkyjss.eyeproject.core.ui.component.*
 
 /**
  * 首页「视觉行为」卡里的实时检测：默认关闭，打开后镜像预览叠加双眼关键点（眼睑 6 点 + 虹膜圈），旁边是眨眼次数、
- * 观看距离与当前状态，下方是最近 8 秒 EAR 曲线，每次眨眼画一条绿线。离开首页、退到后台即关闭相机，
- * 关闭时本次的眨眼频率与观看距离记入主动护眼账本。与苹果端 LiveEyeSection 同一排版。
- * [startRequests] 每增加一次（「为你推荐」里点了「去检测」）就打开一次。
+ * 观看距离与当前状态，下方是最近 8 秒 EAR 曲线，每次眨眼画一条绿线。离开首页、退到后台后摘下预览、在后台继续检测
+ * （通知栏常驻），直到关掉开关、点通知里的「停止」或从最近任务划掉应用；统计按段记入主动护眼账本。
+ * 与苹果端 LiveEyeSection 同一排版（苹果端退到后台即停止）。[startRequests] 每增加一次（气泡里点了「去检测」）就打开一次。
  */
 @Composable
 internal fun LiveEyeSection(startRequests: Int = 0, viewModel: LiveEyeViewModel = hiltViewModel()) {
@@ -53,37 +54,43 @@ internal fun LiveEyeSection(startRequests: Int = 0, viewModel: LiveEyeViewModel 
     var granted by remember {
         mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)
     }
-    // 用户希望开启：默认关闭，打开后切页面再回来仍保持，重启应用恢复关闭
-    var wanted by rememberSaveable { mutableStateOf(false) }
     var denied by remember { mutableStateOf(false) }
+    val notifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
     val preview = remember {
         PreviewView(context).apply {
             scaleType = PreviewView.ScaleType.FILL_CENTER
             implementationMode = PreviewView.ImplementationMode.COMPATIBLE
         }
     }
-    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
-        granted = ok; denied = !ok; if (ok) wanted = true
+    val begin = {
+        viewModel.start(owner, preview)
+        // 后台检测靠常驻通知提示；Android 13 起需要通知权限（不给也照常检测，只是通知栏不显示）
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) notifications.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
-    val start = { if (granted) wanted = true else permission.launch(Manifest.permission.CAMERA) }
+    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
+        granted = ok; denied = !ok; if (ok) begin()
+    }
+    val start = { if (granted) begin() else permission.launch(Manifest.permission.CAMERA) }
     LaunchedEffect(startRequests) { if (startRequests > 0) start() }
-    DisposableEffect(owner, wanted, granted) {
+    DisposableEffect(owner) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_RESUME -> if (wanted && granted) viewModel.start(owner, preview)
-                Lifecycle.Event.ON_PAUSE -> viewModel.stop()
+                Lifecycle.Event.ON_RESUME -> viewModel.attach(owner, preview)
+                Lifecycle.Event.ON_PAUSE -> viewModel.detach()
                 else -> Unit
             }
         }
-        // 加入观察者时会立即补发到当前状态（已在前台即收到 ON_RESUME），开关变化后随之启停
+        // 加入观察者时会立即补发到当前状态（已在前台且正在检测即接上预览）
         owner.lifecycle.addObserver(observer)
-        onDispose { owner.lifecycle.removeObserver(observer); viewModel.stop() }
+        onDispose { owner.lifecycle.removeObserver(observer); viewModel.detach() }
     }
     LiveEyeContent(
         state = state,
         note = if (denied) "未获得相机权限，请在系统设置中允许后再开启" else state.error,
         onStart = start,
-        onPause = { wanted = false },
+        onPause = viewModel::stop,
     ) { AndroidView(factory = { preview }, modifier = Modifier.fillMaxSize()) }
 }
 
@@ -141,7 +148,8 @@ internal fun LiveEyeContent(
 }
 
 internal const val LIVE_HELP = "用前置摄像头实时检测双眼关键点：数眨眼次数、估计眼睛到屏幕的距离和头部姿态，结果计入「视觉行为」。" +
-    "画面只在本机实时处理，不保存、不上传；关闭开关或离开首页即停止相机。"
+    "打开后离开首页或退到后台也会继续检测，通知栏会一直显示；关掉开关、点通知里的「停止」或从最近任务划掉应用即停止，熄屏时自动暂停。" +
+    "画面只在本机实时处理，不保存、不上传。"
 
 private fun status(state: LiveEyeUiState): Pair<String, StatusTone> {
     val s = state.snapshot

@@ -11,6 +11,9 @@ import android.os.Build
 object NotificationChannels {
     const val REMINDER_CHANNEL_ID = "eye_care_reminders"
     const val REMINDER_NOTIFICATION_ID = 3201
+    /** 首页实时检测在后台继续时的常驻通知（前台服务） */
+    const val LIVE_EYE_CHANNEL_ID = "live_eye_detection"
+    const val LIVE_EYE_NOTIFICATION_ID = 3202
 
     /** 升级安装后清理旧版本注册的服务渠道，保留定时提醒渠道。 */
     fun clearLegacyChannels(context: Context) {
@@ -38,4 +41,13 @@ object NotificationChannels {
         context.getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
     }
 
+    /** 后台实时检测：静默、低优先级，只用于前台服务的常驻通知。 */
+    fun createLiveEyeChannel(context: Context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val channel = NotificationChannel(LIVE_EYE_CHANNEL_ID, "后台用眼检测", NotificationManager.IMPORTANCE_LOW).apply {
+            description = "实时检测在后台继续时显示，可在通知里停止"
+            setShowBadge(false)
+        }
+        context.getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+    }
 }

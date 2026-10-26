@@ -65,6 +65,13 @@ class LiveEyeMonitorTest {
         // 中途看不到双眼的时段不计入时长
         repeat(300) { monitor.update(null, 720, 1280, t, focal); t += 33 }
         assertEquals(session.trackedMs, monitor.session()!!.trackedMs)
+        // 后台长时间检测时分段记账：取出后从零开始下一段，界面累计次数不清
+        assertEquals(6, monitor.takeSession()!!.blinks)
+        assertNull(monitor.session(), "刚分段，新一段还没有数据")
+        assertEquals(6, monitor.snapshot(t).blinkCount)
+        repeat(3) { monitor.update(face(0.05f), 720, 1280, t, focal); t += 33 }
+        repeat(700) { monitor.update(face(0.3f), 720, 1280, t, focal); t += 33 }
+        assertEquals(1, monitor.session()!!.blinks)
     }
 
     @Test fun reportsMissingEyesAndStaleCamera() {

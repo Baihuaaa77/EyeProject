@@ -84,6 +84,8 @@ class LiveEyeMonitor(private val windowMs: Long = DEFAULT_WINDOW_MS) {
     private var distance: Float? = null
     private var headOffset: Float? = null
     private var trackedMs = 0L
+    /** 本段统计内的眨眼次数（[takeSession] 分段时清零；界面上的累计次数 [blinkCount] 不清） */
+    private var sessionBlinks = 0
     private var distanceSum = 0.0
     private var distanceFrames = 0
     private var closeFrames = 0
@@ -107,6 +109,7 @@ class LiveEyeMonitor(private val windowMs: Long = DEFAULT_WINDOW_MS) {
             if (below && belowSince < 0) belowSince = timeMs
             if (detector.blinkCount != before) {
                 blinkCount++
+                sessionBlinks++
                 blinks.addLast(timeMs)
                 lastClosedMs = if (belowSince >= 0) timeMs - belowSince else null
             }
@@ -180,12 +183,22 @@ class LiveEyeMonitor(private val windowMs: Long = DEFAULT_WINDOW_MS) {
         if (trackedMs < MIN_SESSION_MS) return@withLock null
         Session(
             trackedMs = trackedMs,
-            blinks = blinkCount,
-            blinksPerMinute = blinkCount * MINUTE_MS.toFloat() / trackedMs,
+            blinks = sessionBlinks,
+            blinksPerMinute = sessionBlinks * MINUTE_MS.toFloat() / trackedMs,
             meanDistanceCm = if (distanceFrames > 0) (distanceSum / distanceFrames).toFloat() else null,
             closeFraction = if (distanceFrames > 0) closeFrames.toFloat() / distanceFrames else null,
             meanHeadOffsetDeg = if (headFrames > 0) (headSum / headFrames).toFloat() else null,
         )
+    }
+
+    /**
+     * 取出当前这段统计并从零开始下一段（长时间后台检测时定期分段记账，跨天也能记到对应的日子）；
+     * 眨眼判据、曲线与界面上的累计次数不受影响。数据不足 [MIN_SESSION_MS] 时返回 null 且不清零。
+     */
+    fun takeSession(): Session? = lock.withLock {
+        val current = session() ?: return@withLock null
+        trackedMs = 0L; sessionBlinks = 0; distanceSum = 0.0; distanceFrames = 0; closeFrames = 0; headSum = 0.0; headFrames = 0
+        current
     }
 
     /** 清零重来（重新开启视窗时）。 */
@@ -195,7 +208,7 @@ class LiveEyeMonitor(private val windowMs: Long = DEFAULT_WINDOW_MS) {
         blinkCount = 0; earSamples = 0; belowSince = -1L; lastClosedMs = null; latestMs = -1L
         faceFound = false; leftEye = null; rightEye = null; imageWidth = 0; imageHeight = 0
         distance = null; headOffset = null
-        trackedMs = 0L; distanceSum = 0.0; distanceFrames = 0; closeFrames = 0; headSum = 0.0; headFrames = 0
+        trackedMs = 0L; sessionBlinks = 0; distanceSum = 0.0; distanceFrames = 0; closeFrames = 0; headSum = 0.0; headFrames = 0
     }
 
     companion object {

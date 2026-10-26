@@ -1,24 +1,13 @@
 package com.zkyjss.eyeproject.feature.home
 
-import android.os.SystemClock
 import androidx.camera.view.PreviewView
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
-import com.zkyjss.eyeproject.core.camera.CameraController
-import com.zkyjss.eyeproject.core.camera.CameraIntrinsicsProvider
-import com.zkyjss.eyeproject.core.data.eyecare.EyeCareRepository
 import com.zkyjss.eyeproject.core.domain.LiveEyeMonitor
+import com.zkyjss.eyeproject.feature.home.live.LiveEyeTracker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
 
 /** 首页实时眼部检测视窗的界面状态。 */
 data class LiveEyeUiState(
@@ -28,57 +17,23 @@ data class LiveEyeUiState(
 )
 
 /**
- * 首页「实时眼部检测」：相机管线走 [CameraController]（与测试共用），每帧关键点与相机焦距喂给共用 [LiveEyeMonitor]
- * （眨眼判据与干眼测试同一份，焦距用于虹膜测距）；界面每 80 ms 取一次快照，不逐帧刷新整块卡片。
- * 关闭时把本次的眨眼频率、观看距离与头部偏转记入主动护眼账本。与苹果端 EyeLiveModel 同一份逻辑。
+ * 首页「实时眼部检测」：检测本身由进程级的 [LiveEyeTracker] 持有（打开后离开首页、退到后台也继续，
+ * 直到关掉开关、点通知里的「停止」或从最近任务划掉应用）；这里只把首页的开关、预览接上与摘下转给它。
+ * 逐帧逻辑在共用 LiveEyeMonitor（眨眼判据与干眼测试同一份），与苹果端 EyeLiveModel 一致（苹果端退到后台即停止）。
  */
 @HiltViewModel
-class LiveEyeViewModel @Inject constructor(
-    private val camera: CameraController,
-    private val intrinsics: CameraIntrinsicsProvider,
-    private val eyeCare: EyeCareRepository,
-) : ViewModel() {
-    private val monitor = LiveEyeMonitor()
-    private val _uiState = MutableStateFlow(LiveEyeUiState())
-    val uiState: StateFlow<LiveEyeUiState> = _uiState.asStateFlow()
-    private var generation = -1
-    private var ticker: Job? = null
+class LiveEyeViewModel @Inject constructor(private val tracker: LiveEyeTracker) : ViewModel() {
+    val uiState: StateFlow<LiveEyeUiState> = tracker.state
 
-    /** 开启：绑定预览与分析（关键点在分析线程喂给监视器，监视器内部加锁）。 */
-    fun start(owner: LifecycleOwner, preview: PreviewView) {
-        if (_uiState.value.running) return
-        monitor.reset()
-        generation = camera.start(owner, preview,
-            onFrame = { frame ->
-                monitor.update(frame.faces.firstOrNull(), frame.sourceWidth, frame.sourceHeight,
-                    frame.analysisElapsedRealtimeMs ?: SystemClock.elapsedRealtime(),
-                    intrinsics.focalLengthPx(frame.sourceWidth, frame.sourceHeight))
-            },
-            onError = { error -> _uiState.update { it.copy(error = "相机启动失败：${error.message ?: "未知原因"}") } })
-        _uiState.update { it.copy(running = true, error = null) }
-        ticker = viewModelScope.launch {
-            while (isActive) {
-                _uiState.update { it.copy(snapshot = monitor.snapshot(SystemClock.elapsedRealtime())) }
-                delay(PUBLISH_MS)
-            }
-        }
-    }
+    /** 打开检测（已在检测时只是接上预览）。 */
+    fun start(owner: LifecycleOwner, preview: PreviewView) = tracker.start(owner, preview)
 
-    /** 关闭：只释放自己这一代绑定，测试页已接管相机时不受影响；本次统计记入账本。 */
-    fun stop() {
-        if (!_uiState.value.running) return
-        ticker?.cancel(); ticker = null
-        camera.stopIfGeneration(generation)
-        _uiState.update { it.copy(running = false) }
-        monitor.session()?.let { session -> viewModelScope.launch { eyeCare.addLiveSession(session) } }
-    }
+    /** 首页回到前台：接上预览。 */
+    fun attach(owner: LifecycleOwner, preview: PreviewView) = tracker.attach(owner, preview)
 
-    override fun onCleared() {
-        // 正常离开首页时界面已先调用 stop() 记下统计；这里只兜底释放相机
-        if (!_uiState.value.running) return
-        ticker?.cancel(); ticker = null
-        camera.stopIfGeneration(generation)
-    }
+    /** 离开首页或退到后台：摘下预览，后台继续检测。 */
+    fun detach() = tracker.detach()
 
-    private companion object { const val PUBLISH_MS = 80L }
+    /** 关掉开关：停止检测，本次统计记入账本。 */
+    fun stop() = tracker.stop()
 }

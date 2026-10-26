@@ -25,6 +25,9 @@ dependencies {
     implementation(project(":core:camera"))
     implementation(libs.androidx.camera.core)
     implementation(libs.androidx.camera.view)
+    // 实时检测退到后台后继续：前台服务（LifecycleService）与常驻通知渠道
+    implementation(project(":core:notifications"))
+    implementation(libs.androidx.lifecycle.service)
     implementation(project(":core:designsystem"))
     implementation(project(":core:ui"))
 
