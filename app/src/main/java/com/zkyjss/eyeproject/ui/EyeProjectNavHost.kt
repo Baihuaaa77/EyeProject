@@ -82,6 +82,8 @@ import com.zkyjss.eyeproject.feature.services.navigation.navigateToDryEye
 import com.zkyjss.eyeproject.feature.services.navigation.navigateToPresbyopia
 import com.zkyjss.eyeproject.feature.services.navigation.navigateToServices
 import com.zkyjss.eyeproject.feature.services.navigation.navigateToStrabismus
+import com.zkyjss.eyeproject.feature.services.navigation.navigateToColorVision
+import com.zkyjss.eyeproject.feature.services.navigation.colorVisionScreen
 import com.zkyjss.eyeproject.feature.services.navigation.presbyopiaScreen
 import com.zkyjss.eyeproject.feature.services.navigation.servicesScreen
 import com.zkyjss.eyeproject.feature.services.navigation.strabismusScreen
@@ -110,6 +112,7 @@ fun EyeProjectNavHost(
             "DRY_EYE" -> navController.navigateToDryEye()
             "PRESBYOPIA" -> navController.navigateToPresbyopia()
             "STRABISMUS" -> navController.navigateToStrabismus()
+            "COLOR_VISION" -> navController.navigateToColorVision()
         }
     }
 
@@ -148,6 +151,7 @@ fun EyeProjectNavHost(
                 onDryEyeClick = { navController.navigateToDryEye() },
                 onPresbyopiaClick = { navController.navigateToPresbyopia() },
                 onStrabismusClick = { navController.navigateToStrabismus() },
+                onColorVisionClick = { navController.navigateToColorVision() },
                 onOpenSettings = openSettings,
                 onOpenAccount = openAccount,
             )
@@ -177,6 +181,7 @@ fun EyeProjectNavHost(
             dryEyeScreen(onBack = { navController.navigateUp() }, onEditSubject = { navController.navigateToSubjectEdit(it) })
             presbyopiaScreen(onBack = { navController.navigateUp() }, onEditSubject = { navController.navigateToSubjectEdit(it) })
             strabismusScreen(onBack = { navController.navigateUp() }, onEditSubject = { navController.navigateToSubjectEdit(it) })
+            colorVisionScreen(onBack = { navController.navigateUp() }, onEditSubject = { navController.navigateToSubjectEdit(it) })
         }
     }
 }

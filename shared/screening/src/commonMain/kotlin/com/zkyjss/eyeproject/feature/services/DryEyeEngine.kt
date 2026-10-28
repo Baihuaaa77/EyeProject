@@ -195,15 +195,26 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
             progressFraction = 0f, remainingSeconds = DryEyeProtocol.PRACTICE_SECONDS) }
         val start = platform.nowMs()
         val trials = mutableListOf<DryEyeTrial>()
+        var pausedTotal = 0L
+        var pausedAt = 0L
+        val activeSec: (Long) -> Float = { t -> (t - start - pausedTotal) / 1000f }
         coroutineScope {
-            val loop = launch { trialLoop(DryEyeStage.PRACTICE, start, trials) }
+            var loop = launch { trialLoop(DryEyeStage.PRACTICE, activeSec, trials) }
             while (isActive) {
-                val elapsed = platform.nowMs() - start
+                val now = platform.nowMs()
+                if (pausedAt > 0L) {
+                    if (takeResume()) {
+                        pausedTotal += now - pausedAt; pausedAt = 0L
+                        loop = launch { trialLoop(DryEyeStage.PRACTICE, activeSec, trials) }
+                    }
+                    delay(100); continue
+                }
+                val elapsed = now - start - pausedTotal
                 if (elapsed >= DryEyeProtocol.PRACTICE_SECONDS * 1000L) break
-                if (gateLostTooLong()) {
-                    loop.cancel()
-                    backToSetup("距离或跟踪中断，请调整后重新开始")
-                    return@coroutineScope
+                val reason = anomalyPersisted()
+                if (reason != null) {
+                    pausedAt = now; loop.cancel(); pause(reason)
+                    continue
                 }
                 updateTimer(elapsed, DryEyeProtocol.PRACTICE_SECONDS)
                 delay(100)
@@ -262,20 +273,35 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
                 trialCount = 0, distanceSamples = emptyList(), error = null)
         }
         var completed = false
+        var pausedTotal = 0L
+        var pausedAt = 0L
+        val pauses = mutableListOf<Pair<Float, Float>>()
+        // 正式计时：去掉暂停时长，暂停前后的试次与眨眼时刻接得上
+        val activeSec: (Long) -> Float = { t -> (t - start - pausedTotal) / 1000f }
         coroutineScope {
-            val loop = launch { trialLoop(DryEyeStage.NATURAL, start, trials, naturalSeconds) }
+            var loop = launch { trialLoop(DryEyeStage.NATURAL, activeSec, trials, naturalSeconds) }
             while (isActive) {
                 val now = platform.nowMs()
-                val elapsed = now - start
-                if (elapsed >= totalMs) { completed = true; break }
-                if (gateLostTooLong()) {
-                    loop.cancel()
-                    finishFormal(naturalSeconds, trials, blinks, distances, frames, validFrames, inRange, turned, false, afterRest)
-                    return@coroutineScope
+                if (pausedAt > 0L) {
+                    // 暂停中：不计时、不出题、暂停期间的眨眼不计入
+                    while (blinkEvents.poll() != null) Unit
+                    if (takeResume()) {
+                        pauses += activeSec(pausedAt) to (now - pausedAt) / 1000f
+                        pausedTotal += now - pausedAt; pausedAt = 0L
+                        loop = launch { trialLoop(DryEyeStage.NATURAL, activeSec, trials, naturalSeconds) }
+                    }
+                    delay(100); continue
                 }
+                val elapsed = now - start - pausedTotal
+                if (elapsed >= totalMs) { completed = true; break }
                 while (true) {
                     val t = blinkEvents.poll() ?: break
-                    if (t >= start) blinks += (t - start) / 1000f
+                    if (t >= start) blinks += activeSec(t)
+                }
+                val reason = anomalyPersisted()
+                if (reason != null) {
+                    pausedAt = now; loop.cancel(); pause(reason)
+                    continue
                 }
                 frames++
                 if (eyesVisible) validFrames++
@@ -306,13 +332,14 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
                 delay(100)
             }
             loop.cancel()
-            if (completed) finishFormal(naturalSeconds, trials, blinks, distances, frames, validFrames, inRange, turned, true, afterRest)
+            if (completed) finishFormal(naturalSeconds, trials, blinks, distances, frames, validFrames, inRange, turned, true, afterRest, pauses)
         }
     }
 
     private fun finishFormal(
         naturalSeconds: Int, trials: List<DryEyeTrial>, blinks: List<Float>, distances: List<DryEyeDistanceSample>,
         frames: Int, validFrames: Int, inRange: Int, turned: Int, completed: Boolean, afterRest: Boolean,
+        pauses: List<Pair<Float, Float>> = emptyList(),
     ) {
         pendingAnswer?.cancel()
         formalStartMs = 0L
@@ -329,6 +356,7 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
             afterRest = afterRest,
             analysisFps = medianFps(formalFrameTimes),
             distanceSamplesCm = distances.map { it.cm },
+            pauses = pauses.toList(),
         )
         lastSession = session
         val report = DryEyeAssessment.evaluate(session, _uiState.value.fields)
@@ -340,7 +368,7 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
     }
 
     /** 视标循环：每题最多显示 2 秒，作答或超时后间隔 300 ms 出下一题。 */
-    private suspend fun trialLoop(stage: DryEyeStage, start: Long, out: MutableList<DryEyeTrial>, naturalSeconds: Int = 0) {
+    private suspend fun trialLoop(stage: DryEyeStage, activeSec: (Long) -> Float, out: MutableList<DryEyeTrial>, naturalSeconds: Int = 0) {
         while (true) {
             val distance = lastDistanceCm.takeIf { it > 0f } ?: DryEyeProtocol.TARGET_DISTANCE_CM
             val maxIndex = maxDisplayableIndex(distance)
@@ -365,7 +393,7 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
             val answer = if (deferred.isCompleted) deferred.await() else withTimeoutOrNull(remaining) { deferred.await() }
             pendingPresentation = null
             val rt = if (answer != null) platform.nowMs() - onset else null
-            val onsetSec = (onset - start) / 1000f
+            val onsetSec = activeSec(onset)
             val trialStage = when {
                 stage == DryEyeStage.PRACTICE -> DryEyeStage.PRACTICE
                 onsetSec < naturalSeconds -> DryEyeStage.NATURAL
@@ -408,21 +436,50 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
     }
 
     private var gateLostSinceMs = 0L
+    private var resumeRequested = false
 
     /**
-     * 测试中允许短暂偏离：双眼不可见 1.5 秒、或距离超出 30–50 cm 达 3 秒才中断，
-     * 避免眨眼瞬间关键点丢失或距离抖动打断连续测试。
+     * 异常持续片刻才暂停：看不到双眼 1 秒、或距离超出 40±5 cm 达 1.5 秒，
+     * 避免眨眼瞬间关键点丢失或距离轻微抖动就打断。返回给用户看的原因。
      */
-    private fun gateLostTooLong(): Boolean {
+    private fun anomalyPersisted(): String? {
         val now = platform.nowMs()
-        val farOff = abs(lastDistanceCm - DryEyeProtocol.TARGET_DISTANCE_CM) > DryEyeProtocol.DISTANCE_TOLERANCE_CM * 2
-        if (eyesVisible && !farOff) {
-            gateLostSinceMs = 0L
-            return false
+        val off = lastDistanceCm - DryEyeProtocol.TARGET_DISTANCE_CM
+        val reason = when {
+            !eyesVisible -> "没有检测到双眼，请正对屏幕"
+            off < -DryEyeProtocol.DISTANCE_TOLERANCE_CM -> "离屏幕太近了（约 ${lastDistanceCm.toInt()} cm），请移到约 40 cm"
+            off > DryEyeProtocol.DISTANCE_TOLERANCE_CM -> "离屏幕太远了（约 ${lastDistanceCm.toInt()} cm），请移到约 40 cm"
+            else -> null
         }
+        if (reason == null) { gateLostSinceMs = 0L; return null }
         if (gateLostSinceMs == 0L) gateLostSinceMs = now
         val limit = if (!eyesVisible) EYES_GRACE_MS else DISTANCE_GRACE_MS
-        return now - gateLostSinceMs > limit
+        return reason.takeIf { now - gateLostSinceMs > limit }
+    }
+
+    /** 暂停：收起当前视标（本题不计），计时冻结，弹窗说明原因。 */
+    private fun pause(reason: String) {
+        pendingAnswer?.cancel()
+        resumeRequested = false
+        platform.feedback(ScreeningFeedbackCue.WARNING)
+        _uiState.update { it.copy(paused = true, pauseReason = reason, trialVisible = false) }
+    }
+
+    /** 弹窗里点「继续」：恢复正常（双眼可见且在 40±5 cm）才接受，接着计时与作答。 */
+    fun resumeFromPause() {
+        val s = _uiState.value
+        if (!s.paused || !s.gateReady) return
+        resumeRequested = true
+    }
+
+    /** 流程协程取走「继续」请求并恢复界面状态。 */
+    private fun takeResume(): Boolean {
+        if (!resumeRequested || !_uiState.value.gateReady) return false
+        resumeRequested = false
+        gateLostSinceMs = 0L
+        platform.feedback(ScreeningFeedbackCue.RECOVER)
+        _uiState.update { it.copy(paused = false, pauseReason = null) }
+        return true
     }
 
     // endregion
@@ -464,6 +521,11 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
         val gate = eyesDetected && abs(distanceCm - DryEyeProtocol.TARGET_DISTANCE_CM) <= DryEyeProtocol.DISTANCE_TOLERANCE_CM
         val now = platform.nowMs()
         val s = _uiState.value
+        // 容差内距离浮动时视标随实测距离实时缩放，保持视角不变；超出容差由暂停弹窗提醒
+        if (gate && s.trialVisible && !s.paused && s.optotypePx > 0f) {
+            val size = OptotypeGeometry.calculate(platform.display, s.level, distanceCm).sizePx
+            if (size > 0f && abs(size - s.optotypePx) / s.optotypePx > RESIZE_STEP) _uiState.update { it.copy(optotypePx = size) }
+        }
         val flipped = gate != s.gateReady || eyesDetected != s.faceDetected
         if (flipped || now - lastGateUpdateMs >= 500) {
             lastGateUpdateMs = now
@@ -502,6 +564,10 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
                     put("valid", report.valid)
                     put("validityReasons", RecordArray(report.validityReasons))
                     put("distanceSamples", RecordArray(session.distanceSamplesCm.map { it.toDouble() }))
+                    put("optotypeScaling", "容差内视标随实测距离实时缩放，保持视角不变；optotypePx 为出题时的尺寸")
+                    put("pauseCount", session.pauses.size)
+                    put("pausedSeconds", session.pauses.sumOf { it.second.toDouble() })
+                    put("pauses", RecordArray(session.pauses.map { (at, sec) -> RecordArray(listOf(at.toDouble(), sec.toDouble())) }))
                     put("abnormal", RecordArray(report.abnormal))
                     put("evidence", report.evidence.toRecordArray())
                     put("analysisFps", report.analysisFps ?: RecordObject.NULL)
@@ -534,8 +600,10 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
     companion object {
         /** 门禁距离（cm）：40±5 cm 才能开始。 */
         const val TARGET_DISTANCE_CM = DryEyeProtocol.TARGET_DISTANCE_CM
-        private const val EYES_GRACE_MS = 1_500L
-        private const val DISTANCE_GRACE_MS = 3_000L
+        private const val EYES_GRACE_MS = 1_000L
+        private const val DISTANCE_GRACE_MS = 1_500L
+        /** 视标尺寸变化超过这个比例才刷新，避免随距离抖动频繁重画 */
+        private const val RESIZE_STEP = 0.02f
         private const val HEAD_LIMIT_DEG = 15f
         /** 逐帧轨迹上限（约 4 分钟 × 60 fps），防止异常情况下内存无限增长。 */
         private const val MAX_TRACE_FRAMES = 15_000

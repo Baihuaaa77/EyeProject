@@ -25,6 +25,7 @@ object EyeCareAdvice {
         }
         val since = EyeCareDays.plusDays(context.today, -180)
         val tests = context.tests.filter { it.day >= since }.groupBy { it.kind }
+            .filterKeys { it in ADVICE_TEST_KINDS }
             .map { (kind, list) -> AdviceTest(kind, list.maxBy { it.day }.level) }.sortedBy { it.kind }
         val profile = context.profile
         return AdviceRequest(
@@ -57,3 +58,6 @@ object EyeCareAdvice {
         return SyncContract.json.encodeToString(AdviceRequest.serializer(), request)
     }
 }
+
+/** 发给 AI 综合建议的自测种类：用户确认过的三项（干眼、老视、眼位）；色觉自测不发送。 */
+private val ADVICE_TEST_KINDS = setOf("DRY_EYE", "PRESBYOPIA", "STRABISMUS")

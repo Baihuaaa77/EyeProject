@@ -26,6 +26,12 @@ data class DryEyeTestUiState(
     val headTurned: Boolean = false,
     val lux: Float? = null,
     val qualityWarning: String? = null,
+    /**
+     * 测试中出现异常（看不到双眼、距离超出 40±5 cm）持续片刻即暂停：计时停止、不出题，弹窗说明原因；
+     * 恢复正常（[gateReady]）后由用户点「继续」接着计时与作答（专家确认的方案二）。
+     */
+    val paused: Boolean = false,
+    val pauseReason: String? = null,
     // 视标
     val trialVisible: Boolean = false,
     val trialId: Int = 0,

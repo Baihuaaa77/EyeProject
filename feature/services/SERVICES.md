@@ -18,10 +18,11 @@
 |---|---|
 | `ServicesScreen` | 服务首页：标题「服务」+ 右上角账户头像与系统设置齿轮（`EyePageHeader`）、小瞳示范舞台、三个 `EyeSelectCard` 入口。示范舞台随机轮流播放干眼（BLINK）/ 眼位（COVER）/ 老视（NEAR）的演示动画（`TestGuide.kt` 的 `GuideFrame`，每种两遍），上方气泡先说是哪项测试、再说「跟着我一起做吧」；点舞台换下一个 |
 | `SystemSettings.kt` | 「系统设置」完整页面（不用底部弹窗）：`SystemSettingsScreen`（路由 `SystemSettingsRoute`，顶层页齿轮进入，分组「反馈 / 语音 / 关于」，关于里是应用图标、版本与免责声明）；测试中的 `TestSettingsPage` 盖在测试页上（不离开测试），同一份 `TestSettingsContent`，底部可停止测试。各项说明收进「?」（`FEEDBACK_HELP` / `VOICE_HELP` / `ANSWER_HELP`）。苹果端 `SystemSettingsPage` 同一排版 |
-| `DryEyeScreen` | 干眼自测页（动画引导、距离门控、两阶段记录、折叠结果曲线） |
+| `DryEyeScreen` | 干眼自测页（动画引导、距离门控、两阶段记录、折叠结果曲线）。测试中看不到双眼 1 秒或距离超出 40±5 cm 达 1.5 秒即**暂停**（专家确认的方案二）：计时冻结、收起视标、暂停期间的眨眼不计，弹窗 `PauseDialog` 说明原因，恢复正常后点「继续测试」接着计时与作答；记录写入 `pauses` / `pauseCount` / `pausedSeconds`。容差内视标随实测距离实时缩放、保持视角不变 |
+| `ColorVisionScreen` / `ColorVisionViewModel` | 色觉自测（共用 `ColorVisionEngine`）：选人 → 准备（关护眼 / 夜间模式、屏幕调到最亮、约 40 cm）→ 示例图 → 8 张检测图（选数字或「看不出」）→ 结果页（`ResultReportView`）与导出。检测图由共用代码按视锥单独刺激生成（红色觉图只改 L 视锥、绿色觉图只改 M 视锥，亮度随机起伏），8 张错 0–1 未见异常、2–3 可疑、≥4 提示红绿色觉异常，两类错读相差 ≥2 提示倾向类型；示例图读错本次无效。不用相机、不发 AI 解读 |
 | `SubjectPicker` | 三项测试的开始页「这次测谁？」：替代原逐题问卷，资料在「我的」维护；成员缺本测试必需项（`SubjectProfiles.missing`）时点开即经 app 导航去补充；可「暂不选择，直接测试」（记录 `profileSkipped`）。记录写入 `subject`（本机成员编号与关系），云端同步时据此归属成员。
 选好人后下方是测前快问 `PreTestQuestions`（共用 `PreTestCheck`）：只问会随时间变化、与本项测试有关的几题——干眼：这几天的症状（有症状再问频率）、这几天用眼、在用眼药水；眼位：最近有无重影、这次谁来帮忙遮眼；老视没有这一步。答案只写入本次记录，答完「开始测试」 |
-| `ScreeningScreens` | 老视 / 斜视选人页（老视再选戴镜方式）、环境检查、大字及语音引导、无预览测试与感知结果页 |
+| `ScreeningScreens` | 近视力、多距离与远近切换题在 ±容差内随实测距离实时缩放视标（保持视角不变），超出容差提示回到目标距离；移近法按方法要求保持视标物理尺寸不变。老视 / 斜视选人页（老视再选戴镜方式）、环境检查、大字及语音引导、无预览测试与感知结果页 |
 | `ScreeningTestViewModel` / `ScreeningMetrics` | 两病种测试状态机、共享相机帧与光照采集、实时距离状态；斜视另含前摄估计距离/头姿质量门控、瞳孔—角膜反光候选点质量标记及归一化眼位指标 |
 | `ScreeningAssessment` | 质量门控 + 规则评估：老视按 Hofstetter 15−0.25×年龄 给出三档调节状态；斜视按 Hirschberg 估算 HDE/VDE（Δ）、遮盖再注视、BSI 输出「未见异常 / 可疑阳性 / 高度疑似斜视」；`StrabismusMeasures` 为可单测的纯计算 |
 | `ScreeningProtocol` | 老视 / 斜视的原文参数与候选阈值、遮盖动作序列、追踪轨迹（±10°） |

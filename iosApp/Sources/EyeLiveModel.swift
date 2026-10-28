@@ -33,10 +33,31 @@ final class EyeLiveModel: ObservableObject {
         previewView.previewLayer.session = camera.captureSession
         previewView.previewLayer.videoGravity = .resizeAspectFill
         camera.onFrame = { [weak self] face, width, height, focal, time, _ in
-            self?.monitor.update(face: face, imageWidth: width, imageHeight: height, timeMs: time, focalLengthPx: focal)
+            guard let self else { return }
+            if self.running { self.monitor.update(face: face, imageWidth: width, imageHeight: height, timeMs: time, focalLengthPx: focal) }
+            self.exerciseLock.lock(); let exercise = self.exerciseFrame; self.exerciseLock.unlock()
+            exercise?(face, time)
         }
         camera.onError = { [weak self] message in DispatchQueue.main.async { self?.error = message } }
         camera.onPressure = { [weak self] note in DispatchQueue.main.async { self?.cameraNote = note } }
+    }
+
+    // MARK: 护眼操借用相机帧
+
+    private let exerciseLock = NSLock()
+    private var exerciseFrame: ((FaceMetrics?, Int64) -> Void)?
+    private var exerciseOwnsCamera = false
+
+    /// 护眼操开始：实时检测开着就直接借它的帧，否则自己开相机（做完即关）。[handler] 在相机线程回调。
+    func startExercise(_ handler: @escaping (FaceMetrics?, Int64) -> Void) {
+        exerciseLock.lock(); exerciseFrame = handler; exerciseLock.unlock()
+        if !running && !exerciseOwnsCamera { camera.start(); exerciseOwnsCamera = true }
+    }
+
+    func stopExercise() {
+        exerciseLock.lock(); exerciseFrame = nil; exerciseLock.unlock()
+        if exerciseOwnsCamera && !running { camera.stop() }
+        exerciseOwnsCamera = false
     }
 
     func start() {

@@ -53,6 +53,8 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
@@ -202,6 +204,9 @@ fun DryEyeScreen(
             }
         }
         if (distanceMatters) DistanceEdgeGlow(distance.zone)
+        if (state.paused) PauseDialog(state.pauseReason, state.gateReady, viewModel::resumeFromPause) {
+            viewModel.backToSetup("已结束，本次结果不计入")
+        }
     }
     if (settingsOpen) TestSettingsPage(settings, voiceAnswer, { settingsOpen = false },
         speechAvailable = voice.available,
@@ -485,3 +490,26 @@ internal fun DryEyeResultForTest(state: DryEyeTestUiState) = ResultContent(state
 @Composable
 internal fun DryEyeTimerForTest(state: DryEyeTestUiState) =
     if (state.phase == DryEyePhase.Rest) RestContent(state) else CountdownContent(state.instruction, state.remainingSeconds)
+
+/**
+ * 测试中异常暂停的弹窗（方案二）：计时已停、不出题；说明原因并实时显示是否已恢复，
+ * 恢复正常后点「继续测试」接着计时与作答。盖住整页，背景不可点。与苹果端 DryEyePauseView 同一文案。
+ */
+@Composable
+internal fun PauseDialog(reason: String?, ready: Boolean, onResume: () -> Unit, onStop: () -> Unit) {
+    val colors = LocalEyeColors.current
+    val typography = LocalEyeTypography.current
+    Box(Modifier.fillMaxSize().background(colors.ink.copy(alpha = 0.55f))
+        .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {}
+        .padding(24.dp), contentAlignment = Alignment.Center) {
+        Column(Modifier.fillMaxWidth().clip(EyeShapes.panel).background(colors.panelBackground).padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            EyeText("测试已暂停", style = typography.title, color = colors.textPrimary)
+            EyeText("计时已停止，恢复后接着测。", style = typography.body, color = colors.textSecondary)
+            EyeText(if (ready) "已回到合适位置，可以继续了" else reason ?: "请正对屏幕，保持约 40 cm",
+                style = typography.subtitle, color = if (ready) colors.success else colors.warning)
+            EyeButton("继续测试", EyeButtonRole.PRIMARY, onResume, Modifier.fillMaxWidth(), enabled = ready)
+            EyeButton("结束测试", EyeButtonRole.SECONDARY, onStop, Modifier.fillMaxWidth())
+        }
+    }
+}

@@ -9,6 +9,10 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
 
+/** 视标尺寸变化超过这个比例才刷新，避免随距离抖动频繁重画。 */
+private const val RESIZE_STEP = 0.02f
+private const val BACK_TO_DISTANCE = "距离超出范围，请回到约"
+
 /** 老视与斜视共用状态机，平台只提供相机、时间、显示几何与持久化。 */
 class ScreeningEngine(private val platform: ScreeningPlatform, private val scope: CoroutineScope) {
     private val _state = MutableStateFlow(ScreeningState())
@@ -1061,6 +1065,21 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
         }
         trackDistanceMove(smoothedDistance)
         val st = _state.value
+        // 近视力、多距离与远近切换：容差内距离浮动时视标随实测距离实时缩放，保持视角不变；超出容差提醒回到目标距离。
+        // 移近法（PUSH_UP）按方法要求保持视标物理尺寸不变，不在此列。
+        if (st.trialVisible && smoothedDistance > 0f &&
+            (step == ScreeningStep.NEAR_VISION || step == ScreeningStep.DISTANCE_CURVE || step == ScreeningStep.FLIPPER)) {
+            trialTargetCm(st)?.let { target ->
+                if (abs(smoothedDistance - target) <= nearDistanceToleranceCm) {
+                    val size = OptotypeGeometry.calculate(platform.display, st.visionLevel, smoothedDistance)
+                    if (size.displayable && st.trialOptotypePx > 0f && abs(size.sizePx - st.trialOptotypePx) / st.trialOptotypePx > RESIZE_STEP)
+                        _state.update { it.copy(trialOptotypePx = size.sizePx) }
+                    if (st.warning?.startsWith(BACK_TO_DISTANCE) == true) _state.update { it.copy(warning = null) }
+                } else if (st.warning == null) {
+                    _state.update { it.copy(warning = "$BACK_TO_DISTANCE ${target.toInt()} cm") }
+                }
+            }
+        }
         // 停稳后视标自动出现：免去点按「显示视标」带动手机
         if ((step == ScreeningStep.FLIPPER && st.secondsLeft > 0 || step == ScreeningStep.DISTANCE_CURVE ||
                 step == ScreeningStep.NEAR_VISION && !st.nearAwaitingEyeReady) &&

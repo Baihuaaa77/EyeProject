@@ -59,6 +59,14 @@ object LocalRecordCatalog {
         val kind = root.string("kind") ?: return null
         val testedAt = fileName.substringAfterLast('_').removeSuffix(".json").toLongOrNull()
         val entry = when (kind) {
+            "COLOR_VISION" -> {
+                val valid = (root["valid"] as? JsonPrimitive)?.booleanOrNull ?: false
+                val level = if (valid) root.string("riskLevel") ?: "UNKNOWN" else "UNKNOWN"
+                val lines = if (!valid) root.strings("validityReasons").ifEmpty { listOf("数据无效，请重新测试") }
+                    else (root["evidence"] as? JsonArray).orEmpty().mapNotNull { e ->
+                        (e as? JsonObject)?.let { "${it.string("title").orEmpty()}：${it.string("summary").orEmpty()}" } }
+                LocalRecordEntry(fileName, kind, "色觉自测", testedAt, level, badge(kind, level), lines)
+            }
             "DRY_EYE" -> {
                 val valid = (root["valid"] as? JsonPrimitive)?.booleanOrNull ?: false
                 val level = if (valid) root.string("riskLevel") ?: "UNKNOWN" else "UNKNOWN"
@@ -96,7 +104,7 @@ object LocalRecordCatalog {
                 val metrics = snapshot.objects("metrics").map { ResultRow(it.string("label").orEmpty(), it.string("value") ?: "未记录") }
                 if (metrics.isNotEmpty()) add(ResultSection("关键指标", metrics))
             }
-            val evidence = (snapshot ?: if (kind == "DRY_EYE") root else assessment)?.objects("evidence").orEmpty()
+            val evidence = (snapshot ?: if (kind == "DRY_EYE" || kind == "COLOR_VISION") root else assessment)?.objects("evidence").orEmpty()
             if (evidence.isNotEmpty()) add(ResultSection("当时的判断依据", evidence.flatMap { e ->
                 listOf(ResultRow(e.string("title").orEmpty(), e.string("summary").orEmpty())) + e.strings("details").map { ResultRow("", it) }
             }))
@@ -169,6 +177,7 @@ object LocalRecordCatalog {
             when (kind) {
                 "DRY_EYE" -> "干眼$label"
                 "PRESBYOPIA" -> "老视$label"
+                "COLOR_VISION" -> when (level) { "LOW" -> "色觉未见异常"; "MEDIUM" -> "色觉可疑"; else -> "色觉异常可能" }
                 else -> when (level) { "LOW" -> "未见异常"; "MEDIUM" -> "可疑"; else -> "高度疑似" }
             }
         }

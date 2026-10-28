@@ -32,7 +32,9 @@ data class RecordSummary(
 class InvalidRecordException(message: String) : IllegalArgumentException(message)
 
 object RecordSummaries {
-    val KINDS = setOf("DRY_EYE", "PRESBYOPIA", "STRABISMUS")
+    val KINDS = setOf("DRY_EYE", "PRESBYOPIA", "STRABISMUS", "COLOR_VISION")
+    /** 可以请求 AI 解读的测试（发给大模型的数据经用户确认的范围）；色觉自测暂不提供 AI 解读。 */
+    val EXPLAINABLE_KINDS = setOf("DRY_EYE", "PRESBYOPIA", "STRABISMUS")
     /** UNCERTAIN：规则 rules-2 起的「结果不确定」（数据有效但指标在测量误差内），不能当作低风险。 */
     val RISK_LEVELS = setOf("LOW", "MEDIUM", "HIGH", "UNCERTAIN", "UNKNOWN")
     private const val MAX_FEATURES = 64
@@ -44,9 +46,9 @@ object RecordSummaries {
         if (kind !in KINDS) throw InvalidRecordException("未知的测试类型：$kind")
         val protocol = (root["protocolVersion"] as? JsonPrimitive)?.intOrNull
         val age = (root["profile"] as? JsonObject)?.string("年龄")?.trim()?.toIntOrNull()?.takeIf { it in 0..130 }
-        val summary = if (kind == "DRY_EYE") {
+        val summary = if (kind == "DRY_EYE" || kind == "COLOR_VISION") {
             val valid = (root["valid"] as? JsonPrimitive)?.booleanOrNull
-                ?: throw InvalidRecordException("干眼记录缺少 valid")
+                ?: throw InvalidRecordException("记录缺少 valid")
             summary(kind, protocol, root.string("assessmentVersion"), root.string("riskLevel"),
                 if (valid) RecordQuality.SUFFICIENT else RecordQuality.INSUFFICIENT, root["features"])
         } else {

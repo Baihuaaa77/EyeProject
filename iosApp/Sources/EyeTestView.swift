@@ -16,7 +16,7 @@ struct EyeTestView: View {
             TestTopBar(title: runtime.string("title").isEmpty ? "眼健康自测" : runtime.string("title"),
                 onBack: { runtime.close(); dismiss() }, onSettings: { settingsOpen = true })
                 .padding(.horizontal, 4)
-            if let progress = runtime.state["overallProgress"] as? NSNumber, pixelsPerMm > 0 {
+            if let progress = runtime.state["overallProgress"] as? NSNumber, displayReady {
                 TestProgressBar(fraction: progress.doubleValue, text: runtime.string("remainingText"))
                     .padding(.horizontal, 16).padding(.bottom, 8)
                     .transition(.opacity)
@@ -45,6 +45,13 @@ struct EyeTestView: View {
                 }
             }
         }.foregroundStyle(EyeStyle.text).tint(EyeStyle.primary)
+            // 干眼测试中异常暂停（方案二）：盖住整页，恢复正常后点「继续测试」
+            .overlay {
+                if runtime.bool("paused") {
+                    DryEyePauseView(reason: runtime.string("pauseReason"), ready: runtime.bool("gateReady"),
+                                    resume: { runtime.act("resume") }, stop: { runtime.act("restart") })
+                }
+            }
             // 全屏呈现：背景铺满到灵动岛与底部，内容留在安全区内。
             .background(EyeStyle.background.ignoresSafeArea())
             // 系统设置以完整页面盖在测试上（不用底部弹窗），右上角「完成」回到测试
@@ -56,7 +63,7 @@ struct EyeTestView: View {
                 brightness = UIScreen.main.brightness; UIScreen.main.brightness = 1
                 previousIdleDisabled = UIApplication.shared.isIdleTimerDisabled
                 UIApplication.shared.isIdleTimerDisabled = true
-                if pixelsPerMm > 0 { runtime.prepare(pixelsPerMm: pixelsPerMm) }
+                if displayReady { runtime.prepare(pixelsPerMm: pixelsPerMm > 0 ? pixelsPerMm : Self.nominalPixelsPerMm) }
             }
             .onDisappear {
                 runtime.close(); UIApplication.shared.isIdleTimerDisabled = previousIdleDisabled
@@ -75,7 +82,7 @@ struct EyeTestView: View {
     }
     private var pageContent: some View {
         VStack(spacing: EyeStyle.spacing) {
-            if pixelsPerMm <= 0 {
+            if !displayReady {
                 ScreenCalibrationView { value in
                     pixelsPerMm = value; UserDefaults.standard.set(value, forKey: "eye.pixelsPerMm")
                     runtime.prepare(pixelsPerMm: value)
@@ -84,12 +91,17 @@ struct EyeTestView: View {
                 if isGazeTask { TestNoticeSlot(text: runtime.error ?? runtime.cameraNote ?? warningText) }
                 else { TestNotice(text: runtime.error ?? runtime.cameraNote ?? warningText) }
                 if isProfile { SubjectPickerView(runtime: runtime) }
+                else if runtime.kind == "COLOR_VISION" { ColorVisionContent(runtime: runtime) }
                 else if isRunning { VStack(spacing: EyeStyle.spacing) { testContent }.modifier(TestStagePanel()) }
                 else { testContent }
             }
         }.animation(.easeInOut(duration: 0.28), value: runtime.error ?? runtime.cameraNote ?? warningText)
     }
     private var phase: String { runtime.string("phase") }
+    /// 色觉自测不需要毫米级视标尺寸，不必先用尺子校准屏幕；其余测试校准后才能开始。
+    private var displayReady: Bool { pixelsPerMm > 0 || runtime.kind == "COLOR_VISION" }
+    /// 未校准时的名义像素密度（约 460 ppi），只用于记录，色觉判定与之无关。
+    private static let nominalPixelsPerMm: Float = Float(UIScreen.main.scale) * 163 / 25.4
     private var warningText: String {
         let text = runtime.string("warning")
         if text == "慢慢移近" { return "" }
@@ -443,5 +455,112 @@ private struct GlassesCheckView: View {
             Button("已摘下，继续", action: confirm).buttonStyle(EyeButtonStyle())
         }.padding(20).frame(maxWidth: .infinity)
             .background(EyeStyle.panel, in: RoundedRectangle(cornerRadius: EyeStyle.radius))
+    }
+}
+
+/// 测试中异常暂停的弹窗（方案二）：计时已停、不出题；说明原因并实时显示是否已恢复，
+/// 恢复正常后点「继续测试」接着计时与作答。与安卓 PauseDialog 同一文案。
+struct DryEyePauseView: View {
+    let reason: String
+    let ready: Bool
+    let resume: () -> Void
+    let stop: () -> Void
+    var body: some View {
+        ZStack {
+            EyeStyle.ink.opacity(0.55).ignoresSafeArea().contentShape(Rectangle()).onTapGesture {}
+            VStack(alignment: .leading, spacing: 14) {
+                Text("测试已暂停").font(EyeStyle.title).foregroundStyle(EyeStyle.text)
+                Text("计时已停止，恢复后接着测。").font(EyeStyle.body).foregroundStyle(EyeStyle.secondary)
+                Text(ready ? "已回到合适位置，可以继续了" : (reason.isEmpty ? "请正对屏幕，保持约 40 cm" : reason))
+                    .font(EyeStyle.subtitle).foregroundStyle(ready ? EyeStyle.success : EyeStyle.warning)
+                Button("继续测试") { EyeHaptics.tap(); resume() }.buttonStyle(EyeButtonStyle()).disabled(!ready)
+                Button("结束测试") { EyeHaptics.tap(); stop() }.buttonStyle(EyeButtonStyle(role: .secondary))
+            }
+            .padding(24).frame(maxWidth: .infinity, alignment: .leading)
+            .background(EyeStyle.panel, in: RoundedRectangle(cornerRadius: 22))
+            .padding(24)
+        }
+        .accessibilityAddTraits(.isModal)
+    }
+}
+
+/// 色觉自测（与安卓 ColorVisionScreen 同一排版与文案）：准备 → 示例图 → 8 张检测图（选看到的数字或「看不出」）→ 结果。
+/// 图由共用代码生成，两端完全一致；不用相机。
+struct ColorVisionContent: View {
+    @ObservedObject var runtime: EyeRuntime
+    var body: some View {
+        let phase = runtime.string("phase")
+        if phase == "Setup" {
+            setup
+        } else if phase == "Demo" || phase == "Plates" {
+            plate
+        } else if phase == "Result" {
+            ResultReportView(runtime: runtime)
+        }
+    }
+
+    private var setup: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("开始前").font(EyeStyle.title).foregroundStyle(EyeStyle.text)
+                Spacer()
+                MascotStage(mood: .happy).frame(width: 96, height: 96)
+            }
+            ForEach(Array(["关掉手机的护眼模式、夜间模式（会改变屏幕颜色）", "在明亮的室内，屏幕亮度已自动调到最高",
+                           "手机离眼睛约 40 cm，平时戴眼镜就戴着"].enumerated()), id: \.offset) { i, text in
+                Text("\(i + 1). \(text)").font(EyeStyle.body).foregroundStyle(EyeStyle.text)
+            }
+            Text("先看一张示例图，再看 8 张检测图，选出看到的数字；看不出就选「看不出」，不要猜。")
+                .font(EyeStyle.body).foregroundStyle(EyeStyle.secondary)
+            Button("准备好了") { EyeHaptics.tap(); runtime.act("colorStart") }.buttonStyle(EyeButtonStyle())
+        }
+        .padding(16).frame(maxWidth: .infinity, alignment: .leading)
+        .background(EyeStyle.panel, in: RoundedRectangle(cornerRadius: 22))
+    }
+
+    private var plate: some View {
+        let plateId = runtime.string("plateId")
+        let options = runtime.state["options"] as? [String] ?? []
+        let demo = runtime.bool("demo")
+        return VStack(spacing: 16) {
+            Text(demo ? "示例图" : "第 \(Int(runtime.number("plateNumber"))) / \(Int(runtime.number("plateCount"))) 张")
+                .font(EyeStyle.subtitle).foregroundStyle(EyeStyle.primary)
+            ColorPlateCanvas(dots: runtime.colorPlateDots(plateId))
+                .aspectRatio(1, contentMode: .fit).frame(maxWidth: 360)
+                .id(plateId)
+                .onAppear { DispatchQueue.main.async { runtime.colorPlateShown() } }
+            Text("图里是什么数字？").font(EyeStyle.title).foregroundStyle(EyeStyle.text)
+            HStack(spacing: 10) {
+                ForEach(options, id: \.self) { option in
+                    Button(option) { EyeHaptics.tap(); runtime.colorAnswer(option) }
+                        .buttonStyle(EyeButtonStyle(role: option == "看不出" ? .secondary : .primary))
+                }
+            }
+        }.frame(maxWidth: .infinity)
+    }
+}
+
+/// 画一张假同色图：面板底上逐个画色点（颜色由共用代码给出，不随主题换色）。
+struct ColorPlateCanvas: View {
+    let dots: [Double]
+    var body: some View {
+        Canvas { context, size in
+            let radius = min(size.width, size.height) / 2
+            let center = CGPoint(x: size.width / 2, y: size.height / 2)
+            var i = 0
+            while i + 3 < dots.count {
+                let r = dots[i + 2] * radius
+                let x = center.x + dots[i] * radius
+                let y = center.y + dots[i + 1] * radius
+                let argb = UInt32(truncatingIfNeeded: Int64(dots[i + 3]))
+                let color = Color(.sRGB, red: Double((argb >> 16) & 0xFF) / 255, green: Double((argb >> 8) & 0xFF) / 255,
+                                  blue: Double(argb & 0xFF) / 255, opacity: 1)
+                context.fill(Path(ellipseIn: CGRect(x: x - r, y: y - r, width: r * 2, height: r * 2)), with: .color(color))
+                i += 4
+            }
+        }
+        .padding(8)
+        .background(EyeStyle.panel, in: RoundedRectangle(cornerRadius: 22))
+        .accessibilityLabel("色觉检测图")
     }
 }

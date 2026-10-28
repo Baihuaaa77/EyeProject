@@ -93,7 +93,7 @@ class ExplanationService(
     }
 
     private fun validate(input: ExplanationRequest): ExplanationRequest {
-        if (input.kind !in RecordSummaries.KINDS) throw ApiException.badRequest("未知的测试类型")
+        if (input.kind !in RecordSummaries.EXPLAINABLE_KINDS) throw ApiException.badRequest("未知的测试类型")
         if (input.riskLevel !in RecordSummaries.RISK_LEVELS) throw ApiException.badRequest("风险等级无效")
         return input.bounded()
     }

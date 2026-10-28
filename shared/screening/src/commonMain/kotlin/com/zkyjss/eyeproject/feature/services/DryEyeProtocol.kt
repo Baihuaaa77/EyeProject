@@ -127,6 +127,8 @@ data class DryEyeSession(
     val analysisFps: Double? = null,
     /** 正式阶段每约 500 ms 的距离读数；0 表示没有读数，仅用于描述采集条件。 */
     val distanceSamplesCm: List<Float> = emptyList(),
+    /** 因异常暂停的区间：[开始（正式计时秒）, 时长秒]；暂停期间不计时、不出题、不计眨眼。 */
+    val pauses: List<Pair<Float, Float>> = emptyList(),
 )
 
 data class DryEyeReport(

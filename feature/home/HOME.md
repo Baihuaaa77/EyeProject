@@ -27,6 +27,9 @@
 - 二级完整页面（`EyeCarePages.kt`）：`EyeTrendScreen`（近 7 天用屏、负荷、眨眼柱状图 + 小结 + 今天的主要原因 + 身体感受）、
   `EyeAdviceScreen`（规则建议、就医建议与 AI 综合建议卡 `AiExplanationCard(text = AiCardText.ADVICE)`）、`EyeBrightnessScreen`（当前亮度与环境光、做法，一键打开系统显示设置）。
 - `RestBreakPage`：「休息一下」20-20-20 全屏引导，小瞳陪伴，可提前结束。
+- `EyeExercisePage` / `EyeExerciseViewModel`：「护眼操」全屏页（主动服务里的入口卡、或小瞳气泡「去做」）。小瞳提示向左 / 右 / 上 / 下看（两遍），
+  前置相机看虹膜在眼裂里的偏移（共用 `EyeExerciseCoach`，先看小瞳 1.5 秒取基线），转到位即整页朝该方向翻页、振动，小瞳飞出画面打滚再回来；
+  最后闭眼休息 5 秒。实时检测开着时借用其相机帧，否则自己开相机、做完即关；没有相机权限时按时间带着做。
 - navigation/HomeNavigation：`HomeRoute` / `EyeTrendRoute` / `EyeAdviceRoute` / `EyeBrightnessRoute`，`homeScreen(navigation)`、`eyeCareScreens(onBack, onOpenTest)`。
 
 依赖 core:common、core:domain、core:model、core:camera、core:data、core:notifications（常驻通知渠道）、core:designsystem、core:ui；

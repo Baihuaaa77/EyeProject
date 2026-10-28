@@ -357,6 +357,7 @@ object EyeCareEngine {
         }
         val keys = factors.map { it.key }.toSet()
         if (level == "LOW") add(EyeTip("今天用眼很棒，继续保持！"))
+        add(EyeTip("转转眼球，跟我做一套护眼操吧", "EXERCISE", action = "去做"))
         if ("distance" !in keys) add(EyeTip("屏幕别贴太近，保持一臂远"))
         if ("posture" !in keys) add(EyeTip("坐直一点，别低头太久"))
         add(EyeTip("每 20 分钟，看看 6 米外 20 秒"))
@@ -383,6 +384,12 @@ object EyeCareEngine {
             when (t.level) {
                 "HIGH" -> add(EyeConsult("眼位自测高度疑似", "建议尽快做遮盖试验等专业检查。", "小儿眼科或斜视专科", child))
                 "MEDIUM" -> add(EyeConsult("眼位自测可疑", "建议近期到眼科复查眼位。", "小儿眼科或斜视专科", false))
+            }
+        }
+        latest["COLOR_VISION"]?.let { t ->
+            when (t.level) {
+                "HIGH" -> add(EyeConsult("色觉自测提示可能异常", "建议到医院做色觉检查，确认红绿色觉异常的类型和程度。", "眼科", false))
+                "MEDIUM" -> add(EyeConsult("色觉自测结果可疑", "在明亮处、关闭护眼模式后复测；仍读错请到医院做色觉检查。", "眼科", false))
             }
         }
         val week = EyeCareDays.plusDays(c.today, -6)

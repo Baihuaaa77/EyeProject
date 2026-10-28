@@ -42,7 +42,7 @@ struct NavIconView: View {
 }
 
 /// 服务入口图标：水滴（干眼）/ 双眼对位（眼位）/ 视标 E（老视），与安卓 ServiceGlyph 同一画法。
-enum ServiceGlyph { case dryEye, alignment, presbyopia }
+enum ServiceGlyph { case dryEye, alignment, presbyopia, color }
 
 struct ServiceGlyphView: View {
     let glyph: ServiceGlyph
@@ -69,6 +69,17 @@ struct ServiceGlyphView: View {
                     if step == 0 { shine.move(to: point) } else { shine.addLine(to: point) }
                 }
                 context.stroke(shine, with: primary, style: StrokeStyle(lineWidth: s * 0.08, lineCap: .round))
+            case .color:
+                // 一圈主色点、中间一竖暖色点：像一张极简的色觉图（与安卓 ServiceKind.COLOR 一致）
+                context.stroke(Path(ellipseIn: CGRect(x: 0.08 * s, y: 0.08 * s, width: 0.84 * s, height: 0.84 * s)), with: primary, lineWidth: s * 0.07)
+                for i in 0..<6 {
+                    let a = (Double(i) * 60 + 30) * .pi / 180
+                    let c = CGPoint(x: s * 0.5 + s * 0.24 * cos(a), y: s * 0.5 + s * 0.24 * sin(a))
+                    context.fill(Path(ellipseIn: CGRect(x: c.x - s * 0.07, y: c.y - s * 0.07, width: s * 0.14, height: s * 0.14)), with: primary)
+                }
+                for y in [0.38, 0.62] as [CGFloat] {
+                    context.fill(Path(ellipseIn: CGRect(x: s * 0.42, y: y * s - s * 0.08, width: s * 0.16, height: s * 0.16)), with: .color(EyeStyle.accent))
+                }
             case .alignment:
                 for side in [-1.0, 1.0] as [CGFloat] {
                     let cx = s * 0.5 + side * s * 0.24

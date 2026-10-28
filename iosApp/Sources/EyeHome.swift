@@ -23,6 +23,7 @@ struct HomePage: View {
     @ObservedObject private var subjects = SubjectStore.shared
     @StateObject private var reminder = EyeReminder()
     @State private var breakOpen = false
+    @State private var exerciseOpen = false
     @State private var liveRequests = 0
 
     private var greeting: String {
@@ -47,6 +48,7 @@ struct HomePage: View {
                 HeroCard(report: report) { tip in
                     switch tip.kind {
                     case "BREAK": breakOpen = true
+                    case "EXERCISE": exerciseOpen = true
                     case "REMINDER": reminder.setInterval(tip.value ?? 20); reminder.setEnabled(true)
                     case "BRIGHTNESS", "NIGHT": navigate(.brightness)
                     case "TEST": if let target = tip.target { openTest(target) }
@@ -62,6 +64,7 @@ struct HomePage: View {
                 if report.signals("BASIC").contains(where: { $0.id != "brightness" }) { BasicCard(report: report) }
                 BehaviorCard(report: report, liveRequests: liveRequests).id("behavior")
                 SectionTitle(title: "主动服务", help: nil)
+                ExerciseCard { exerciseOpen = true }
                 ReminderCard(reminder: reminder, suggested: report.loaded ? report.suggestedReminderMinutes : nil)
                 ServiceTiles(report: report, navigate: navigate)
             }
@@ -69,6 +72,7 @@ struct HomePage: View {
         .onAppear { store.refresh() }
         .onChange(of: reminder.enabled) { _ in store.refresh() }
         .fullScreenCover(isPresented: $breakOpen) { RestBreakView() }
+        .fullScreenCover(isPresented: $exerciseOpen) { EyeExerciseView() }
     }
 }
 
@@ -337,6 +341,25 @@ private struct BehaviorCard: View {
 
 // MARK: - 主动服务
 
+/// 护眼操入口：跟小瞳转转眼球（向左、右、上、下看），约 1 分钟。
+private struct ExerciseCard: View {
+    let start: () -> Void
+    var body: some View {
+        Button { EyeHaptics.tap(); start() } label: {
+            HStack(spacing: 10) {
+                MascotStage(mood: .happy, interactive: false, headScale: 0.78).frame(width: 56, height: 56)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("护眼操").font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text)
+                    Text("跟小瞳转转眼球 · 约 1 分钟").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
+                }.frame(maxWidth: .infinity, alignment: .leading)
+                PillButton(label: "开始", action: start)
+            }
+            .padding(.horizontal, 18).padding(.vertical, 14)
+            .background(EyeStyle.panel, in: RoundedRectangle(cornerRadius: 22))
+        }.buttonStyle(.plain)
+    }
+}
+
 /// 休息提醒：开关（间隔）+ 间隔选择；建议间隔与当前不同时给出一键采用。
 private struct ReminderCard: View {
     @ObservedObject var reminder: EyeReminder
@@ -593,5 +616,138 @@ struct RestBreakView: View {
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("关闭") { dismiss() } } }
         }
         .onAppear { started = Date() }
+    }
+}
+
+// MARK: - 护眼操
+
+/// 「护眼操」完整页面（与安卓 EyeExercisePage 同一流程与文案）：深色底，上方进度条，中间大箭头 + 「向左看」+ 倒计时，
+/// 下方是小瞳和它的气泡。眼睛转到位时整页朝那个方向翻过去、手机振动，小瞳顺着飞出画面打个滚再回来；最后闭眼休息 5 秒。
+/// 判断与计时在共用 EyeExerciseCoach；没有相机权限时按时间带着做。
+struct EyeExerciseView: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var coach = EyeExerciseCoach()
+    @State private var state: EyeExerciseCoach.State?
+    @State private var flipMove: EyeExerciseCoach.Move?
+    @State private var flyMove: EyeExerciseCoach.Move?
+    @State private var fly: CGFloat = 0
+    @State private var spin: Double = 0
+    private let ticker = Timer.publish(every: 0.05, on: .main, in: .common).autoconnect()
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack {
+                EyeStyle.ink.ignoresSafeArea()
+                VStack(spacing: 0) {
+                    HStack(spacing: 8) {
+                        Button("结束") { dismiss() }.font(EyeStyle.body).foregroundStyle(.white).frame(minWidth: 44, minHeight: 44)
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(Color.white.opacity(0.25))
+                            Capsule().fill(EyeStyle.success).frame(width: max(0, (geo.size.width - 100) * CGFloat(state?.progress ?? 0)))
+                        }.frame(height: 6)
+                    }
+                    Spacer()
+                    instruction.id(pageKey).transition(flipTransition).animation(.easeInOut(duration: 0.38), value: pageKey)
+                    Spacer()
+                    if !isStage(.done) {
+                        MascotBubble(line: MascotLine(text: bubbleText))
+                        MascotStage(mood: isStage(.rest) ? .sleepy : .happy, interactive: false)
+                            .frame(width: 150, height: 150)
+                            .rotationEffect(.degrees(spin * (flyMove.map { $0.dx < 0 || $0.dy < 0 ? -1.0 : 1.0 } ?? 1.0)))
+                            .offset(x: CGFloat(flyMove?.dx ?? 0) * fly * geo.size.width * 0.8,
+                                    y: CGFloat(flyMove?.dy ?? 0) * fly * geo.size.height * 0.45)
+                        Text(state?.faceVisible == true || coach.usedCamera ? "头保持不动，只转眼睛" : "跟着提示转动眼睛就好")
+                            .font(EyeStyle.bodySecondary).foregroundStyle(Color.white.opacity(0.7))
+                    } else {
+                        MascotStage(mood: .happy, interactive: false, greet: true).frame(width: 170, height: 170)
+                        Text(coach.usedCamera ? "共 \(state?.stepCount ?? 0) 步，小瞳看到你做到了 \(state?.detectedCount ?? 0) 步" : "共 \(state?.stepCount ?? 0) 步，做完啦")
+                            .font(EyeStyle.body).foregroundStyle(.white).multilineTextAlignment(.center)
+                        Button("完成") { dismiss() }.buttonStyle(EyeButtonStyle()).padding(.top, 16)
+                    }
+                }
+                .padding(.horizontal, 20).padding(.vertical, 12)
+            }
+            .onReceive(ticker) { _ in tick(size: geo.size) }
+        }
+        .onAppear {
+            let model = coach
+            EyeLiveModel.shared.startExercise { face, time in model.onFace(face: face, timeMs: time) }
+        }
+        .onDisappear { EyeLiveModel.shared.stopExercise() }
+    }
+
+    private var now: Int64 { Int64(ProcessInfo.processInfo.systemUptime * 1000) }
+    private func isStage(_ stage: EyeExerciseCoach.Stage) -> Bool { state?.stage == stage }
+    private var pageKey: String { "\(state?.stage.name ?? "")-\(state?.stepIndex ?? 0)" }
+
+    private func tick(size: CGSize) {
+        let t = now
+        if let event = coach.tick(timeMs: t) { handle(event, move: coach.state(timeMs: t).move) }
+        state = coach.state(timeMs: t)
+    }
+
+    private func handle(_ event: EyeExerciseCoach.Event, move: EyeExerciseCoach.Move?) {
+        if event == .detected {
+            flipMove = move; flyMove = move
+            EyeHaptics.success(); MascotSound.shared.play("eye_spin")
+            // 小瞳顺着方向飞出去、边飞边打滚，再从另一边飞回来
+            spin = 0
+            withAnimation(.easeIn(duration: 0.45)) { fly = 1; spin = 360 }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                fly = -1
+                withAnimation(.easeOut(duration: 0.45)) { fly = 0; spin = 720 }
+            }
+        } else if event == .missed {
+            flipMove = nil; EyeHaptics.tap()
+        } else if event == .rest {
+            flipMove = nil; MascotSound.shared.play("eye_yawn")
+        } else if event == .done {
+            EyeHaptics.success(); MascotSound.shared.play("eye_heart")
+        } else {
+            flipMove = nil
+        }
+    }
+
+    /// 看到了就整页朝那个方向翻走、新的一页从另一边进来；其余淡入淡出。
+    private var flipTransition: AnyTransition {
+        guard let move = flipMove else { return .opacity }
+        let out: Edge = move.dx < 0 ? .leading : move.dx > 0 ? .trailing : move.dy < 0 ? .top : .bottom
+        let into: Edge = out == .leading ? .trailing : out == .trailing ? .leading : out == .top ? .bottom : .top
+        return .asymmetric(insertion: .move(edge: into).combined(with: .opacity), removal: .move(edge: out).combined(with: .opacity))
+    }
+
+    @ViewBuilder private var instruction: some View {
+        VStack(spacing: 14) {
+            if isStage(.calibrate) || state == nil {
+                Text("看着小瞳").font(EyeStyle.headline).foregroundStyle(.white)
+                Text("准备开始").font(EyeStyle.body).foregroundStyle(Color.white.opacity(0.7))
+            } else if isStage(.move), let move = state?.move {
+                Image(systemName: arrowName(move)).font(.system(size: 56, weight: .bold)).foregroundStyle(Color.white.opacity(0.6))
+                    .accessibilityLabel(move.label)
+                Text(move.label).font(EyeStyle.title).foregroundStyle(.white)
+                Text("\(state?.secondsLeft ?? 0)").font(.system(size: 96, weight: .bold, design: .rounded)).foregroundStyle(.white)
+            } else if isStage(.back) {
+                Text("看回中间").font(EyeStyle.title).foregroundStyle(.white)
+            } else if isStage(.rest) {
+                Text("闭上眼睛休息").font(EyeStyle.title).foregroundStyle(.white)
+                Text("\(state?.secondsLeft ?? 0)").font(.system(size: 96, weight: .bold, design: .rounded)).foregroundStyle(.white)
+            } else {
+                Text("完成啦！").font(EyeStyle.headline).foregroundStyle(.white)
+            }
+        }.frame(maxWidth: .infinity)
+    }
+
+    private func arrowName(_ move: EyeExerciseCoach.Move) -> String {
+        move.dx < 0 ? "arrow.left" : move.dx > 0 ? "arrow.right" : move.dy < 0 ? "arrow.up" : "arrow.down"
+    }
+
+    /// 小瞳气泡：跟着阶段说一句（与安卓同一文案）。
+    private var bubbleText: String {
+        if isStage(.move), let move = state?.move {
+            return move.dx < 0 ? "眼睛往左边看，看我飞过去！" : move.dx > 0 ? "再往右边看～" : move.dy < 0 ? "抬眼看看上面" : "低眼看看下面"
+        }
+        if isStage(.back) { return "真棒，看回我这里" }
+        if isStage(.rest) { return "闭上眼睛，歇一会儿" }
+        return "跟我一起转转眼球吧"
     }
 }

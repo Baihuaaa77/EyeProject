@@ -135,6 +135,7 @@ internal fun HomeContent(
     val colors = LocalEyeColors.current
     val report = state.report
     var breakOpen by rememberSaveable { mutableStateOf(false) }
+    var exerciseOpen by rememberSaveable { mutableStateOf(false) }
     var liveRequests by rememberSaveable { mutableIntStateOf(0) }
     val behavior = remember { BringIntoViewRequester() }
     val basic = remember { BringIntoViewRequester() }
@@ -150,6 +151,7 @@ internal fun HomeContent(
         EyeCareHero(report) { tip ->
             when (tip.kind) {
                 "BREAK" -> breakOpen = true
+                "EXERCISE" -> exerciseOpen = true
                 "REMINDER" -> actions.enableReminder(tip.value ?: 20)
                 "BRIGHTNESS", "NIGHT" -> navigation.onOpenBrightness()
                 "TEST" -> tip.target?.let(navigation.onOpenTest)
@@ -163,6 +165,7 @@ internal fun HomeContent(
         BasicDataCard(state, actions, Modifier.bringIntoViewRequester(basic))
         BehaviorCard(report, Modifier.bringIntoViewRequester(behavior)) { liveEye(liveRequests) }
         SectionTitle("主动服务", null)
+        ExerciseCard { exerciseOpen = true }
         ReminderCard(state, actions)
         ServiceTiles(state, navigation)
         EyeDisclosure("开发者工具") {
@@ -171,6 +174,7 @@ internal fun HomeContent(
         Spacer(Modifier.height(24.dp))
     }
     if (breakOpen) RestBreakPage { breakOpen = false }
+    if (exerciseOpen) EyeExercisePage({ exerciseOpen = false })
 }
 
 private fun greeting(): String = when (LocalTime.now().hour) {
@@ -466,6 +470,24 @@ private fun BehaviorCard(report: EyeCareReport?, modifier: Modifier, live: @Comp
 // endregion
 
 // region 主动服务
+
+/** 护眼操入口：跟小瞳转转眼球（向左、右、上、下看），约 1 分钟。 */
+@Composable
+private fun ExerciseCard(onStart: () -> Unit) {
+    val colors = LocalEyeColors.current
+    val typography = LocalEyeTypography.current
+    Row(Modifier.fillMaxWidth().clip(EyeShapes.panel).background(colors.panelBackground)
+        .clickable(role = Role.Button, onClick = onStart).padding(horizontal = 18.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically) {
+        XiaoTong(MascotMood.HAPPY, Modifier.size(56.dp), interactive = false, headScale = 0.78f)
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            EyeText("护眼操", style = typography.subtitle, color = colors.textPrimary)
+            EyeText("跟小瞳转转眼球 · 约 1 分钟", style = typography.bodySecondary, color = colors.textSecondary)
+        }
+        PillButton("开始", onClick = onStart)
+    }
+}
 
 /** 休息提醒：开关（下次提醒时间）+ 间隔；建议间隔与当前不同时给出一键采用。 */
 @Composable

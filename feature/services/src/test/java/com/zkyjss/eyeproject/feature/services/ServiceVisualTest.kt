@@ -8,6 +8,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asAndroidBitmap
@@ -316,6 +317,38 @@ class ServiceVisualTest {
         capture("23-干眼-测前快问")
         compose.onNodeWithText("开始测试").performScrollTo().performClick()
         assertEquals(mapOf("干眼症状" to "怕光", "症状频率" to "有时", "近期用眼情况" to "比平时多", "近期眼部用药" to "人工泪液"), confirmed)
+    }
+
+    /** 色觉自测的图：示例图人人可读；红 / 绿色觉检测图只差一种视锥，色觉正常者能看出数字。 */
+    @Test @Config(qualifiers = "zh-rCN-w390dp-h1300dp-mdpi")
+    fun colorVisionPlates() {
+        compose.setContent {
+            EyeProjectTheme {
+                Column(Modifier.fillMaxSize().background(LocalEyeColors.current.appBackground).padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    ColorVisionProtocol.plates.filter { it.id in setOf("demo", "p1", "d1", "p4") }.chunked(2).forEach { row ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            row.forEach { ColorPlateView(it, Modifier.weight(1f).aspectRatio(1f)) }
+                        }
+                    }
+                }
+            }
+        }
+        capture("24-色觉自测-检测图")
+    }
+
+    /** 干眼测试中异常暂停（方案二）：计时停止，恢复正常前「继续测试」不可点。 */
+    @Test fun dryEyePauseDialog() {
+        var resumed = false
+        var ready by mutableStateOf(false)
+        compose.setContent { EyeProjectTheme { PauseDialog("离屏幕太近了（约 31 cm），请移到约 40 cm", ready, { resumed = true }) {} } }
+        compose.onNodeWithText("测试已暂停").assertExists()
+        compose.onNodeWithText("继续测试").assertIsNotEnabled()
+        capture("25-干眼-异常暂停")
+        ready = true
+        compose.onNodeWithText("已回到合适位置，可以继续了").assertExists()
+        compose.onNodeWithText("继续测试").performClick()
+        assertTrue(resumed)
     }
 
     /** 服务页：没有「我是小瞳」的介绍文字，舞台轮流示范三项自测，上方气泡说这是哪项测试。 */

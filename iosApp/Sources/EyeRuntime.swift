@@ -190,6 +190,18 @@ final class EyeRuntime: ObservableObject {
     private static func json(_ answers: [String: String]) -> String {
         (try? JSONSerialization.data(withJSONObject: answers)).flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
     }
+    // MARK: 色觉自测（不用相机，流程与判定在共用 ColorVisionEngine）
+
+    func colorAnswer(_ option: String) { controller.colorAnswer(option: option); refresh() }
+    func colorPlateShown() { controller.colorPlateShown() }
+    private var colorDots: [String: [Double]] = [:]
+    /// 一张图的色点（扁平数组 x, y, r, argb），每张只向共用代码取一次。
+    func colorPlateDots(_ plateId: String) -> [Double] {
+        if let cached = colorDots[plateId] { return cached }
+        let values = (try? JSONSerialization.jsonObject(with: Data(controller.colorPlateDotsJson(plateId: plateId).utf8))) as? [Double] ?? []
+        colorDots[plateId] = values
+        return values
+    }
     func proceed(mode: String) {
         controller.setMode(mode: mode)
         if !controller.proceedFromProfile() { error = "请先在资料里填好必需项，并选择这次戴哪副眼镜。" }

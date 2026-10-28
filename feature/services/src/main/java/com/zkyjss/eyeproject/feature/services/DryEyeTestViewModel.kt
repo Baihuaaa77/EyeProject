@@ -42,6 +42,7 @@ class DryEyeTestViewModel @Inject constructor(
     fun permissionDenied() = engine.permissionDenied()
     fun markTrialPresented(trialId: Int, timestampMs: Long) = engine.markTrialPresented(trialId, timestampMs)
     fun startTest() = engine.startTest()
+    fun resumeFromPause() = engine.resumeFromPause()
     fun confirmPracticeGuide() = engine.confirmPracticeGuide()
     fun confirmFormalGuide() = engine.confirmFormalGuide()
     fun startExtended() = engine.startExtended()

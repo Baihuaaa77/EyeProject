@@ -84,7 +84,7 @@ object Explanations {
      */
     fun fromRecord(payload: String): ExplanationRequest? {
         val root = runCatching { SyncContract.json.parseToJsonElement(payload).jsonObject }.getOrNull() ?: return null
-        val kind = root.string("kind")?.takeIf { it in RecordSummaries.KINDS } ?: return null
+        val kind = root.string("kind")?.takeIf { it in RecordSummaries.EXPLAINABLE_KINDS } ?: return null
         val profile = root["profile"] as? JsonObject
         val age = profile?.string("年龄")?.trim()?.toIntOrNull()
         val background = BACKGROUND_KEYS[kind].orEmpty().mapNotNull { key ->

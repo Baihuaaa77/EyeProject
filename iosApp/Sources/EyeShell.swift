@@ -203,6 +203,9 @@ private struct ServicesPage: View {
             SelectCard(title: "老视自测", subtitle: "近视力与调节 · 看 E 选方向") {
                 ServiceGlyphView(glyph: .presbyopia).frame(width: 28, height: 28)
             } action: { open("PRESBYOPIA") }
+            SelectCard(title: "色觉自测", subtitle: "约 1 分钟 · 看色点图认数字") {
+                ServiceGlyphView(glyph: .color).frame(width: 28, height: 28)
+            } action: { open("COLOR_VISION") }
             Text("自测结果仅供参考，不能替代医院检查。").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary).padding(.top, 4)
         }
     }

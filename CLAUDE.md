@@ -39,8 +39,8 @@ core/
   designsystem/ 设计令牌 + EyeProjectTheme（唯一视觉事实源）
   ui/           自绘通用组件（EyeButton/EyeText/…）
 feature/
-  home/         首页 = 主动护眼闭环（负荷评估、小瞳气泡提醒、打卡、多源感知、实时检测开关）+ 趋势 / AI 建议 / 亮度二级页、休息提醒、模型测试入口
-  services/     干眼/老视/斜视自检
+  home/         首页 = 主动护眼闭环（负荷评估、小瞳气泡提醒、打卡、多源感知、实时检测开关）+ 护眼操 + 趋势 / AI 建议 / 亮度二级页、休息提醒、模型测试入口
+  services/     干眼/老视/斜视/色觉自检
   testmodel/    实验页：主导航 + gaze/（FaceDetector + LiteRT L2CS-Net 注视估计）+ blink/（FaceLandmarker EAR 眨眼检测）
   mine/         「我的」入口页 + 二级页：账户、测试记录、家庭成员资料、云端同步（分项同意、导出）、权限与通知
   agent/        占位页

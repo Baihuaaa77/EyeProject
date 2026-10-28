@@ -4,6 +4,7 @@ import androidx.navigation.NavController
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavOptions
 import androidx.navigation.compose.composable
+import com.zkyjss.eyeproject.feature.services.ColorVisionScreen
 import com.zkyjss.eyeproject.feature.services.DryEyeScreen
 import com.zkyjss.eyeproject.feature.services.PresbyopiaScreen
 import com.zkyjss.eyeproject.feature.services.ServicesScreen
@@ -22,6 +23,9 @@ data object PresbyopiaRoute
 
 @Serializable
 data object StrabismusRoute
+
+@Serializable
+data object ColorVisionRoute
 
 /** 顶层页右上角齿轮打开的「系统设置」完整页面。 */
 @Serializable
@@ -43,6 +47,10 @@ fun NavController.navigateToStrabismus() {
     navigate(StrabismusRoute)
 }
 
+fun NavController.navigateToColorVision() {
+    navigate(ColorVisionRoute)
+}
+
 fun NavController.navigateToSystemSettings() {
     navigate(SystemSettingsRoute) { launchSingleTop = true }
 }
@@ -57,12 +65,14 @@ fun NavGraphBuilder.servicesScreen(
     onStrabismusClick: () -> Unit,
     onOpenSettings: () -> Unit = {},
     onOpenAccount: () -> Unit = {},
+    onColorVisionClick: () -> Unit = {},
 ) {
     composable<ServicesRoute> {
         ServicesScreen(
             onDryEyeClick = onDryEyeClick,
             onPresbyopiaClick = onPresbyopiaClick,
             onStrabismusClick = onStrabismusClick,
+            onColorVisionClick = onColorVisionClick,
             onOpenSettings = onOpenSettings,
             onOpenAccount = onOpenAccount,
         )
@@ -85,5 +95,11 @@ fun NavGraphBuilder.presbyopiaScreen(onBack: () -> Unit, onEditSubject: (String?
 fun NavGraphBuilder.strabismusScreen(onBack: () -> Unit, onEditSubject: (String?) -> Unit) {
     composable<StrabismusRoute> {
         StrabismusScreen(onBack = onBack, onEditSubject = onEditSubject)
+    }
+}
+
+fun NavGraphBuilder.colorVisionScreen(onBack: () -> Unit, onEditSubject: (String?) -> Unit) {
+    composable<ColorVisionRoute> {
+        ColorVisionScreen(onBack = onBack, onEditSubject = onEditSubject)
     }
 }

@@ -48,17 +48,18 @@ class MobileScreeningController(
     }
     private var screening = ScreeningEngine(platform,scope)
     private var dry = DryEyeEngine(platform,scope)
+    private var color = ColorVisionEngine(platform,scope)
 
     fun configureDisplay(widthPixels: Int,heightPixels: Int,pixelsPerMm: Float) {
         require(widthPixels > 0 && heightPixels > 0 && pixelsPerMm.isFinite() && pixelsPerMm > 0)
         display = DisplayGeometry(widthPixels,heightPixels,pixelsPerMm * 25.4f,pixelsPerMm * 25.4f)
     }
     fun selectTest(name: String) {
-        require(name in listOf("DRY_EYE","PRESBYOPIA","STRABISMUS"))
+        require(name in listOf("DRY_EYE","PRESBYOPIA","STRABISMUS","COLOR_VISION"))
         dry.close(); screening.close()
-        dry = DryEyeEngine(platform,scope); screening = ScreeningEngine(platform,scope)
+        dry = DryEyeEngine(platform,scope); screening = ScreeningEngine(platform,scope); color = ColorVisionEngine(platform,scope)
         kind = name
-        if (kind != "DRY_EYE") screening.configure(ScreeningKind.valueOf(kind))
+        if (kind == "PRESBYOPIA" || kind == "STRABISMUS") screening.configure(ScreeningKind.valueOf(kind))
     }
     fun setMode(mode: String) = screening.setMode(mode)
 
@@ -69,7 +70,11 @@ class MobileScreeningController(
      */
     fun useSubject(profileJson: String): Boolean {
         val profile = SubjectProfiles.fromJson("[$profileJson]").firstOrNull() ?: return false
-        if (kind == "DRY_EYE") dry.useSubject(profile) else screening.useSubject(profile)
+        when (kind) {
+            "DRY_EYE" -> dry.useSubject(profile)
+            "COLOR_VISION" -> { color.useSubject(profile); return true }
+            else -> screening.useSubject(profile)
+        }
         return kind != "PRESBYOPIA" && !PreTestCheck.needed(kind) && proceedFromProfile()
     }
 
@@ -95,6 +100,7 @@ class MobileScreeningController(
 
     /** 离开选人页进入准备页并启动相机；老视未选戴镜方式或资料不全时返回 false。 */
     fun proceedFromProfile(): Boolean {
+        if (kind == "COLOR_VISION") return color.uiState.value.phase == ColorVisionPhase.Setup
         if (display.xdpi <= 0) return false
         if (kind == "DRY_EYE") {
             if (dry.uiState.value.phase != DryEyePhase.Setup) return false
@@ -119,8 +125,10 @@ class MobileScreeningController(
             "calibrate" -> screening.retryGazeCalibration()
             "extended" -> dry.startExtended()
             "rest" -> dry.startRestRetest()
-            "restart" -> if (kind == "DRY_EYE") dry.restartAll() else screening.restart()
-            "skipProfile" -> if (display.xdpi > 0) {
+            "resume" -> dry.resumeFromPause()
+            "restart" -> when (kind) { "DRY_EYE" -> dry.restartAll(); "COLOR_VISION" -> color.restart(); else -> screening.restart() }
+            "colorStart" -> color.start()
+            "skipProfile" -> if (kind == "COLOR_VISION") color.skipProfile() else if (display.xdpi > 0) {
                 if (kind == "DRY_EYE") { dry.skipProfile(); dry.startMonitoring() } else { screening.skipProfile(); screening.startCamera() }
             }
             "retryCamera" -> if (kind == "DRY_EYE") { dry.stopMonitoring(); dry.startMonitoring() } else screening.retryCamera()
@@ -149,11 +157,32 @@ class MobileScreeningController(
         }
         return 1
     }
+    // region 色觉自测
+
+    /** 选了一个选项（数字或「看不出」）。 */
+    fun colorAnswer(option: String) = color.answer(option)
+
+    /** 苹果端画出这张图后回报，反应时从这里算起。 */
+    fun colorPlateShown() = color.markPlateShown(platform.nowMs())
+
+    /** 一张图的色点：扁平数组 [x, y, r, argb, …]（图半径 1）。每张图只取一次，界面缓存。 */
+    fun colorPlateDotsJson(plateId: String): String =
+        ColorVisionProtocol.plates.firstOrNull { it.id == plateId }?.let { plate ->
+            RecordArray(plate.dots.flatMap { listOf(it.x.toDouble(), it.y.toDouble(), it.r.toDouble(), it.argb.toLong().and(0xFFFFFFFFL).toDouble()) })
+        }?.toString() ?: "[]"
+
+    // endregion
+
     fun markPresented(trialId: Int) {
         if (kind == "DRY_EYE") dry.markTrialPresented(trialId,platform.nowMs()) else screening.markTrialPresented(trialId,platform.nowMs())
     }
     fun feedbackJson(enabled: Boolean): String {
-        val frame = if (kind == "DRY_EYE") screeningFeedbackFrame(dry.uiState.value) else screeningFeedbackFrame(screening.state.value, screening.coverRemainingMs())
+        val frame = when (kind) {
+            "DRY_EYE" -> screeningFeedbackFrame(dry.uiState.value)
+            "COLOR_VISION" -> color.uiState.value.let { c -> ScreeningFeedbackFrame("${c.phase}:${c.plateIndex}",
+                taskActive = c.phase == ColorVisionPhase.Demo || c.phase == ColorVisionPhase.Plates, complete = c.phase == ColorVisionPhase.Result) }
+            else -> screeningFeedbackFrame(screening.state.value, screening.coverRemainingMs())
+        }
         val events = feedbackSession.poll(frame, platform.nowMs(), enabled && !closed)
         return RecordArray(events.map { cue -> RecordObject().apply {
             put("name", cue.name); put("sound", cue.sound); put("microphonePauseMs", cue.microphonePauseMs)
@@ -167,6 +196,7 @@ class MobileScreeningController(
     fun reportPursuitCapacity(xDeg: Float,yDeg: Float) = screening.reportPursuitCapacity(xDeg,yDeg)
     /** 与安卓一致：问卷和结果页切后台不丢内容，只有进行中的任务回到准备页。 */
     fun interrupt() {
+        if (kind == "COLOR_VISION") return
         if (kind == "DRY_EYE") {
             val phase = dry.uiState.value.phase
             if (phase != DryEyePhase.Profile && phase != DryEyePhase.Result) dry.backToSetup("测试已中断，请重新开始")
@@ -175,11 +205,13 @@ class MobileScreeningController(
     }
     /** 回到前台后重新挂接相机；问卷阶段尚未需要相机。 */
     fun resume() {
-        if (closed) return
+        if (closed || kind == "COLOR_VISION") return
         if (kind == "DRY_EYE") { if (dry.uiState.value.phase != DryEyePhase.Profile) dry.startMonitoring() }
         else if (screening.state.value.step == ScreeningStep.ENVIRONMENT) screening.startCamera()
     }
     fun close() { if (!closed) { closed = true; dry.close(); screening.close(); scope.cancel() } }
+    /** 当前测试的完整记录 JSON（结果页导出用）。 */
+    fun lastRecordJson(): String? = when (kind) { "DRY_EYE" -> dry.lastRecordJson; "COLOR_VISION" -> color.lastRecordJson; else -> null }
     fun cameraFailed(message: String) { cameraError?.invoke(IllegalStateException(message)) }
     fun cameraSample(points: FloatArray,matrix: FloatArray,image: GrayImage,focalLengthPx: Float,timeMs: Long,brightness: Float) =
         cameraFace(LandmarkGeometry.face(points,matrix,image),image.width,image.height,focalLengthPx,timeMs,brightness)
@@ -195,13 +227,27 @@ class MobileScreeningController(
     }
     fun snapshotJson(): String {
         val result = RecordObject().apply { put("kind",kind) }
-        if (kind == "DRY_EYE") {
+        if (kind == "COLOR_VISION") {
+            val s = color.uiState.value
+            result.apply {
+                put("phase",s.phase.name); put("title","色觉自测"); put("subjectName",s.subject?.name)
+                s.plate?.let { plate -> put("plateId",plate.id); put("options",RecordArray(plate.options)) }
+                put("demo",s.phase == ColorVisionPhase.Demo); put("plateNumber",s.answers.size + 1); put("plateCount",s.plateCount)
+                put("savedFile",s.savedFile)
+                if (s.phase == ColorVisionPhase.Plates) {
+                    val p = TestProgress(s.progress, (s.plateCount - s.answers.size) * 5)
+                    put("overallProgress",p.fraction); put("remainingText",p.remainingText)
+                }
+                s.result?.let { put("report",it.toRecordObject()) }
+            }
+        } else if (kind == "DRY_EYE") {
             val s = dry.uiState.value
             result.apply {
                 put("phase",s.phase.name); put("title","干眼自测"); put("instruction",s.instruction)
                 put("subjectName",s.subject?.name)
                 put("distanceCm",s.distanceCm); put("gateReady",s.gateReady); put("warning",s.error ?: s.qualityWarning)
                 put("faceDetected",s.faceDetected)
+                put("paused",s.paused); put("pauseReason",s.pauseReason)
                 val distanceSpeech = s.phase in setOf(DryEyePhase.Setup, DryEyePhase.FormalGuide, DryEyePhase.Countdown,
                     DryEyePhase.Practice, DryEyePhase.Natural, DryEyePhase.Open)
                 put("distanceZone",spokenDistanceZone(s.distanceCm,s.faceDetected,

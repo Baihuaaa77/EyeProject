@@ -119,6 +119,8 @@ object SubjectProfiles {
     fun ageRange(kind: String): IntRange = when (kind) {
         "DRY_EYE" -> 6..100
         "PRESBYOPIA" -> 18..100
+        // 色觉图要认得数字
+        "COLOR_VISION" -> 5..100
         else -> 3..100
     }
 

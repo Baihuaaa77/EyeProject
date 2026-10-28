@@ -57,7 +57,7 @@ import com.zkyjss.eyeproject.core.ui.component.drawTumblingE
 import com.zkyjss.eyeproject.core.ui.component.leafEyePath
 import kotlin.math.abs
 
-/** 服务页：小瞳示范舞台 + 三个自测入口。 */
+/** 服务页：小瞳示范舞台 + 四个自测入口。 */
 @Composable
 fun ServicesScreen(
     onDryEyeClick: () -> Unit,
@@ -66,6 +66,7 @@ fun ServicesScreen(
     modifier: Modifier = Modifier,
     onOpenSettings: () -> Unit = {},
     onOpenAccount: (() -> Unit)? = null,
+    onColorVisionClick: () -> Unit = {},
 ) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
@@ -101,6 +102,12 @@ fun ServicesScreen(
             subtitle = "近视力与调节 · 看 E 选方向",
             leading = { ServiceGlyph(ServiceKind.PRESBYOPIA) },
             onClick = onPresbyopiaClick,
+        )
+        EyeSelectCard(
+            content = "色觉自测",
+            subtitle = "约 1 分钟 · 看色点图认数字",
+            leading = { ServiceGlyph(ServiceKind.COLOR) },
+            onClick = onColorVisionClick,
         )
         EyeText(
             "自测结果仅供参考，不能替代医院检查。",
@@ -180,9 +187,9 @@ private fun segmentAt(ms: Float, lengths: List<Int>): Pair<Int, Float> {
     return 0 to 0f
 }
 
-private enum class ServiceKind { DRY_EYE, ALIGNMENT, PRESBYOPIA }
+private enum class ServiceKind { DRY_EYE, ALIGNMENT, PRESBYOPIA, COLOR }
 
-/** 入口卡图标：水滴（干眼）/ 双眼对位（眼位）/ 视标 E（老视），统一主色线性风格。 */
+/** 入口卡图标：水滴（干眼）/ 双眼对位（眼位）/ 视标 E（老视）/ 色点圆（色觉），统一主色线性风格。 */
 @Composable
 private fun ServiceGlyph(kind: ServiceKind) {
     val colors = LocalEyeColors.current
@@ -211,6 +218,16 @@ private fun ServiceGlyph(kind: ServiceKind) {
                 drawLine(colors.accent, Offset(s * 0.1f, s * 0.86f), Offset(s * 0.9f, s * 0.86f), s * 0.08f, StrokeCap.Round)
             }
             ServiceKind.PRESBYOPIA -> drawTumblingE(colors.primary, Offset(s / 2, s / 2), s * 0.62f, 0)
+            ServiceKind.COLOR -> {
+                drawCircle(colors.primary, s * 0.42f, Offset(s / 2, s / 2), style = Stroke(s * 0.07f))
+                // 一圈主色点、中间一竖暖色点：像一张极简的色觉图
+                for (i in 0 until 6) {
+                    val a = Math.toRadians(i * 60.0 + 30.0)
+                    drawCircle(colors.primary, s * 0.07f, Offset(s / 2 + (s * 0.24f * kotlin.math.cos(a)).toFloat(), s / 2 + (s * 0.24f * kotlin.math.sin(a)).toFloat()))
+                }
+                drawCircle(colors.accent, s * 0.08f, Offset(s / 2, s * 0.38f))
+                drawCircle(colors.accent, s * 0.08f, Offset(s / 2, s * 0.62f))
+            }
         }
     }
 }

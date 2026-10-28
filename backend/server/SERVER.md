@@ -67,6 +67,7 @@ $env:DEEPSEEK_API_KEY = "sk-..."; .\gradlew.bat -p backend/server run
 ```
 
 - 输入 `ExplanationRequest`（`shared/sync` 的 `Explanations.fromRecord` 从本机记录抽取：等级、徽标、指标、依据、可靠性说明、年龄段、几项相关资料选项；不含姓名、账号、成员编号、逐帧数据）。
+- 只接受干眼、老视、眼位三项（`RecordSummaries.EXPLAINABLE_KINDS`）；色觉自测记录可同步但不做 AI 解读。
 - 风险等级只来自设备端规则；模型输出与等级矛盾、出现诊断性措辞或编造数字即判为不合格并重试一次，仍不合格返回 502。
 - 需 `AI_EXPLANATION` 同意（403 `consent_required`）；未配置密钥 503 `ai_unavailable`；超额度 429 `ai_quota_exceeded`；每账号每分钟限 6 次。
 - 缓存键 = 提示词版本 + 模型 + 知识库版本 + 输入哈希；改提示词时递增 `ExplanationService.PROMPT_VERSION`，改知识库时更新文件头「版本」。日志只记 token 数。

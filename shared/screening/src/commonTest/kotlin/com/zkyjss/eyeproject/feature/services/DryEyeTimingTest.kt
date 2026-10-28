@@ -62,4 +62,40 @@ class DryEyeTimingTest {
         assertFalse(engine.uiState.value.trialVisible && engine.uiState.value.trialId == second.trialId)
         engine.close()
     }
+
+    /** 方案二：看不到双眼持续 1 秒即暂停（计时冻结、收起视标），恢复后点「继续」才接着计时。 */
+    @Test fun lostEyesPauseTheTimerUntilTheUserContinues() = runTest {
+        val platform = Platform { 1_000 + testScheduler.currentTime }
+        val engine = DryEyeEngine(platform, backgroundScope)
+        engine.skipProfile(); engine.startMonitoring()
+        var eyes = true
+        backgroundScope.launch {
+            while (true) {
+                val now = platform.nowMs()
+                platform.onFrame?.invoke(if (eyes) frame(now) else FaceLandmarkFrame(emptyList(), 400, 400, now, 0, 30f, 150f, now))
+                delay(33)
+            }
+        }
+        advanceTimeBy(1_500); runCurrent()
+        engine.startTest(); engine.confirmPracticeGuide(); runCurrent()
+        advanceTimeBy(3_000); runCurrent()
+        val before = engine.uiState.value.remainingSeconds
+        eyes = false
+        advanceTimeBy(1_400); runCurrent()
+        val paused = engine.uiState.value
+        assertTrue(paused.paused, "看不到双眼 1 秒后暂停")
+        assertFalse(paused.trialVisible, "暂停时不出题")
+        advanceTimeBy(5_000); runCurrent()
+        assertEquals(paused.remainingSeconds, engine.uiState.value.remainingSeconds, "暂停期间计时不走")
+        engine.resumeFromPause(); runCurrent()
+        assertTrue(engine.uiState.value.paused, "还没恢复正常时点继续无效")
+        eyes = true
+        advanceTimeBy(1_000); runCurrent()
+        engine.resumeFromPause(); advanceTimeBy(200); runCurrent()
+        assertFalse(engine.uiState.value.paused)
+        assertTrue(engine.uiState.value.remainingSeconds <= before, "继续后接着原来的时间倒数")
+        advanceTimeBy(1_000); runCurrent()
+        assertTrue(engine.uiState.value.trialVisible, "继续后接着出题")
+        engine.close()
+    }
 }
