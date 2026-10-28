@@ -1,6 +1,7 @@
 package com.zkyjss.eyeproject.core.network
 
 import android.content.Context
+import com.zkyjss.eyeproject.core.sync.SyncContract
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -25,10 +26,10 @@ class ServerAddressStore internal constructor(private val read: () -> String?, p
     /** 当前生效的地址（不含末尾斜杠）；空字符串表示未配置。 */
     val address: StateFlow<String> = _address.asStateFlow()
 
-    /** 保存地址；只接受 http(s)://主机[:端口]，空字符串表示关闭云端。返回 false 表示格式不对。 */
+    /** 保存地址；规则见 [SyncContract.SERVER_ADDRESS]（可带路径前缀，与苹果端同一份），空字符串表示关闭云端。返回 false 表示格式不对。 */
     fun set(url: String): Boolean {
         val trimmed = url.trim().trimEnd('/')
-        if (trimmed.isNotEmpty() && !VALID.matches(trimmed)) return false
+        if (trimmed.isNotEmpty() && !SyncContract.SERVER_ADDRESS.matches(trimmed)) return false
         write(trimmed)
         _address.value = trimmed
         return true
@@ -37,6 +38,5 @@ class ServerAddressStore internal constructor(private val read: () -> String?, p
     private companion object {
         const val PREFS = "eye_server"
         const val KEY = "api_base_url"
-        val VALID = Regex("""^https?://[^\s/]+(:\d+)?$""")
     }
 }

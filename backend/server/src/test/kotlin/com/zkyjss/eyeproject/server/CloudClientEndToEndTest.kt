@@ -15,6 +15,9 @@ import io.ktor.http.HttpMethod
 import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonArray
@@ -149,10 +152,31 @@ class CloudClientEndToEndTest {
                     client.sync()
                     assertNull(services.db.transaction { single("SELECT id FROM subjects WHERE id = ?", kidId) { it.getString(1) } })
 
-                    // 退出登录只清会话，本机资料与记录保留
+                    // 服务器连不上（换了网络、原服务器已关）：同步卡住时照样能退出，且立即生效、不等服务器
+                    val refreshToken = SyncContract.json.parseToJsonElement(phone.secrets.values.single())
+                        .jsonObject["refreshToken"]!!.jsonPrimitive.content
+                    val unreachable = CoroutineScope(Job() + Dispatchers.Unconfined)
+                    val offline = CloudClient(object : HttpTransport {
+                        override fun send(method: String, url: String, headers: Map<String, String>, body: String?, callback: HttpCallback) = Unit
+                    }, phone, unreachable) { }
+                    offline.syncNow(userInitiated = true)
+                    assertEquals("true", SyncContract.json.parseToJsonElement(offline.snapshotJson()).jsonObject["busy"]!!.jsonPrimitive.content)
+                    offline.signOut()
+                    val signedOut = SyncContract.json.parseToJsonElement(offline.snapshotJson()).jsonObject
+                    assertEquals("false", signedOut["signedIn"]!!.jsonPrimitive.content)
+                    assertEquals("false", signedOut["busy"]!!.jsonPrimitive.content)
+                    assertEquals("已退出登录，本机记录仍保留", signedOut["message"]!!.jsonPrimitive.content)
+                    assertTrue(phone.secrets.isEmpty())
+                    unreachable.cancel()
+
+                    // 服务器连得上：退出登录只清会话，本机资料与记录保留，并在后台吊销服务端令牌
                     client.signOut(); client.awaitIdle()
                     assertTrue(phone.secrets.isEmpty())
                     assertEquals(3, phone.records.size)
+                    val reuse = http.request("/v1/auth/refresh") {
+                        method = HttpMethod.Post; contentType(ContentType.Application.Json); setBody("""{"refreshToken":"$refreshToken"}""")
+                    }
+                    assertEquals(401, reuse.status.value, "退出后旧刷新令牌已吊销")
                 }
             }
         } finally {

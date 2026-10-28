@@ -14,9 +14,12 @@ import com.zkyjss.eyeproject.core.sync.RegisterRequest
 import com.zkyjss.eyeproject.core.sync.SyncContract
 import com.zkyjss.eyeproject.core.sync.TokenResponse
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -69,6 +72,8 @@ internal class DefaultAccountRepository @Inject constructor(
     private val scheduler: SyncScheduler,
     private val addresses: ServerAddressStore,
 ) : AccountRepository {
+    /** 退出登录后吊销服务端令牌用：单例仓储自持的作用域，不随页面取消。 */
+    private val revokeScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override val accountState: Flow<AccountState> = combine(sessions.session, addresses.address) { session, address ->
         AccountState(
@@ -88,7 +93,7 @@ internal class DefaultAccountRepository @Inject constructor(
         if (trimmed == addresses.address.value) return AccountResult.Success
         // 会话属于原服务器：换地址先退出登录
         val previous = sessions.session.value
-        if (!addresses.set(trimmed)) return AccountResult.Failure("地址格式应为 http://IP:端口 或 https://域名")
+        if (!addresses.set(trimmed)) return AccountResult.Failure(SyncContract.SERVER_ADDRESS_HINT)
         if (previous != null) sessions.save(null)
         return AccountResult.Success
     }
@@ -101,9 +106,16 @@ internal class DefaultAccountRepository @Inject constructor(
 
     override suspend fun signOut() {
         val session = sessions.session.value ?: return
-        // 尽力吊销服务端令牌；离线时直接清本机会话。
-        caller.call { token -> network.logout(token, session.refreshToken) }
+        // 先清本机会话：退出立即生效，服务器连不上（换了网络、原服务器已关）也不会卡住
         sessions.save(null)
+        // 再在后台尽力吊销服务端令牌，不等结果；失败也无妨，令牌到期后服务端自会失效
+        revokeScope.launch {
+            val (access, refresh) = if (session.accessExpiresAt - REVOKE_MARGIN_MS > System.currentTimeMillis())
+                session.accessToken to session.refreshToken
+            else (network.refresh(session.refreshToken) as? NetworkResult.Success)?.value
+                ?.let { it.accessToken to it.refreshToken } ?: return@launch
+            network.logout(access, refresh)
+        }
     }
 
     override suspend fun setConsent(type: ConsentType, granted: Boolean): AccountResult {
@@ -179,3 +191,6 @@ internal fun NetworkResult<*>.failure(): AccountResult.Failure = when (this) {
     is NetworkResult.Unreachable -> AccountResult.Failure("无法连接云端服务，请检查网络后重试")
     is NetworkResult.Success -> AccountResult.Failure("未知错误")
 }
+
+/** 退出时访问令牌离过期不足这么久就先刷新再吊销，与 AuthorizedCaller 一致。 */
+private const val REVOKE_MARGIN_MS = 30_000L

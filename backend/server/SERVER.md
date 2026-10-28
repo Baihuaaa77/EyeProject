@@ -12,7 +12,7 @@ Ktor 3 API 服务：账号、家庭成员（被测者）及其健康资料、分
 
 本机若有 `E:\Android\gradle-cache\gradle.properties` 写死的旧代理端口导致下载失败，命令后加 `-Dhttp.proxyPort=<端口> -Dhttps.proxyPort=<端口>` 覆盖。
 
-iOS 连本机服务：在「我的 → 云端同步 → 服务器地址」（已登录时先退出登录，在「数据如何处理 · 服务器设置」里修改）填电脑的局域网地址（如 `http://192.168.1.5:8080`），手机与电脑连同一 Wi-Fi；
+iOS 连本机服务：在「我的 → 右上角人像（账户）→ 服务器地址」（未登录时可改；退出登录立即生效，不等服务器）填电脑的局域网地址（如 `http://192.168.1.5:8080`），手机与电脑连同一 Wi-Fi；
 首次连接时允许「本地网络」权限。客户端逻辑见 `shared/sync` 的 `client/CloudClient`。
 
 安卓调试包连本机服务：在根 `local.properties` 写 `eyeproject.apiBaseUrl=http://10.0.2.2:8080`（模拟器）或局域网地址（真机），见 `core/network/NETWORK.md`。
@@ -90,4 +90,4 @@ $env:DEEPSEEK_API_KEY = "sk-..."; .\gradlew.bat -p backend/server run
 - 被测者：`POST /v1/subjects` 可带客户端生成的 UUID（离线新建的成员与云端同号）；更新用 `PATCH` 或 `PUT /v1/subjects/{id}`（安卓 HttpURLConnection 不支持 PATCH）。
 - 健康资料：`PUT /v1/subjects/{id}/profile`（`SubjectProfileInput`：键 → 答案 + 客户端修改时间），`GET /v1/subjects` 与导出返回解密后的资料。规则同记录：需 `HEALTH_DATA_SYNC`，儿童需该成员的 `GUARDIAN`；客户端修改时间早于云端已有版本返回 409，最多 64 项、值 ≤ 200 字。迁移 `V2__subject_profile.sql`。
 - 日志不得打印请求体、令牌、邮箱。新增读取原文的接口必须写审计。
-- 未部署：托管、TLS、KMS、短信登录均待决策（设计文档 §9）；LLM 已按 §5.4 接入 DeepSeek，正式启用前需完成数据处理协议与知识库医学审核。
+- 未部署：托管、TLS、KMS、短信登录均待决策（设计文档 §9），自建 Linux 服务器的部署步骤见 [`docs/后端部署说明.md`](../../docs/后端部署说明.md)；LLM 已按 §5.4 接入 DeepSeek，正式启用前需完成数据处理协议与知识库医学审核。

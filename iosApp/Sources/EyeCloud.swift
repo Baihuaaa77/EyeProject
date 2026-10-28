@@ -221,7 +221,8 @@ struct AccountPage: View {
             }
             if !message.isEmpty { note(message) }
             ListGroup {
-                ListRow(title: "退出登录", glyph: .logout, tone: .neutral, enabled: !busy) { cloud.client.signOut() }
+                // 退出登录随时可点：立即清本机会话，不等同步或服务器
+                ListRow(title: "退出登录", glyph: .logout, tone: .neutral) { cloud.client.signOut() }
                 ListRow(title: confirmDelete ? "确认注销账号" : "注销账号", glyph: .trash, tone: .danger,
                         subtitle: confirmDelete ? "将永久删除云端账号与全部已上传数据，本机记录保留" : nil,
                         titleColor: EyeStyle.danger, divider: false, enabled: !busy) {

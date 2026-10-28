@@ -4,6 +4,7 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -16,6 +17,14 @@ internal const val DRY_EYE_RECORD = """{"protocolVersion":1,"kind":"DRY_EYE","as
 "riskLevel":"UNKNOWN","valid":false,"validityReasons":["测试未完整完成"],"features":{"blink_rate_per_min":12.0,"vmr":null}}"""
 
 class RecordSummaryTest {
+    @Test fun serverAddressMayCarryAPathPrefix() {
+        // 局域网 IP、域名、部署在主页域名下的子路径都可以；不接受查询串、空格和非 http(s)
+        listOf("http://192.168.1.5:8080", "https://eye.example.com", "https://geometrylearning.com/eyeapi", "https://example.com/a/b")
+            .forEach { assertTrue(SyncContract.SERVER_ADDRESS.matches(it), it) }
+        listOf("ftp://example.com", "example.com", "https://", "https://example.com/eyeapi?x=1", "https://exa mple.com")
+            .forEach { assertFalse(SyncContract.SERVER_ADDRESS.matches(it), it) }
+    }
+
     @Test fun parsesScreeningAssessment() {
         val s = RecordSummaries.parse(STRABISMUS_RECORD)
         assertEquals("STRABISMUS", s.kind)

@@ -9,6 +9,12 @@ import kotlinx.serialization.json.Json
  */
 object SyncContract {
     const val API_PREFIX = "/v1"
+    /**
+     * 服务器地址格式（双端共用）：`http(s)://主机[:端口]`，可带路径前缀（如部署在主页域名下的 `https://域名/eyeapi`），
+     * 不带查询串；末尾的 `/` 由调用方去掉。接口地址 = 服务器地址 + [API_PREFIX] + 路径。
+     */
+    val SERVER_ADDRESS = Regex("""^https?://[^\s/?#]+(/[^\s?#]*)?$""")
+    const val SERVER_ADDRESS_HINT = "地址格式应为 http://IP:端口 或 https://域名[/路径]"
     /** 当前隐私政策与健康数据处理说明的版本，随 App 文本更新。 */
     const val PRIVACY_POLICY_VERSION = "2026-10-15"
     /** 单条记录原文上限（字节）；斜视逐帧样本约 2 MB。 */

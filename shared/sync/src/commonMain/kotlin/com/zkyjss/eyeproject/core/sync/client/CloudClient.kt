@@ -30,6 +30,8 @@ import com.zkyjss.eyeproject.core.sync.TokenResponse
 import com.zkyjss.eyeproject.core.sync.UploadResult
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -109,8 +111,8 @@ class CloudClient(
     /** 设置服务器地址；只接受 http(s) 地址，空字符串表示关闭云端。换地址时退出登录。 */
     fun setServer(url: String): Boolean {
         val trimmed = url.trim().trimEnd('/')
-        if (trimmed.isNotEmpty() && !Regex("^https?://[^\\s/]+(:\\d+)?$").matches(trimmed)) {
-            message = "地址格式应为 http://IP:端口 或 https://域名"; outcome(false); onChange(); return false
+        if (trimmed.isNotEmpty() && !SyncContract.SERVER_ADDRESS.matches(trimmed)) {
+            message = SyncContract.SERVER_ADDRESS_HINT; outcome(false); onChange(); return false
         }
         if (trimmed != serverUrl) { session = null; message = null }
         serverUrl = trimmed
@@ -126,12 +128,26 @@ class CloudClient(
 
     fun signIn(email: String, password: String) = act("已登录") { establish(api.login(LoginRequest(email.trim(), password))) }
 
-    /** 退出登录只清本机会话；本机测试记录与成员资料保留。 */
-    fun signOut() = act("已退出登录，本机记录仍保留") {
-        val current = session ?: return@act null
-        authorized { api.logout(it, current.refreshToken) }
+    /**
+     * 退出登录只清本机会话；本机测试记录与成员资料保留。立即生效、不等服务器：
+     * 以前要等服务端吊销令牌、且同步进行中按钮不可点，服务器连不上（如换了网络、原服务器已关）时就退不出去。
+     * 现在先停掉进行中的同步、清掉会话，再在后台尽力吊销服务端令牌（连不上就算了，令牌到期后服务端也会失效）。
+     */
+    fun signOut() {
+        val current = session ?: return
+        syncJob?.cancel(); syncJob = null
+        resyncRequested = false; reportSync = false; syncing = false
         session = null
-        null
+        message = "已退出登录，本机记录仍保留"
+        outcome(true); onChange()
+        track(scope.launch { revoke(current) })
+    }
+
+    /** 用退出前的令牌吊销服务端会话；访问令牌快过期时先用刷新令牌换一对新的再吊销。 */
+    private suspend fun revoke(old: CloudSession) {
+        val (access, refresh) = if (old.accessExpiresAt - EXPIRY_MARGIN_MS > platform.nowMs()) old.accessToken to old.refreshToken
+            else (api.refresh(old.refreshToken) as? ApiResult.Ok)?.value?.let { it.accessToken to it.refreshToken } ?: return
+        api.logout(access, refresh)
     }
 
     /** [type] 为 HEALTH_DATA_SYNC / GUARDIAN / RESEARCH_USE / AI_EXPLANATION / AI_ADVICE；GUARDIAN 指「本人」这一成员的监护人同意。 */
@@ -431,6 +447,8 @@ class CloudClient(
         val report = runCatching {
             RecordSyncEngine(outbox, remote, platform::nowMs, subjectFor = ::remoteSubjectFor, clientPlatform = "iOS").pushPending()
         }.getOrElse { SyncReport(stopReason = SyncStopReason.TRANSIENT) }
+        // 同步途中退出登录会取消本轮：不再写结果，免得盖掉「已退出登录」
+        currentCoroutineContext().ensureActive()
         lastSyncAt = platform.nowMs()
         message = describe(report)
         syncing = false; onChange()
@@ -477,6 +495,8 @@ class CloudClient(
         return when (val result = api.refresh(current.refreshToken)) {
             is ApiResult.Ok -> {
                 val t = result.value
+                // 刷新途中已退出登录（或换了账号）：不把会话写回来
+                if (session?.refreshToken != current.refreshToken) return SIGNED_OUT
                 session = current.copy(accessToken = t.accessToken, accessExpiresAt = t.accessExpiresAt,
                     refreshToken = t.refreshToken, refreshExpiresAt = t.refreshExpiresAt)
                 ApiResult.Ok(t.accessToken, result.status)

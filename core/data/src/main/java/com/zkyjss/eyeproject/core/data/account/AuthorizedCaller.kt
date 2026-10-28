@@ -48,6 +48,8 @@ internal class AuthorizedCaller @Inject constructor(
         when (val result = network.refresh(current.refreshToken)) {
             is NetworkResult.Success -> {
                 val tokens = result.value
+                // 刷新途中已退出登录（或换了账号）：不把会话写回来
+                if (sessions.session.value?.refreshToken != current.refreshToken) return SIGNED_OUT
                 sessions.save(current.copy(accessToken = tokens.accessToken, accessExpiresAt = tokens.accessExpiresAt,
                     refreshToken = tokens.refreshToken, refreshExpiresAt = tokens.refreshExpiresAt))
                 NetworkResult.Success(tokens.accessToken, result.status)

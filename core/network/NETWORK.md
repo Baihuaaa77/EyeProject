@@ -12,7 +12,7 @@
 
 ## 服务器地址
 
-`ServerAddressStore` 持有当前地址（`StateFlow`）：用户在「我的 → 云端同步」填写的地址存 SharedPreferences（`eye_server`），未填写时回退构建期常量 `BuildConfig.API_BASE_URL`（Gradle 属性 `-Peyeproject.apiBaseUrl=...` 或根 `local.properties` 的 `eyeproject.apiBaseUrl=...`）。只接受 `http(s)://主机[:端口]`；换地址由 `AccountRepository.setServerAddress` 一并退出登录。与苹果端 `CloudClient.setServer` 同一规则。
+`ServerAddressStore` 持有当前地址（`StateFlow`）：用户在「我的 → 云端同步」填写的地址存 SharedPreferences（`eye_server`），未填写时回退构建期常量 `BuildConfig.API_BASE_URL`（Gradle 属性 `-Peyeproject.apiBaseUrl=...` 或根 `local.properties` 的 `eyeproject.apiBaseUrl=...`）。格式规则为共用的 `SyncContract.SERVER_ADDRESS`：`http(s)://主机[:端口]`，可带路径前缀（如 `https://域名/eyeapi`，接口地址 = 地址 + `/v1` + 路径）；换地址由 `AccountRepository.setServerAddress` 一并退出登录。与苹果端 `CloudClient.setServer` 同一规则。
 `HttpEyeNetworkDataSource` 每次请求读取当前地址，改地址无需重启。
 **缺省为空**：`isConfigured = false`，「我的」页显示「未连接服务器」，任何数据都不会离开设备。正式地址待托管决策（设计文档 §9）。
 
