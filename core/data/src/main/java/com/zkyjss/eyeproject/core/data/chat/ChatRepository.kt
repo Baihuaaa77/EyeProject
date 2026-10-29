@@ -44,6 +44,8 @@ data class ChatState(
     val messages: List<ChatEntry> = emptyList(),
     val sending: Boolean = false,
     val error: String? = null,
+    /** 发送前是否弹同意说明：未同意时总要弹；已同意且勾过「以后不再提示」就不弹 */
+    val askConsent: Boolean = true,
 )
 
 /**
@@ -53,8 +55,11 @@ data class ChatState(
  */
 interface ChatRepository {
     val state: Flow<ChatState>
-    /** 发一条消息；[context] 为当下概况（没有时为 null），[agreeFirst] 为点了「同意并发送」，同意未能保存则不发送任何内容。 */
-    suspend fun send(text: String, context: AdviceRequest?, agreeFirst: Boolean = false)
+    /**
+     * 发一条消息；[context] 为当下概况（没有时为 null）。[agreeFirst] 为在弹窗里点了「同意」（还没同意过时先保存同意，
+     * 未能保存则不发送任何内容）；[dontAskAgain] 为弹窗里勾了「以后不再提示」。
+     */
+    suspend fun send(text: String, context: AdviceRequest?, agreeFirst: Boolean = false, dontAskAgain: Boolean = false)
     suspend fun clear()
 }
 
@@ -80,6 +85,8 @@ internal class DefaultChatRepository(
     ) : this(context.filesDir, network, sessions, caller, accounts, advice, addresses.address)
 
     private val file = File(directory, FILE)
+    private val noPromptFile = File(directory, NO_PROMPT_FILE)
+    private val noPrompt = MutableStateFlow(false)
     private val lock = Mutex()
     private val history = MutableStateFlow<List<ChatEntry>>(emptyList())
     private var loaded = false
@@ -88,21 +95,26 @@ internal class DefaultChatRepository(
 
     override val state: Flow<ChatState> = flow {
         load()
-        emitAll(combine(history, sending, error, sessions.session, serverAddress) { messages, busy, failure, session, address ->
+        val status = combine(sending, error, noPrompt) { busy, failure, quiet -> Triple(busy, failure, !quiet) }
+        emitAll(combine(history, status, sessions.session, serverAddress) { messages, (busy, failure, ask), session, address ->
             val (access, message) = when {
                 address.isBlank() -> ChatAccess.NEEDS_ACCOUNT to "连接云端服务并登录后，就可以和小瞳聊天了"
                 session == null -> ChatAccess.NEEDS_ACCOUNT to "登录账户后，就可以和小瞳聊聊今天的用眼感受"
                 session.consents[ConsentType.AI_CHAT] != true -> ChatAccess.NEEDS_CONSENT to null
                 else -> ChatAccess.READY to null
             }
-            ChatState(access, message, messages, busy, failure)
+            ChatState(access, message, messages, busy, failure, ask)
         })
     }
 
-    override suspend fun send(text: String, context: AdviceRequest?, agreeFirst: Boolean) {
+    override suspend fun send(text: String, context: AdviceRequest?, agreeFirst: Boolean, dontAskAgain: Boolean) {
         val question = text.trim().take(Chats.INPUT_LIMIT)
         if (question.isEmpty() || sending.value) return
         load()
+        if (dontAskAgain && !noPrompt.value) {
+            withContext(Dispatchers.IO) { noPromptFile.writeText("1") }
+            noPrompt.value = true
+        }
         sending.value = true; error.value = null
         append(ChatEntry(Chats.USER, question, clock(), urgent = Chats.redFlag(question)))
         error.value = run {
@@ -144,6 +156,7 @@ internal class DefaultChatRepository(
         history.value = withContext(Dispatchers.IO) {
             runCatching { SyncContract.json.decodeFromString(SERIALIZER, file.readText()) }.getOrDefault(emptyList())
         }
+        noPrompt.value = withContext(Dispatchers.IO) { noPromptFile.exists() }
         loaded = true
     }
 
@@ -159,6 +172,8 @@ internal class DefaultChatRepository(
 
     companion object {
         const val FILE = "ai_chat.json"
+        /** 勾过「以后不再提示」的标记（清空对话不影响） */
+        const val NO_PROMPT_FILE = "ai_chat_no_prompt"
         private val SERIALIZER = ListSerializer(ChatEntry.serializer())
     }
 }

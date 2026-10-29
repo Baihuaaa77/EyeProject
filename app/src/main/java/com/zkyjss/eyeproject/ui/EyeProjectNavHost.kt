@@ -145,7 +145,7 @@ fun EyeProjectNavHost(
                 onEditProfile = { navController.navigateToSubjectEdit(it) },
                 onOpenTrend = { navController.navigateToEyeTrend() },
                 onOpenAdvice = { navController.navigateToEyeAdvice() },
-                onOpenChat = { navController.navigateToEyeChat(it) },
+                onOpenChat = { navController.navigateToEyeChat() },
                 onOpenBrightness = { navController.navigateToEyeBrightness() },
             ))
             eyeCareScreens(onBack = back, onOpenTest = openTest, onOpenAccount = openAccount)

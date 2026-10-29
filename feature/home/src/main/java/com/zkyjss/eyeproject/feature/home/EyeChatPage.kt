@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -32,6 +31,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -50,8 +50,8 @@ import com.zkyjss.eyeproject.core.ui.component.AiExplanationCard
 import com.zkyjss.eyeproject.core.ui.component.EyeButton
 import com.zkyjss.eyeproject.core.ui.component.EyeButtonRole
 import com.zkyjss.eyeproject.core.ui.component.EyeGlyph
-import com.zkyjss.eyeproject.core.ui.component.EyeGlyphIcon
 import com.zkyjss.eyeproject.core.ui.component.EyeIconTile
+import com.zkyjss.eyeproject.core.ui.component.EyeOptionRow
 import com.zkyjss.eyeproject.core.ui.component.EyeSubPage
 import com.zkyjss.eyeproject.core.ui.component.EyeText
 import com.zkyjss.eyeproject.core.ui.component.EyeTileTone
@@ -69,49 +69,38 @@ import kotlinx.coroutines.launch
 class ChatViewModel @Inject constructor(private val chat: ChatRepository) : ViewModel() {
     val state: StateFlow<ChatState?> = chat.state.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-    fun send(text: String, context: AdviceRequest?, agreeFirst: Boolean) { viewModelScope.launch { chat.send(text, context, agreeFirst) } }
+    fun send(text: String, context: AdviceRequest?, agreeFirst: Boolean, dontAskAgain: Boolean) {
+        viewModelScope.launch { chat.send(text, context, agreeFirst, dontAskAgain) }
+    }
     fun clear() { viewModelScope.launch { chat.clear() } }
 }
 
-/** 首页「AI 综合建议」入口（放在「今日感受」上方）：像一个输入框，点一下或点快捷提问就进入对话页。与苹果端 ChatEntryCard 一致。 */
-@OptIn(ExperimentalLayoutApi::class)
+/** 首页「AI 综合建议」入口（放在「今日感受」上方）：一个按钮，点了进入对话页。与苹果端 ChatEntryCard 一致。 */
 @Composable
-internal fun ChatEntryCard(onOpen: (String?) -> Unit) {
+internal fun ChatEntryCard(onOpen: () -> Unit) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
     val haptics = rememberEyeHaptics()
-    Column(Modifier.fillMaxWidth().clip(EyeShapes.panel).background(colors.panelBackground).padding(18.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(Modifier.fillMaxWidth().clickable(role = Role.Button) { haptics.tap(); onOpen(null) }, verticalAlignment = Alignment.CenterVertically) {
-            EyeIconTile(EyeGlyph.BULB, EyeTileTone.ACCENT, 32.dp)
-            Spacer(Modifier.width(10.dp))
-            Column(Modifier.weight(1f)) {
-                EyeText("AI 综合建议", style = typography.subtitle, color = colors.textPrimary)
-                EyeText("和小瞳聊聊今天的用眼感受", style = typography.bodySecondary, color = colors.textSecondary)
-            }
-            EyeText("›", style = typography.title, color = colors.textSecondary)
+    Row(Modifier.fillMaxWidth().clip(EyeShapes.panel).background(colors.panelBackground)
+        .clickable(role = Role.Button) { haptics.tap(); onOpen() }.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
+        EyeIconTile(EyeGlyph.BULB, EyeTileTone.ACCENT, 32.dp)
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            EyeText("AI 综合建议", style = typography.subtitle, color = colors.textPrimary)
+            EyeText("和小瞳聊聊今天的用眼感受", style = typography.bodySecondary, color = colors.textSecondary)
         }
-        Row(Modifier.fillMaxWidth().heightIn(min = 46.dp).clip(EyeShapes.chip).background(colors.appBackground)
-            .clickable(role = Role.Button) { haptics.tap(); onOpen(null) }.padding(horizontal = 14.dp),
-            verticalAlignment = Alignment.CenterVertically) {
-            EyeText("说说今天眼睛的感受…", Modifier.weight(1f), style = typography.body, color = colors.textSecondary)
-            EyeGlyphIcon(EyeGlyph.CHAT, Modifier.size(20.dp), colors.primary)
-        }
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Chats.SUGGESTIONS.take(3).forEach { text -> ChoiceChip(text, false) { onOpen(text) } }
-        }
+        EyeText("›", style = typography.title, color = colors.textSecondary)
     }
 }
 
 /**
  * 「AI 综合建议」对话页：开场是今天的综合建议卡片，下面和小瞳自由对话；记录只存在本机，可清空。
- * [draft] 为首页点的快捷提问（放进输入框，不自动发送）。与苹果端 AiChatPage 同一规则与文案。
+ * 同意说明平时不展示，发送时按需弹窗（见 [ChatConsentDialog]）。与苹果端 AiChatPage 同一规则与文案。
  */
 @Composable
 fun EyeChatScreen(
     onBack: () -> Unit,
     onOpenAccount: () -> Unit,
-    draft: String? = null,
     home: HomeViewModel = hiltViewModel(),
     viewModel: ChatViewModel = hiltViewModel(),
 ) {
@@ -120,10 +109,9 @@ fun EyeChatScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     EyeChatContent(
         state = state,
-        draft = draft,
         onBack = onBack,
         onOpenAccount = onOpenAccount,
-        onSend = { text, agree -> viewModel.send(text, homeState.adviceRequest, agree) },
+        onSend = { text, agree, quiet -> viewModel.send(text, homeState.adviceRequest, agree, quiet) },
         onClear = viewModel::clear,
     ) {
         card?.let { AiExplanationCard(it, onGenerate = { home.generateAdvice() }, onAgree = { home.generateAdvice(agreeFirst = true) },
@@ -135,23 +123,32 @@ fun EyeChatScreen(
 @Composable
 internal fun EyeChatContent(
     state: ChatState?,
-    draft: String?,
     onBack: () -> Unit,
     onOpenAccount: () -> Unit,
-    onSend: (String, Boolean) -> Unit,
+    /** 文字、是否先保存同意、是否勾了「以后不再提示」 */
+    onSend: (String, Boolean, Boolean) -> Unit,
     onClear: () -> Unit,
     opening: @Composable () -> Unit,
 ) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
     val scroll = rememberScrollState()
-    var input by rememberSaveable { mutableStateOf(draft.orEmpty()) }
+    var input by rememberSaveable { mutableStateOf("") }
     var confirmClear by rememberSaveable { mutableStateOf(false) }
+    // 本次进入对话页是否已弹过同意说明；还没同意时每次发送都要弹
+    var asked by rememberSaveable { mutableStateOf(false) }
+    var confirming by rememberSaveable { mutableStateOf(false) }
+    val needsConsent = state?.access == ChatAccess.NEEDS_CONSENT
     val messages = state?.messages.orEmpty()
+    fun send(agree: Boolean, quiet: Boolean) { onSend(input, agree, quiet); input = "" }
     LaunchedEffect(messages.size, state?.sending) { scroll.animateScrollTo(scroll.maxValue) }
+    if (confirming) ChatConsentDialog(
+        onAgree = { quiet -> confirming = false; asked = true; send(needsConsent, quiet) },
+        onDecline = { confirming = false },
+    )
     EyeSubPage("AI 综合建议", onBack, Modifier.imePadding(), scroll = scroll, bottomBar = {
-        ChatInputBar(state, input, { input = it.take(Chats.INPUT_LIMIT) }, onOpenAccount) { agree ->
-            onSend(input, agree); input = ""
+        ChatInputBar(state, input, { input = it.take(Chats.INPUT_LIMIT) }, onOpenAccount) {
+            if (needsConsent || (state?.askConsent == true && !asked)) confirming = true else send(agree = false, quiet = false)
         }
     }) {
         opening()
@@ -179,9 +176,9 @@ internal fun EyeChatContent(
     }
 }
 
-/** 底部：未登录提示去登录；未同意时显示说明与「同意并发送」；否则输入框 + 发送。 */
+/** 底部：未登录提示去登录；否则输入框 + 发送。 */
 @Composable
-private fun ChatInputBar(state: ChatState?, input: String, onInput: (String) -> Unit, onOpenAccount: () -> Unit, onSend: (Boolean) -> Unit) {
+private fun ChatInputBar(state: ChatState?, input: String, onInput: (String) -> Unit, onOpenAccount: () -> Unit, onSend: () -> Unit) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
     val haptics = rememberEyeHaptics()
@@ -192,17 +189,41 @@ private fun ChatInputBar(state: ChatState?, input: String, onInput: (String) -> 
             EyeButton("登录 / 注册", EyeButtonRole.PRIMARY, onOpenAccount, Modifier.fillMaxWidth())
         }
         else -> {
-            val consent = state.access == ChatAccess.NEEDS_CONSENT
-            if (consent) EyeText(Chats.CONSENT_TEXT, style = typography.bodySecondary, color = colors.textSecondary)
             Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Box(Modifier.weight(1f).clip(EyeShapes.panel).background(colors.panelBackground).padding(horizontal = 14.dp, vertical = 12.dp)) {
                     if (input.isEmpty()) EyeText("说说今天眼睛的感受…", style = typography.body, color = colors.textSecondary)
                     BasicTextField(input, onInput, Modifier.fillMaxWidth(), textStyle = typography.body.copy(color = colors.textPrimary),
                         cursorBrush = SolidColor(colors.primary), maxLines = 4)
                 }
-                EyeButton(if (consent) "同意并发送" else "发送", EyeButtonRole.PRIMARY, { haptics.tap(); onSend(consent) },
+                EyeButton("发送", EyeButtonRole.PRIMARY, { haptics.tap(); onSend() },
                     enabled = input.isNotBlank() && !state.sending)
             }
+        }
+    }
+}
+
+/**
+ * 发送前的同意说明弹窗：还没同意时每次发送都弹；已同意但没勾「以后不再提示」时，每次进入对话页第一次发送弹一次。
+ * 「同意」后发送（[onAgree] 带上是否勾了「以后不再提示」），「不同意」只关闭、输入框里的字保留。与苹果端 ChatConsentView 同一文案。
+ */
+@Composable
+internal fun ChatConsentDialog(onAgree: (Boolean) -> Unit, onDecline: () -> Unit) {
+    val colors = LocalEyeColors.current
+    val typography = LocalEyeTypography.current
+    val haptics = rememberEyeHaptics()
+    var quiet by rememberSaveable { mutableStateOf(false) }
+    Dialog(onDismissRequest = onDecline) {
+        Column(Modifier.fillMaxWidth().clip(EyeShapes.panel).background(colors.panelBackground).padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                XiaoTong(MascotMood.HAPPY, Modifier.size(40.dp), interactive = false)
+                Spacer(Modifier.width(10.dp))
+                EyeText(Chats.CONSENT_TITLE, style = typography.title, color = colors.textPrimary)
+            }
+            EyeText(Chats.CONSENT_TEXT, style = typography.body, color = colors.textSecondary)
+            EyeOptionRow(Chats.DONT_ASK_AGAIN, null, quiet, multiple = true) { haptics.tap(); quiet = !quiet }
+            EyeButton("同意", EyeButtonRole.PRIMARY, { haptics.tap(); onAgree(quiet) }, Modifier.fillMaxWidth())
+            EyeButton("不同意", EyeButtonRole.SECONDARY, onDecline, Modifier.fillMaxWidth())
         }
     }
 }

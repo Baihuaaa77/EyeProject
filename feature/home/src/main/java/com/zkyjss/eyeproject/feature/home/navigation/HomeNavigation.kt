@@ -4,7 +4,6 @@ import androidx.navigation.NavController
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavOptions
 import androidx.navigation.compose.composable
-import androidx.navigation.toRoute
 import com.zkyjss.eyeproject.feature.home.EyeAdviceScreen
 import com.zkyjss.eyeproject.feature.home.EyeBrightnessScreen
 import com.zkyjss.eyeproject.feature.home.EyeChatScreen
@@ -28,9 +27,9 @@ data object EyeAdviceRoute
 @Serializable
 data object EyeBrightnessRoute
 
-/** AI 综合建议对话页；[draft] 为首页点的快捷提问。 */
+/** AI 综合建议对话页。 */
 @Serializable
-data class EyeChatRoute(val draft: String? = null)
+data object EyeChatRoute
 
 fun NavController.navigateToHome(navOptions: NavOptions? = null) {
     navigate(HomeRoute, navOptions)
@@ -39,7 +38,7 @@ fun NavController.navigateToHome(navOptions: NavOptions? = null) {
 fun NavController.navigateToEyeTrend() { navigate(EyeTrendRoute) { launchSingleTop = true } }
 fun NavController.navigateToEyeAdvice() { navigate(EyeAdviceRoute) { launchSingleTop = true } }
 fun NavController.navigateToEyeBrightness() { navigate(EyeBrightnessRoute) { launchSingleTop = true } }
-fun NavController.navigateToEyeChat(draft: String? = null) { navigate(EyeChatRoute(draft)) { launchSingleTop = true } }
+fun NavController.navigateToEyeChat() { navigate(EyeChatRoute) { launchSingleTop = true } }
 
 /** 首页；跳转（账户、系统设置、测试、资料……）由 app 经 [navigation] 接线。 */
 fun NavGraphBuilder.homeScreen(navigation: HomeNavigation) {
@@ -51,5 +50,5 @@ fun NavGraphBuilder.eyeCareScreens(onBack: () -> Unit, onOpenTest: (String) -> U
     composable<EyeTrendRoute> { EyeTrendScreen(onBack = onBack) }
     composable<EyeAdviceRoute> { EyeAdviceScreen(onBack = onBack, onOpenTest = onOpenTest) }
     composable<EyeBrightnessRoute> { EyeBrightnessScreen(onBack = onBack) }
-    composable<EyeChatRoute> { entry -> EyeChatScreen(onBack = onBack, onOpenAccount = onOpenAccount, draft = entry.toRoute<EyeChatRoute>().draft) }
+    composable<EyeChatRoute> { EyeChatScreen(onBack = onBack, onOpenAccount = onOpenAccount) }
 }

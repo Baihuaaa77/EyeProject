@@ -47,8 +47,6 @@ final class CloudModel: ObservableObject {
     /// 生成综合建议；agreeFirst 为卡片内点了「同意并生成」。
     func advise(_ requestJson: String, agreeFirst: Bool) { client.advise(requestJson: requestJson, agreeFirst: agreeFirst) }
 
-    /// 首页快捷提问带进对话页的草稿
-    @Published var chatDraft = ""
     /// 对话页状态；见 CloudClient.chatJson，缓存到下次 [refresh]。
     private var chatState: [String: Any]?
     func chat() -> [String: Any] {
@@ -58,8 +56,9 @@ final class CloudModel: ObservableObject {
         return value
     }
     /// 发一条消息：带上当下的去标识概况（与综合建议同一份），已生成的综合建议作为开场。
-    func sendChat(_ text: String, agreeFirst: Bool) {
-        client.sendChat(text: text, adviceRequestJson: EyeCareStore.shared.adviceRequestJson, agreeFirst: agreeFirst)
+    /// agreeFirst 为在弹窗里点了「同意」（还没同意过时先保存同意），dontAskAgain 为勾了「以后不再提示」。
+    func sendChat(_ text: String, agreeFirst: Bool, dontAskAgain: Bool) {
+        client.sendChat(text: text, adviceRequestJson: EyeCareStore.shared.adviceRequestJson, agreeFirst: agreeFirst, dontAskAgain: dontAskAgain)
     }
     func clearChat() { client.clearChat() }
 }

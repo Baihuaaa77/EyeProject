@@ -325,6 +325,9 @@ export IOS_EXPORT_OPTIONS_PLIST="$PWD/iosApp/ExportOptions.local.plist"
 - 首页「今日感受」上方是「AI 综合建议」入口（`ChatEntryCard` / 安卓同名），进入对话页（`AiChatPage` / 安卓 `EyeChatScreen`）：
   开场是综合建议卡，下面自由对话；规则与请求在共用 `CloudClient.chatJson / sendChat / clearChat`（安卓 `core:data` `ChatRepository`），
   需单独的「AI 对话」同意，记录只存本机，危险信号由共用 `Chats.redFlag` 判断并醒目提示就医。后端 `POST /v1/chat`（`ChatService`）。
+- 首页入口只是一个按钮行；对话页按钮一律「发送」，同意说明不在页面上，点发送时按需弹窗（iOS `ChatConsentView` / 安卓 `ChatConsentDialog`）：
+  还没同意时每次都弹，已同意但没勾「以后不再提示」时每次进页面首次发送弹一次；「不同意」只关闭、保留输入。
+  是否弹由共用 `chatJson.askConsent`（安卓 `ChatState.askConsent`）给出，勾选随 `sendChat(dontAskAgain:)` 记在本机。
 - 服务器地址默认 `SyncContract.DEFAULT_SERVER`（`https://geometrylearning.com/eyeapi`），仍可在账户页修改；清空即只在本机保存。
 - 连着云端却未登录时，冷启动的启动动画后显示登录引导（`WelcomeView` / 安卓 `WelcomeScreen`），可跳过；登录 / 注册表单两端都抽成 `SignInForm` 与账户页共用。
 

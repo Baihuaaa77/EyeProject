@@ -76,8 +76,8 @@ data class HomeNavigation(
     val onEditProfile: (String?) -> Unit = {},
     val onOpenTrend: () -> Unit = {},
     val onOpenAdvice: () -> Unit = {},
-    /** AI 综合建议对话页；参数为首页点的快捷提问（放进输入框） */
-    val onOpenChat: (String?) -> Unit = {},
+    /** AI 综合建议对话页 */
+    val onOpenChat: () -> Unit = {},
     val onOpenBrightness: () -> Unit = {},
 )
 

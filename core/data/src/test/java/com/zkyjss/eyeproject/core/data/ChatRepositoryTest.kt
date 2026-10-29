@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -99,6 +100,19 @@ class ChatRepositoryTest {
         assertEquals(2, repository().state.first().messages.size)
         repo.clear()
         assertTrue(repository().state.first().messages.isEmpty())
+    }
+
+    @Test
+    fun dontAskAgainIsRememberedOnDeviceAndSurvivesClearing() = runTest {
+        signIn(ConsentType.AI_CHAT)
+        val repo = repository()
+        assertTrue(repo.state.first().askConsent)
+        repo.send("眼睛干", null)
+        assertTrue(repo.state.first().askConsent)
+        repo.send("还是干", null, dontAskAgain = true)
+        assertFalse(repo.state.first().askConsent)
+        repo.clear()
+        assertFalse(repository().state.first().askConsent)
     }
 
     @Test

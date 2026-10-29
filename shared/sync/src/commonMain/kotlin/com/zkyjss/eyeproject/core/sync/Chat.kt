@@ -48,6 +48,9 @@ object Chats {
     const val USER = "user"
     const val ASSISTANT = "assistant"
     const val DISCLAIMER = "AI 回答只作科普和生活建议，不是诊断，也不能代替眼科检查。"
+    /** 首次发送时弹窗的标题与「以后不再提示」勾选项（两端一致）；同意说明平时不在对话页展示。 */
+    const val CONSENT_TITLE = "和小瞳聊天前"
+    const val DONT_ASK_AGAIN = "以后不再提示"
     /** 同意说明（两端一致）。 */
     const val CONSENT_TEXT = "和小瞳聊天时，会把你输入的文字、最近几轮对话，以及「AI 综合建议」用到的去标识用眼概况" +
         "（年龄段、用屏与休息、眨眼与距离、自测等级、今天的感受等）发送到云端服务，由第三方大模型（DeepSeek）回答；" +

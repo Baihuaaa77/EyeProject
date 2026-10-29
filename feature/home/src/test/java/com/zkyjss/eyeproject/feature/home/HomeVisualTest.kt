@@ -201,20 +201,37 @@ class HomeVisualTest {
                 sources = listOf(com.zkyjss.eyeproject.core.sync.KnowledgeSourceDto("aao", "电脑视觉综合征", "美国眼科学会"))),
             com.zkyjss.eyeproject.core.sync.ChatEntry(com.zkyjss.eyeproject.core.sync.Chats.USER, "右眼突然看不清了", 3L, urgent = true),
         )))
-        val sent = mutableListOf<Pair<String, Boolean>>()
+        val sent = mutableListOf<Triple<String, Boolean, Boolean>>()
         compose.setContent {
             EyeProjectTheme {
-                EyeChatContent(state, "今天眼睛有点干涩", {}, {}, { text, agree -> sent += text to agree }, {}) {
+                EyeChatContent(state, {}, {}, { text, agree, quiet -> sent += Triple(text, agree, quiet) }, {}) {
                     EyeText("（今天的综合建议卡片）", style = com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography.current.body)
                 }
             }
         }
         compose.onNodeWithText(com.zkyjss.eyeproject.core.sync.Chats.URGENT_NOTICE).assertExists()
+        // 同意说明平时不在页面上
+        compose.onNodeWithText(com.zkyjss.eyeproject.core.sync.Chats.CONSENT_TEXT).assertDoesNotExist()
         capture("12-AI综合建议对话")
-        // 未同意：输入框旁是「同意并发送」，首页带来的快捷提问已在输入框里
+        // 未同意：点「发送」先弹同意说明；「不同意」只关闭，输入框里的字还在
         state = state.copy(access = com.zkyjss.eyeproject.core.data.chat.ChatAccess.NEEDS_CONSENT)
-        compose.onNodeWithText("同意并发送").performClick()
-        assertEquals(listOf("今天眼睛有点干涩" to true), sent)
+        compose.onNode(hasSetTextAction()).performTextInput("今天眼睛有点干涩")
+        compose.onNodeWithText("发送").performClick()
+        compose.onNodeWithText(com.zkyjss.eyeproject.core.sync.Chats.CONSENT_TEXT).assertExists()
+        compose.onNodeWithText("不同意").performClick()
+        compose.onNodeWithText(com.zkyjss.eyeproject.core.sync.Chats.CONSENT_TEXT).assertDoesNotExist()
+        assertTrue(sent.isEmpty())
+        // 再点发送：勾「以后不再提示」并同意，先保存同意再发送
+        compose.onNodeWithText("发送").performClick()
+        compose.onNodeWithText(com.zkyjss.eyeproject.core.sync.Chats.DONT_ASK_AGAIN).performClick()
+        compose.onNodeWithText("同意").performClick()
+        assertEquals(listOf(Triple("今天眼睛有点干涩", true, true)), sent)
+        // 已同意且不再提示：直接发送，不再弹窗
+        state = state.copy(access = com.zkyjss.eyeproject.core.data.chat.ChatAccess.READY, askConsent = false)
+        compose.onNode(hasSetTextAction()).performTextInput("晚上怎么护眼")
+        compose.onNodeWithText("发送").performClick()
+        compose.onNodeWithText(com.zkyjss.eyeproject.core.sync.Chats.CONSENT_TEXT).assertDoesNotExist()
+        assertEquals(Triple("晚上怎么护眼", false, false), sent.last())
     }
 
     @Test @Config(qualifiers = "zh-rCN-w390dp-h1200dp-mdpi")

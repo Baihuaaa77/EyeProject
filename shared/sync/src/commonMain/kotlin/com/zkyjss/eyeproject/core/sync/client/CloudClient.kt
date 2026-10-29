@@ -414,19 +414,26 @@ class CloudClient(
         ?.let { runCatching { json.decodeFromString(CHAT_HISTORY, it) }.getOrNull() } ?: emptyList()
     private var chatSending = false
     private var chatError: String? = null
+    /** 用户在首次发送的弹窗里勾了「以后不再提示」 */
+    private var chatNoPrompt = platform.readValue(KEY_CHAT_NO_PROMPT) != null
 
     /**
-     * 对话页状态（JSON）：`state` 为 locked（message）/ consent（consentText）/ ready；`messages` 为本机记录
-     * （role、text、urgent、sources）；另有 sending、error、suggestions、urgentNotice、disclaimer、maxInput。
+     * 对话页状态（JSON）：`state` 为 locked（message）/ consent / ready；`messages` 为本机记录
+     * （role、text、urgent、sources）；`askConsent` 为发送前是否弹同意说明（未同意时总要弹，已同意且勾过「以后不再提示」就不弹），
+     * 弹窗用 consentTitle、consentText、dontAskAgain；另有 sending、error、suggestions、urgentNotice、disclaimer、maxInput。
      */
     fun chatJson(): String = buildJsonObject {
         val s = session
         when {
             !api.configured -> { put("state", "locked"); put("message", "连接云端服务并登录后，就可以和小瞳聊天了") }
             s == null -> { put("state", "locked"); put("message", "登录账户后，就可以和小瞳聊聊今天的用眼感受") }
-            s.consents[ConsentType.AI_CHAT] != true -> { put("state", "consent"); put("consentText", Chats.CONSENT_TEXT) }
+            s.consents[ConsentType.AI_CHAT] != true -> put("state", "consent")
             else -> put("state", "ready")
         }
+        put("askConsent", !chatNoPrompt)
+        put("consentTitle", Chats.CONSENT_TITLE)
+        put("consentText", Chats.CONSENT_TEXT)
+        put("dontAskAgain", Chats.DONT_ASK_AGAIN)
         put("messages", JsonArray(chatHistory.map { e ->
             buildJsonObject {
                 put("role", e.role); put("text", e.text); put("urgent", e.urgent)
@@ -443,11 +450,13 @@ class CloudClient(
 
     /**
      * 发一条消息。[adviceRequestJson] 为当下的去标识概况（没有时传空串），已生成的综合建议作为开场一起发给模型；
-     * [agreeFirst] 为点了「同意并发送」，同意未能保存则不发送任何内容。状态经 onChange 通知。
+     * [agreeFirst] 为在弹窗里点了「同意」（还没同意过时先保存同意，未能保存则不发送任何内容）；
+     * [dontAskAgain] 为弹窗里勾了「以后不再提示」。状态经 onChange 通知。
      */
-    fun sendChat(text: String, adviceRequestJson: String, agreeFirst: Boolean) {
+    fun sendChat(text: String, adviceRequestJson: String, agreeFirst: Boolean, dontAskAgain: Boolean) {
         val question = text.trim().take(Chats.INPUT_LIMIT)
         if (question.isEmpty() || chatSending) return
+        if (dontAskAgain && !chatNoPrompt) { chatNoPrompt = true; platform.writeValue(KEY_CHAT_NO_PROMPT, "1") }
         val context = adviceRequest(adviceRequestJson)
         val opening = context?.let { adviceCache[Advices.cacheKey(it)] }
         appendChat(ChatEntry(Chats.USER, question, platform.nowMs(), urgent = Chats.redFlag(question)))
@@ -792,6 +801,7 @@ class CloudClient(
         private val AI_CACHE = MapSerializer(String.serializer(), ExplanationDto.serializer())
         private const val KEY_ADVICE = "cloud.aiAdvice"
         private const val KEY_CHAT = "cloud.aiChat"
+        private const val KEY_CHAT_NO_PROMPT = "cloud.aiChatNoPrompt"
         private val CHAT_HISTORY = ListSerializer(ChatEntry.serializer())
         private const val MAX_ADVICE_CACHED = 30
         private val ADVICE_CACHE = MapSerializer(String.serializer(), AdviceDto.serializer())
