@@ -39,6 +39,8 @@ jobs:
   ios:
     name: iOS 共用算法与模拟器测试（不需要签名）
     runs-on: macos-26
+    # 正常 11～17 分钟；模拟器偶发卡住时别空等 6 小时（Run 39 即卡在 xcodebuild test）
+    timeout-minutes: 60
     needs: shared
     steps:
       - uses: actions/checkout@v4
