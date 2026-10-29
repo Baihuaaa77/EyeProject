@@ -22,6 +22,7 @@ import com.zkyjss.eyeproject.core.designsystem.theme.EyeProjectTheme
 import com.zkyjss.eyeproject.core.ui.component.EyeAccountBadge
 import com.zkyjss.eyeproject.core.ui.component.EyeSplash
 import com.zkyjss.eyeproject.core.ui.component.LocalEyeAccountBadge
+import com.zkyjss.eyeproject.feature.mine.WelcomeScreen
 import com.zkyjss.eyeproject.ui.EyeProjectNavHost
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -49,11 +50,18 @@ class MainActivity : ComponentActivity() {
                     accounts.accountState.map { EyeAccountBadge(it.email != null, it.email.orEmpty().take(1)) }
                 }.collectAsState(EyeAccountBadge())
                 var splash by rememberSaveable { mutableStateOf(coldStart) }
+                // 连着云端服务却没登录：冷启动的启动动画之后先提示登录 / 注册（可跳过；主动清空服务器地址、只在本机用的不打扰）
+                val account by remember { accounts.accountState }.collectAsState(null)
+                var welcome by rememberSaveable { mutableStateOf(false) }
                 CompositionLocalProvider(LocalEyeAccountBadge provides badge) {
                     Box(Modifier.fillMaxSize()) {
                         // 首页与启动动画同时创建：动画只盖在上面，不推迟首页加载
                         EyeProjectNavHost(modifier = Modifier.fillMaxSize())
-                        if (splash) EyeSplash(onFinished = { splash = false })
+                        if (splash) EyeSplash(onFinished = {
+                            splash = false
+                            welcome = account?.let { it.cloudConfigured && it.email == null } == true
+                        })
+                        if (welcome && !splash) WelcomeScreen(onDone = { welcome = false })
                     }
                 }
             }

@@ -25,8 +25,8 @@ final class ScreeningBridgeTests: XCTestCase {
         }
         controller.close()
     }
-    /// 云端客户端经 iOS 框架桥接：未配置服务器时不联网；地址格式校验；状态快照可读。
-    func testCloudClientBridgeStaysOfflineUntilAServerIsSet() {
+    /// 云端客户端经 iOS 框架桥接：没填过地址时用课题组服务器；地址格式校验；清空即关闭云端；状态快照可读。
+    func testCloudClientBridgeDefaultsToTheGroupServer() {
         final class Platform: NSObject, CloudPlatform {
             var values: [String: String] = [:]
             func nowMs() -> Int64 { 1_760_500_000_000 }
@@ -42,11 +42,14 @@ final class ScreeningBridgeTests: XCTestCase {
         }
         let platform = Platform()
         let client = IosCloudClientKt.makeIosCloudClient(transport: CloudTransport(), platform: platform) {}
-        XCTAssertEqual(EyeRuntime.object(client.snapshotJson())["configured"] as? Bool, false)
+        XCTAssertEqual(EyeRuntime.object(client.snapshotJson())["serverUrl"] as? String, "https://geometrylearning.com/eyeapi")
+        XCTAssertEqual(EyeRuntime.object(client.snapshotJson())["configured"] as? Bool, true)
         XCTAssertFalse(client.setServer(url: "192.168.1.5:8080"), "缺少 http:// 的地址不接受")
         XCTAssertTrue(client.setServer(url: "http://192.168.1.5:8080"))
         XCTAssertEqual(platform.values["cloud.serverUrl"], "http://192.168.1.5:8080")
         XCTAssertEqual(EyeRuntime.object(client.snapshotJson())["signedIn"] as? Bool, false)
+        XCTAssertTrue(client.setServer(url: ""))
+        XCTAssertEqual(EyeRuntime.object(client.snapshotJson())["configured"] as? Bool, false, "主动清空即关闭云端，不回到默认地址")
     }
     func testIOSPixelsUseTheSameRGBWeights() {
         var pixelBuffer: CVPixelBuffer?

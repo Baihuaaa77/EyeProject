@@ -136,21 +136,17 @@ internal fun Bullet(text: String, dot: androidx.compose.ui.graphics.Color = Loca
 // region 健康建议
 
 /**
- * 健康建议：专业咨询建议（规则按近期自测、身体感受与年龄给出）+ AI 综合建议 + 可以马上做的事。
+ * 健康建议：专业咨询建议（规则按近期自测、身体感受与年龄给出）+ 建议做的自测。AI 综合建议在单独的对话页（EyeChatScreen）。
  * 与苹果端 AdvicePage 同一排版。
  */
 @Composable
 fun EyeAdviceScreen(onBack: () -> Unit, onOpenTest: (String) -> Unit, viewModel: HomeViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    val card by viewModel.aiAdvice.collectAsStateWithLifecycle()
-    EyeAdviceContent(state.report, onBack, onOpenTest) {
-        card?.let { AiExplanationCard(it, onGenerate = { viewModel.generateAdvice() }, onAgree = { viewModel.generateAdvice(agreeFirst = true) },
-            text = AiCardText.ADVICE) }
-    }
+    EyeAdviceContent(state.report, onBack, onOpenTest)
 }
 
 @Composable
-internal fun EyeAdviceContent(report: EyeCareReport?, onBack: () -> Unit, onOpenTest: (String) -> Unit, aiAdvice: @Composable () -> Unit) {
+internal fun EyeAdviceContent(report: EyeCareReport?, onBack: () -> Unit, onOpenTest: (String) -> Unit) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
     EyeSubPage("健康建议", onBack) {
@@ -161,7 +157,6 @@ internal fun EyeAdviceContent(report: EyeCareReport?, onBack: () -> Unit, onOpen
         }
         EyeText("专业咨询建议", Modifier.padding(start = 4.dp, top = 4.dp), style = typography.title, color = colors.textPrimary)
         report?.consults.orEmpty().forEach { ConsultCard(it) }
-        aiAdvice()
         val doable = report?.actions.orEmpty().filter { it.kind == "TEST" }
         if (doable.isNotEmpty()) EyeListGroup(title = "建议做的自测") {
             doable.forEachIndexed { i, a ->

@@ -32,6 +32,7 @@ iOS 连本机服务：在「我的 → 右上角人像（账户）→ 服务器�
 | `ExplanationService.kt` | AI 解读：校验输入 → 「AI 解读」同意 → 缓存 → 每日额度 → 检索知识库 → 调模型 → 校验输出（诊断措辞、与等级矛盾、输入中没有的数字）→ 不合格重试一次；提示词 `ExplanationPrompt` |
 | `AdviceService.kt` | AI 综合建议：「AI 综合建议」同意 → 缓存（与解读同表，键前缀 `advice-a1`）→ 共用每日额度 → 检索知识库 → 调模型 → 校验输出（`AdviceOutput`，复用解读的禁用词与编造数字检查）→ 不合格重试一次；提示词 `AdvicePrompt` |
 | `AdminService.kt` | 数据看板（`/admin/`，页面在 `resources/admin/`）：`EYE_ADMIN_PASSWORD` 口令登录（内存会话 8 小时）；统计与去标识记录只含最新一次同意 `RESEARCH_USE` 的账号，账号 / 被测者用审计盐 HMAC 的假名；按测试、等级、时间筛选与导出 CSV；不解密原文；登录、查看、导出写审计 |
+| `ChatService.kt` | AI 对话（`POST /v1/chat`）：「AI 对话」同意 → 每日条数（`ai_chat_usage`，与解读 / 建议分开）→ 规则判断危险信号（`Chats.redFlag`）→ 检索知识库（`searchChat`）→ 系统提示 + 概况与知识 + 多轮对话调模型 → 校验（禁用词、长度、有危险信号时必须建议就医）→ 不合格重试一次；对话内容不入库、不缓存，审计只记次数与 URGENT / NORMAL；提示词 `ChatPrompt` |
 | `KnowledgeBase.kt` | 读取 `resources/knowledge/eye-knowledge.md`，中文二元切词 BM25 检索，按等级固定带上「就医 / 不确定 / 数据无效」条目 |
 | `LlmClient.kt` | 大模型端口与 `DeepSeekClient`（OpenAI 兼容 Chat Completions，JSON 输出、关闭思考；不记内容与密钥）。用 OkHttp：域名解析出多个地址时，连不上的地址 4 秒后自动换下一个（有的网络里 api.deepseek.com 的个别地址不通，JDK HttpClient 只连第一个地址会整次超时） |
 | `resources/db/migration` | Flyway 脚本；PostgreSQL 与 H2（PostgreSQL 模式）通用写法 |
@@ -57,6 +58,7 @@ iOS 连本机服务：在「我的 → 右上角人像（账户）→ 服务器�
 | `DEEPSEEK_API_KEY`（或 `EYE_LLM_API_KEY`） | 读 `llm.properties` 的 `apiKey`；都没有则 AI 解读返回 `ai_unavailable` | 必填才开启 AI 解读 |
 | `EYE_LLM_MODEL` / `EYE_LLM_BASE_URL` | `deepseek-v4-flash` / `https://api.deepseek.com` | |
 | `EYE_LLM_DAILY_LIMIT` | 20 | 每账号每天调用模型次数（命中缓存不计） |
+| `EYE_LLM_CHAT_DAILY_LIMIT` | 40 | 每账号每天和 AI 对话的条数（与上一项分开计） |
 | `EYE_LLM_TIMEOUT_MS` / `EYE_LLM_DISABLE_THINKING` | 30000 / true | 换不支持 `thinking` 字段的模型时设 false |
 | `EYE_ADMIN_PASSWORD` | 不设置：不开放数据看板（`/admin` 一律 404） | 设置则至少 12 位 |
 
@@ -75,6 +77,13 @@ $env:DEEPSEEK_API_KEY = "sk-..."; .\gradlew.bat -p backend/server run
 - 缓存键 = 提示词版本 + 模型 + 知识库版本 + 输入哈希；改提示词时递增 `ExplanationService.PROMPT_VERSION`，改知识库时更新文件头「版本」。日志只记 token 数。
 - 费用参考：每次约 1.5k 输入 + 0.3k 输出 token，按 V4 Flash 公开价（约 1 元 / 2 元每百万 token）约 0.002 元；以 DeepSeek 官网价格为准。
 - 知识库条目为公开权威资料的转述，**上线前需眼科医生审核**（见知识库文件头）。迁移 `V3__ai_explanation.sql`。
+
+## AI 对话（`POST /v1/chat`）
+
+- 输入 `ChatRequest`（`shared/sync` 的 `Chat.kt`）：最近至多 12 条对话（用户每条 ≤ 300 字，最后一条必须是用户的提问；开场的综合建议以 assistant 身份放在最前），以及与综合建议同一份去标识概况 `AdviceRequest`（可空）。
+- 需 `AI_CHAT` 同意（与 AI 综合建议分开：对话会发送用户自己打的字）；与解读、建议共用每分钟限速；每日条数 `EYE_LLM_CHAT_DAILY_LIMIT`；迁移 `V4__ai_chat_usage.sql`。
+- 输出 `ChatReplyDto`：`reply`、`urgent`（提问里有眼痛、突然看不清等危险信号，由规则判断）、引用的参考资料、免责说明。对话记录只存在手机本机，服务器不保存。
+- 费用参考：每条约 1.5–3k 输入 + 0.2k 输出 token，约 0.003–0.005 元。
 
 ## AI 综合建议（`POST /v1/advice`）
 

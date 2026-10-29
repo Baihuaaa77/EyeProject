@@ -3,6 +3,8 @@ package com.zkyjss.eyeproject.core.network
 import com.zkyjss.eyeproject.core.sync.AccountDto
 import com.zkyjss.eyeproject.core.sync.AdviceDto
 import com.zkyjss.eyeproject.core.sync.AdviceRequest
+import com.zkyjss.eyeproject.core.sync.ChatReplyDto
+import com.zkyjss.eyeproject.core.sync.ChatRequest
 import com.zkyjss.eyeproject.core.sync.ConsentDto
 import com.zkyjss.eyeproject.core.sync.ConsentInput
 import com.zkyjss.eyeproject.core.sync.ErrorBody
@@ -85,6 +87,9 @@ class HttpEyeNetworkDataSource internal constructor(private val baseUrl: () -> S
 
     override suspend fun advise(accessToken: String, request: AdviceRequest) =
         call("POST", "/advice", accessToken, encode(request), serializer<AdviceDto>())
+
+    override suspend fun chat(accessToken: String, request: ChatRequest) =
+        call("POST", "/chat", accessToken, encode(request), serializer<ChatReplyDto>())
 
     override suspend fun explain(accessToken: String, request: ExplanationRequest) =
         call("POST", "/explanations", accessToken, encode(request), serializer<ExplanationDto>())

@@ -25,6 +25,8 @@
   红色觉图数字只提高 L 视锥、绿色觉图只提高 M 视锥，对比度 30/22/16/11%，色点亮度随机 ±14%；固定随机种子，两端出图一致；判定标准与结果页）
   与 `ColorVisionEngine`（流程、记录 `color_*.json`，kind = COLOR_VISION）。云端同步接受 COLOR_VISION；AI 解读与 AI 综合建议不发送色觉结果
   （`RecordSummaries.EXPLAINABLE_KINDS`、`EyeCareAdvice` 只取用户确认过的三项）。
+- `sync/Chat`：AI 对话契约（`ChatRequest` / `ChatReplyDto` / 本机记录 `ChatEntry`、`Chats.request` 取最近 12 条并带上开场建议、危险信号 `redFlag`、同意与就医提示文案）；`CloudClient.chatJson` / `sendChat` / `clearChat` 为苹果端入口，记录存应用沙盒。
+- `SyncContract.DEFAULT_SERVER`：两端没填写过服务器地址时默认用课题组部署的 `https://geometrylearning.com/eyeapi`；用户清空地址即关闭云端（存空串以区分）。
 - `sync/Advice`：AI 综合建议契约（`AdviceRequest` / `AdviceDto`、`Advices.cacheKey`、同意文案、取值裁剪 `bounded()`），安卓、苹果与服务端共用；`CloudClient.adviceJson` / `advise` 为苹果端入口。
 - `ScreeningFeedback`：双端共用的交互反馈事件、距离防抖、阶段及标定点切换提示；引擎只在有效输入后投递作答事件。`shared/feedback/res/raw` 提供同一套短音，平台层各自播放声音与原生轻触觉。
 

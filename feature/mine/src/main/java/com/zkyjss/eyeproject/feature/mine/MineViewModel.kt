@@ -58,6 +58,8 @@ sealed interface CloudSyncUiState {
         val aiExplanation: Boolean = false,
         /** 同意把去标识的用眼概况发给大模型生成综合建议。 */
         val aiAdvice: Boolean = false,
+        /** 同意把输入的文字与去标识概况发给大模型对话。 */
+        val aiChat: Boolean = false,
     ) : CloudSyncUiState
 }
 
@@ -133,7 +135,7 @@ class CloudSyncViewModel @Inject constructor(
                 !account.cloudConfigured -> CloudSyncUiState.NotConfigured(note)
                 account.email == null -> CloudSyncUiState.SignedOut(working, note)
                 else -> CloudSyncUiState.SignedIn(account.email!!, account.healthDataSync, account.guardian,
-                    account.researchUse, status, working || status.syncing, note ?: status.lastMessage, account.aiExplanation, account.aiAdvice)
+                    account.researchUse, status, working || status.syncing, note ?: status.lastMessage, account.aiExplanation, account.aiAdvice, account.aiChat)
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), CloudSyncUiState.Loading)
 

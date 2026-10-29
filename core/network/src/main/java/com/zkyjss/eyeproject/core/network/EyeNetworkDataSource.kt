@@ -3,6 +3,8 @@ package com.zkyjss.eyeproject.core.network
 import com.zkyjss.eyeproject.core.sync.AdviceDto
 import com.zkyjss.eyeproject.core.sync.AdviceRequest
 import com.zkyjss.eyeproject.core.sync.AccountDto
+import com.zkyjss.eyeproject.core.sync.ChatReplyDto
+import com.zkyjss.eyeproject.core.sync.ChatRequest
 import com.zkyjss.eyeproject.core.sync.ConsentDto
 import com.zkyjss.eyeproject.core.sync.ConsentInput
 import com.zkyjss.eyeproject.core.sync.ExplanationDto
@@ -52,4 +54,6 @@ interface EyeNetworkDataSource {
     suspend fun explain(accessToken: String, request: ExplanationRequest): NetworkResult<ExplanationDto>
     /** AI 综合建议：去标识的用眼概况由大模型生成建议（需「AI 综合建议」同意）。 */
     suspend fun advise(accessToken: String, request: AdviceRequest): NetworkResult<AdviceDto>
+    /** AI 对话：用户输入、最近几轮对话与去标识概况由大模型回答（需「AI 对话」同意；服务器不保存内容）。 */
+    suspend fun chat(accessToken: String, request: ChatRequest): NetworkResult<ChatReplyDto>
 }

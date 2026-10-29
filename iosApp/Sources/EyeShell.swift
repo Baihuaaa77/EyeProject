@@ -9,7 +9,7 @@ enum TopLevelTab: CaseIterable { case home, services, mine
 
 /// 二级完整页面（NavigationStack 推入，替代系统底部弹窗）；与安卓各 feature 的路由一一对应。
 enum AppRoute: Hashable {
-    case account, settings, records, subjects, cloud, permissions, trend, advice, brightness
+    case account, settings, records, subjects, cloud, permissions, trend, advice, brightness, chat
     /// 编辑成员资料；nil 为新建家庭成员
     case subjectEdit(String?)
 }
@@ -21,6 +21,8 @@ struct EyeRootView: View {
     @State private var selectedTest: String?
     /// 冷启动的启动动画：盖在已经创建好的首页上，结束后移除
     @State private var splash = true
+    /// 未登录时启动先提示登录 / 注册（可跳过）；每次冷启动只出现一次
+    @State private var welcome = false
     /// 「系统设置」：与测试页同一份偏好（保存在本机，测试开始时读取）
     @StateObject private var voice = EyeVoice()
     @StateObject private var feedback = EyeFeedback()
@@ -44,12 +46,13 @@ struct EyeRootView: View {
                 .toolbar(.hidden, for: .navigationBar)
                 .navigationDestination(for: AppRoute.self) { destination($0) }
             }
-            if splash { SplashView { splash = false }.transition(.opacity).zIndex(1) }
+            if splash { SplashView { splash = false; welcome = needsWelcome }.transition(.opacity).zIndex(1) }
         }
         // 测试全屏呈现：不用卡片式弹窗，避免顶部留出灵动岛下方的空隙和下滑误关。
         .fullScreenCover(item: Binding(get: { selectedTest.map(TestSelection.init) }, set: { selectedTest = $0?.id })) { test in
             EyeTestView(kind: test.id)
         }
+        .fullScreenCover(isPresented: $welcome) { WelcomeView { welcome = false } }
         .onAppear { EyeCareStore.shared.appBecameActive() }
         .onChange(of: scenePhase) { phase in
             if phase == .active {
@@ -63,6 +66,8 @@ struct EyeRootView: View {
     }
 
     private func navigate(_ route: AppRoute) { path.append(route) }
+    /// 连着云端服务却没登录（用户主动清空服务器地址、只在本机用的不打扰）
+    private var needsWelcome: Bool { CloudModel.shared.bool("configured") && !CloudModel.shared.bool("signedIn") }
     private func openTest(_ kind: String) { selectedTest = kind }
 
     @ViewBuilder private func destination(_ route: AppRoute) -> some View {
@@ -75,6 +80,7 @@ struct EyeRootView: View {
         case .permissions: PermissionsPage()
         case .trend: TrendPage()
         case .advice: AdvicePage(openTest: openTest)
+        case .chat: AiChatPage(openAccount: { navigate(.account) })
         case .brightness: BrightnessPage()
         case .subjectEdit(let id):
             SubjectEditView(item: id.flatMap { id in SubjectStore.shared.subjects.first { $0.id == id } } ?? SubjectStore.newMember())

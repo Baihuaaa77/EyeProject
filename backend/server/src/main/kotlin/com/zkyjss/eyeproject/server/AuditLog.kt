@@ -11,6 +11,8 @@ enum class AuditAction {
     AI_EXPLAIN,
     /** AI 综合建议：结果同上，不记内容。 */
     AI_ADVICE,
+    /** AI 对话：结果为 OK / QUOTA / FAILED / INVALID_OUTPUT，不记对话内容；target_id 记是否有危险信号（URGENT / NORMAL）。 */
+    AI_CHAT,
     /** 管理网页：登录、查看统计或记录列表（target_type 为 overview / records）、导出 CSV；actor 为 admin。 */
     ADMIN_LOGIN, ADMIN_LOGIN_FAILED, ADMIN_VIEW, ADMIN_EXPORT,
 }

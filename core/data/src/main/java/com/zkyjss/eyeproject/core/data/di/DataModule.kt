@@ -3,6 +3,8 @@ package com.zkyjss.eyeproject.core.data.di
 import com.zkyjss.eyeproject.core.data.account.AccountRepository
 import com.zkyjss.eyeproject.core.data.advice.AdviceRepository
 import com.zkyjss.eyeproject.core.data.advice.DefaultAdviceRepository
+import com.zkyjss.eyeproject.core.data.chat.ChatRepository
+import com.zkyjss.eyeproject.core.data.chat.DefaultChatRepository
 import com.zkyjss.eyeproject.core.data.account.DefaultAccountRepository
 import com.zkyjss.eyeproject.core.data.explanation.DefaultExplanationRepository
 import com.zkyjss.eyeproject.core.data.explanation.ExplanationRepository
@@ -37,6 +39,9 @@ internal abstract class DataModule {
 
     @Binds
     abstract fun bindAdviceRepository(impl: DefaultAdviceRepository): AdviceRepository
+
+    @Binds
+    abstract fun bindChatRepository(impl: DefaultChatRepository): ChatRepository
 
     @Binds
     abstract fun bindEyeCareRepository(impl: OfflineFirstEyeCareRepository): EyeCareRepository

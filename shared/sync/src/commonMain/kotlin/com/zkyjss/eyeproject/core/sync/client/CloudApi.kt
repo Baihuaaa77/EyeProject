@@ -6,6 +6,8 @@ import com.zkyjss.eyeproject.core.sync.ConsentInput
 import com.zkyjss.eyeproject.core.sync.ErrorBody
 import com.zkyjss.eyeproject.core.sync.AdviceDto
 import com.zkyjss.eyeproject.core.sync.AdviceRequest
+import com.zkyjss.eyeproject.core.sync.ChatReplyDto
+import com.zkyjss.eyeproject.core.sync.ChatRequest
 import com.zkyjss.eyeproject.core.sync.ExplanationDto
 import com.zkyjss.eyeproject.core.sync.ExplanationRequest
 import com.zkyjss.eyeproject.core.sync.LoginRequest
@@ -77,6 +79,9 @@ class CloudApi(private val baseUrl: () -> String, private val transport: HttpTra
     /** AI 综合建议（需「AI 综合建议」同意）。 */
     suspend fun advise(token: String, request: AdviceRequest) =
         call("POST", "/advice", token, encode(AdviceRequest.serializer(), request), AdviceDto.serializer())
+    /** AI 对话（需「AI 对话」同意）。 */
+    suspend fun chat(token: String, request: ChatRequest) =
+        call("POST", "/chat", token, encode(ChatRequest.serializer(), request), ChatReplyDto.serializer())
 
     private fun <T> encode(serializer: KSerializer<T>, value: T) = json.encodeToString(serializer, value)
 

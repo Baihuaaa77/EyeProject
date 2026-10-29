@@ -25,7 +25,7 @@
   相机走 `core:camera` 的 `CameraController`，焦距取相机内参用于测距；记入账本的是眨眼频率、平均距离、过近占比、头部偏转（每段 ≥20 秒才记）。
   画面只在本机处理，不保存、不上传。
 - 二级完整页面（`EyeCarePages.kt`）：`EyeTrendScreen`（近 7 天用屏、负荷、眨眼柱状图 + 小结 + 今天的主要原因 + 身体感受）、
-  `EyeAdviceScreen`（规则建议、就医建议与 AI 综合建议卡 `AiExplanationCard(text = AiCardText.ADVICE)`）、`EyeBrightnessScreen`（当前亮度与环境光、做法，一键打开系统显示设置）。
+  `EyeAdviceScreen`（规则建议、就医建议与建议做的自测）、`EyeBrightnessScreen`（当前亮度与环境光、做法，一键打开系统显示设置）。
 - `RestBreakPage`：「休息一下」20-20-20 全屏引导，小瞳陪伴，可提前结束。
 - `EyeExercisePage` / `EyeExerciseViewModel`：「护眼操」全屏页（主动服务里的入口卡、或小瞳气泡「去做」）。小瞳提示向左 / 右 / 上 / 下看（两遍），
   前置相机看虹膜在眼裂里的偏移（共用 `EyeExerciseCoach`，先看小瞳 1.5 秒取基线），转到位即整页朝该方向翻页、振动，小瞳飞出画面打滚再回来；
@@ -37,3 +37,6 @@
 评分阈值为工程默认值（见 `shared/SHARED.md`「主动护眼」），待眼科专家确认。
 
 本地界面检查：`./gradlew.bat :feature:home:testDebugUnitTest`，截图在 `feature/home/build/reports/ui/` 并同步到 `docs/界面截图-2026-10-23/安卓/`。
+- AI 综合建议对话（`EyeChatPage.kt`）：首页「今日感受」上方的 `ChatEntryCard`（像输入框，快捷提问带进对话页）→ `EyeChatScreen`（`EyeChatRoute(draft)`）：
+  开场是综合建议卡（`AiExplanationCard(text = AiCardText.ADVICE)`，取自 `HomeViewModel.aiAdvice`），下面是与小瞳的对话（`ChatViewModel` → `core:data` `ChatRepository`），
+  未登录提示去登录、未同意时「同意并发送」；提到危险信号时在提问下方醒目提示尽快就医；记录只存本机，可清空。与苹果端 `AiChatView.swift` 一致。

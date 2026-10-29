@@ -76,6 +76,8 @@ data class HomeNavigation(
     val onEditProfile: (String?) -> Unit = {},
     val onOpenTrend: () -> Unit = {},
     val onOpenAdvice: () -> Unit = {},
+    /** AI 综合建议对话页；参数为首页点的快捷提问（放进输入框） */
+    val onOpenChat: (String?) -> Unit = {},
     val onOpenBrightness: () -> Unit = {},
 )
 
@@ -95,7 +97,7 @@ internal const val PERCEPTION_HELP = "基础数据来自系统用屏统计与光
 internal const val USAGE_HELP_ANDROID = "需要在系统设置里允许「使用情况访问」，小瞳才能统计每天用屏多久、连续用了多久和夜间使用；统计只在本机进行。"
 
 /**
- * 首页：问候与日期（右上角账户、系统设置）→ 今日用眼（负荷分、小瞳、闭环进度）→ 今日感受 → 为你推荐 →
+ * 首页：问候与日期（右上角账户、系统设置）→ 今日用眼（负荷分、小瞳、闭环进度）→ AI 综合建议（和小瞳聊聊）→ 今日感受 →
  * 多源感知（基础数据 / 视觉行为与实时检测 / 个体档案）→ 主动服务（休息提醒、趋势报告、健康建议、亮度与蓝光）。
  * 与苹果端 HomePage 同一顺序、排版与文案（苹果端没有开发者工具）。
  */
@@ -160,6 +162,7 @@ internal fun HomeContent(
                 "LIVE" -> { liveRequests++; scrollTarget = behavior }
             }
         }
+        ChatEntryCard(navigation.onOpenChat)
         CheckInCard(report, actions.checkIn)
         SectionTitle("多源感知", PERCEPTION_HELP)
         BasicDataCard(state, actions, Modifier.bringIntoViewRequester(basic))
@@ -519,7 +522,7 @@ private fun ReminderCard(state: HomeUiState, actions: HomeActions) {
     }
 }
 
-/** 服务入口 2×2：用眼趋势报告、专业咨询建议、AI 综合建议、亮度与蓝光。 */
+/** 服务入口：用眼趋势报告、专业咨询建议，下一行亮度与蓝光（AI 综合建议已移到首页「今日感受」上方）。 */
 @Composable
 private fun ServiceTiles(state: HomeUiState, navigation: HomeNavigation) {
     val report = state.report
@@ -531,11 +534,8 @@ private fun ServiceTiles(state: HomeUiState, navigation: HomeNavigation) {
             ServiceTile("用眼趋势报告", trend, EyeGlyph.CHART, EyeTileTone.SUCCESS, Modifier.weight(1f), navigation.onOpenTrend)
             ServiceTile("专业咨询建议", consult, EyeGlyph.CHAT, if (urgent) EyeTileTone.DANGER else EyeTileTone.BLUE, Modifier.weight(1f), navigation.onOpenAdvice)
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            ServiceTile("AI 综合建议", "小瞳结合大模型给建议", EyeGlyph.BULB, EyeTileTone.ACCENT, Modifier.weight(1f), navigation.onOpenAdvice)
-            ServiceTile("亮度与蓝光", state.screenBrightness?.let { "屏幕亮度 ${(it * 100).toInt()}%" } ?: "夜间模式与护眼",
-                EyeGlyph.SUN, EyeTileTone.ACCENT, Modifier.weight(1f), navigation.onOpenBrightness)
-        }
+        ServiceTile("亮度与蓝光", state.screenBrightness?.let { "屏幕亮度 ${(it * 100).toInt()}%" } ?: "夜间模式与护眼",
+            EyeGlyph.SUN, EyeTileTone.ACCENT, Modifier.fillMaxWidth(), navigation.onOpenBrightness)
     }
 }
 

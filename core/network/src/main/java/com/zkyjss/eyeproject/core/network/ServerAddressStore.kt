@@ -19,7 +19,8 @@ class ServerAddressStore internal constructor(private val read: () -> String?, p
         read = { context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY, null) },
         write = { value -> context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().apply {
             if (value == null) remove(KEY) else putString(KEY, value) }.apply() },
-        fallback = BuildConfig.API_BASE_URL,
+        // 构建期没指定地址时用课题组部署的服务器（与苹果端一致）
+        fallback = BuildConfig.API_BASE_URL.ifEmpty { SyncContract.DEFAULT_SERVER },
     )
 
     private val _address = MutableStateFlow(read() ?: fallback)

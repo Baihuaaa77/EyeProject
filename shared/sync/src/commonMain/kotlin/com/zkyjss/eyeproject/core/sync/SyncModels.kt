@@ -15,6 +15,8 @@ object SyncContract {
      */
     val SERVER_ADDRESS = Regex("""^https?://[^\s/?#]+(/[^\s?#]*)?$""")
     const val SERVER_ADDRESS_HINT = "地址格式应为 http://IP:端口 或 https://域名[/路径]"
+    /** 课题组部署的服务器：两端未填写过地址时默认用它，给别人测试不用手动输入（仍可在账户页改）。 */
+    const val DEFAULT_SERVER = "https://geometrylearning.com/eyeapi"
     /** 当前隐私政策与健康数据处理说明的版本，随 App 文本更新。 */
     const val PRIVACY_POLICY_VERSION = "2026-10-15"
     /** 单条记录原文上限（字节）；斜视逐帧样本约 2 MB。 */
@@ -106,10 +108,11 @@ data class SubjectProfileInput(
  * 分项同意。PRIVACY_POLICY 注册必需；HEALTH_DATA_SYNC 上传必需；
  * GUARDIAN 为未满 14 周岁的被测者上传时必需；RESEARCH_USE 决定能否进入去标识研究数据；
  * AI_EXPLANATION 允许把去标识的结果发给第三方大模型生成解读（见 [Explanations.CONSENT_TEXT]）；
- * AI_ADVICE 允许把去标识的用眼概况发给第三方大模型生成综合建议（见 [Advices.CONSENT_TEXT]），与解读分开同意。
+ * AI_ADVICE 允许把去标识的用眼概况发给第三方大模型生成综合建议（见 [Advices.CONSENT_TEXT]），与解读分开同意；
+ * AI_CHAT 允许把用户输入的文字、最近几轮对话与同一份用眼概况发给第三方大模型对话（见 [Chats.CONSENT_TEXT]）。
  */
 @Serializable
-enum class ConsentType { PRIVACY_POLICY, HEALTH_DATA_SYNC, GUARDIAN, RESEARCH_USE, AI_EXPLANATION, AI_ADVICE }
+enum class ConsentType { PRIVACY_POLICY, HEALTH_DATA_SYNC, GUARDIAN, RESEARCH_USE, AI_EXPLANATION, AI_ADVICE, AI_CHAT }
 
 @Serializable
 data class ConsentInput(

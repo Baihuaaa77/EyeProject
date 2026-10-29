@@ -4,6 +4,7 @@ import com.zkyjss.eyeproject.core.sync.ConsentInput
 import com.zkyjss.eyeproject.core.sync.ErrorBody
 import com.zkyjss.eyeproject.core.sync.ErrorCodes
 import com.zkyjss.eyeproject.core.sync.AdviceRequest
+import com.zkyjss.eyeproject.core.sync.ChatRequest
 import com.zkyjss.eyeproject.core.sync.ExplanationRequest
 import com.zkyjss.eyeproject.core.sync.SubjectProfileInput
 import com.zkyjss.eyeproject.core.sync.LoginRequest
@@ -88,6 +89,7 @@ class Services(
     private val knowledge = KnowledgeBase.load()
     val explanations = ExplanationService(db, config, audit, knowledge, llm, clock)
     val advice = AdviceService(db, config, audit, knowledge, llm, clock)
+    val chat = ChatService(db, config, audit, knowledge, llm, clock)
     val admin = AdminService(db, config, audit, clock)
     override fun close() = db.close()
 }
@@ -179,6 +181,9 @@ fun Application.eyeProjectModule(config: ServerConfig, services: Services = Serv
                     }
                     post("/advice") {
                         call.respond(services.advice.advise(call.accountId, call.receive<AdviceRequest>(), call.ip))
+                    }
+                    post("/chat") {
+                        call.respond(services.chat.reply(call.accountId, call.receive<ChatRequest>(), call.ip))
                     }
                 }
             }

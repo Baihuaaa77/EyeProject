@@ -3,6 +3,8 @@ package com.zkyjss.eyeproject.core.sync.client
 import com.zkyjss.eyeproject.core.sync.AdviceDto
 import com.zkyjss.eyeproject.core.sync.AdviceRequest
 import com.zkyjss.eyeproject.core.sync.Advices
+import com.zkyjss.eyeproject.core.sync.ChatEntry
+import com.zkyjss.eyeproject.core.sync.Chats
 import com.zkyjss.eyeproject.core.sync.ConsentDto
 import com.zkyjss.eyeproject.core.sync.ConsentInput
 import com.zkyjss.eyeproject.core.sync.ConsentType
@@ -36,6 +38,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.JsonArray
@@ -95,8 +98,11 @@ class CloudClient(
     /** 用户点了「立即同步」：本轮同步结束后报告结果。 */
     private var reportSync = false
 
-    /** 服务器地址（如 `http://192.168.1.5:8080`）；为空表示未配置，任何数据都不离开手机。 */
-    var serverUrl: String = platform.readValue(KEY_SERVER).orEmpty()
+    /**
+     * 服务器地址（如 `http://192.168.1.5:8080`）；从没填写过时用 [SyncContract.DEFAULT_SERVER]。
+     * 为空表示用户主动关闭了云端，任何数据都不离开手机。
+     */
+    var serverUrl: String = platform.readValue(KEY_SERVER) ?: SyncContract.DEFAULT_SERVER
         private set
 
     private var session: CloudSession? = platform.readSecret(KEY_SESSION)
@@ -116,7 +122,8 @@ class CloudClient(
         }
         if (trimmed != serverUrl) { session = null; message = null }
         serverUrl = trimmed
-        platform.writeValue(KEY_SERVER, trimmed.ifEmpty { null })
+        // 清空也存下来（空串）：区分「主动关闭云端」与「从没填写过、用默认地址」
+        platform.writeValue(KEY_SERVER, trimmed)
         outcome(true)
         onChange()
         return true
@@ -150,7 +157,7 @@ class CloudClient(
         api.logout(access, refresh)
     }
 
-    /** [type] 为 HEALTH_DATA_SYNC / GUARDIAN / RESEARCH_USE / AI_EXPLANATION / AI_ADVICE；GUARDIAN 指「本人」这一成员的监护人同意。 */
+    /** [type] 为 HEALTH_DATA_SYNC / GUARDIAN / RESEARCH_USE / AI_EXPLANATION / AI_ADVICE / AI_CHAT；GUARDIAN 指「本人」这一成员的监护人同意。 */
     fun setConsent(type: String, granted: Boolean) = act(null) {
         val current = session ?: return@act "请先登录"
         val consentType = runCatching { ConsentType.valueOf(type) }.getOrNull() ?: return@act "未知的同意项"
@@ -220,6 +227,7 @@ class CloudClient(
             put("researchUse", s?.consents?.get(ConsentType.RESEARCH_USE) == true)
             put("aiExplanation", s?.consents?.get(ConsentType.AI_EXPLANATION) == true)
             put("aiAdvice", s?.consents?.get(ConsentType.AI_ADVICE) == true)
+            put("aiChat", s?.consents?.get(ConsentType.AI_CHAT) == true)
             put("pending", entries.count { it.state == SyncState.PENDING })
             put("synced", entries.count { it.state == SyncState.SYNCED })
             put("failed", entries.count { it.state == SyncState.CONFLICT || it.state == SyncState.REJECTED })
@@ -397,6 +405,95 @@ class CloudClient(
 
     private fun adviceRequest(requestJson: String): AdviceRequest? =
         runCatching { json.decodeFromString(AdviceRequest.serializer(), requestJson) }.getOrNull()
+
+    // endregion
+
+    // region AI 对话（与安卓 core:data ChatRepository 同一规则；记录只存本机）
+
+    private var chatHistory: List<ChatEntry> = platform.readValue(KEY_CHAT)
+        ?.let { runCatching { json.decodeFromString(CHAT_HISTORY, it) }.getOrNull() } ?: emptyList()
+    private var chatSending = false
+    private var chatError: String? = null
+
+    /**
+     * 对话页状态（JSON）：`state` 为 locked（message）/ consent（consentText）/ ready；`messages` 为本机记录
+     * （role、text、urgent、sources）；另有 sending、error、suggestions、urgentNotice、disclaimer、maxInput。
+     */
+    fun chatJson(): String = buildJsonObject {
+        val s = session
+        when {
+            !api.configured -> { put("state", "locked"); put("message", "连接云端服务并登录后，就可以和小瞳聊天了") }
+            s == null -> { put("state", "locked"); put("message", "登录账户后，就可以和小瞳聊聊今天的用眼感受") }
+            s.consents[ConsentType.AI_CHAT] != true -> { put("state", "consent"); put("consentText", Chats.CONSENT_TEXT) }
+            else -> put("state", "ready")
+        }
+        put("messages", JsonArray(chatHistory.map { e ->
+            buildJsonObject {
+                put("role", e.role); put("text", e.text); put("urgent", e.urgent)
+                put("sources", JsonArray(e.sources.map { JsonPrimitive("${it.title}（${it.publisher}）") }))
+            }
+        }))
+        put("sending", chatSending)
+        put("error", chatError)
+        put("suggestions", JsonArray(Chats.SUGGESTIONS.map(::JsonPrimitive)))
+        put("urgentNotice", Chats.URGENT_NOTICE)
+        put("disclaimer", Chats.DISCLAIMER)
+        put("maxInput", Chats.MAX_INPUT)
+    }.toString()
+
+    /**
+     * 发一条消息。[adviceRequestJson] 为当下的去标识概况（没有时传空串），已生成的综合建议作为开场一起发给模型；
+     * [agreeFirst] 为点了「同意并发送」，同意未能保存则不发送任何内容。状态经 onChange 通知。
+     */
+    fun sendChat(text: String, adviceRequestJson: String, agreeFirst: Boolean) {
+        val question = text.trim().take(Chats.MAX_INPUT)
+        if (question.isEmpty() || chatSending) return
+        val context = adviceRequest(adviceRequestJson)
+        val opening = context?.let { adviceCache[Advices.cacheKey(it)] }
+        appendChat(ChatEntry(Chats.USER, question, platform.nowMs(), urgent = Chats.redFlag(question)))
+        chatSending = true; chatError = null; onChange()
+        track(scope.launch {
+            val failure: String? = run {
+                if (agreeFirst) {
+                    val current = session ?: return@run "请先登录"
+                    when (val consent = authorized { api.recordConsent(it, ConsentInput(ConsentType.AI_CHAT, SyncContract.PRIVACY_POLICY_VERSION, true)) }) {
+                        is ApiResult.Ok -> session = session?.copy(consents = consentMap(consent.value, current.defaultSubjectId))
+                        else -> return@run describe(consent)
+                    }
+                }
+                when (val result = authorized { api.chat(it, Chats.request(chatHistory, opening, context)) }) {
+                    is ApiResult.Ok -> {
+                        val r = result.value
+                        appendChat(ChatEntry(Chats.ASSISTANT, r.reply, platform.nowMs(), r.urgent, r.sources))
+                        null
+                    }
+                    is ApiResult.Failed -> when {
+                        result.code == ErrorCodes.CONSENT_REQUIRED -> {
+                            session = session?.let { it.copy(consents = it.consents + (ConsentType.AI_CHAT to false)) }
+                            "需要先同意 AI 对话"
+                        }
+                        result.status == 401 -> "登录已失效，请重新登录"
+                        else -> result.message
+                    }
+                    is ApiResult.Unreachable -> "无法连接云端服务，请检查网络后重试"
+                }
+            }
+            chatSending = false; chatError = failure
+            onChange()
+        })
+    }
+
+    /** 清空本机对话记录。 */
+    fun clearChat() {
+        chatHistory = emptyList(); chatError = null
+        platform.writeValue(KEY_CHAT, null)
+        onChange()
+    }
+
+    private fun appendChat(entry: ChatEntry) {
+        chatHistory = (chatHistory + entry).takeLast(Chats.MAX_STORED)
+        platform.writeValue(KEY_CHAT, json.encodeToString(CHAT_HISTORY, chatHistory))
+    }
 
     // endregion
 
@@ -694,10 +791,12 @@ class CloudClient(
         private const val MAX_AI_CACHED = 200
         private val AI_CACHE = MapSerializer(String.serializer(), ExplanationDto.serializer())
         private const val KEY_ADVICE = "cloud.aiAdvice"
+        private const val KEY_CHAT = "cloud.aiChat"
+        private val CHAT_HISTORY = ListSerializer(ChatEntry.serializer())
         private const val MAX_ADVICE_CACHED = 30
         private val ADVICE_CACHE = MapSerializer(String.serializer(), AdviceDto.serializer())
         /** 研究用途与两项 AI 同意打开时不触发上传。 */
-        private val NO_SYNC_CONSENTS = setOf(ConsentType.RESEARCH_USE, ConsentType.AI_EXPLANATION, ConsentType.AI_ADVICE)
+        private val NO_SYNC_CONSENTS = setOf(ConsentType.RESEARCH_USE, ConsentType.AI_EXPLANATION, ConsentType.AI_ADVICE, ConsentType.AI_CHAT)
         private const val EXPIRY_MARGIN_MS = 30_000L
         private const val SELF = "SELF"
         private const val BIRTH_YEAR = "出生年份"

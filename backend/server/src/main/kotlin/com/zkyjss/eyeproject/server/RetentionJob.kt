@@ -25,7 +25,9 @@ class RetentionJob(
         val records = config.recordRetentionDays?.let { update("DELETE FROM records WHERE tested_at < ?", now - it * day) } ?: 0
         // AI 解读缓存保留 30 天（知识库或模型更新后自然换新）；用量只需当天
         update("DELETE FROM ai_explanations WHERE created_at < ?", now - 30 * day)
-        update("DELETE FROM ai_usage WHERE usage_day < ?", java.time.Instant.ofEpochMilli(now - 2 * day).atZone(java.time.ZoneId.of("Asia/Shanghai")).toLocalDate().toString())
+        val usageCutoff = java.time.Instant.ofEpochMilli(now - 2 * day).atZone(java.time.ZoneId.of("Asia/Shanghai")).toLocalDate().toString()
+        update("DELETE FROM ai_usage WHERE usage_day < ?", usageCutoff)
+        update("DELETE FROM ai_chat_usage WHERE usage_day < ?", usageCutoff)
         if (records > 0) audit.write(this, AuditAction.RETENTION_PURGE, null, "records", null, "DELETED_$records")
         Result(tokens, events, records)
     }

@@ -14,7 +14,7 @@ final class CloudModel: ObservableObject {
     // 首次访问可能来自保存记录的后台线程：状态只在主线程更新
     private init() { DispatchQueue.main.async { self.refresh() } }
 
-    func refresh() { explanations = [:]; advices = [:]; state = EyeRuntime.object(client.snapshotJson()) }
+    func refresh() { explanations = [:]; advices = [:]; chatState = nil; state = EyeRuntime.object(client.snapshotJson()) }
     func string(_ key: String) -> String { state[key] as? String ?? "" }
     func bool(_ key: String) -> Bool { state[key] as? Bool ?? false }
     func int(_ key: String) -> Int { (state[key] as? NSNumber)?.intValue ?? 0 }
@@ -46,6 +46,22 @@ final class CloudModel: ObservableObject {
     }
     /// 生成综合建议；agreeFirst 为卡片内点了「同意并生成」。
     func advise(_ requestJson: String, agreeFirst: Bool) { client.advise(requestJson: requestJson, agreeFirst: agreeFirst) }
+
+    /// 首页快捷提问带进对话页的草稿
+    @Published var chatDraft = ""
+    /// 对话页状态；见 CloudClient.chatJson，缓存到下次 [refresh]。
+    private var chatState: [String: Any]?
+    func chat() -> [String: Any] {
+        if let cached = chatState { return cached }
+        let value = EyeRuntime.object(client.chatJson())
+        chatState = value
+        return value
+    }
+    /// 发一条消息：带上当下的去标识概况（与综合建议同一份），已生成的综合建议作为开场。
+    func sendChat(_ text: String, agreeFirst: Bool) {
+        client.sendChat(text: text, adviceRequestJson: EyeCareStore.shared.adviceRequestJson, agreeFirst: agreeFirst)
+    }
+    func clearChat() { client.clearChat() }
 }
 
 /// URLSession 实现的一次 HTTP 往返；请求体与令牌不写日志。
@@ -122,12 +138,13 @@ enum CloudTexts {
         "未满 14 岁孩子的数据需监护人同意才上传；研究用途需单独同意。",
         "AI 功能需单独同意：只发送去标识的结果与概况，由第三方大模型生成文字，风险等级仍由测试规则决定。",
     ]
-    static let server = "局域网试用时填电脑上运行的服务地址，如 http://192.168.1.5:8080；正式上线后填 https 域名。更换地址会退出登录。"
+    static let server = "默认是课题组的服务器，一般不用改。局域网试用时可填电脑上运行的服务地址，如 http://192.168.1.5:8080；清空即只在本机保存。更换地址会退出登录。"
     static let sync = "把测试记录与家庭成员资料加密保存到云端，换手机或多台设备时可以找回。关闭后不再上传，已上传的数据可在下方导出或注销账号删除。"
     static let guardian = "未满 14 岁孩子的测试记录，需要监护人同意后才会上传。"
     static let research = "可选。同意后，去掉姓名、账号等身份信息的数据可用于改进眼健康研究；不同意不影响任何功能。"
     static let ai = "生成 AI 解读时，把这次结果的等级、指标、判断依据、年龄段和几项相关资料选项发给第三方大模型（DeepSeek），不发送姓名、账号、照片或视频；风险等级仍由测试规则决定。"
     static let advice = "生成 AI 综合建议时，把年龄段、职业、戴镜方式、既往眼病选项，实时检测的眨眼与观看距离，屏幕亮度等级，三项自测最近的等级，今天的用眼负荷与主要原因，以及你记录的感受发给第三方大模型（DeepSeek）；不发送姓名、账号、具体日期、照片或视频。"
+    static let chat = "和小瞳聊天时，把你输入的文字、最近几轮对话，以及综合建议用到的去标识用眼概况发给第三方大模型（DeepSeek）回答；服务器不保存对话内容，记录只在这台手机上；不发送姓名、账号、照片或视频。"
 }
 
 /// 账户（右上角人像按钮进入的完整页面）：账号概况、登录 / 注册、退出登录、注销账号与服务器地址。
@@ -135,10 +152,6 @@ enum CloudTexts {
 struct AccountPage: View {
     @ObservedObject private var cloud = CloudModel.shared
     let openCloudSync: () -> Void
-    @State private var mode = 0
-    @State private var email = ""
-    @State private var password = ""
-    @State private var agreed = false
     @State private var confirmDelete = false
     private var busy: Bool { cloud.bool("busy") }
     private var message: String { cloud.string("message") }
@@ -150,7 +163,7 @@ struct AccountPage: View {
                 ServerCard(cloud: cloud, emphasize: true)
                 if !message.isEmpty { note(message) }
             } else if !cloud.bool("signedIn") {
-                signInForm
+                SignInForm()
                 ServerCard(cloud: cloud, emphasize: false)
             } else {
                 signedIn
@@ -186,7 +199,45 @@ struct AccountPage: View {
                     in: RoundedRectangle(cornerRadius: 22))
     }
 
-    private var signInForm: some View {
+    private var signedIn: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            ListGroup(title: "账号") {
+                ListRow(title: "邮箱", glyph: .person, value: cloud.string("email"))
+                ListRow(title: "云端同步", glyph: .cloud, tone: .blue, value: cloud.bool("healthDataSync") ? "已开启" : "未开启",
+                        divider: false, action: openCloudSync)
+            }
+            if !message.isEmpty { note(message) }
+            ListGroup {
+                // 退出登录随时可点：立即清本机会话，不等同步或服务器
+                ListRow(title: "退出登录", glyph: .logout, tone: .neutral) { cloud.client.signOut() }
+                ListRow(title: confirmDelete ? "确认注销账号" : "注销账号", glyph: .trash, tone: .danger,
+                        subtitle: confirmDelete ? "将永久删除云端账号与全部已上传数据，本机记录保留" : nil,
+                        titleColor: EyeStyle.danger, divider: false, enabled: !busy) {
+                    if confirmDelete { confirmDelete = false; cloud.client.deleteCloudAccount() } else { confirmDelete = true }
+                }
+            }
+            ListGroup(title: "服务器") {
+                ListRow(title: "服务器地址", glyph: .server, tone: .neutral, value: cloud.string("serverUrl"), divider: false)
+            }
+        }
+    }
+
+    private func note(_ text: String) -> some View {
+        Text(text).font(EyeStyle.body).foregroundStyle(EyeStyle.secondary).padding(.horizontal, 4)
+    }
+}
+
+/// 登录 / 注册表单：账户页与启动时的登录引导共用（与安卓 SignInForm 一致）。
+struct SignInForm: View {
+    @ObservedObject private var cloud = CloudModel.shared
+    @State private var mode = 0
+    @State private var email = ""
+    @State private var password = ""
+    @State private var agreed = false
+    private var busy: Bool { cloud.bool("busy") }
+    private var message: String { cloud.string("message") }
+
+    var body: some View {
         Panel(padding: 20) {
             SegmentedPicker(options: [(0, "登录"), (1, "注册")], selected: mode) { mode = $0 }
             field("邮箱") {
@@ -212,28 +263,6 @@ struct AccountPage: View {
         }
     }
 
-    private var signedIn: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            ListGroup(title: "账号") {
-                ListRow(title: "邮箱", glyph: .person, value: cloud.string("email"))
-                ListRow(title: "云端同步", glyph: .cloud, tone: .blue, value: cloud.bool("healthDataSync") ? "已开启" : "未开启",
-                        divider: false, action: openCloudSync)
-            }
-            if !message.isEmpty { note(message) }
-            ListGroup {
-                // 退出登录随时可点：立即清本机会话，不等同步或服务器
-                ListRow(title: "退出登录", glyph: .logout, tone: .neutral) { cloud.client.signOut() }
-                ListRow(title: confirmDelete ? "确认注销账号" : "注销账号", glyph: .trash, tone: .danger,
-                        subtitle: confirmDelete ? "将永久删除云端账号与全部已上传数据，本机记录保留" : nil,
-                        titleColor: EyeStyle.danger, divider: false, enabled: !busy) {
-                    if confirmDelete { confirmDelete = false; cloud.client.deleteCloudAccount() } else { confirmDelete = true }
-                }
-            }
-            ListGroup(title: "服务器") {
-                ListRow(title: "服务器地址", glyph: .server, tone: .neutral, value: cloud.string("serverUrl"), divider: false)
-            }
-        }
-    }
 
     private func field<Content: View>(_ label: String, @ViewBuilder _ content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -300,7 +329,8 @@ struct CloudSyncPage: View {
                     consent("监护人同意", "GUARDIAN", "guardian", .family, .primary, CloudTexts.guardian)
                     consent("用于研究", "RESEARCH_USE", "researchUse", .chart, .success, CloudTexts.research)
                     consent("AI 解读", "AI_EXPLANATION", "aiExplanation", .bulb, .accent, CloudTexts.ai)
-                    consent("AI 综合建议", "AI_ADVICE", "aiAdvice", .chat, .blue, CloudTexts.advice, divider: false)
+                    consent("AI 综合建议", "AI_ADVICE", "aiAdvice", .chat, .blue, CloudTexts.advice)
+                    consent("AI 对话", "AI_CHAT", "aiChat", .chat, .primary, CloudTexts.chat, divider: false)
                 }
                 ListGroup(title: "数据") {
                     ListRow(title: "导出云端数据", glyph: .export, tone: .neutral, divider: false, enabled: !busy) {

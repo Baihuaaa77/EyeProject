@@ -33,6 +33,8 @@ data class ServerConfig(
     val llmModel: String = "deepseek-v4-flash",
     /** 每个账号每天调用大模型的次数上限（命中缓存不计）。 */
     val llmDailyLimit: Int = 20,
+    /** 每个账号每天和 AI 对话的条数上限（与解读、综合建议的额度分开）。 */
+    val llmChatDailyLimit: Int = 40,
     val llmTimeoutMs: Long = 30_000,
     /** 请求里带 `thinking: disabled`（DeepSeek V4 默认开启思考，解读不需要）；换不支持该字段的模型时设 false。 */
     val llmDisableThinking: Boolean = true,
@@ -80,6 +82,7 @@ data class ServerConfig(
                 llmBaseUrl = env["EYE_LLM_BASE_URL"]?.takeIf { it.isNotBlank() }?.trimEnd('/') ?: "https://api.deepseek.com",
                 llmModel = env["EYE_LLM_MODEL"]?.takeIf { it.isNotBlank() } ?: "deepseek-v4-flash",
                 llmDailyLimit = env["EYE_LLM_DAILY_LIMIT"]?.toInt() ?: 20,
+                llmChatDailyLimit = env["EYE_LLM_CHAT_DAILY_LIMIT"]?.toInt() ?: 40,
                 llmTimeoutMs = env["EYE_LLM_TIMEOUT_MS"]?.toLong() ?: 30_000,
                 llmDisableThinking = env["EYE_LLM_DISABLE_THINKING"]?.toBoolean() ?: true,
                 adminPassword = env["EYE_ADMIN_PASSWORD"]?.takeIf { it.isNotBlank() }?.also {

@@ -5,7 +5,7 @@ plugins {
     id("eyeproject.android.hilt")
 }
 
-// 云端地址：-Peyeproject.apiBaseUrl=... 或根 local.properties；缺省为空 → App 只在本机保存，不联网。
+// 云端地址：-Peyeproject.apiBaseUrl=... 或根 local.properties；缺省为空 → 用 SyncContract.DEFAULT_SERVER（课题组部署的服务器）。
 val apiBaseUrl: String = providers.gradleProperty("eyeproject.apiBaseUrl").orNull
     ?: rootProject.file("local.properties").takeIf { it.exists() }
         ?.let { file -> Properties().apply { file.inputStream().use(::load) }.getProperty("eyeproject.apiBaseUrl") }

@@ -319,3 +319,12 @@ export IOS_EXPORT_OPTIONS_PLIST="$PWD/iosApp/ExportOptions.local.plist"
 - 安卓编译、Debug APK 打包与原有 services 单元测试 64 项通过。
 - 共用 domain 3 项、screening 10 项 JVM 测试通过，涵盖三项风险结论、光学像素、屏幕尺寸、校准失败和中断。
 - Swift 源码通过语法解析，XcodeGen 与 GitHub Actions YAML 通过解析，隐私清单和图标格式通过静态检查。此类检查不包含 Apple SDK 类型检查与链接。
+
+## AI 对话、默认服务器与启动登录引导（2026-10-29）
+
+- 首页「今日感受」上方是「AI 综合建议」入口（`ChatEntryCard` / 安卓同名），进入对话页（`AiChatPage` / 安卓 `EyeChatScreen`）：
+  开场是综合建议卡，下面自由对话；规则与请求在共用 `CloudClient.chatJson / sendChat / clearChat`（安卓 `core:data` `ChatRepository`），
+  需单独的「AI 对话」同意，记录只存本机，危险信号由共用 `Chats.redFlag` 判断并醒目提示就医。后端 `POST /v1/chat`（`ChatService`）。
+- 服务器地址默认 `SyncContract.DEFAULT_SERVER`（`https://geometrylearning.com/eyeapi`），仍可在账户页修改；清空即只在本机保存。
+- 连着云端却未登录时，冷启动的启动动画后显示登录引导（`WelcomeView` / 安卓 `WelcomeScreen`），可跳过；登录 / 注册表单两端都抽成 `SignInForm` 与账户页共用。
+

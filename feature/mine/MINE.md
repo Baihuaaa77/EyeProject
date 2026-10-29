@@ -8,7 +8,8 @@
   三格概览（测试记录 / 家庭成员 / 已上传），分组入口：健康档案（测试记录、家庭成员与资料、用眼趋势报告）、数据与隐私（云端同步、权限与通知）、通用（系统设置）。
   跳转经 `MineNavigation` 由 app 接线（趋势页与系统设置属于其他 feature，不直接依赖）。
 - `AccountScreen` / `AccountViewModel`：右上角人像按钮进入的账户页：账号概况、登录 / 注册（注册前「?」里是隐私要点 `DATA_HANDLING`）、退出登录、注销账号（二次确认）、服务器地址（仅未登录时可改，换地址会退出登录）。
-- `CloudSyncScreen` / `CloudSyncViewModel`（`CloudSyncUiState`）：同步状态与立即同步、分项同意（云端保存、监护人、研究用途、AI 解读、**AI 综合建议**，每项旁「?」为 `ConsentHelp` 文案，两端一致）、导出云端数据、数据如何处理。
+- `WelcomeScreen`：启动时的登录引导（app 在冷启动的启动动画后、连着云端却未登录时显示），复用 `SignInForm`，可跳过，登录成功自动关闭。
+- `CloudSyncScreen` / `CloudSyncViewModel`（`CloudSyncUiState`）：同步状态与立即同步、分项同意（云端保存、监护人、研究用途、AI 解读、AI 综合建议、**AI 对话**，每项旁「?」为 `ConsentHelp` 文案，两端一致）、导出云端数据、数据如何处理。
   AI 综合建议的同意文案逐项列出发送的数据（年龄段、职业、戴镜方式、既往眼病、近 7 天用屏与休息概况、眨眼与距离、环境光与亮度、各测试等级、今日负荷与原因、记录的感受），不发送姓名、账号、具体日期、照片或视频。
 - `RecordsScreen` / `RecordsViewModel`：测试记录卡片列表，数据来自 `ScreeningRecordRepository.localRecords`（共享 `LocalRecordCatalog` 解析，苹果端同一份）；每张卡测试名、「时间 · 成员」、结论徽标，
   点开显示当时建议与要点、AI 解读卡片、按组展开的关键指标 / 判断依据 / 数据可靠性 / 测试时资料 / 设备信息，底部「导出报告」（UTF-8 TXT）与「导出原始数据」（JSON 原样）。空状态为思考中的小瞳。

@@ -55,6 +55,8 @@ internal object ConsentHelp {
     const val RESEARCH = "可选。同意后，去掉姓名、账号等身份信息的数据可用于改进眼健康研究；不同意不影响任何功能。"
     const val ADVICE = "生成 AI 综合建议时，把年龄段、职业、戴镜方式、既往眼病选项，近 7 天的用屏与休息概况，实时检测的眨眼与观看距离，" +
         "环境光与亮度等级，三项自测最近的等级，今天的用眼负荷与主要原因，以及你记录的感受发给第三方大模型（DeepSeek）；不发送姓名、账号、具体日期、照片或视频。"
+    const val CHAT = "和小瞳聊天时，把你输入的文字、最近几轮对话，以及综合建议用到的去标识用眼概况发给第三方大模型（DeepSeek）回答；" +
+        "服务器不保存对话内容，记录只在这台手机上；不发送姓名、账号、照片或视频。"
     const val AI = "生成 AI 解读时，把这次结果的等级、指标、判断依据、年龄段和几项相关资料选项发给第三方大模型（DeepSeek），不发送姓名、账号、照片或视频；风险等级仍由测试规则决定。"
 }
 
@@ -134,7 +136,9 @@ private fun SignedInPanel(state: CloudSyncUiState.SignedIn, actions: CloudSyncAc
         EyeSwitchRow("AI 解读", state.aiExplanation, { actions.setConsent(ConsentType.AI_EXPLANATION, it) },
             glyph = EyeGlyph.BULB, tone = EyeTileTone.ACCENT, enabled = !state.busy, help = "AI 解读" to ConsentHelp.AI)
         EyeSwitchRow("AI 综合建议", state.aiAdvice, { actions.setConsent(ConsentType.AI_ADVICE, it) },
-            glyph = EyeGlyph.CHAT, tone = EyeTileTone.BLUE, enabled = !state.busy, help = "AI 综合建议" to ConsentHelp.ADVICE, divider = false)
+            glyph = EyeGlyph.CHAT, tone = EyeTileTone.BLUE, enabled = !state.busy, help = "AI 综合建议" to ConsentHelp.ADVICE)
+        EyeSwitchRow("AI 对话", state.aiChat, { actions.setConsent(ConsentType.AI_CHAT, it) },
+            glyph = EyeGlyph.CHAT, tone = EyeTileTone.PRIMARY, enabled = !state.busy, help = "AI 对话" to ConsentHelp.CHAT, divider = false)
     }
     EyeListGroup(title = "数据") {
         EyeListRow("导出云端数据", onClick = actions.export, glyph = EyeGlyph.EXPORT, tone = EyeTileTone.NEUTRAL, enabled = !state.busy, divider = false)

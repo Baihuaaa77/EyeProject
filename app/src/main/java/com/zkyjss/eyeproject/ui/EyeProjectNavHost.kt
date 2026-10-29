@@ -57,6 +57,7 @@ import com.zkyjss.eyeproject.feature.agent.navigation.agentScreen
 import com.zkyjss.eyeproject.feature.home.HomeNavigation
 import com.zkyjss.eyeproject.feature.home.navigation.HomeRoute
 import com.zkyjss.eyeproject.feature.home.navigation.eyeCareScreens
+import com.zkyjss.eyeproject.feature.home.navigation.navigateToEyeChat
 import com.zkyjss.eyeproject.feature.home.navigation.homeScreen
 import com.zkyjss.eyeproject.feature.home.navigation.navigateToEyeAdvice
 import com.zkyjss.eyeproject.feature.home.navigation.navigateToEyeBrightness
@@ -144,9 +145,10 @@ fun EyeProjectNavHost(
                 onEditProfile = { navController.navigateToSubjectEdit(it) },
                 onOpenTrend = { navController.navigateToEyeTrend() },
                 onOpenAdvice = { navController.navigateToEyeAdvice() },
+                onOpenChat = { navController.navigateToEyeChat(it) },
                 onOpenBrightness = { navController.navigateToEyeBrightness() },
             ))
-            eyeCareScreens(onBack = back, onOpenTest = openTest)
+            eyeCareScreens(onBack = back, onOpenTest = openTest, onOpenAccount = openAccount)
             servicesScreen(
                 onDryEyeClick = { navController.navigateToDryEye() },
                 onPresbyopiaClick = { navController.navigateToPresbyopia() },

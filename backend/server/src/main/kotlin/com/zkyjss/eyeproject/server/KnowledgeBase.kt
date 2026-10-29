@@ -59,6 +59,22 @@ class KnowledgeBase(val version: String, val sources: Map<String, KnowledgeSourc
         return (pinned + ranked).take(limit)
     }
 
+    /**
+     * AI 对话的检索：在全部条目里按最近两条提问（加上概况里的主要原因与症状）找；
+     * 提问里有危险信号时固定带上危险信号与科室条目。
+     */
+    fun searchChat(questions: List<String>, context: AdviceRequest?, urgent: Boolean, limit: Int = 5): List<Entry> {
+        val pinned = (if (urgent) listOf("gen-red-flags", "gen-departments") else emptyList()).mapNotNull(::entry)
+        val query = tokenize(buildList {
+            addAll(questions)
+            context?.factors?.let(::addAll)
+            context?.symptoms?.let(::addAll)
+        }.joinToString(" "))
+        val ranked = entries.filter { it !in pinned }.map { it to score(it, query) }.filter { it.second > 0 }
+            .sortedByDescending { it.second }.map { it.first }
+        return (pinned + ranked).take(limit)
+    }
+
     /** 各等级必须带上的条目：就医时机、不确定与无效的含义。 */
     private fun pinnedIds(request: ExplanationRequest): List<String> {
         val prefix = when (request.kind) { "DRY_EYE" -> "dry"; "PRESBYOPIA" -> "pres"; else -> "stra" }

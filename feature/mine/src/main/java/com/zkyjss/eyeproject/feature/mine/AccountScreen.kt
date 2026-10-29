@@ -70,7 +70,7 @@ internal val DATA_HANDLING = listOf(
     "AI 功能需单独同意：只发送去标识的结果与概况，由第三方大模型生成文字，风险等级仍由测试规则决定。",
 )
 
-internal const val SERVER_HELP = "局域网试用时填电脑上运行的服务地址，如 http://192.168.1.5:8080；正式上线后填 https 域名。更换地址会退出登录。"
+internal const val SERVER_HELP = "默认是课题组的服务器，一般不用改。局域网试用时可填电脑上运行的服务地址，如 http://192.168.1.5:8080；清空即只在本机保存。更换地址会退出登录。"
 
 /**
  * 账户（右上角人像按钮进入的完整页面）：账号概况、登录 / 注册、退出登录、注销账号与服务器地址。
@@ -143,8 +143,9 @@ private fun AccountHeader(account: AccountState?) {
     }
 }
 
+/** 登录 / 注册表单：账户页与启动时的登录引导（WelcomeScreen）共用。 */
 @Composable
-private fun SignInForm(busy: Boolean, message: String?, actions: AccountActions) {
+internal fun SignInForm(busy: Boolean, message: String?, actions: AccountActions) {
     val colors = LocalEyeColors.current
     val haptics = rememberEyeHaptics()
     var mode by rememberSaveable { mutableStateOf(0) }

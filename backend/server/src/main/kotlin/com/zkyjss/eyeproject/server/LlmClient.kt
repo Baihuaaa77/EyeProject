@@ -23,10 +23,17 @@ data class LlmReply(val content: String, val promptTokens: Int?, val completionT
 
 class LlmException(message: String) : RuntimeException(message)
 
+/** 对话里的一轮：[role] 为 user / assistant。 */
+data class LlmTurn(val role: String, val content: String)
+
 /** 大模型端口；测试注入替身，不联网。 */
 interface LlmClient {
     val model: String
     suspend fun complete(system: String, user: String): LlmReply
+
+    /** 多轮对话（JSON 输出）。默认把各轮拼成一条用户消息，替身无需另外实现。 */
+    suspend fun chat(system: String, turns: List<LlmTurn>): LlmReply =
+        complete(system, turns.joinToString("\n\n") { "${if (it.role == "user") "用户" else "助手"}：${it.content}" })
 }
 
 /**
@@ -51,16 +58,21 @@ class DeepSeekClient(
         .build()
     private val json = Json { ignoreUnknownKeys = true }
 
-    override suspend fun complete(system: String, user: String): LlmReply {
+    override suspend fun complete(system: String, user: String): LlmReply = send(system, listOf(LlmTurn("user", user)), 0.3)
+
+    /** 对话稍放开温度，让口吻自然些。 */
+    override suspend fun chat(system: String, turns: List<LlmTurn>): LlmReply = send(system, turns, 0.5)
+
+    private suspend fun send(system: String, turns: List<LlmTurn>, temperature: Double): LlmReply {
         val body = buildJsonObject {
             put("model", model)
             put("messages", buildJsonArray {
                 add(buildJsonObject { put("role", "system"); put("content", system) })
-                add(buildJsonObject { put("role", "user"); put("content", user) })
+                turns.forEach { turn -> add(buildJsonObject { put("role", turn.role); put("content", turn.content) }) }
             })
             putJsonObject("response_format") { put("type", "json_object") }
             if (disableThinking) putJsonObject("thinking") { put("type", "disabled") }
-            put("temperature", 0.3)
+            put("temperature", temperature)
             put("max_tokens", 1024)
             put("stream", false)
         }

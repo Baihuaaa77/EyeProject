@@ -15,7 +15,7 @@ private func ringColor(_ level: String) -> Color {
     switch level { case "LOW": return EyeStyle.success; case "MEDIUM": return EyeStyle.accent; case "HIGH": return EyeStyle.danger; default: return EyeStyle.borderSubtle }
 }
 
-/// 首页：问候与日期（右上角账户、系统设置）→ 今日用眼 → 今日感受 → 为你推荐 → 多源感知 → 主动服务。
+/// 首页：问候与日期（右上角账户、系统设置）→ 今日用眼 → AI 综合建议（和小瞳聊聊）→ 今日感受 → 多源感知 → 主动服务。
 struct HomePage: View {
     let navigate: (AppRoute) -> Void
     let openTest: (String) -> Void
@@ -59,6 +59,7 @@ struct HomePage: View {
                     default: break
                     }
                 }
+                ChatEntryCard { navigate(.chat) }
                 CheckInCard(report: report) { store.checkIn($0) }
                 SectionTitle(title: "多源感知", help: perceptionHelp)
                 if report.signals("BASIC").contains(where: { $0.id != "brightness" }) { BasicCard(report: report) }
@@ -389,7 +390,7 @@ private struct ReminderCard: View {
     }
 }
 
-/// 服务入口 2×2：用眼趋势报告、专业咨询建议、AI 综合建议、亮度与蓝光。
+/// 服务入口：用眼趋势报告、专业咨询建议，下一行亮度与蓝光（AI 综合建议已移到首页「今日感受」上方）。
 private struct ServiceTiles: View {
     let report: CareReport
     let navigate: (AppRoute) -> Void
@@ -400,10 +401,7 @@ private struct ServiceTiles: View {
                 tile("用眼趋势报告", "近 7 天变化", .chart, .success) { navigate(.trend) }
                 tile("专业咨询建议", report.consults.first?.title ?? "结合自测与档案", .chat, urgent ? .danger : .blue) { navigate(.advice) }
             }
-            HStack(spacing: 10) {
-                tile("AI 综合建议", "小瞳结合大模型给建议", .bulb, .accent) { navigate(.advice) }
-                tile("亮度与蓝光", report.signal("brightness").map { "屏幕亮度 \($0.value)" } ?? "夜间模式与护眼", .sun, .accent) { navigate(.brightness) }
-            }
+            tile("亮度与蓝光", report.signal("brightness").map { "屏幕亮度 \($0.value)" } ?? "夜间模式与护眼", .sun, .accent) { navigate(.brightness) }
         }
     }
     private func tile(_ title: String, _ subtitle: String, _ glyph: EyeGlyph, _ tone: TileTone, _ action: @escaping () -> Void) -> some View {
@@ -489,7 +487,7 @@ struct TrendPage: View {
 
 // MARK: - 健康建议
 
-/// 健康建议：专业咨询建议（规则按近期自测、身体感受与年龄给出）+ AI 综合建议 + 建议做的自测。
+/// 健康建议：专业咨询建议（规则按近期自测、身体感受与年龄给出）+ 建议做的自测。AI 综合建议在单独的对话页。
 struct AdvicePage: View {
     let openTest: (String) -> Void
     @ObservedObject private var store = EyeCareStore.shared
@@ -504,7 +502,6 @@ struct AdvicePage: View {
                 .background(EyeStyle.panel, in: RoundedRectangle(cornerRadius: 22))
             Text("专业咨询建议").font(EyeStyle.title).foregroundStyle(EyeStyle.text).padding(.leading, 4).padding(.top, 4)
             ForEach(report.consults) { ConsultCard(consult: $0) }
-            AiAdviceView()
             if !tests.isEmpty {
                 ListGroup(title: "建议做的自测") {
                     ForEach(Array(tests.enumerated()), id: \.element.id) { i, action in

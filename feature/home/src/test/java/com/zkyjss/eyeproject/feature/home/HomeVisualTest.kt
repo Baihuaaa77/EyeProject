@@ -151,9 +151,9 @@ class HomeVisualTest {
         var saved: List<String>? = null
         compose.setContent { EyeProjectTheme { HomeContent(demoState(checkIn = false), HomeNavigation(), HomeActions(checkIn = { saved = it })) } }
         compose.onNodeWithText("眼睛酸胀").performScrollTo().performClick()
-        compose.onNodeWithText("头痛").performClick()
+        compose.onNodeWithText("头痛").performScrollTo().performClick()
         capture("04-首页-今日感受")
-        compose.onNodeWithText("记录今天的感受").performClick()
+        compose.onNodeWithText("记录今天的感受").performScrollTo().performClick()
         assertEquals(listOf("眼睛酸胀", "头痛"), saved)
     }
 
@@ -193,13 +193,37 @@ class HomeVisualTest {
     }
 
     @Test @Config(qualifiers = "zh-rCN-w390dp-h1200dp-mdpi")
+    fun aiChatShowsHistoryRedFlagsAndConsent() {
+        var state by mutableStateOf(com.zkyjss.eyeproject.core.data.chat.ChatState(com.zkyjss.eyeproject.core.data.chat.ChatAccess.READY, messages = listOf(
+            com.zkyjss.eyeproject.core.sync.ChatEntry(com.zkyjss.eyeproject.core.sync.Chats.USER, "下午盯电脑，眼睛又干又涩", 1L),
+            com.zkyjss.eyeproject.core.sync.ChatEntry(com.zkyjss.eyeproject.core.sync.Chats.ASSISTANT,
+                "看屏幕久了眨眼会变少，可能和眼睛干涩有关。每用眼 20 分钟抬头看远处一会儿，有意识地多眨眼。", 2L,
+                sources = listOf(com.zkyjss.eyeproject.core.sync.KnowledgeSourceDto("aao", "电脑视觉综合征", "美国眼科学会"))),
+            com.zkyjss.eyeproject.core.sync.ChatEntry(com.zkyjss.eyeproject.core.sync.Chats.USER, "右眼突然看不清了", 3L, urgent = true),
+        )))
+        val sent = mutableListOf<Pair<String, Boolean>>()
+        compose.setContent {
+            EyeProjectTheme {
+                EyeChatContent(state, "今天眼睛有点干涩", {}, {}, { text, agree -> sent += text to agree }, {}) {
+                    EyeText("（今天的综合建议卡片）", style = com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography.current.body)
+                }
+            }
+        }
+        compose.onNodeWithText(com.zkyjss.eyeproject.core.sync.Chats.URGENT_NOTICE).assertExists()
+        capture("12-AI综合建议对话")
+        // 未同意：输入框旁是「同意并发送」，首页带来的快捷提问已在输入框里
+        state = state.copy(access = com.zkyjss.eyeproject.core.data.chat.ChatAccess.NEEDS_CONSENT)
+        compose.onNodeWithText("同意并发送").performClick()
+        assertEquals(listOf("今天眼睛有点干涩" to true), sent)
+    }
+
+    @Test @Config(qualifiers = "zh-rCN-w390dp-h1200dp-mdpi")
     fun adviceAndBrightness() {
         var page by mutableStateOf(0)
         compose.setContent {
             EyeProjectTheme {
-                if (page == 0) EyeAdviceContent(demoState().report, {}, {}) {
-                    EyeText("（AI 综合建议卡片）", style = com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography.current.body)
-                } else EyeBrightnessContent(demoState(), {}, {})
+                if (page == 0) EyeAdviceContent(demoState().report, {}, {})
+                else EyeBrightnessContent(demoState(), {}, {})
             }
         }
         compose.onNodeWithText("干眼自测提示中风险").assertExists()
