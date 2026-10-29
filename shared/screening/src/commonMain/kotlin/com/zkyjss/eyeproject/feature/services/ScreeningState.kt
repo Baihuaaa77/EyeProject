@@ -3,7 +3,7 @@ package com.zkyjss.eyeproject.feature.services
 import com.zkyjss.eyeproject.core.model.HeadPoseEstimate
 
 enum class ScreeningKind { PRESBYOPIA, STRABISMUS }
-enum class ScreeningStep { PROFILE, ENVIRONMENT, NEAR_VISION, PUSH_UP, DISTANCE_CURVE, FLIPPER, GAZE_CALIBRATION, FIXATION, COVER, PURSUIT, RESULT }
+enum class ScreeningStep { PROFILE, ENVIRONMENT, NEAR_VISION, PUSH_UP, DISTANCE_CURVE, FLIPPER, GAZE_CALIBRATION, FIXATION, FAR_FIXATION, COVER, PURSUIT, RESULT }
 enum class VisionEye(val label: String) { RIGHT("右眼"), LEFT("左眼"), BOTH("双眼") }
 enum class PushStage { READY, APPROACH }
 

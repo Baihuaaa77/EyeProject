@@ -118,7 +118,8 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, onEditSubje
         ScreeningStep.PUSH_UP -> if (s.pushStage == PushStage.READY) "第${s.nearPoints.size + 1}次移近。先移到四十五厘米以外。" else "看着E，慢慢移近。一开始持续模糊就点按。"
         // 换距离的「请移动到 xx 厘米处」由距离提示播报，到位后不再重复
         ScreeningStep.DISTANCE_CURVE, ScreeningStep.FLIPPER -> "停稳后视标会自动出现，请选择开口方向。"
-        ScreeningStep.FIXATION -> "请保持三十三厘米，看着中间闪烁的小瞳，头和手机都不要动。"
+        ScreeningStep.FIXATION -> "请保持三十三厘米，看着上方闪烁的小瞳，头和手机都不要动。"
+        ScreeningStep.FAR_FIXATION -> "请看六米以外的目标，眼睛不要看手机，头和手机都不要动。"
         ScreeningStep.GAZE_CALIBRATION -> "请只用眼睛依次看着圆点，头和手机都不要动。"
         ScreeningStep.COVER -> coverSpokenPrompt(s)
         ScreeningStep.PURSUIT -> "请只用双眼跟随移动的小瞳，保持头部稳定。"
@@ -177,7 +178,8 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, onEditSubje
         onDispose { owner.lifecycle.removeObserver(observer) }
     }
     val activeTest = !s.guidePending && s.step !in setOf(ScreeningStep.PROFILE, ScreeningStep.ENVIRONMENT, ScreeningStep.RESULT)
-    val gazeTask = activeTest && s.step in setOf(ScreeningStep.GAZE_CALIBRATION, ScreeningStep.FIXATION, ScreeningStep.COVER, ScreeningStep.PURSUIT)
+    val gazeTask = activeTest && s.step in setOf(ScreeningStep.GAZE_CALIBRATION, ScreeningStep.FIXATION, ScreeningStep.FAR_FIXATION,
+        ScreeningStep.COVER, ScreeningStep.PURSUIT)
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
     Box(modifier.fillMaxSize()) {
@@ -207,6 +209,7 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, onEditSubje
                 ScreeningStep.FLIPPER -> FlipperContent(s, viewModel)
                 ScreeningStep.GAZE_CALIBRATION -> GazeCalibrationContent(s, viewModel)
                 ScreeningStep.FIXATION -> FixationContent(s, viewModel)
+                ScreeningStep.FAR_FIXATION -> FarFixationContent(s)
                 ScreeningStep.COVER -> CoverContent(s, viewModel)
                 ScreeningStep.PURSUIT -> PursuitContent(s, viewModel)
                 ScreeningStep.RESULT -> ScreeningResultContent(s, viewModel)
@@ -348,8 +351,32 @@ private fun FixationContent(s: ScreeningState, vm: ScreeningTestViewModel) {
 }
 
 /**
- * 原文：中央动态闪烁、高对比度的卡通注视点，1–2 Hz；直径 1.5–2 cm。
+ * 看远：受试者越过手机看 6 米外的目标，屏幕是给协助者看的。舞台用深色，避免整块亮屏在角膜上映出一大片光，
+ * 只留顶部的映光点；大号倒计时，最后 3 秒有节拍音、结束有提示音。与苹果端 FarFixationPanel 一致。
+ */
+@Composable
+private fun FarFixationContent(s: ScreeningState) {
+    val colors = LocalEyeColors.current
+    val typography = LocalEyeTypography.current
+    TestStageCard(title = "看 ${StrabismusProtocol.FAR_TARGET_M} 米外的目标") {
+        Column(Modifier.fillMaxWidth().height(240.dp + rememberStageExtra()).clip(EyeShapes.medium).background(colors.ink).padding(20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterVertically)) {
+            Canvas(Modifier.size(64.dp)) {
+                drawMascot(colors, Offset(size.width / 2, size.height * 0.58f), size.minDimension * 0.8f, gaze = Offset(0f, -0.6f))
+            }
+            BaseEyeText("${s.secondsLeft}", style = typography.headline, color = colors.white)
+            BaseEyeText("眼睛越过手机，看着远处的目标", style = typography.subtitle, color = colors.white,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            BaseEyeText("协助者：确认一直看着远处，头和手机不动", style = typography.bodySecondary, color = colors.white.copy(alpha = 0.72f),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        }
+    }
+}
+
+/**
+ * 原文：动态闪烁、高对比度的卡通注视点，1–2 Hz；直径 1.5–2 cm。
  * 用小瞳脸作为卡通目标，白底呈现；整体透明度交替变化，让小瞳本身闪烁。
+ * 目标放在画布顶部、尽量靠近顶部的映光点（专家建议：视标越靠近点光源，角膜映光越准）。
  */
 @Composable
 private fun FixationTarget(diameterMm: Float, bright: Boolean, vm: ScreeningTestViewModel) {
@@ -360,10 +387,12 @@ private fun FixationTarget(diameterMm: Float, bright: Boolean, vm: ScreeningTest
     Canvas(Modifier.fillMaxWidth().height(240.dp + rememberStageExtra()).clip(EyeShapes.medium).background(colors.white)
         .onGloballyPositioned { origin = it.positionInWindow() }) {
         val s = sizePx.coerceAtMost(minOf(size.width, size.height) * 0.6f)
+        // 头顶嫩芽也留在画布内
+        val target = Offset(center.x, s * 0.6f + 12.dp.toPx())
         drawContext.canvas.saveLayer(Rect(Offset.Zero, size), Paint().apply { alpha = if (bright) 1f else 0.3f })
-        drawMascot(colors, center, s, lid = 0f)
+        drawMascot(colors, target, s, lid = 0f)
         drawContext.canvas.restore()
-        vm.reportGazeTarget(origin.x + center.x, origin.y + center.y)
+        vm.reportGazeTarget(origin.x + target.x, origin.y + target.y)
     }
 }
 

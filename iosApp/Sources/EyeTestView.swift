@@ -111,14 +111,14 @@ struct EyeTestView: View {
     private var isProfile: Bool { phase == "Profile" || phase == "PROFILE" }
     /// 注视类任务：提示位固定高度，画布位置不随提示变化
     private var isGazeTask: Bool {
-        pixelsPerMm > 0 && !runtime.bool("guidePending") && ["GAZE_CALIBRATION","FIXATION","COVER","PURSUIT"].contains(phase)
+        pixelsPerMm > 0 && !runtime.bool("guidePending") && ["GAZE_CALIBRATION","FIXATION","FAR_FIXATION","COVER","PURSUIT"].contains(phase)
     }
     private var hasReflexStimulus: Bool {
         pixelsPerMm > 0 && runtime.kind == "STRABISMUS" && !isProfile && !phase.isEmpty && phase != "RESULT"
     }
     private var isRunning: Bool {
         pixelsPerMm > 0 && !runtime.bool("guidePending") && ["Practice","Natural","Open","Countdown","Rest",
-            "NEAR_VISION","PUSH_UP","DISTANCE_CURVE","FLIPPER","GAZE_CALIBRATION","FIXATION","COVER","PURSUIT"].contains(phase)
+            "NEAR_VISION","PUSH_UP","DISTANCE_CURVE","FLIPPER","GAZE_CALIBRATION","FIXATION","FAR_FIXATION","COVER","PURSUIT"].contains(phase)
     }
     @ViewBuilder private var testContent: some View {
         if phase == "Setup" || phase == "ENVIRONMENT" {
@@ -166,6 +166,9 @@ struct EyeTestView: View {
         } else if phase == "Result" || phase == "RESULT" {
             // 结论、关键指标、判断依据、本次数据与导出：与安卓共用 ResultReport 内容
             ResultReportView(runtime: runtime)
+        } else if phase == "FAR_FIXATION" {
+            Text("看 \(Int(runtime.number("farTargetM"))) 米外的目标").font(EyeStyle.title)
+            FarFixationPanel(seconds: Int(runtime.number("secondsLeft")))
         } else if phase == "GAZE_CALIBRATION" || phase == "FIXATION" || phase == "COVER" || phase == "PURSUIT" {
             if phase == "GAZE_CALIBRATION" {
                 Text("注视校准 · \(Int(runtime.number("gazeCalibrationIndex")) + 1)/\(Int(runtime.number("calibrationCount")))").font(EyeStyle.title)
@@ -360,6 +363,27 @@ private struct CoverSequenceStrip: View {
     }
 }
 
+/// 看远：受试者越过手机看 6 米外的目标，屏幕是给协助者看的。舞台用深色，避免整块亮屏在角膜上映出一大片光，
+/// 只留顶部的映光点；大号倒计时，最后 3 秒有节拍音、结束有提示音。与安卓 FarFixationContent 一致。
+private struct FarFixationPanel: View {
+    let seconds: Int
+    var body: some View {
+        VStack(spacing: 10) {
+            Canvas { ctx, size in
+                Cartoon.mascot(ctx, center: CGPoint(x: size.width / 2, y: size.height * 0.58), size: min(size.width, size.height) * 0.8,
+                    gaze: CGPoint(x: 0, y: -0.6))
+            }.frame(width: 64, height: 64)
+            Text("\(seconds)").font(EyeStyle.headline).monospacedDigit().foregroundStyle(.white)
+            Text("眼睛越过手机，看着远处的目标").font(EyeStyle.subtitle).foregroundStyle(.white).multilineTextAlignment(.center)
+            Text("协助者：确认一直看着远处，头和手机不动").font(EyeStyle.bodySecondary).foregroundStyle(.white.opacity(0.72))
+                .multilineTextAlignment(.center)
+        }
+        .padding(20).frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(EyeStyle.ink, in: RoundedRectangle(cornerRadius: EyeStyle.radius))
+        .stageHeight(240)
+    }
+}
+
 private struct GazeTargetView: View {
     @ObservedObject var runtime: EyeRuntime
     let pixelsPerMm: Float
@@ -402,7 +426,9 @@ private struct GazeTargetView: View {
             return CGPoint(x: size.width / 2 + tan(runtime.number("targetX") * scale * .pi / 180) * distance * ppm,
                 y: size.height / 2 - tan(runtime.number("targetY") * scale * .pi / 180) * distance * ppm)
         }
-        return CGPoint(x: size.width / 2,y: size.height / 2)
+        // 注视、遮盖：目标放在画布顶部、尽量靠近顶部的映光点（专家建议），头顶嫩芽也留在画布内
+        let width = CGFloat(runtime.number("targetDiameterMm") * Double(pixelsPerMm)) / UIScreen.main.scale
+        return CGPoint(x: size.width / 2, y: width * 0.6 + 12)
     }
     private func report(_ geometry: GeometryProxy,_ point: CGPoint) {
         let frame = geometry.frame(in: .global), scale = UIScreen.main.scale

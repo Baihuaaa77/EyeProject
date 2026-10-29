@@ -485,8 +485,16 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
         gaze = null; gazeCalibration.clear(); renderedTargets.clear()
         stepStartMs = platform.nowMs()
         _state.update { it.copy(step = ScreeningStep.FIXATION, guidePending = true, gazeCalibrated = false,
-            gazeWarning = null, secondsLeft = StrabismusProtocol.FIXATION_SECONDS, instruction = "看着中央闪烁的小瞳，头和手机保持不动。", warning = null) }
+            gazeWarning = null, secondsLeft = StrabismusProtocol.FIXATION_SECONDS, instruction = "看着屏幕上方闪烁的小瞳，头和手机保持不动。", warning = null) }
 
+    }
+
+    /** 看远眼位：受试者越过手机看 6 米外的目标；只记录双眼映光，不做屏幕注视监督（目标不在屏幕上）。 */
+    private fun startFarFixation() {
+        resetGazeWindow()
+        stepStartMs = platform.nowMs()
+        _state.update { it.copy(step = ScreeningStep.FAR_FIXATION, guidePending = true, secondsLeft = StrabismusProtocol.FAR_FIXATION_SECONDS,
+            instruction = "眼睛越过手机，看着 6 米外的目标，头和手机保持不动。", warning = null) }
     }
 
     private fun startCover() {
@@ -566,6 +574,7 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
             }
             ScreeningStep.FIXATION -> retryGazeCalibration()
             ScreeningStep.PURSUIT -> runTimedStep(StrabismusProtocol.PURSUIT_SECONDS) { finish() }
+            ScreeningStep.FAR_FIXATION -> runTimedStep(StrabismusProtocol.FAR_FIXATION_SECONDS) { startCover() }
             else -> Unit
         }
     }
@@ -611,8 +620,8 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
             } else {
                 stepStartMs = platform.nowMs(); resetGazeWindow(); faceCenterBaseline = null
                 _state.update { it.copy(step = ScreeningStep.FIXATION, gazeCalibrated = true,
-                    instruction = "看着中央闪烁的小瞳，头和手机保持不动。", targetX = 1f, targetY = 0f) }
-                runTimedStep(StrabismusProtocol.FIXATION_SECONDS) { startCover() }
+                    instruction = "看着屏幕上方闪烁的小瞳，头和手机保持不动。", targetX = 1f, targetY = 0f) }
+                runTimedStep(StrabismusProtocol.FIXATION_SECONDS) { startFarFixation() }
             }
         }
     }
@@ -677,7 +686,7 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
         scope.launch(Dispatchers.IO) {
             runCatching {
                 val data = RecordObject().apply {
-                    put("protocolVersion", if (s.kind == ScreeningKind.STRABISMUS) 5 else 4)
+                    put("protocolVersion", if (s.kind == ScreeningKind.STRABISMUS) 6 else 4)
                     if (s.kind == ScreeningKind.STRABISMUS) {
                         put("gazeCalibrated", s.gazeCalibrated)
                         put("gazeCalibration", RecordArray().apply { capturedCalibration.forEach { c -> put(RecordObject().apply {
@@ -889,8 +898,9 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
                 "虹膜 ${decimalString(it.irisDiameterPx.toDouble(), 1)} px；瞳孔对比 ${decimalString(it.pupilContrast.toDouble(), 0)}；反光对比 ${decimalString(it.reflexContrast.toDouble(), 0)}"
             } ?: "眼区像素不可用"
         val opticalReady = leftOptical?.usable == true && rightOptical?.usable == true
+        val pitchLimit = if (step == ScreeningStep.FAR_FIXATION) StrabismusProtocol.FAR_PITCH_LIMIT_DEG else 10f
         val poseStable = pose != null && abs(pose.yawDeg) <= 10f &&
-            abs(pose.pitchDeg) <= 10f && abs(pose.rollDeg) <= 8f
+            abs(pose.pitchDeg) <= pitchLimit && abs(pose.rollDeg) <= 8f
         val opticalStatus = when {
             face == null -> "等待人脸"
             pose == null -> "头姿不可用"
@@ -983,8 +993,9 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
         } }
         if (!_state.value.guidePending && step == _state.value.step && time >= stepStartMs && step != ScreeningStep.PROFILE && step != ScreeningStep.ENVIRONMENT && step != ScreeningStep.RESULT && step != ScreeningStep.GAZE_CALIBRATION) {
             totalFrames++
-            val eligible = step != ScreeningStep.COVER ||
-                _state.value.coverMarks.lastOrNull()?.label?.let { it.startsWith("移开") || it.startsWith("完全") } == true
+            // 看远另行评估（数据不足时只是不评估看远），不拉低整体有效帧率
+            val eligible = step != ScreeningStep.FAR_FIXATION && (step != ScreeningStep.COVER ||
+                _state.value.coverMarks.lastOrNull()?.label?.let { it.startsWith("移开") || it.startsWith("完全") } == true)
             if (eligible) qualityEligibleFrames++
             if (valid) {
                 validFrames++

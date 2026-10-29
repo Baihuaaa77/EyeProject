@@ -75,6 +75,17 @@ object StrabismusProtocol {
     const val FIXATION_SECONDS = 12
     const val PURSUIT_SECONDS = 22
 
+    /**
+     * 看远眼位（专家 2026-10-29 建议）：缩小视标模拟看远时眼睛仍在看 33 cm 的手机，调节和集合没有放松，
+     * 看远才出现的间歇性外斜测不出来。改为手机留在眼前约 33 cm、略低于视线，受试者越过手机注视 6 米外的目标 5–10 秒，
+     * 前置相机同时记录双眼映光。前 [FAR_SETTLE_MS] 是视线转向远处、调节放松的时间，不计入。
+     */
+    const val FAR_FIXATION_SECONDS = 10
+    const val FAR_SETTLE_MS = 1_500L
+    const val FAR_TARGET_M = 6
+    /** 手机放低到视线下方，相机看到的头部俯仰会比正对时大：看远时放宽到 20°（其余任务 10°）。 */
+    const val FAR_PITCH_LIMIT_DEG = 20f
+
     /** 平均角膜横径（mm），用于把图像像素换算为毫米（以每帧虹膜直径作尺度）。 */
     const val CORNEA_DIAMETER_MM = 11.7
     /** Hirschberg 经验值：1 mm 映光偏移 ≈ 15Δ（原文；候选参数，未针对本机标定）。 */

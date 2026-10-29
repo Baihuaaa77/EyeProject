@@ -181,7 +181,8 @@ class RuleRevisionTest {
 
     // region 斜视
 
-    private fun strabismus(nasal: (Int) -> Float, pursuitDeg: Pair<Float, Float>? = null, coordinated: Boolean = true): ScreeningAssessment {
+    private fun strabismus(nasal: (Int) -> Float, pursuitDeg: Pair<Float, Float>? = null, coordinated: Boolean = true,
+                           far: ((Int) -> Float)? = null, farFrames: Int = 100): ScreeningAssessment {
         val fixation = List(120) { i -> EyeMotionSample(i * 100L, ScreeningStep.FIXATION, 0f, 0f, 0f, 0f, 33f,
             leftNasal = 0.1f + nasal(i), rightNasal = 0.1f, leftVertical = 0f, rightVertical = 0f, gazeOnTarget = true) }
         val marks = listOf(CoverMark("移开遮盖，双眼注视", 15_000, uncovered = VisionEye.RIGHT),
@@ -200,7 +201,33 @@ class RuleRevisionTest {
                 leftGazeX = 0.5f + lx, leftGazeY = 0.5f + ly, rightGazeX = 0.5f + lx, rightGazeY = 0.5f + ly, gazeOnTarget = true)
         }
         return ScreeningAssessmentModel.strabismus(ScreeningState(kind = ScreeningKind.STRABISMUS, coverMarks = marks,
-            gazeCalibrated = true, pursuitMaxDeg = pursuitDeg), fixation + cover + pursuit, 100, 90)
+            gazeCalibrated = true, pursuitMaxDeg = pursuitDeg), fixation + cover + pursuit + farSamples(far, farFrames), 100, 90)
+    }
+
+    /** 看远 10 秒（每 100 ms 一帧）；看远不监督屏幕注视，gazeOnTarget 为空。 */
+    private fun farSamples(far: ((Int) -> Float)?, frames: Int) = if (far == null) emptyList() else List(frames) { i ->
+        EyeMotionSample(30_000 + i * 100L, ScreeningStep.FAR_FIXATION, 0f, 0f, 0f, 0f, 33f,
+            leftNasal = 0.1f + far(i), rightNasal = 0.1f, leftVertical = 0f, rightVertical = 0f)
+    }
+
+    @Test fun deviationOnlyAtDistanceIsFlagged() {
+        // 看近正常、看远约 17Δ：提示只在看远时出现的间歇性斜视
+        val result = strabismus({ 0f }, far = { 0.1f })
+        assertEquals(EvidenceStatus.NORMAL, result.evidence.first { it.key == "alignment" }.status)
+        assertEquals(EvidenceStatus.ABNORMAL, result.evidence.first { it.key == "far" }.status)
+        assertEquals(ScreeningRiskLevel.HIGH, result.riskLevel)
+        assertTrue(result.findings.any { "间歇性" in it })
+        // 前 1.5 秒视线转向远处、调节放松，不计入
+        assertEquals(85.0, result.features["far_frames"])
+    }
+
+    @Test fun missingDistanceDataOnlySkipsTheDistanceEvidence() {
+        // 看远拍不清（如手机挡住、头低得太多）：只是不评估看远，整次测试仍有效
+        for (result in listOf(strabismus({ 0f }), strabismus({ 0f }, far = { 0.1f }, farFrames = 30))) {
+            assertEquals(EvidenceStatus.UNAVAILABLE, result.evidence.first { it.key == "far" }.status)
+            assertEquals(ScreeningRiskLevel.LOW, result.riskLevel)
+        }
+        assertEquals(EvidenceStatus.NORMAL, strabismus({ 0f }, far = { 0f }).evidence.first { it.key == "far" }.status)
     }
 
     @Test fun measurementJitterCannotHideALargeDeviation() {
@@ -258,7 +285,8 @@ class RuleRevisionTest {
         assertEquals("高度疑似", view.badge)
         val json = Json.parseToJsonElement(view.toRecordObject().toString()).jsonObject
         assertEquals("HIGH", json["level"]!!.jsonPrimitive.content)
-        assertEquals(3, json["evidence"]!!.jsonArray.size)
+        // 看近、看远、遮盖、协调四条依据
+        assertEquals(4, json["evidence"]!!.jsonArray.size)
         assertTrue(json["sections"]!!.jsonArray.isNotEmpty())
     }
 

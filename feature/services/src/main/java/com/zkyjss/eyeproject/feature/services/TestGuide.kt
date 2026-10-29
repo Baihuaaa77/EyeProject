@@ -68,7 +68,7 @@ import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sin
 
-internal enum class GuideMotion { POSTURE, ACUITY, FVA, BLINK, OPEN, NEAR, MOVE, CURVE, SWITCH, FIXATE, COVER, FOLLOW }
+internal enum class GuideMotion { POSTURE, ACUITY, FVA, BLINK, OPEN, NEAR, MOVE, CURVE, SWITCH, FIXATE, FAR, COVER, FOLLOW }
 
 /** 演示里的一个「分镜」：从循环进度 [start] 起高亮该步骤文字。 */
 private data class GuideBeat(val start: Float, val label: String)
@@ -267,6 +267,7 @@ private fun sceneFor(motion: GuideMotion): GuideScene = when (motion) {
     GuideMotion.MOVE -> moveScene
     GuideMotion.SWITCH -> switchScene
     GuideMotion.FIXATE -> fixateScene
+    GuideMotion.FAR -> farScene
     GuideMotion.COVER -> coverScene
     GuideMotion.FOLLOW -> followScene
 }
@@ -498,7 +499,7 @@ private val switchScene = GuideScene(
 
 private val fixateScene = GuideScene(
     cycleMs = 4000,
-    beats = listOf(GuideBeat(0f, "① 看着屏幕中央闪烁的小瞳"), GuideBeat(0.45f, "② 头和手机都保持不动")),
+    beats = listOf(GuideBeat(0f, "① 看着屏幕上方闪烁的小瞳"), GuideBeat(0.45f, "② 头和手机都保持不动")),
     keyframe = 0.5f,
 ) { phase ->
     floorShadow(95f, 182f, 110f)
@@ -506,7 +507,7 @@ private val fixateScene = GuideScene(
     scope.drawMascot(colors, mascot, u(108f), gaze = Offset(0.9f, -0.1f))
     if (phase >= 0.45f) headLock(95f, 106f, 66f)
     val (tl, screen) = scope.drawCartoonPhone(colors, p(242f, 100f), u(160f))
-    val dot = Offset(tl.x + screen.width / 2, tl.y + screen.height / 2)
+    val dot = Offset(tl.x + screen.width / 2, tl.y + screen.height * 0.2f)
     val pulse = (sin(phase * 2f * PI.toFloat() * 2f) + 1f) / 2f
     scope.drawContext.canvas.saveLayer(Rect(dot - Offset(u(20f), u(20f)), Size(u(40f), u(40f))),
         Paint().apply { alpha = if (pulse > 0.5f) 1f else 0.3f })
@@ -518,6 +519,38 @@ private val fixateScene = GuideScene(
         colors.primary.copy(alpha = 0.45f), Offset(eye.x + u(16f), eye.y), Offset(dot.x - u(14f), dot.y), u(2f),
         cap = StrokeCap.Round, pathEffect = PathEffect.dashPathEffect(floatArrayOf(u(5f), u(6f)), phase = -phase * u(110f))
     )
+}
+
+/** 看远：手机在小瞳面前、略低于视线；视线越过手机，落到远处的目标上，保持约 10 秒。 */
+private val farScene = GuideScene(
+    cycleMs = 5200,
+    beats = listOf(
+        GuideBeat(0f, "① 手机留在眼前约 33 cm，略低于视线"),
+        GuideBeat(0.3f, "② 眼睛越过手机，看 6 米外的目标"),
+        GuideBeat(0.65f, "③ 看约 10 秒，头和手机都不动"),
+    ),
+    keyframe = 0.5f,
+) { phase ->
+    floorShadow(62f, 182f, 90f)
+    val mascot = p(62f, 104f)
+    val look = seg(phase, 0.3f, 0.4f)
+    scope.drawMascot(colors, mascot, u(92f), gaze = Offset(0.9f, -0.15f * look))
+    if (phase >= 0.65f) headLock(62f, 100f, 56f)
+    scope.drawCartoonPhone(colors, p(142f, 128f), u(78f))
+    // 远处的目标：一扇门，旁边标注距离
+    val door = p(272f, 70f)
+    scope.drawRoundRect(colors.panelBackground, Offset(door.x - u(17f), door.y - u(30f)), Size(u(34f), u(60f)), CornerRadius(u(4f)))
+    scope.drawRoundRect(colors.primary, Offset(door.x - u(17f), door.y - u(30f)), Size(u(34f), u(60f)), CornerRadius(u(4f)), style = Stroke(u(2.5f)))
+    scope.drawCircle(colors.accent, u(3f), Offset(door.x + u(9f), door.y + u(4f)))
+    label("${StrabismusProtocol.FAR_TARGET_M} 米外", 272f, 120f, colors.textSecondary)
+    // 视线：从双眼越过手机顶部流向远处
+    if (look > 0f) {
+        val eye = mascotEyeCenter(mascot, u(92f), 1)
+        scope.drawLine(
+            colors.primary.copy(alpha = 0.45f * look), Offset(eye.x + u(14f), eye.y), Offset(door.x - u(20f), door.y), u(2f),
+            cap = StrokeCap.Round, pathEffect = PathEffect.dashPathEffect(floatArrayOf(u(5f), u(6f)), phase = -phase * u(160f))
+        )
+    }
 }
 
 private val coverScene = GuideScene(
@@ -676,6 +709,7 @@ internal fun guideMotion(step: ScreeningStep) = when (step) {
     ScreeningStep.DISTANCE_CURVE -> GuideMotion.CURVE
     ScreeningStep.FLIPPER -> GuideMotion.SWITCH
     ScreeningStep.FIXATION -> GuideMotion.FIXATE
+    ScreeningStep.FAR_FIXATION -> GuideMotion.FAR
     ScreeningStep.COVER -> GuideMotion.COVER
     ScreeningStep.PURSUIT -> GuideMotion.FOLLOW
     else -> GuideMotion.POSTURE

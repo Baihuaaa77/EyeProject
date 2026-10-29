@@ -288,6 +288,7 @@ class MobileScreeningController(
                 put("gazeCalibrationIndex",s.gazeCalibrationIndex); put("gazeCalibrationRound",s.gazeCalibrationRound)
                 put("gazeCalibrationFailed",s.gazeCalibrationFailed)
                 put("targetDiameterMm",StrabismusProtocol.targetDiameterMm(s.fields["年龄"]?.toIntOrNull()))
+                put("farTargetM",StrabismusProtocol.FAR_TARGET_M)
                 put("coverDone",s.coverMarks.size); put("coverNext",StrabismusProtocol.COVER_SEQUENCE.getOrNull(s.coverMarks.size)?.label)
                 put("coverRemainingMs",screening.coverRemainingMs())
                 StrabismusProtocol.COVER_SEQUENCE.getOrNull(s.coverMarks.size - 1)?.let { put("coverCurrent",it.label); put("coverHoldMs",it.holdMs) }

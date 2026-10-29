@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// 测试前的方法演示：逐项移植安卓 TestGuide.kt（12 个场景、320×200 舞台单位、与动画同步高亮的分镜、暂停 / 继续）。
+/// 测试前的方法演示：逐项移植安卓 TestGuide.kt（13 个场景、320×200 舞台单位、与动画同步高亮的分镜、暂停 / 继续）。
 /// 只出现在准备阶段，不参与正式刺激呈现或计时；系统减弱动态效果时停在关键帧并展示全部步骤。
-enum GuideMotion { case posture, acuity, fva, blink, open, near, move, curve, flip, fixate, cover, follow
+enum GuideMotion { case posture, acuity, fva, blink, open, near, move, curve, flip, fixate, far, cover, follow
     /// 与安卓 guideMotion(step) 相同的映射。
     static func forStep(_ step: String) -> GuideMotion {
         switch step {
@@ -11,6 +11,7 @@ enum GuideMotion { case posture, acuity, fva, blink, open, near, move, curve, fl
         case "DISTANCE_CURVE": .curve
         case "FLIPPER": .flip
         case "FIXATION", "GAZE_CALIBRATION": .fixate
+        case "FAR_FIXATION": .far
         case "COVER": .cover
         case "PURSUIT": .follow
         default: .posture
@@ -253,6 +254,7 @@ struct GuideScene {
         case .curve: curve
         case .flip: flip
         case .fixate: fixate
+        case .far: far
         case .cover: cover
         case .follow: follow
         }
@@ -380,20 +382,43 @@ struct GuideScene {
         else if (0.55...0.7).contains(phase) { g.label("移远 →", 220, 172, EyeStyle.primary) }
     }
 
-    static let fixate = GuideScene(cycle: 4.0, beats: [.init(start: 0, label: "① 看着屏幕中央闪烁的小瞳"),
+    static let fixate = GuideScene(cycle: 4.0, beats: [.init(start: 0, label: "① 看着屏幕上方闪烁的小瞳"),
         .init(start: 0.45, label: "② 头和手机都保持不动")], keyframe: 0.5) { g, phase in
         g.floorShadow(95, 182, 110)
         let mascot = g.p(95, 110)
         g.mascot(95, 110, 108, gaze: CGPoint(x: 0.9, y: -0.1))
         if phase >= 0.45 { g.headLock(95, 106, 66) }
         let (tl, screen) = g.phone(242, 100, 160)
-        let dot = CGPoint(x: tl.x + screen.width / 2, y: tl.y + screen.height / 2)
+        let dot = CGPoint(x: tl.x + screen.width / 2, y: tl.y + screen.height * 0.2)
         let pulse = (sin(phase * 2 * .pi * 2) + 1) / 2
         var flash = g.ctx; flash.opacity = pulse > 0.5 ? 1 : 0.3
         flash.drawLayer { layer in Cartoon.mascot(layer, center: dot, size: g.u(22)) }
         let eye = Cartoon.mascotEyeCenter(mascot, g.u(108), 1)
         g.line(CGPoint(x: eye.x + g.u(16), y: eye.y), CGPoint(x: dot.x - g.u(14), y: dot.y), EyeStyle.primary.opacity(0.45), g.u(2),
                dash: [g.u(5), g.u(6)], dashPhase: -CGFloat(phase) * g.u(110))
+    }
+
+    /// 看远：手机在小瞳面前、略低于视线；视线越过手机，落到远处的目标上，保持约 10 秒。
+    static let far = GuideScene(cycle: 5.2, beats: [.init(start: 0, label: "① 手机留在眼前约 33 cm，略低于视线"),
+        .init(start: 0.3, label: "② 眼睛越过手机，看 6 米外的目标"), .init(start: 0.65, label: "③ 看约 10 秒，头和手机都不动")], keyframe: 0.5) { g, phase in
+        g.floorShadow(62, 182, 90)
+        let mascot = g.p(62, 104)
+        let look = seg(phase, 0.3, 0.4)
+        g.mascot(62, 104, 92, gaze: CGPoint(x: 0.9, y: -0.15 * look))
+        if phase >= 0.65 { g.headLock(62, 100, 56) }
+        _ = g.phone(142, 128, 78)
+        // 远处的目标：一扇门，旁边标注距离
+        let door = CGRect(origin: g.p(255, 40), size: CGSize(width: g.u(34), height: g.u(60)))
+        g.ctx.fill(Path(roundedRect: door, cornerRadius: g.u(4)), with: .color(EyeStyle.panel))
+        g.ctx.stroke(Path(roundedRect: door, cornerRadius: g.u(4)), with: .color(EyeStyle.primary), lineWidth: g.u(2.5))
+        g.circle(g.p(281, 74), g.u(3), EyeStyle.accent)
+        g.label("6 米外", 272, 120, EyeStyle.secondary)
+        // 视线：从双眼越过手机顶部流向远处
+        if look > 0 {
+            let eye = Cartoon.mascotEyeCenter(mascot, g.u(92), 1)
+            g.line(CGPoint(x: eye.x + g.u(14), y: eye.y), g.p(252, 70), EyeStyle.primary.opacity(0.45), g.u(2), alpha: look,
+                   dash: [g.u(5), g.u(6)], dashPhase: -CGFloat(phase) * g.u(160))
+        }
     }
 
     static let cover = GuideScene(cycle: 9.6, beats: [.init(start: 0, label: "① 遮右眼 2 秒 → 移开，双眼注视 2 秒"),

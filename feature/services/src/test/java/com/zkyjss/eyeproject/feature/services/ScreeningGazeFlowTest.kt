@@ -69,6 +69,11 @@ class ScreeningGazeFlowTest {
         ShadowLooper.idleMainLooper(11, TimeUnit.SECONDS)
         assertEquals(ScreeningStep.FIXATION, vm.state.value.step)
         ShadowLooper.idleMainLooper(1, TimeUnit.SECONDS)
+        // 注视满 12 秒后先看远处（引导页确认后计时 10 秒），再进入遮盖
+        assertEquals(ScreeningStep.FAR_FIXATION, vm.state.value.step)
+        assertTrue(vm.state.value.guidePending)
+        vm.confirmGuide()
+        ShadowLooper.idleMainLooper(StrabismusProtocol.FAR_FIXATION_SECONDS.toLong(), TimeUnit.SECONDS)
         assertEquals(ScreeningStep.COVER, vm.state.value.step)
         vm.interruptTest()
     }

@@ -8,7 +8,9 @@ fun screeningGuidance(s: ScreeningState): String? {
     val monocular = s.step == ScreeningStep.NEAR_VISION && s.visionEye != VisionEye.BOTH
     if ((!s.faceDetected && !monocular) || !s.distanceCm.isFinite() || s.distanceCm <= 0f) return "请正对屏幕"
     if (s.lux != null && s.lux < 50f) return "请增加光照"
-    s.headPose?.let { pose -> if (kotlin.math.abs(pose.yawDeg) > 15f || kotlin.math.abs(pose.pitchDeg) > 15f) return "请把头摆正" }
+    // 看远时手机放在视线下方，相机看到的俯仰本来就大一些
+    val pitchLimit = if (s.step == ScreeningStep.FAR_FIXATION) StrabismusProtocol.FAR_PITCH_LIMIT_DEG + 5f else 15f
+    s.headPose?.let { pose -> if (kotlin.math.abs(pose.yawDeg) > 15f || kotlin.math.abs(pose.pitchDeg) > pitchLimit) return "请把头摆正" }
     // 移近法：只提示速度，不提示距离
     if (s.step == ScreeningStep.PUSH_UP) {
         if (s.pushStage != PushStage.APPROACH) {

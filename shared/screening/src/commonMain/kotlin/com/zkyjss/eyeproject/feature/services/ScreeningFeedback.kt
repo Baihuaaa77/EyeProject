@@ -41,6 +41,8 @@ fun screeningFeedbackFrame(s: ScreeningState, coverRemainingMs: Long = -1): Scre
     return ScreeningFeedbackFrame(s.step.name + suffix, active, s.step == ScreeningStep.RESULT,
         if (s.step == ScreeningStep.GAZE_CALIBRATION && !s.gazeCalibrationFailed) s.gazeCalibrationIndex else -1,
         s.step == ScreeningStep.GAZE_CALIBRATION && s.gazeCalibrationFailed,
+        // 看远的最后 3 秒响节拍音：受试者不看屏幕，听到结束音再看回手机
+        countdown = if (s.step == ScreeningStep.FAR_FIXATION && !s.guidePending && s.secondsLeft in 1..3) s.secondsLeft else 0,
         coverReady = s.step == ScreeningStep.COVER && !s.guidePending && s.coverMarks.isNotEmpty() &&
             s.coverMarks.size < StrabismusProtocol.COVER_SEQUENCE.size && coverRemainingMs == 0L,
         distanceZone = feedbackDistanceZone(s.distanceCm,
