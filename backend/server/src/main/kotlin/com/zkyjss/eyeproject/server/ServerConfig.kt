@@ -36,6 +36,8 @@ data class ServerConfig(
     val llmTimeoutMs: Long = 30_000,
     /** 请求里带 `thinking: disabled`（DeepSeek V4 默认开启思考，解读不需要）；换不支持该字段的模型时设 false。 */
     val llmDisableThinking: Boolean = true,
+    /** 管理网页口令；为 null 时不开放管理入口（/admin 返回 404）。 */
+    val adminPassword: String? = null,
 ) {
     init {
         require(activeKeyId in dataKeys) { "EYE_ACTIVE_KEY_ID 不在 EYE_DATA_KEYS 中" }
@@ -80,6 +82,11 @@ data class ServerConfig(
                 llmDailyLimit = env["EYE_LLM_DAILY_LIMIT"]?.toInt() ?: 20,
                 llmTimeoutMs = env["EYE_LLM_TIMEOUT_MS"]?.toLong() ?: 30_000,
                 llmDisableThinking = env["EYE_LLM_DISABLE_THINKING"]?.toBoolean() ?: true,
+                adminPassword = env["EYE_ADMIN_PASSWORD"]?.takeIf { it.isNotBlank() }?.also {
+                    if (production) require(it.length >= AdminService.MIN_PASSWORD_LENGTH) {
+                        "EYE_ADMIN_PASSWORD 至少 ${AdminService.MIN_PASSWORD_LENGTH} 位"
+                    }
+                },
             )
         }
 

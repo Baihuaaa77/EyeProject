@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>眼健康助手 · 数据看板</title>
+<link rel="stylesheet" href="admin.css">
+<script src="admin.js" defer></script>
+</head>
+<body>
+<header class="bar">
+  <div class="brand"><span class="dot"></span>眼健康助手 · 数据看板</div>
+  <button id="logout" class="ghost" hidden>退出</button>
+</header>
+
+<main>
+  <section id="login" class="card login" hidden>
+    <h1>管理登录</h1>
+    <p class="muted">输入服务器配置里的管理口令。这里只显示同意了「研究用途」的用户数据，并且已去标识。</p>
+    <form id="login-form">
+      <input id="password" type="password" autocomplete="current-password" placeholder="管理口令" required>
+      <button type="submit">登录</button>
+    </form>
+    <p id="login-error" class="error" role="alert"></p>
+  </section>
+
+  <div id="app" hidden>
+    <section class="tiles" id="tiles"></section>
+
+    <section class="grid">
+      <div class="card">
+        <h2>各项测试与风险分布</h2>
+        <div id="kinds"></div>
+        <div class="legend" id="legend"></div>
+      </div>
+      <div class="card">
+        <h2>最近 30 天测试次数</h2>
+        <div id="daily" class="daily"></div>
+        <div class="daily-axis"><span id="daily-start"></span><span id="daily-end"></span></div>
+        <h2 class="spaced">平台</h2>
+        <div id="platforms" class="chips"></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="table-head">
+        <h2>测试记录（去标识）</h2>
+        <form id="filters" class="filters">
+          <select id="f-kind" aria-label="测试类型"><option value="">全部测试</option></select>
+          <select id="f-risk" aria-label="风险等级"><option value="">全部等级</option></select>
+          <input id="f-from" type="date" aria-label="开始日期">
+          <span class="muted">至</span>
+          <input id="f-to" type="date" aria-label="结束日期">
+          <button type="submit" class="ghost">筛选</button>
+          <button type="button" id="export">导出 CSV</button>
+        </form>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>测试时间</th><th>测试</th><th>风险</th><th>质量</th><th>用户</th><th>被测者</th><th>年龄段</th><th>性别</th><th>平台</th><th></th>
+          </tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+      <div class="pager">
+        <span id="count" class="muted"></span>
+        <span>
+          <button type="button" id="prev" class="ghost">上一页</button>
+          <button type="button" id="next" class="ghost">下一页</button>
+        </span>
+      </div>
+    </section>
+    <p class="foot muted">用户、被测者为不可逆假名编号：同一人始终同一编号，但看不到邮箱、昵称与问卷原文。每次查看与导出都会写入审计日志。<span id="generated"></span></p>
+  </div>
+</main>
+</body>
+</html>

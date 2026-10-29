@@ -13,6 +13,8 @@ import com.zkyjss.eyeproject.core.sync.RecordUpload
 import com.zkyjss.eyeproject.core.sync.SubjectInput
 import com.zkyjss.eyeproject.core.sync.SyncContract
 import io.ktor.http.ContentDisposition
+import io.ktor.http.ContentType
+import io.ktor.http.withCharset
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
@@ -41,6 +43,8 @@ import io.ktor.server.request.path
 import io.ktor.server.request.receive
 import io.ktor.server.response.header
 import io.ktor.server.response.respond
+import io.ktor.server.response.respondRedirect
+import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
@@ -64,6 +68,9 @@ fun main() {
 /** 已认证账号。 */
 data class AccountPrincipal(val accountId: String)
 
+/** 已登录的管理网页会话（持有令牌以便退出）。 */
+data class AdminPrincipal(val token: String)
+
 /** 服务端全部组件；测试可注入大模型替身与时钟。 */
 class Services(
     val config: ServerConfig,
@@ -81,12 +88,14 @@ class Services(
     private val knowledge = KnowledgeBase.load()
     val explanations = ExplanationService(db, config, audit, knowledge, llm, clock)
     val advice = AdviceService(db, config, audit, knowledge, llm, clock)
+    val admin = AdminService(db, config, audit, clock)
     override fun close() = db.close()
 }
 
 fun Application.eyeProjectModule(config: ServerConfig, services: Services = Services(config), runJobs: Boolean = true) {
     val auth = RateLimitName("auth")
     val ai = RateLimitName("ai")
+    val adminLogin = RateLimitName("admin-login")
     if (config.trustProxy) install(XForwardedHeaders)
     install(CallLogging) {
         level = Level.INFO
@@ -103,6 +112,11 @@ fun Application.eyeProjectModule(config: ServerConfig, services: Services = Serv
         register(ai) {
             rateLimiter(limit = 6, refillPeriod = 1.minutes)
             requestKey { call -> call.principal<AccountPrincipal>()?.accountId ?: call.request.origin.remoteHost }
+        }
+        // 管理口令只有一个：每 IP 每分钟最多试 5 次
+        register(adminLogin) {
+            rateLimiter(limit = 5, refillPeriod = 1.minutes)
+            requestKey { call -> call.request.origin.remoteHost }
         }
     }
     install(StatusPages) {
@@ -138,6 +152,9 @@ fun Application.eyeProjectModule(config: ServerConfig, services: Services = Serv
         bearer("api") {
             authenticate { credential -> services.auth.authenticate(credential.token)?.let(::AccountPrincipal) }
         }
+        bearer("admin") {
+            authenticate { credential -> if (services.admin.authenticate(credential.token)) AdminPrincipal(credential.token) else null }
+        }
     }
 
     if (runJobs) {
@@ -148,6 +165,8 @@ fun Application.eyeProjectModule(config: ServerConfig, services: Services = Serv
 
     routing {
         get("/health") { call.respond(mapOf("status" to "ok")) }
+        // 未设置管理口令时不注册任何管理路由（一律 404）
+        if (services.admin.enabled) adminRoutes(services.admin, adminLogin)
         route(SyncContract.API_PREFIX) {
             rateLimit(auth) { authRoutes(services) }
             authenticate("api") {
@@ -236,4 +255,55 @@ private fun Route.recordRoutes(s: Services) = route("/records") {
         call.respond(HttpStatusCode.NoContent)
     }
     get("/{id}/compare") { call.respond(s.records.compare(call.accountId, call.parameters["id"]!!)) }
+}
+
+/**
+ * 管理网页：页面与脚本在 `resources/admin/`，接口在 `admin/api/`。页面里一律用相对地址，
+ * 所以部署在反向代理的子路径下（如 `https://域名/eyeapi/admin/`）也能用。
+ */
+private fun Route.adminRoutes(admin: AdminService, loginLimit: RateLimitName) = route("/admin") {
+    fun resource(name: String) = AdminService::class.java.classLoader.getResource("admin/$name")!!.readText()
+    val page = resource("index.html")
+    val script = resource("admin.js")
+    val style = resource("admin.css")
+    suspend fun ApplicationCall.static(text: String, type: ContentType) {
+        response.header(HttpHeaders.CacheControl, "no-store")
+        response.header("X-Content-Type-Options", "nosniff")
+        response.header("Referrer-Policy", "no-referrer")
+        response.header("Content-Security-Policy", "default-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
+        respondText(text, type.withCharset(Charsets.UTF_8))
+    }
+    // 不带斜杠时相对地址会解析到上一级，先补上斜杠
+    get { call.respondRedirect("admin/") }
+    get("/") { call.static(page, ContentType.Text.Html) }
+    get("/admin.js") { call.static(script, ContentType.Text.JavaScript) }
+    get("/admin.css") { call.static(style, ContentType.Text.CSS) }
+    route("/api") {
+        rateLimit(loginLimit) {
+            post("/login") { call.respond(admin.login(call.receive<AdminLoginRequest>().password, call.ip)) }
+        }
+        authenticate("admin") {
+            post("/logout") {
+                admin.logout(call.principal<AdminPrincipal>()!!.token)
+                call.respond(HttpStatusCode.NoContent)
+            }
+            get("/overview") { call.respond(admin.overview(call.ip)) }
+            get("/records") {
+                val q = call.request.queryParameters
+                call.respond(admin.records(call.adminFilter(), q["offset"]?.toIntOrNull() ?: 0, q["limit"]?.toIntOrNull() ?: 50, call.ip))
+            }
+            get("/records.csv") {
+                val csv = admin.csv(call.adminFilter(), call.ip)
+                call.response.header(HttpHeaders.ContentDisposition,
+                    ContentDisposition.Attachment.withParameter(ContentDisposition.Parameters.FileName, "eyeproject-records.csv").toString())
+                call.response.header(HttpHeaders.CacheControl, "no-store")
+                call.respondText(csv, ContentType.Text.CSV.withCharset(Charsets.UTF_8))
+            }
+        }
+    }
+}
+
+private fun ApplicationCall.adminFilter(): AdminFilter {
+    val q = request.queryParameters
+    return AdminFilter(q["kind"], q["risk"], q["from"]?.toLongOrNull(), q["to"]?.toLongOrNull())
 }

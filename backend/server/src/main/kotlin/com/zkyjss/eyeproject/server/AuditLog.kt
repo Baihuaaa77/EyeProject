@@ -11,6 +11,8 @@ enum class AuditAction {
     AI_EXPLAIN,
     /** AI 综合建议：结果同上，不记内容。 */
     AI_ADVICE,
+    /** 管理网页：登录、查看统计或记录列表（target_type 为 overview / records）、导出 CSV；actor 为 admin。 */
+    ADMIN_LOGIN, ADMIN_LOGIN_FAILED, ADMIN_VIEW, ADMIN_EXPORT,
 }
 
 class AuditLog(private val ipHasher: IpHasher, private val clock: () -> Long) {
