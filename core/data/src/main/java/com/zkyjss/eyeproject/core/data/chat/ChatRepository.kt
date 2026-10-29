@@ -100,7 +100,7 @@ internal class DefaultChatRepository(
     }
 
     override suspend fun send(text: String, context: AdviceRequest?, agreeFirst: Boolean) {
-        val question = text.trim().take(Chats.MAX_INPUT)
+        val question = text.trim().take(Chats.INPUT_LIMIT)
         if (question.isEmpty() || sending.value) return
         load()
         sending.value = true; error.value = null

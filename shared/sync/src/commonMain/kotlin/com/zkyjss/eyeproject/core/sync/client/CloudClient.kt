@@ -438,7 +438,7 @@ class CloudClient(
         put("suggestions", JsonArray(Chats.SUGGESTIONS.map(::JsonPrimitive)))
         put("urgentNotice", Chats.URGENT_NOTICE)
         put("disclaimer", Chats.DISCLAIMER)
-        put("maxInput", Chats.MAX_INPUT)
+        put("maxInput", Chats.INPUT_LIMIT)
     }.toString()
 
     /**
@@ -446,7 +446,7 @@ class CloudClient(
      * [agreeFirst] 为点了「同意并发送」，同意未能保存则不发送任何内容。状态经 onChange 通知。
      */
     fun sendChat(text: String, adviceRequestJson: String, agreeFirst: Boolean) {
-        val question = text.trim().take(Chats.MAX_INPUT)
+        val question = text.trim().take(Chats.INPUT_LIMIT)
         if (question.isEmpty() || chatSending) return
         val context = adviceRequest(adviceRequestJson)
         val opening = context?.let { adviceCache[Advices.cacheKey(it)] }

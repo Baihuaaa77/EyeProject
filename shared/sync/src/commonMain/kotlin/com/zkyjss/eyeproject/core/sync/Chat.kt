@@ -55,7 +55,7 @@ object Chats {
     const val URGENT_NOTICE = "你提到的情况可能需要尽快就医：眼睛疼痛、突然看不清、突然重影、眼前闪光或黑影增多、眼外伤或化学物质溅入，" +
         "请不要等待，尽快到医院眼科（必要时急诊）检查。"
     /** 输入框一条消息的字数上限 */
-    const val MAX_INPUT = 300
+    const val INPUT_LIMIT = 300
     /** 每次发给模型的最近对话条数 */
     const val MAX_HISTORY = 12
     /** 历史里一条回答最多带多少字（更早的长回答截断，控制费用） */
@@ -88,10 +88,10 @@ object Chats {
         return ChatRequest(messages.map { it.copy(text = it.text.take(MAX_HISTORY_TEXT)) }, context)
     }
 
-    /** 服务端校验与截断：角色只认两种，最后一条必须是用户的；用户消息不超过 [MAX_INPUT] 字。 */
+    /** 服务端校验与截断：角色只认两种，最后一条必须是用户的；用户消息不超过 [INPUT_LIMIT] 字。 */
     fun ChatRequest.bounded(): ChatRequest? {
         val kept = messages.filter { it.role == USER || it.role == ASSISTANT }.takeLast(MAX_HISTORY)
-            .map { m -> m.copy(text = m.text.trim().take(if (m.role == USER) MAX_INPUT else MAX_HISTORY_TEXT)) }
+            .map { m -> m.copy(text = m.text.trim().take(if (m.role == USER) INPUT_LIMIT else MAX_HISTORY_TEXT)) }
             .filter { it.text.isNotEmpty() }
         if (kept.lastOrNull()?.role != USER) return null
         return ChatRequest(kept, context)

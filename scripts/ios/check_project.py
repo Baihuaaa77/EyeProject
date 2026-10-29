@@ -31,12 +31,23 @@ ios_sdk = re.search(r"pod 'MediaPipeTasksVision', '([^']+)'",pod).group(1)
 if android_sdk != ios_sdk:
     errors.append('MediaPipe SDK versions differ')
 
+C_MACROS = {
+    'ARG_MAX', 'CHILD_MAX', 'LINK_MAX', 'MAX_CANON', 'MAX_INPUT', 'NAME_MAX', 'NGROUPS_MAX', 'OPEN_MAX', 'PATH_MAX',
+    'PIPE_BUF', 'LINE_MAX', 'RE_DUP_MAX', 'IOV_MAX', 'CHAR_BIT', 'CHAR_MAX', 'CHAR_MIN', 'INT_MAX', 'INT_MIN', 'LONG_MAX',
+    'LONG_MIN', 'SHRT_MAX', 'UINT_MAX', 'BUFSIZ', 'EOF', 'FILENAME_MAX', 'TMP_MAX', 'NULL', 'TRUE', 'FALSE', 'YES', 'NO',
+    'MAXPATHLEN', 'NBBY', 'DEBUG', 'NDEBUG', 'TARGET_OS_IOS', 'M_PI', 'M_E', 'INFINITY', 'NAN', 'HUGE_VAL',
+    'EXIT_SUCCESS', 'EXIT_FAILURE', 'RAND_MAX', 'SIG_DFL', 'SIG_IGN', 'CLOCKS_PER_SEC', 'UINT8_MAX', 'INT32_MAX', 'INT64_MAX',
+}
 for path in (root / 'shared').rglob('*.kt'):
     if '/build/' in path.as_posix(): continue
     if 'commonMain' in path.parts:
         text = path.read_text(encoding='utf-8')
         if re.search(r'^import (android\.|java\.|javax\.)',text,re.M):
             errors.append('Platform dependency in common source: ' + str(path.relative_to(root)))
+        # 导出到 iOS 框架的常量会写进 Objective-C 头文件，与苹果 SDK 的 C 宏同名就会被宏替换、头文件编译失败
+        # （曾因 Chats.MAX_INPUT 撞上 <sys/syslimits.h> 的 MAX_INPUT）
+        for name in set(re.findall(r'\bconst val ([A-Z][A-Z0-9_]*)\b', text)) & C_MACROS:
+            errors.append('Constant name clashes with an Apple SDK C macro (' + name + '): ' + str(path.relative_to(root)))
 
 sources = list((root / 'iosApp/Sources').glob('*.swift'))
 if len(sources) < 6: errors.append('Missing iOS source files')

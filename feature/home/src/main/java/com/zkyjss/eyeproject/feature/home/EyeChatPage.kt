@@ -150,7 +150,7 @@ internal fun EyeChatContent(
     val messages = state?.messages.orEmpty()
     LaunchedEffect(messages.size, state?.sending) { scroll.animateScrollTo(scroll.maxValue) }
     EyeSubPage("AI 综合建议", onBack, Modifier.imePadding(), scroll = scroll, bottomBar = {
-        ChatInputBar(state, input, { input = it.take(Chats.MAX_INPUT) }, onOpenAccount) { agree ->
+        ChatInputBar(state, input, { input = it.take(Chats.INPUT_LIMIT) }, onOpenAccount) { agree ->
             onSend(input, agree); input = ""
         }
     }) {
