@@ -621,8 +621,8 @@ struct RestBreakView: View {
 
 // MARK: - 护眼操
 
-/// 「护眼操」完整页面（与安卓 EyeExercisePage 同一流程与文案）：深色底，上方进度条，中间大箭头 + 「向左看」+ 倒计时，
-/// 下方是小瞳和它的气泡。眼睛转到位时整页朝那个方向翻过去、手机振动，小瞳顺着飞出画面打个滚再回来；最后闭眼休息 5 秒。
+/// 「护眼操」完整页面（与安卓 EyeExercisePage 同一流程与文案）：深色底，顶部进度条；上方大箭头 +「向左看」和小瞳的气泡，
+/// 小瞳在屏幕正中，下方倒计时。眼睛转到位时提示朝那个方向翻过去、手机振动，小瞳顺着飞出画面打个滚再回来；最后闭眼休息 5 秒，每秒轻响一下。
 /// 判断与计时在共用 EyeExerciseCoach；没有相机权限时按时间带着做。
 struct EyeExerciseView: View {
     @Environment(\.dismiss) private var dismiss
@@ -646,24 +646,35 @@ struct EyeExerciseView: View {
                             Capsule().fill(EyeStyle.success).frame(width: max(0, (geo.size.width - 100) * CGFloat(state?.progress ?? 0)))
                         }.frame(height: 6)
                     }
-                    Spacer()
-                    instruction.id(pageKey).transition(flipTransition).animation(.easeInOut(duration: 0.38), value: pageKey)
-                    Spacer()
+                    // 上半区：动作提示 + 小瞳的气泡（贴着小瞳）；中间：小瞳；下半区：倒计时与提示语。上下等高，小瞳正好在屏幕中央
+                    VStack(spacing: 20) {
+                        Spacer(minLength: 0)
+                        instruction.id(pageKey).transition(flipTransition).animation(.easeInOut(duration: 0.38), value: pageKey)
+                        if !isStage(.done) { MascotBubble(line: MascotLine(text: bubbleText)) }
+                    }.frame(maxHeight: .infinity)
                     if !isStage(.done) {
-                        MascotBubble(line: MascotLine(text: bubbleText))
                         MascotStage(mood: isStage(.rest) ? .sleepy : .happy, interactive: false)
                             .frame(width: 150, height: 150)
                             .rotationEffect(.degrees(spin * (flyMove.map { $0.dx < 0 || $0.dy < 0 ? -1.0 : 1.0 } ?? 1.0)))
                             .offset(x: CGFloat(flyMove?.dx ?? 0) * fly * geo.size.width * 0.8,
                                     y: CGFloat(flyMove?.dy ?? 0) * fly * geo.size.height * 0.45)
-                        Text(state?.faceVisible == true || coach.usedCamera ? "头保持不动，只转眼睛" : "跟着提示转动眼睛就好")
-                            .font(EyeStyle.bodySecondary).foregroundStyle(Color.white.opacity(0.7))
                     } else {
                         MascotStage(mood: .happy, interactive: false, greet: true).frame(width: 170, height: 170)
-                        Text(coach.usedCamera ? "共 \(state?.stepCount ?? 0) 步，小瞳看到你做到了 \(state?.detectedCount ?? 0) 步" : "共 \(state?.stepCount ?? 0) 步，做完啦")
-                            .font(EyeStyle.body).foregroundStyle(.white).multilineTextAlignment(.center)
-                        Button("完成") { dismiss() }.buttonStyle(EyeButtonStyle()).padding(.top, 16)
                     }
+                    VStack(spacing: 0) {
+                        if !isStage(.done) {
+                            Text(isStage(.move) || isStage(.rest) ? "\(state?.secondsLeft ?? 0)" : " ")
+                                .font(.system(size: 88, weight: .bold, design: .rounded)).foregroundStyle(.white).padding(.top, 8)
+                            Spacer(minLength: 0)
+                            Text(state?.faceVisible == true || coach.usedCamera ? "头保持不动，只转眼睛" : "跟着提示转动眼睛就好")
+                                .font(EyeStyle.bodySecondary).foregroundStyle(Color.white.opacity(0.7))
+                        } else {
+                            Text(coach.usedCamera ? "共 \(state?.stepCount ?? 0) 步，小瞳看到你做到了 \(state?.detectedCount ?? 0) 步" : "共 \(state?.stepCount ?? 0) 步，做完啦")
+                                .font(EyeStyle.body).foregroundStyle(.white).multilineTextAlignment(.center).padding(.top, 16)
+                            Spacer(minLength: 0)
+                            Button("完成") { dismiss() }.buttonStyle(EyeButtonStyle())
+                        }
+                    }.frame(maxHeight: .infinity)
                 }
                 .padding(.horizontal, 20).padding(.vertical, 12)
             }
@@ -701,6 +712,9 @@ struct EyeExerciseView: View {
             flipMove = nil; EyeHaptics.tap()
         } else if event == .rest {
             flipMove = nil; MascotSound.shared.play("eye_yawn")
+        } else if event == .countdown {
+            // 闭着眼看不到数字：每过一秒轻响一下
+            MascotSound.shared.play("eye_count")
         } else if event == .done {
             EyeHaptics.success(); MascotSound.shared.play("eye_heart")
         } else {
@@ -725,12 +739,10 @@ struct EyeExerciseView: View {
                 Image(systemName: arrowName(move)).font(.system(size: 56, weight: .bold)).foregroundStyle(Color.white.opacity(0.6))
                     .accessibilityLabel(move.label)
                 Text(move.label).font(EyeStyle.title).foregroundStyle(.white)
-                Text("\(state?.secondsLeft ?? 0)").font(.system(size: 96, weight: .bold, design: .rounded)).foregroundStyle(.white)
             } else if isStage(.back) {
                 Text("看回中间").font(EyeStyle.title).foregroundStyle(.white)
             } else if isStage(.rest) {
                 Text("闭上眼睛休息").font(EyeStyle.title).foregroundStyle(.white)
-                Text("\(state?.secondsLeft ?? 0)").font(.system(size: 96, weight: .bold, design: .rounded)).foregroundStyle(.white)
             } else {
                 Text("完成啦！").font(EyeStyle.headline).foregroundStyle(.white)
             }

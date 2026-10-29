@@ -29,7 +29,7 @@
 - `RestBreakPage`：「休息一下」20-20-20 全屏引导，小瞳陪伴，可提前结束。
 - `EyeExercisePage` / `EyeExerciseViewModel`：「护眼操」全屏页（主动服务里的入口卡、或小瞳气泡「去做」）。小瞳提示向左 / 右 / 上 / 下看（两遍），
   前置相机看虹膜在眼裂里的偏移（共用 `EyeExerciseCoach`，先看小瞳 1.5 秒取基线），转到位即整页朝该方向翻页、振动，小瞳飞出画面打滚再回来；
-  最后闭眼休息 5 秒。实时检测开着时借用其相机帧，否则自己开相机、做完即关；没有相机权限时按时间带着做。
+  最后闭眼休息 5 秒，每过一秒响一声 `eye_count`（教练的 `COUNTDOWN` 事件）。布局：上方箭头 + 动作与小瞳气泡，小瞳在屏幕正中，下方倒计时与提示语。实时检测开着时借用其相机帧，否则自己开相机、做完即关；没有相机权限时按时间带着做。
 - navigation/HomeNavigation：`HomeRoute` / `EyeTrendRoute` / `EyeAdviceRoute` / `EyeBrightnessRoute`，`homeScreen(navigation)`、`eyeCareScreens(onBack, onOpenTest)`。
 
 依赖 core:common、core:domain、core:model、core:camera、core:data、core:notifications（常驻通知渠道）、core:designsystem、core:ui；

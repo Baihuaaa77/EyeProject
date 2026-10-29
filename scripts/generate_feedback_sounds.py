@@ -4,7 +4,7 @@
 相邻音符交叠衰减，听起来连贯而不像蜂鸣。每段时长不超过
 ScreeningFeedbackCue.microphonePauseMs 扣除约 60 ms 尾音后的长度。
 
-eye_boop / eye_hop / eye_giggle / eye_wow / eye_spin / eye_heart / eye_dizzy / eye_yawn / eye_pop / eye_sigh 为吉祥物「小瞳」的互动音（core:ui XiaoTong 与 iOS MascotStage），
+eye_boop / eye_hop / eye_giggle / eye_wow / eye_spin / eye_heart / eye_dizzy / eye_yawn / eye_pop / eye_sigh / eye_count 为吉祥物「小瞳」的互动音（core:ui XiaoTong 与 iOS MascotStage），
 音符带滑音（起始频率按指数滑向目标频率），听起来俏皮，时长同样不超过 0.35 秒。
 """
 from pathlib import Path
@@ -40,6 +40,8 @@ SOUNDS = {
     'eye_pop': (0.090, 0.24, [(660, 0.0, 0.022, 1320, 0.010)]),
     # 叹气（累了还被戳）：缓缓下滑
     'eye_sigh': (0.300, 0.26, [(587, 0.0, 0.110, 392, 0.090)]),
+    # 护眼操闭眼休息的倒计时：闭着眼也知道还剩几秒；比测试里的 eye_tick 低、更软，像轻敲木鱼
+    'eye_count': (0.220, 0.24, [(587, 0.0, 0.040), (880, 0.004, 0.022)]),
 }
 PARTIALS = [(1, 1.0), (2, 0.18), (3, 0.06)]
 ATTACK = 0.0025

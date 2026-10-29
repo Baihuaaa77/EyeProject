@@ -110,6 +110,7 @@ class CameraController @Inject constructor(
                         .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
                         .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST) // 只保留最新帧，旧的没处理完直接丢弃
                         .setResolutionSelector(ResolutionSelector.Builder()
+                            .setAspectRatioStrategy(ASPECT_RATIO)
                             .setResolutionStrategy(ResolutionStrategy(analysisResolution,
                                 ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER))
                             .build())
@@ -154,8 +155,9 @@ class CameraController @Inject constructor(
     }
 
     /**
-     * 预览可缺省：只有在需要把画面显示出来时才绑定 `Preview`。预览与分析同为 16:9（分析 1280×720），
-     * 关键点叠加在预览上不会因裁切比例不同而错位。
+     * 预览可缺省：只有在需要把画面显示出来时才绑定 `Preview`。预览与分析用同一宽高比 [ASPECT_RATIO]，
+     * 两路画面的视野一致，关键点叠加在预览上才不会错位。
+     * （曾把预览设为 16:9，而分析没指定比例、按 CameraX 默认是 4:3：预览比分析画面窄一截，关键点整体偏开。）
      */
     private fun buildUseCases(previewView: PreviewView?, analysis: ImageAnalysis): Array<UseCase> =
         buildList {
@@ -163,7 +165,7 @@ class CameraController @Inject constructor(
                 add(
                     Preview.Builder()
                         .setResolutionSelector(ResolutionSelector.Builder()
-                            .setAspectRatioStrategy(AspectRatioStrategy.RATIO_16_9_FALLBACK_AUTO_STRATEGY)
+                            .setAspectRatioStrategy(ASPECT_RATIO)
                             .build())
                         .build()
                         .also { it.setSurfaceProvider(view.surfaceProvider) }
@@ -181,5 +183,13 @@ class CameraController @Inject constructor(
         analysisExecutor = null
         isRunning = false
         isRequested = false
+    }
+
+    private companion object {
+        /**
+         * 预览与分析共用的宽高比：4:3 即传感器全幅，竖屏时左右视野最宽（近距离做老视测试时脸也放得下）；
+         * 分析 1280×720 上限按此比例取最接近的尺寸（通常 1280×960）。
+         */
+        val ASPECT_RATIO: AspectRatioStrategy = AspectRatioStrategy.RATIO_4_3_FALLBACK_AUTO_STRATEGY
     }
 }

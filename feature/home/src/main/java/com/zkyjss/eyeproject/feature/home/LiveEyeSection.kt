@@ -124,7 +124,7 @@ internal fun LiveEyeContent(
         }
         if (state.running) {
             Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                val aspect = if (s != null && s.imageWidth > 0 && s.imageHeight > 0) s.imageWidth.toFloat() / s.imageHeight else 9f / 16f
+                val aspect = if (s != null && s.imageWidth > 0 && s.imageHeight > 0) s.imageWidth.toFloat() / s.imageHeight else 3f / 4f
                 Box(Modifier.width(120.dp).aspectRatio(aspect).clip(EyeShapes.medium).background(colors.ink)) {
                     preview()
                     LandmarkOverlay(s, Modifier.matchParentSize())

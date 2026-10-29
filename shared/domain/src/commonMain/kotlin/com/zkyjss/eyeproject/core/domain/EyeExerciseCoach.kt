@@ -23,8 +23,11 @@ class EyeExerciseCoach(private val moves: List<Move>) {
 
     enum class Stage { CALIBRATE, MOVE, BACK, REST, DONE }
 
-    /** 阶段变化事件：界面据此翻页、振动、播放小瞳动作。 */
-    enum class Event { STARTED, DETECTED, MISSED, NEXT, REST, DONE }
+    /**
+     * 阶段变化事件：界面据此翻页、振动、播放小瞳动作。
+     * [COUNTDOWN] 为闭眼休息时倒计时又少了一秒（剩 4、3、2、1 秒各一次），界面播放倒计时音——闭着眼也知道快结束了。
+     */
+    enum class Event { STARTED, DETECTED, MISSED, NEXT, REST, COUNTDOWN, DONE }
 
     data class State(
         val stage: Stage,
@@ -52,6 +55,8 @@ class EyeExerciseCoach(private val moves: List<Move>) {
     private var holdSinceMs = -1L
     private var everSawFace = false
     private var detectedCount = 0
+    /** 闭眼休息时最近一次报过的剩余秒数 */
+    private var restSecond = 0
 
     /** 一帧的人脸（可为空：这帧没看到脸）。 */
     fun onFace(face: FaceMetrics?, timeMs: Long) = lock.withLock {
@@ -95,7 +100,14 @@ class EyeExerciseCoach(private val moves: List<Move>) {
                 if (stepIndex + 1 < moves.size) { stepIndex++; enter(Stage.MOVE, timeMs); Event.NEXT }
                 else { enter(Stage.REST, timeMs); Event.REST }
             } else null
-            Stage.REST -> if (elapsed >= REST_MS) { enter(Stage.DONE, timeMs); Event.DONE } else null
+            Stage.REST -> {
+                val left = secondsLeft(REST_MS, elapsed)
+                when {
+                    elapsed >= REST_MS -> { enter(Stage.DONE, timeMs); Event.DONE }
+                    left < restSecond -> { restSecond = left; Event.COUNTDOWN }
+                    else -> null
+                }
+            }
             Stage.DONE -> null
         }
     }
@@ -118,7 +130,7 @@ class EyeExerciseCoach(private val moves: List<Move>) {
             Stage.DONE -> 1f
         }
         State(stage, stepIndex, moves.size, moves.getOrNull(stepIndex).takeIf { stage == Stage.MOVE || stage == Stage.BACK },
-            (((limit - elapsed).coerceAtLeast(0L) + 999) / 1000).toInt(),
+            secondsLeft(limit, elapsed),
             latest != null && timeMs - latestMs <= 1_000L, detectedCount, progress)
     }
 
@@ -130,7 +142,11 @@ class EyeExerciseCoach(private val moves: List<Move>) {
 
     private fun enter(next: Stage, timeMs: Long) {
         stage = next; stageStartMs = timeMs; holdSinceMs = -1L
+        if (next == Stage.REST) restSecond = secondsLeft(REST_MS, 0L)
     }
+
+    /** 界面上显示的剩余整秒（向上取整：还剩 4.2 秒显示 5）。 */
+    private fun secondsLeft(limit: Long, elapsed: Long): Int = (((limit - elapsed).coerceAtLeast(0L) + 999) / 1000).toInt()
 
     companion object {
         val DEFAULT_MOVES = listOf(Move.LEFT, Move.RIGHT, Move.UP, Move.DOWN, Move.LEFT, Move.RIGHT, Move.UP, Move.DOWN)

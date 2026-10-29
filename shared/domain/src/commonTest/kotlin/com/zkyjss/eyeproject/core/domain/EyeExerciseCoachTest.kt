@@ -44,8 +44,10 @@ class EyeExerciseCoachTest {
         val events = mutableListOf<EyeExerciseCoach.Event>()
         var t = 0L
         while (t < 20_000) { coach.tick(t)?.let(events::add); t += 50 }
+        // 闭眼 5 秒：剩 4、3、2、1 秒各报一次倒计时，再结束
+        val countdown = List(4) { EyeExerciseCoach.Event.COUNTDOWN }
         assertEquals(listOf(EyeExerciseCoach.Event.STARTED, EyeExerciseCoach.Event.NEXT, EyeExerciseCoach.Event.NEXT,
-            EyeExerciseCoach.Event.REST, EyeExerciseCoach.Event.DONE), events)
+            EyeExerciseCoach.Event.REST) + countdown + EyeExerciseCoach.Event.DONE, events)
         assertEquals(1 to 0, coach.summary)
         assertEquals(1f, coach.state(t).progress)
     }

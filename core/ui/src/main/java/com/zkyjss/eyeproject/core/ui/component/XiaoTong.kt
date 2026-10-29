@@ -376,7 +376,7 @@ class MascotSounds internal constructor(context: Context) {
     }.getOrNull()
     private val ids = mapOf("eye_boop" to R.raw.eye_boop, "eye_hop" to R.raw.eye_hop, "eye_giggle" to R.raw.eye_giggle, "eye_wow" to R.raw.eye_wow,
         "eye_spin" to R.raw.eye_spin, "eye_heart" to R.raw.eye_heart, "eye_dizzy" to R.raw.eye_dizzy, "eye_yawn" to R.raw.eye_yawn,
-        "eye_pop" to R.raw.eye_pop, "eye_sigh" to R.raw.eye_sigh)
+        "eye_pop" to R.raw.eye_pop, "eye_sigh" to R.raw.eye_sigh, "eye_count" to R.raw.eye_count)
         .mapValues { (_, res) -> pool?.load(context, res, 1) ?: 0 }
 
     fun play(name: String) {

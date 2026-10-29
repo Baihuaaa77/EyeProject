@@ -63,7 +63,8 @@ chmod +x gradlew scripts/ios/*.sh
 - 干眼测试异常处理按方案二：看不到双眼或距离超出 40±5 cm 持续片刻即暂停（计时冻结、不出题），弹窗说明原因，恢复正常后点「继续测试」接着计时与作答。
   苹果端 `DryEyePauseView`（快照字段 `paused` / `pauseReason`，动作 `resume`）。
 - 视标随距离实时缩放：干眼与老视近视力 / 多距离 / 远近切换题，在距离容差内按实测距离重算像素尺寸、保持视角不变；超出容差仍提醒。
-- 首页护眼操（`EyeExerciseView` / 安卓 `EyeExercisePage`，共用 `EyeExerciseCoach`）：箭头 + 「向左看」+ 倒计时，眼睛转到位即翻页、振动，小瞳飞出打滚。
+- 首页护眼操（`EyeExerciseView` / 安卓 `EyeExercisePage`，共用 `EyeExerciseCoach`）：上方箭头 + 「向左看」，小瞳在屏幕正中，下方倒计时；眼睛转到位即翻页、振动，小瞳飞出打滚。
+  闭眼休息时每过一秒响一声 `eye_count`（2026-10-29）。
   苹果端借用 `EyeLiveModel` 的相机帧（`startExercise` / `stopExercise`）。
 - 服务页新增「色觉自测」（共用 `ColorVisionEngine`，苹果端 `ColorVisionContent`；不需要先用尺子校准屏幕）。
 

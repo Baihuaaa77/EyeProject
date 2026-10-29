@@ -145,8 +145,8 @@ class EyeExerciseViewModel @Inject constructor(private val camera: CameraControl
 }
 
 /**
- * 「护眼操」完整页面（盖在首页上）：深色底，上方进度条，中间大箭头 + 「向左看」+ 倒计时，下方是小瞳和它的气泡。
- * 眼睛转到位时整页朝那个方向翻过去、手机振动，小瞳顺着飞出画面打个滚再回来；最后闭眼休息 5 秒。
+ * 「护眼操」完整页面（盖在首页上）：深色底，顶部进度条；上方大箭头 +「向左看」和小瞳的气泡，小瞳在屏幕正中，下方倒计时。
+ * 眼睛转到位时提示朝那个方向翻过去、手机振动，小瞳顺着飞出画面打个滚再回来；最后闭眼休息 5 秒，每秒轻响一下。
  * 没有相机权限时按时间带着做。与苹果端 EyeExerciseView 同一流程与文案。
  */
 @Composable
@@ -188,6 +188,8 @@ internal fun EyeExercisePage(onClose: () -> Unit, viewModel: EyeExerciseViewMode
                 }
                 EyeExerciseCoach.Event.MISSED -> { flipMove = null; haptics.tap() }
                 EyeExerciseCoach.Event.REST -> { flipMove = null; haptics.tap(); sounds.play("eye_yawn") }
+                // 闭着眼看不到数字：每过一秒轻响一下
+                EyeExerciseCoach.Event.COUNTDOWN -> sounds.play("eye_count")
                 EyeExerciseCoach.Event.DONE -> { haptics.success(); sounds.play("eye_heart") }
                 else -> flipMove = null
             }
@@ -206,15 +208,18 @@ internal fun EyeExercisePage(onClose: () -> Unit, viewModel: EyeExerciseViewMode
                         Box(Modifier.fillMaxWidth(state.progress).height(6.dp).clip(CircleShape).background(colors.success))
                     }
                 }
-                Spacer(Modifier.weight(1f))
-                AnimatedContent(
-                    targetState = state.stage to state.stepIndex,
-                    transitionSpec = { flipTransition(flipMove) },
-                    label = "护眼操翻页",
-                ) { (stage, _) -> ExerciseInstruction(stage, state) }
-                Spacer(Modifier.weight(1f))
+                // 上半区：动作提示 + 小瞳的气泡（贴着小瞳）；中间：小瞳；下半区：倒计时与提示语。上下等高，小瞳正好在屏幕中央
+                Column(Modifier.weight(1f).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Bottom) {
+                    AnimatedContent(
+                        targetState = state.stage to state.stepIndex,
+                        transitionSpec = { flipTransition(flipMove) },
+                        label = "护眼操翻页",
+                    ) { (stage, _) -> ExerciseInstruction(stage, state) }
+                    Spacer(Modifier.height(20.dp))
+                    if (state.stage != EyeExerciseCoach.Stage.DONE) MascotBubble(bubbleText(state), tail = BubbleTail.CENTER)
+                }
                 if (state.stage != EyeExerciseCoach.Stage.DONE) {
-                    MascotBubble(bubbleText(state), tail = BubbleTail.CENTER)
                     val f = fly.value
                     XiaoTong(if (state.stage == EyeExerciseCoach.Stage.REST) MascotMood.SLEEPY else MascotMood.HAPPY,
                         Modifier.size(150.dp).graphicsLayer {
@@ -223,15 +228,25 @@ internal fun EyeExercisePage(onClose: () -> Unit, viewModel: EyeExerciseViewMode
                             translationY = (m?.dy ?: 0) * f * heightPx * 0.45f
                             rotationZ = if (m == null) 0f else spin.value * (if (m.dx < 0 || m.dy < 0) -1 else 1)
                         }, interactive = false)
-                    EyeText(if (state.faceVisible || viewModel.usedCamera) "头保持不动，只转眼睛" else "跟着提示转动眼睛就好",
-                        style = typography.bodySecondary, color = colors.white.copy(alpha = 0.7f))
                 } else {
-                    val (total, seen) = viewModel.summary
                     XiaoTong(MascotMood.HAPPY, Modifier.size(170.dp), greet = true)
-                    EyeText(if (viewModel.usedCamera) "共 $total 步，小瞳看到你做到了 $seen 步" else "共 $total 步，做完啦",
-                        style = typography.body, color = colors.white, textAlign = TextAlign.Center)
-                    Spacer(Modifier.height(16.dp))
-                    EyeButton("完成", EyeButtonRole.PRIMARY, onClose, Modifier.fillMaxWidth().heightIn(min = 52.dp))
+                }
+                Column(Modifier.weight(1f).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                    if (state.stage != EyeExerciseCoach.Stage.DONE) {
+                        val counting = state.stage == EyeExerciseCoach.Stage.MOVE || state.stage == EyeExerciseCoach.Stage.REST
+                        EyeText(if (counting) "${state.secondsLeft}" else "", Modifier.padding(top = 8.dp),
+                            style = typography.headline.copy(fontSize = 88.sp), color = colors.white, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.weight(1f))
+                        EyeText(if (state.faceVisible || viewModel.usedCamera) "头保持不动，只转眼睛" else "跟着提示转动眼睛就好",
+                            style = typography.bodySecondary, color = colors.white.copy(alpha = 0.7f))
+                    } else {
+                        val (total, seen) = viewModel.summary
+                        Spacer(Modifier.height(16.dp))
+                        EyeText(if (viewModel.usedCamera) "共 $total 步，小瞳看到你做到了 $seen 步" else "共 $total 步，做完啦",
+                            style = typography.body, color = colors.white, textAlign = TextAlign.Center)
+                        Spacer(Modifier.weight(1f))
+                        EyeButton("完成", EyeButtonRole.PRIMARY, onClose, Modifier.fillMaxWidth().heightIn(min = 52.dp))
+                    }
                 }
                 Spacer(Modifier.height(16.dp))
             }
@@ -239,7 +254,7 @@ internal fun EyeExercisePage(onClose: () -> Unit, viewModel: EyeExerciseViewMode
     }
 }
 
-/** 中间的提示：大箭头 + 动作 + 倒计时；开头「看着小瞳」、结尾「闭上眼睛」与「完成啦」。 */
+/** 上方的动作提示：大箭头 + 动作；开头「看着小瞳」、结尾「闭上眼睛」与「完成啦」。倒计时在小瞳下方。 */
 @Composable
 private fun ExerciseInstruction(stage: EyeExerciseCoach.Stage, state: EyeExerciseCoach.State) {
     val colors = LocalEyeColors.current
@@ -255,15 +270,11 @@ private fun ExerciseInstruction(stage: EyeExerciseCoach.Stage, state: EyeExercis
                 if (stage == EyeExerciseCoach.Stage.MOVE) {
                     Arrow(move)
                     EyeText(move.label, style = typography.title, color = colors.white)
-                    EyeText("${state.secondsLeft}", style = typography.headline.copy(fontSize = 96.sp), color = colors.white, fontWeight = FontWeight.Bold)
                 } else {
                     EyeText("看回中间", style = typography.title, color = colors.white)
                 }
             }
-            EyeExerciseCoach.Stage.REST -> {
-                EyeText("闭上眼睛休息", style = typography.title, color = colors.white)
-                EyeText("${state.secondsLeft}", style = typography.headline.copy(fontSize = 96.sp), color = colors.white, fontWeight = FontWeight.Bold)
-            }
+            EyeExerciseCoach.Stage.REST -> EyeText("闭上眼睛休息", style = typography.title, color = colors.white)
             EyeExerciseCoach.Stage.DONE -> EyeText("完成啦！", style = typography.headline, color = colors.white)
         }
     }
