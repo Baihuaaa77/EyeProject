@@ -112,7 +112,8 @@ final class EyeRuntime: ObservableObject {
     private func speakPrompts() {
         let phase = string("phase")
         let base: String
-        if phase == "Profile" || phase == "PROFILE" { base = kind == "STRABISMUS" ? "这次给谁测？" : "这次测谁？" }
+        // 选人页不播报：页面标题已写明（与安卓一致）
+        if phase == "Profile" || phase == "PROFILE" { base = "" }
         else if phase == "Setup" || phase == "ENVIRONMENT" {
             base = kind == "STRABISMUS" ? "请正对屏幕，保持三十三厘米。" : "请正对屏幕，保持四十厘米。"
         } else if bool("calibrationPaused") {

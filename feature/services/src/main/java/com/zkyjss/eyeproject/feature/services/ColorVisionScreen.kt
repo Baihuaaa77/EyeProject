@@ -110,7 +110,7 @@ fun ColorVisionScreen(
     }
     val running = state.phase == ColorVisionPhase.Demo || state.phase == ColorVisionPhase.Plates
     Box(modifier) {
-        TestSessionLayout("色觉自测", onBack, { settingsOpen = true }, running,
+        TestSessionLayout("色觉自测", onBack, { settingsOpen = true }, running, confirmExit = running,
             progress = if (state.phase == ColorVisionPhase.Plates)
                 TestProgress(state.progress, (state.plateCount - state.answers.size) * 5) else null) {
             when (state.phase) {

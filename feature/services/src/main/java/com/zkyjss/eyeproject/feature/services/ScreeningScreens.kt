@@ -112,14 +112,15 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, onEditSubje
         }
     }
     val voicePrompt = when (s.step) {
-        ScreeningStep.PROFILE -> if (kind == ScreeningKind.STRABISMUS) "这次给谁测？" else "这次测谁？"
+        // 选人页不播报：页面标题已写明，开口就问「这次测谁」显得突兀
+        ScreeningStep.PROFILE -> ""
         ScreeningStep.ENVIRONMENT -> if (kind == ScreeningKind.PRESBYOPIA) "请正对屏幕，保持约四十厘米，检查光照和距离。" else "请正对屏幕，保持三十三厘米，由家长协助后续遮眼任务。"
         ScreeningStep.NEAR_VISION -> if (s.nearAwaitingEyeReady) s.instruction else "${s.visionEye.label}测试。保持四十厘米，停稳后显示视标。"
         ScreeningStep.PUSH_UP -> if (s.pushStage == PushStage.READY) "第${s.nearPoints.size + 1}次移近。先移到四十五厘米以外。" else "看着E，慢慢移近。一开始持续模糊就点按。"
         // 换距离的「请移动到 xx 厘米处」由距离提示播报，到位后不再重复
         ScreeningStep.DISTANCE_CURVE, ScreeningStep.FLIPPER -> "停稳后视标会自动出现，请选择开口方向。"
         ScreeningStep.FIXATION -> "请保持三十三厘米，看着上方闪烁的小瞳，头和手机都不要动。"
-        ScreeningStep.FAR_FIXATION -> "请看六米以外的目标，眼睛不要看手机，头和手机都不要动。"
+        ScreeningStep.FAR_FIXATION -> if (s.farWaiting) FAR_WAIT_PROMPT else "请看六米以外的目标，眼睛不要看手机，头和手机都不要动。"
         ScreeningStep.GAZE_CALIBRATION -> "请只用眼睛依次看着圆点，头和手机都不要动。"
         ScreeningStep.COVER -> coverSpokenPrompt(s)
         ScreeningStep.PURSUIT -> "请只用双眼跟随移动的小瞳，保持头部稳定。"
@@ -187,7 +188,9 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, onEditSubje
             title = if (kind == ScreeningKind.PRESBYOPIA) "老视自测" else "眼位自测",
             onBack = { viewModel.stopCamera(); onBack() }, onSettings = { settingsOpen = true },
             centered = activeTest, scroll = pageScroll, progress = screeningProgress(s),
-            reflexStimulus = kind == ScreeningKind.STRABISMUS && s.step != ScreeningStep.PROFILE && s.step != ScreeningStep.RESULT,
+            confirmExit = s.step !in setOf(ScreeningStep.PROFILE, ScreeningStep.ENVIRONMENT, ScreeningStep.RESULT),
+            // 斜视：距离条放到底部，注视目标紧贴顶栏下方
+            statusAtBottom = kind == ScreeningKind.STRABISMUS,
             // 注视类任务里距离条固定为单行，文字变化不改变高度，避免挤动画布
             status = { distance?.let { DistanceBanner(it, compact = true, singleLine = gazeTask) } },
         ) {
@@ -195,7 +198,8 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, onEditSubje
                 it == "保持稳定" || it == "慢慢移近" || it.startsWith("太近") || it.startsWith("太远") || it.startsWith("请移动到") ||
                     (distance != null && it == "请正对屏幕")
             }
-            if (gazeTask) TestNoticeSlot(notice) else TestNotice(notice.takeIf { !s.guidePending })
+            // 注视类任务的提示位放在舞台下方：舞台紧贴顶部，提示出现与否不挪动目标
+            if (!gazeTask) TestNotice(notice.takeIf { !s.guidePending })
             if (s.guidePending && s.glassesCheckPending) {
                 GlassesCheckContent(viewModel::confirmGlassesRemoved)
             } else if (s.guidePending) {
@@ -209,11 +213,12 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, onEditSubje
                 ScreeningStep.FLIPPER -> FlipperContent(s, viewModel)
                 ScreeningStep.GAZE_CALIBRATION -> GazeCalibrationContent(s, viewModel)
                 ScreeningStep.FIXATION -> FixationContent(s, viewModel)
-                ScreeningStep.FAR_FIXATION -> FarFixationContent(s)
+                ScreeningStep.FAR_FIXATION -> FarFixationContent(s, viewModel::startFarCountdown)
                 ScreeningStep.COVER -> CoverContent(s, viewModel)
                 ScreeningStep.PURSUIT -> PursuitContent(s, viewModel)
                 ScreeningStep.RESULT -> ScreeningResultContent(s, viewModel)
             }
+            if (gazeTask) TestNoticeSlot(notice)
         }
         distance?.let { DistanceEdgeGlow(it.zone) }
     }
@@ -343,9 +348,10 @@ internal fun FlipperContent(s: ScreeningState, vm: ScreeningTestViewModel) {
 @Composable
 private fun FixationContent(s: ScreeningState, vm: ScreeningTestViewModel) {
     val age = s.fields["年龄"]?.toIntOrNull()
-    TestStageCard(title = "剩余 ${s.secondsLeft} 秒") {
+    TestStageCard {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             FixationTarget(StrabismusProtocol.targetDiameterMm(age), bright = s.targetX > 0f, vm = vm)
+            StageCaption("剩余 ${s.secondsLeft} 秒")
         }
     }
 }
@@ -355,22 +361,39 @@ private fun FixationContent(s: ScreeningState, vm: ScreeningTestViewModel) {
  * 只留顶部的映光点；大号倒计时，最后 3 秒有节拍音、结束有提示音。与苹果端 FarFixationPanel 一致。
  */
 @Composable
-private fun FarFixationContent(s: ScreeningState) {
+internal fun FarFixationContent(s: ScreeningState, onStart: () -> Unit) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
-    TestStageCard(title = "看 ${StrabismusProtocol.FAR_TARGET_M} 米外的目标") {
-        Column(Modifier.fillMaxWidth().height(240.dp + rememberStageExtra()).clip(EyeShapes.medium).background(colors.ink).padding(20.dp),
-            horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterVertically)) {
-            Canvas(Modifier.size(64.dp)) {
-                drawMascot(colors, Offset(size.width / 2, size.height * 0.58f), size.minDimension * 0.8f, gaze = Offset(0f, -0.6f))
+    val center = androidx.compose.ui.text.style.TextAlign.Center
+    TestStageCard {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.fillMaxWidth().height(240.dp + rememberStageExtra()).clip(EyeShapes.medium).background(colors.ink).padding(20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterVertically)) {
+                Canvas(Modifier.size(64.dp)) {
+                    drawMascot(colors, Offset(size.width / 2, size.height * 0.58f), size.minDimension * 0.8f, gaze = Offset(0f, -0.6f))
+                }
+                if (s.farWaiting) {
+                    BaseEyeText("看着 ${StrabismusProtocol.FAR_TARGET_M} 米外的目标", style = typography.title, color = colors.white, textAlign = center)
+                    BaseEyeText("看好以后，协助者点下面的按钮开始计时", style = typography.bodySecondary, color = colors.white.copy(alpha = 0.72f),
+                        textAlign = center)
+                } else {
+                    BaseEyeText("${s.secondsLeft}", style = typography.headline, color = colors.white)
+                    BaseEyeText("眼睛越过手机，看着远处的目标", style = typography.subtitle, color = colors.white, textAlign = center)
+                    BaseEyeText("协助者：确认一直看着远处，头和手机不动", style = typography.bodySecondary, color = colors.white.copy(alpha = 0.72f),
+                        textAlign = center)
+                }
             }
-            BaseEyeText("${s.secondsLeft}", style = typography.headline, color = colors.white)
-            BaseEyeText("眼睛越过手机，看着远处的目标", style = typography.subtitle, color = colors.white,
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-            BaseEyeText("协助者：确认一直看着远处，头和手机不动", style = typography.bodySecondary, color = colors.white.copy(alpha = 0.72f),
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            StageCaption(if (s.farWaiting) "看远处 · 准备" else "剩余 ${s.secondsLeft} 秒")
         }
     }
+    if (s.farWaiting) EyeButton("已在看 ${StrabismusProtocol.FAR_TARGET_M} 米外的目标，开始", EyeButtonRole.PRIMARY, onStart, Modifier.fillMaxWidth())
+}
+
+/** 注视类舞台下方的一行说明（计时、进度）：舞台本身紧贴顶部。 */
+@Composable
+private fun StageCaption(text: String) {
+    BaseEyeText(text, style = LocalEyeTypography.current.subtitle, color = LocalEyeColors.current.textSecondary,
+        textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.fillMaxWidth())
 }
 
 /**
@@ -410,7 +433,7 @@ internal fun GazeCalibrationContent(s: ScreeningState, vm: ScreeningTestViewMode
             halo.animateTo(1f, com.zkyjss.eyeproject.core.designsystem.theme.EyeMotion.settleSpring())
         }
     }
-    TestStageCard(title = "注视校准 · ${s.gazeCalibrationIndex + 1}/${StrabismusGaze.calibrationTargets.size}") {
+    TestStageCard {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             // 与追踪画布同高（两屏卡片结构相同，伸展量也相同）：校准点覆盖追踪目标会到达的整个范围，避免边缘外推。
             Canvas(Modifier.fillMaxWidth().height(PURSUIT_CANVAS_HEIGHT + rememberStageExtra()).clip(EyeShapes.medium).background(colors.white)
@@ -424,6 +447,7 @@ internal fun GazeCalibrationContent(s: ScreeningState, vm: ScreeningTestViewMode
                 drawCircle(colors.white, radius = 2.5.dp.toPx(), center = point)
                 vm.reportGazeTarget(origin.x + point.x, origin.y + point.y)
             }
+            StageCaption("注视校准 · ${s.gazeCalibrationIndex + 1}/${StrabismusGaze.calibrationTargets.size}")
             if (s.gazeCalibrationFailed) EyeButton("重试注视校准", EyeButtonRole.PRIMARY, vm::retryGazeCalibration, Modifier.fillMaxWidth())
         }
     }
@@ -437,9 +461,10 @@ internal fun CoverContent(s: ScreeningState, vm: ScreeningTestViewModel) {
     val done = s.coverMarks.size
     val next = sequence.getOrNull(done)
     val current = sequence.getOrNull(done - 1)
-    TestStageCard(title = "交替遮盖 · ${done}/${sequence.size}") {
+    TestStageCard {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             FixationTarget(StrabismusProtocol.targetDiameterMm(s.fields["年龄"]?.toIntOrNull()), bright = true, vm = vm)
+            StageCaption("交替遮盖 · ${done}/${sequence.size}")
             if (current != null && current.holdMs > 0) HoldTimer(done, current.holdMs, "保持：${current.label}")
             EyeText(next?.let { "下一步：${it.label}" } ?: "遮盖完成", typography.title, colors.textPrimary)
             CoverSequenceStrip(done)
@@ -489,7 +514,7 @@ private fun PursuitContent(s: ScreeningState, vm: ScreeningTestViewModel) {
     val distanceMm = (if (s.distanceCm > 0f) s.distanceCm else StrabismusProtocol.DISTANCE_CM) * 10f
     val radiusPx = 10f / 2f * pxPerMm // 保持原有 1 cm 目标包络和轨迹边界。
     var origin by remember { mutableStateOf(Offset.Zero) }
-    TestStageCard(title = "剩余 ${s.secondsLeft} 秒") {
+    TestStageCard {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Canvas(Modifier.fillMaxWidth().height(PURSUIT_CANVAS_HEIGHT + rememberStageExtra()).clip(EyeShapes.medium).background(colors.white)
                 .onGloballyPositioned { origin = it.positionInWindow() }) {
@@ -507,6 +532,7 @@ private fun PursuitContent(s: ScreeningState, vm: ScreeningTestViewModel) {
                 drawMascot(colors, Offset(x, y), radiusPx / 0.65f, lid = 0f)
                 vm.reportGazeTarget(origin.x + x, origin.y + y)
             }
+            StageCaption("剩余 ${s.secondsLeft} 秒")
         }
     }
 }

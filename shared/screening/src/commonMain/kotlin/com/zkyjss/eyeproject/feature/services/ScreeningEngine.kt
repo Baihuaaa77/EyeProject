@@ -493,8 +493,18 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
     private fun startFarFixation() {
         resetGazeWindow()
         stepStartMs = platform.nowMs()
-        _state.update { it.copy(step = ScreeningStep.FAR_FIXATION, guidePending = true, secondsLeft = StrabismusProtocol.FAR_FIXATION_SECONDS,
-            instruction = "眼睛越过手机，看着 6 米外的目标，头和手机保持不动。", warning = null) }
+        _state.update { it.copy(step = ScreeningStep.FAR_FIXATION, guidePending = true, farWaiting = false,
+            secondsLeft = StrabismusProtocol.FAR_FIXATION_SECONDS, instruction = FAR_WAIT_PROMPT, warning = null) }
+    }
+
+    /** 看远：协助者确认受试者已经在看 6 米外的目标后，才开始倒计时和采集眼位。 */
+    fun startFarCountdown() {
+        val s = _state.value
+        if (s.step != ScreeningStep.FAR_FIXATION || s.guidePending || !s.farWaiting) return
+        stepStartMs = platform.nowMs()
+        faceCenterBaseline = null
+        _state.update { it.copy(farWaiting = false, instruction = "眼睛越过手机，看着 6 米外的目标，头和手机保持不动。", warning = null) }
+        runTimedStep(StrabismusProtocol.FAR_FIXATION_SECONDS) { startCover() }
     }
 
     private fun startCover() {
@@ -574,7 +584,7 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
             }
             ScreeningStep.FIXATION -> retryGazeCalibration()
             ScreeningStep.PURSUIT -> runTimedStep(StrabismusProtocol.PURSUIT_SECONDS) { finish() }
-            ScreeningStep.FAR_FIXATION -> runTimedStep(StrabismusProtocol.FAR_FIXATION_SECONDS) { startCover() }
+            ScreeningStep.FAR_FIXATION -> _state.update { it.copy(farWaiting = true) }
             else -> Unit
         }
     }
@@ -991,7 +1001,7 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
         val gazeOnTarget = if (coverSettling) null else rendered?.let { target -> estimates?.let { (l, r) ->
             if (l == null && r == null) null else StrabismusGaze.onTarget(l, target.point) || StrabismusGaze.onTarget(r, target.point)
         } }
-        if (!_state.value.guidePending && step == _state.value.step && time >= stepStartMs && step != ScreeningStep.PROFILE && step != ScreeningStep.ENVIRONMENT && step != ScreeningStep.RESULT && step != ScreeningStep.GAZE_CALIBRATION) {
+        if (!_state.value.guidePending && !_state.value.farWaiting && step == _state.value.step && time >= stepStartMs && step != ScreeningStep.PROFILE && step != ScreeningStep.ENVIRONMENT && step != ScreeningStep.RESULT && step != ScreeningStep.GAZE_CALIBRATION) {
             totalFrames++
             // 看远另行评估（数据不足时只是不评估看远），不拉低整体有效帧率
             val eligible = step != ScreeningStep.FAR_FIXATION && (step != ScreeningStep.COVER ||

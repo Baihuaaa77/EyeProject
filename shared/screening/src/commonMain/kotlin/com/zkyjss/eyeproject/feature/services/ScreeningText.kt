@@ -15,6 +15,9 @@ fun stepTitle(step: ScreeningStep) = when (step) {
     ScreeningStep.RESULT -> "测试结果"
 }
 
+/** 看远：等受试者看向 6 米外的目标（界面与语音共用）。 */
+const val FAR_WAIT_PROMPT = "请看着 6 米外的目标。看好以后，协助者点「已在看远处，开始」。"
+
 /** 老视标准模式的摘镜提醒（界面与语音共用）。 */
 const val GLASSES_REMOVAL_PROMPT = "请先摘下老花镜或渐进镜；看远用的近视眼镜可以继续戴。摘好后点「已摘下，继续」。"
 

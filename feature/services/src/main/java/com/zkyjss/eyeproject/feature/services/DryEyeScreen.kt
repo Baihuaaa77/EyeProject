@@ -144,7 +144,8 @@ fun DryEyeScreen(
         }
     }
     val basePrompt = when (state.phase) {
-        DryEyePhase.Profile -> "这次测谁？"
+        // 选人页不播报：页面标题已写明
+        DryEyePhase.Profile -> ""
         DryEyePhase.Setup -> "建议佩戴最佳矫正视力眼镜。准备好后开始"
         DryEyePhase.PracticeGuide -> guideCueDryEyePractice
         DryEyePhase.FormalGuide -> "正式测试。先自然眨眼，之后不停顿，直接保持睁眼二十秒"
@@ -178,6 +179,7 @@ fun DryEyeScreen(
     val running = state.phase in setOf(DryEyePhase.Practice, DryEyePhase.Countdown, DryEyePhase.Natural, DryEyePhase.Open, DryEyePhase.Rest)
     Box(modifier.fillMaxSize()) {
         TestSessionLayout("干眼自测", onBack, { settingsOpen = true }, running, progress = dryEyeProgress(state),
+            confirmExit = state.phase !in setOf(DryEyePhase.Profile, DryEyePhase.Setup, DryEyePhase.Result),
             status = {
                 if (running && state.phase != DryEyePhase.Rest) DistanceBanner(distance, compact = true)
             }) {

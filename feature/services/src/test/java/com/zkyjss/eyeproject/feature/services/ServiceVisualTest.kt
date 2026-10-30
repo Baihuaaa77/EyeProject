@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import com.zkyjss.eyeproject.core.designsystem.theme.*
 import com.zkyjss.eyeproject.core.ui.component.*
 import org.junit.Assert.assertEquals
+import androidx.compose.ui.test.onNodeWithContentDescription
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -209,7 +210,7 @@ class ServiceVisualTest {
         compose.setContent {
             EyeProjectTheme {
                 TestSessionLayout(if (task == 0) "老视自测" else if (task == 1) "干眼自测" else "眼位自测", {}, {}, true,
-                    modifier = Modifier.testTag("test-session"), reflexStimulus = task == 2,
+                    modifier = Modifier.testTag("test-session"), statusAtBottom = task == 2,
                     progress = when (task) { 0 -> TestProgress(0.82f, 30); 1 -> TestProgress(0.4f, 57); else -> TestProgress(0.15f, 80) },
                     status = { DistanceBanner(distanceStatus(if (task == 0) 50f else if (task == 1) 40f else 33f,
                         true, if (task == 0) 50f else if (task == 1) 40f else 33f, 5f), compact = true) }) {
@@ -518,7 +519,7 @@ class ServiceVisualTest {
         var index by androidx.compose.runtime.mutableIntStateOf(0)
         compose.setContent {
             EyeProjectTheme {
-                TestSessionLayout("眼位自测", {}, {}, true, reflexStimulus = true,
+                TestSessionLayout("眼位自测", {}, {}, true, statusAtBottom = true,
                     progress = screeningProgress(ScreeningState(kind = ScreeningKind.STRABISMUS,
                         step = ScreeningStep.GAZE_CALIBRATION, gazeCalibrationIndex = index)),
                     status = { DistanceBanner(distanceStatus(33f, true, 33f, 5f), compact = true) }) {
@@ -532,6 +533,38 @@ class ServiceVisualTest {
             compose.onNodeWithText("注视校准 · ${i + 1}/9").assertExists()
             capture("calibration-9-$i")
         }
+    }
+
+    @Test fun backDuringATestAsksFirstAndDistanceWaitsForTheHelper() {
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val vm = ScreeningTestViewModel(context,
+            com.zkyjss.eyeproject.core.camera.CameraController(context),
+            com.zkyjss.eyeproject.core.camera.CameraIntrinsicsProvider(context), TestScreeningRecordRepository(context), TestSubjectRepository(), TestExplanationRepository())
+        var exits = 0
+        var farWaiting by androidx.compose.runtime.mutableStateOf(true)
+        compose.setContent {
+            EyeProjectTheme {
+                TestSessionLayout("眼位自测", { exits++ }, {}, true, confirmExit = true, statusAtBottom = true,
+                    status = { DistanceBanner(distanceStatus(33f, true, 33f, 5f), compact = true) }) {
+                    FarFixationContent(ScreeningState(kind = ScreeningKind.STRABISMUS, step = ScreeningStep.FAR_FIXATION,
+                        farWaiting = farWaiting, secondsLeft = 7), vm::startFarCountdown)
+                }
+            }
+        }
+        // 看远：等协助者确认已在看远处，才显示倒计时
+        compose.onNodeWithText("已在看 6 米外的目标，开始").assertExists()
+        capture("strabismus-far-waiting")
+        farWaiting = false
+        compose.onNodeWithText("已在看 6 米外的目标，开始").assertDoesNotExist()
+        compose.onNodeWithText("7").assertExists()
+        // 测试中点返回：先弹确认，「继续测试」不离开，「确认退出」才离开
+        compose.onNodeWithContentDescription("返回").performClick()
+        compose.onNodeWithText(EXIT_BUBBLE).assertExists()
+        compose.onNodeWithText("继续测试").performClick()
+        assertEquals(0, exits)
+        compose.onNodeWithContentDescription("返回").performClick()
+        compose.onNodeWithText("确认退出").performClick()
+        assertEquals(1, exits)
     }
 
     @Test fun countdownAndRestUseTimerRings() {

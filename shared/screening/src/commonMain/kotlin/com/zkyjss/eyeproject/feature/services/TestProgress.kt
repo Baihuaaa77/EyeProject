@@ -105,7 +105,7 @@ fun screeningProgress(s: ScreeningState): TestProgress? {
             ScreeningStep.FIXATION -> if (!s.gazeCalibrated) 0 to 0f
                 else 1 to (StrabismusProtocol.FIXATION_SECONDS - s.secondsLeft).toFloat()
             ScreeningStep.GAZE_CALIBRATION -> 0 to s.gazeCalibrationIndex * StrabismusGaze.CALIBRATION_POINT_MS / 1000f
-            ScreeningStep.FAR_FIXATION -> 2 to if (s.guidePending) 0f else (StrabismusProtocol.FAR_FIXATION_SECONDS - s.secondsLeft).toFloat()
+            ScreeningStep.FAR_FIXATION -> 2 to if (s.guidePending || s.farWaiting) 0f else (StrabismusProtocol.FAR_FIXATION_SECONDS - s.secondsLeft).toFloat()
             ScreeningStep.COVER -> 3 to s.coverMarks.size * est.COVER_TOTAL / StrabismusProtocol.COVER_SEQUENCE.size
             else -> 4 to if (s.guidePending) 0f else (StrabismusProtocol.PURSUIT_SECONDS - s.secondsLeft).toFloat()
         }

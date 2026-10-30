@@ -2,7 +2,9 @@ package com.zkyjss.eyeproject.feature.services
 
 import android.content.Context
 import android.content.SharedPreferences
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
@@ -98,7 +100,11 @@ internal fun rememberTestSettings(): TestSettings {
     return settings
 }
 
-/** 单层顶栏；进行中的任务在可用区域居中，小屏或大字号时仍可滚动操作。 */
+/**
+ * 单层顶栏；进行中的任务在可用区域居中，小屏或大字号时仍可滚动操作。
+ * [statusAtBottom] 时距离条放在屏幕底部（斜视：注视目标要尽量靠近屏幕顶部）。
+ * [confirmExit] 时点返回（含系统返回）先弹「确定要退出测试吗？」，确认后才离开。
+ */
 @Composable
 internal fun TestSessionLayout(
     title: String,
@@ -106,16 +112,20 @@ internal fun TestSessionLayout(
     onSettings: () -> Unit,
     centered: Boolean,
     modifier: Modifier = Modifier,
-    reflexStimulus: Boolean = false,
+    confirmExit: Boolean = false,
+    statusAtBottom: Boolean = false,
     scroll: ScrollState = rememberScrollState(),
     progress: TestProgress? = null,
     status: @Composable () -> Unit = {},
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val colors = LocalEyeColors.current
+    var asking by rememberSaveable { mutableStateOf(false) }
+    BackHandler(enabled = confirmExit) { asking = true }
+    if (asking) TestExitDialog(onStay = { asking = false }, onExit = { asking = false; onBack() })
     Column(modifier.fillMaxSize().background(colors.appBackground).navigationBarsPadding().imePadding().screenHorizontalPaddingLarge()) {
         Box {
-            TopBackBar(title = title, noText = true, onBackClick = onBack)
+            TopBackBar(title = title, noText = true, onBackClick = { if (confirmExit) asking = true else onBack() })
             Box(Modifier.align(Alignment.BottomEnd).size(48.dp).semantics { contentDescription = "系统设置" }
                 .clickable(role = Role.Button, onClick = onSettings), contentAlignment = Alignment.Center) {
                 EyeIcon(painterResource(com.zkyjss.eyeproject.core.designsystem.R.drawable.ic_settings_gear),
@@ -123,12 +133,7 @@ internal fun TestSessionLayout(
             }
         }
         TestProgressBar(progress)
-        if (reflexStimulus) {
-            Canvas(Modifier.padding(bottom = 6.dp).fillMaxWidth().height(20.dp).clip(EyeShapes.small).background(colors.black)) {
-                drawCircle(colors.white, radius = 4.dp.toPx(), center = center)
-            }
-        }
-        status()
+        if (!statusAtBottom) status()
         BoxWithConstraints(Modifier.weight(1f).testTag("test-content")) {
             val density = LocalDensity.current
             val available = maxHeight - 16.dp
@@ -147,6 +152,7 @@ internal fun TestSessionLayout(
                 }
             }
         }
+        if (statusAtBottom) Box(Modifier.padding(bottom = 8.dp)) { status() }
     }
 }
 

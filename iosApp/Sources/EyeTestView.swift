@@ -10,21 +10,20 @@ struct EyeTestView: View {
     @State private var previousIdleDisabled = false
     @State private var settingsOpen = false
     @State private var suspended = false
+    @State private var confirmingExit = false
     init(kind: String) { _runtime = StateObject(wrappedValue: EyeRuntime(kind: kind)) }
     var body: some View {
         VStack(spacing: 0) {
             TestTopBar(title: runtime.string("title").isEmpty ? "眼健康自测" : runtime.string("title"),
-                onBack: { runtime.close(); dismiss() }, onSettings: { settingsOpen = true })
+                onBack: { if needsExitConfirm { confirmingExit = true } else { runtime.close(); dismiss() } },
+                onSettings: { settingsOpen = true })
                 .padding(.horizontal, 4)
             if let progress = runtime.state["overallProgress"] as? NSNumber, displayReady {
                 TestProgressBar(fraction: progress.doubleValue, text: runtime.string("remainingText"))
                     .padding(.horizontal, 16).padding(.bottom, 8)
                     .transition(.opacity)
             }
-            if hasReflexStimulus {
-                ZStack { Color.black; Circle().fill(.white).frame(width: 8, height: 8) }.frame(height: 20).clipShape(RoundedRectangle(cornerRadius: 8))
-            }
-            if pixelsPerMm > 0 && runtime.number("targetDistanceCm") > 0 && !runtime.bool("guidePending") {
+            if showsDistance && !distanceAtBottom {
                 TestDistanceBanner(runtime: runtime).padding(.horizontal, 16).padding(.top, 4)
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
@@ -44,7 +43,17 @@ struct EyeTestView: View {
                     }
                 }
             }
+            // 斜视：距离条放到底部，注视目标紧贴顶栏下方（与安卓一致）
+            if showsDistance && distanceAtBottom {
+                TestDistanceBanner(runtime: runtime).padding(.horizontal, 16).padding(.bottom, 8)
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+            }
         }.foregroundStyle(EyeStyle.text).tint(EyeStyle.primary)
+            .overlay {
+                if confirmingExit {
+                    TestExitConfirm(stay: { confirmingExit = false }, exit: { confirmingExit = false; runtime.close(); dismiss() })
+                }
+            }
             // 干眼测试中异常暂停（方案二）：盖住整页，恢复正常后点「继续测试」
             .overlay {
                 if runtime.bool("paused") {
@@ -88,12 +97,13 @@ struct EyeTestView: View {
                     runtime.prepare(pixelsPerMm: value)
                 }
             } else {
-                if isGazeTask { TestNoticeSlot(text: runtime.error ?? runtime.cameraNote ?? warningText) }
-                else { TestNotice(text: runtime.error ?? runtime.cameraNote ?? warningText) }
+                // 注视类任务的提示位放在舞台下方：舞台紧贴顶部，提示出现与否不挪动目标
+                if !isGazeTask { TestNotice(text: runtime.error ?? runtime.cameraNote ?? warningText) }
                 if isProfile { SubjectPickerView(runtime: runtime) }
                 else if runtime.kind == "COLOR_VISION" { ColorVisionContent(runtime: runtime) }
                 else if isRunning { VStack(spacing: EyeStyle.spacing) { testContent }.modifier(TestStagePanel()) }
                 else { testContent }
+                if isGazeTask { TestNoticeSlot(text: runtime.error ?? runtime.cameraNote ?? warningText) }
             }
         }.animation(.easeInOut(duration: 0.28), value: runtime.error ?? runtime.cameraNote ?? warningText)
     }
@@ -113,8 +123,11 @@ struct EyeTestView: View {
     private var isGazeTask: Bool {
         pixelsPerMm > 0 && !runtime.bool("guidePending") && ["GAZE_CALIBRATION","FIXATION","FAR_FIXATION","COVER","PURSUIT"].contains(phase)
     }
-    private var hasReflexStimulus: Bool {
-        pixelsPerMm > 0 && runtime.kind == "STRABISMUS" && !isProfile && !phase.isEmpty && phase != "RESULT"
+    private var showsDistance: Bool { pixelsPerMm > 0 && runtime.number("targetDistanceCm") > 0 && !runtime.bool("guidePending") }
+    private var distanceAtBottom: Bool { runtime.kind == "STRABISMUS" }
+    /// 测试进行中（选人页、准备页、结果页以外）点返回先确认；规则与安卓各测试页一致。
+    private var needsExitConfirm: Bool {
+        !phase.isEmpty && !["Profile", "PROFILE", "Setup", "ENVIRONMENT", "Result", "RESULT"].contains(phase)
     }
     private var isRunning: Bool {
         pixelsPerMm > 0 && !runtime.bool("guidePending") && ["Practice","Natural","Open","Countdown","Rest",
@@ -167,13 +180,18 @@ struct EyeTestView: View {
             // 结论、关键指标、判断依据、本次数据与导出：与安卓共用 ResultReport 内容
             ResultReportView(runtime: runtime)
         } else if phase == "FAR_FIXATION" {
-            Text("看 \(Int(runtime.number("farTargetM"))) 米外的目标").font(EyeStyle.title)
-            FarFixationPanel(seconds: Int(runtime.number("secondsLeft")))
+            let meters = Int(runtime.number("farTargetM"))
+            let waiting = runtime.bool("farWaiting")
+            FarFixationPanel(seconds: Int(runtime.number("secondsLeft")), meters: meters, waiting: waiting)
+            StageCaption(text: waiting ? "看远处 · 准备" : "剩余 \(Int(runtime.number("secondsLeft"))) 秒")
+            if waiting {
+                Button("已在看 \(meters) 米外的目标，开始") { EyeHaptics.tap(); runtime.act("farStart") }.buttonStyle(EyeButtonStyle())
+            }
         } else if phase == "GAZE_CALIBRATION" || phase == "FIXATION" || phase == "COVER" || phase == "PURSUIT" {
-            if phase == "GAZE_CALIBRATION" {
-                Text("注视校准 · \(Int(runtime.number("gazeCalibrationIndex")) + 1)/\(Int(runtime.number("calibrationCount")))").font(EyeStyle.title)
-            } else if phase != "COVER" { Text("剩余 \(Int(runtime.number("secondsLeft"))) 秒").monospacedDigit() }
             GazeTargetView(runtime: runtime, pixelsPerMm: pixelsPerMm)
+            StageCaption(text: phase == "GAZE_CALIBRATION"
+                ? "注视校准 · \(Int(runtime.number("gazeCalibrationIndex")) + 1)/\(Int(runtime.number("calibrationCount")))"
+                : phase == "COVER" ? "交替遮盖 · \(Int(runtime.number("coverDone")))/9" : "剩余 \(Int(runtime.number("secondsLeft"))) 秒")
             if runtime.bool("gazeCalibrationFailed") { Button("重试注视校准") { runtime.act("calibrate") }.buttonStyle(EyeButtonStyle()) }
             if phase == "COVER" { CoverPanel(runtime: runtime) }
         } else if phase == "Countdown" {
@@ -367,20 +385,63 @@ private struct CoverSequenceStrip: View {
 /// 只留顶部的映光点；大号倒计时，最后 3 秒有节拍音、结束有提示音。与安卓 FarFixationContent 一致。
 private struct FarFixationPanel: View {
     let seconds: Int
+    let meters: Int
+    /// 等协助者确认已经在看远处：此时不计时、不采集
+    let waiting: Bool
     var body: some View {
         VStack(spacing: 10) {
             Canvas { ctx, size in
                 Cartoon.mascot(ctx, center: CGPoint(x: size.width / 2, y: size.height * 0.58), size: min(size.width, size.height) * 0.8,
                     gaze: CGPoint(x: 0, y: -0.6))
             }.frame(width: 64, height: 64)
-            Text("\(seconds)").font(EyeStyle.headline).monospacedDigit().foregroundStyle(.white)
-            Text("眼睛越过手机，看着远处的目标").font(EyeStyle.subtitle).foregroundStyle(.white).multilineTextAlignment(.center)
-            Text("协助者：确认一直看着远处，头和手机不动").font(EyeStyle.bodySecondary).foregroundStyle(.white.opacity(0.72))
-                .multilineTextAlignment(.center)
+            if waiting {
+                Text("看着 \(meters) 米外的目标").font(EyeStyle.title).foregroundStyle(.white).multilineTextAlignment(.center)
+                Text("看好以后，协助者点下面的按钮开始计时").font(EyeStyle.bodySecondary).foregroundStyle(.white.opacity(0.72))
+                    .multilineTextAlignment(.center)
+            } else {
+                Text("\(seconds)").font(EyeStyle.headline).monospacedDigit().foregroundStyle(.white)
+                Text("眼睛越过手机，看着远处的目标").font(EyeStyle.subtitle).foregroundStyle(.white).multilineTextAlignment(.center)
+                Text("协助者：确认一直看着远处，头和手机不动").font(EyeStyle.bodySecondary).foregroundStyle(.white.opacity(0.72))
+                    .multilineTextAlignment(.center)
+            }
         }
         .padding(20).frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(EyeStyle.ink, in: RoundedRectangle(cornerRadius: EyeStyle.radius))
         .stageHeight(240)
+    }
+}
+
+/// 注视类舞台下方的一行说明（计时、进度）：舞台本身紧贴顶部。与安卓 StageCaption 一致。
+private struct StageCaption: View {
+    let text: String
+    var body: some View {
+        Text(text).font(EyeStyle.subtitle).foregroundStyle(EyeStyle.secondary).monospacedDigit().frame(maxWidth: .infinity)
+    }
+}
+
+/// 测试中点返回：屏幕中间弹出确认框，小瞳在上方冒气泡挽留。「继续测试」关闭，「确认退出」才离开。与安卓 TestExitDialog 同一文案。
+private struct TestExitConfirm: View {
+    let stay: () -> Void
+    let exit: () -> Void
+    var body: some View {
+        ZStack {
+            EyeStyle.ink.opacity(0.55).ignoresSafeArea().contentShape(Rectangle()).onTapGesture { stay() }
+            VStack(spacing: 0) {
+                MascotBubble(line: MascotLine(text: "很快就要测完了哦，再坚持一下～"))
+                MascotStage(mood: .concerned, interactive: false).frame(width: 96, height: 96)
+                VStack(spacing: 12) {
+                    Text("确定要退出测试吗？").font(EyeStyle.title).foregroundStyle(EyeStyle.text)
+                    Text("退出后这次测试不会保存，下次要从头开始。").font(EyeStyle.body).foregroundStyle(EyeStyle.secondary)
+                        .multilineTextAlignment(.center)
+                    Button("继续测试") { EyeHaptics.tap(); stay() }.buttonStyle(EyeButtonStyle())
+                    Button("确认退出") { EyeHaptics.tap(); exit() }.buttonStyle(EyeButtonStyle(role: .secondary))
+                }
+                .padding(24).frame(maxWidth: .infinity)
+                .background(EyeStyle.panel, in: RoundedRectangle(cornerRadius: 22))
+            }
+            .padding(24)
+        }
+        .accessibilityAddTraits(.isModal)
     }
 }
 

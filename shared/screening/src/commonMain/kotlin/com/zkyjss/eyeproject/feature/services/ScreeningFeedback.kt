@@ -29,7 +29,8 @@ data class ScreeningFeedbackFrame(
 )
 
 fun screeningFeedbackFrame(s: ScreeningState, coverRemainingMs: Long = -1): ScreeningFeedbackFrame {
-    val active = !s.guidePending && s.step !in setOf(ScreeningStep.PROFILE, ScreeningStep.ENVIRONMENT, ScreeningStep.RESULT)
+    // 看远等待协助者确认期间不算开始，点「开始」时才响开始音
+    val active = !s.guidePending && !s.farWaiting && s.step !in setOf(ScreeningStep.PROFILE, ScreeningStep.ENVIRONMENT, ScreeningStep.RESULT)
     val suffix = when (s.step) {
         ScreeningStep.NEAR_VISION -> ":${s.visionEye}"
         ScreeningStep.DISTANCE_CURVE -> ":${s.curveIndex}"

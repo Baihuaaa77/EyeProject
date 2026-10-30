@@ -51,6 +51,7 @@ class ScreeningTestViewModel @Inject constructor(
     fun startPushTrial() = engine.startPushTrial()
     fun markPushBlur() = engine.markPushBlur()
     fun markCover() = engine.markCover()
+    fun startFarCountdown() = engine.startFarCountdown()
     fun confirmGuide() = engine.confirmGuide()
     fun confirmGlassesRemoved() = engine.confirmGlassesRemoved()
     fun retryGazeCalibration() = engine.retryGazeCalibration()

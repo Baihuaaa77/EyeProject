@@ -153,6 +153,8 @@ data class ScreeningState(
     val targetX: Float = 0f,
     val targetY: Float = 0f,
     val gazeCalibrated: Boolean = false,
+    /** 看远：示范已确认，等协助者确认受试者已经在看 6 米外的目标，之后才计时、采集 */
+    val farWaiting: Boolean = false,
     val gazeCalibrationIndex: Int = 0,
     /** 第几轮校准（首轮 0，补测 1）；界面据此在同一点重看时也重新上报位置、重播换点动效。 */
     val gazeCalibrationRound: Int = 0,
