@@ -127,7 +127,7 @@ internal class DefaultChatRepository(
             when (val result = caller.call { token -> network.chat(token, Chats.request(history.value, opening, context)) }) {
                 is NetworkResult.Success -> {
                     val r = result.value
-                    append(ChatEntry(Chats.ASSISTANT, r.reply, clock(), r.urgent, r.sources))
+                    append(ChatEntry(Chats.ASSISTANT, r.reply, clock(), r.urgent, r.sources, r.question, r.inquiryComplete))
                     null
                 }
                 is NetworkResult.HttpError -> when {

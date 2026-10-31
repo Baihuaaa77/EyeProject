@@ -238,6 +238,24 @@ class HomeVisualTest {
     }
 
     @Test @Config(qualifiers = "zh-rCN-w390dp-h1200dp-mdpi")
+    fun aiInquiryQuestionCardSelectsThenWaitsForSend() {
+        val q = com.zkyjss.eyeproject.core.sync.ChatQuestion("从什么时候开始？", listOf("今天", "几天前"))
+        var state by mutableStateOf(com.zkyjss.eyeproject.core.data.chat.ChatState(
+            com.zkyjss.eyeproject.core.data.chat.ChatAccess.READY, askConsent = false,
+            messages = listOf(com.zkyjss.eyeproject.core.sync.ChatEntry("assistant", "先了解一下", 1, question = q))))
+        val sent = mutableListOf<String>()
+        compose.setContent { EyeProjectTheme { EyeChatContent(state, {}, {}, { text, _, _ -> sent += text }, {}) {} } }
+        compose.onNodeWithText("从什么时候开始？").assertExists()
+        compose.onNodeWithText("几天前").performClick()
+        assertTrue("选择选项只填入输入框，等待用户确认发送", sent.isEmpty())
+        capture("13-AI逐步问询")
+        compose.onNodeWithText("发送").performClick()
+        assertEquals(listOf("几天前"), sent)
+        state = state.copy(messages = state.messages + com.zkyjss.eyeproject.core.sync.ChatEntry("user", "几天前", 2))
+        compose.onNodeWithText("选择选项或输入回答，然后点发送；也可以换个话题。").assertDoesNotExist()
+    }
+
+    @Test @Config(qualifiers = "zh-rCN-w390dp-h1200dp-mdpi")
     fun adviceAndBrightness() {
         var page by mutableStateOf(0)
         compose.setContent {

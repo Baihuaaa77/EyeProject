@@ -80,9 +80,13 @@ $env:DEEPSEEK_API_KEY = "sk-..."; .\gradlew.bat -p backend/server run
 
 ## AI 对话（`POST /v1/chat`）
 
-- 输入 `ChatRequest`（`shared/sync` 的 `Chat.kt`）：最近至多 12 条对话（用户每条 ≤ 300 字，最后一条必须是用户的提问；开场的综合建议以 assistant 身份放在最前），以及与综合建议同一份去标识概况 `AdviceRequest`（可空）。
+- 输入 `ChatRequest`（`shared/sync` 的 `Chat.kt`）：最近至多 24 条对话（用户每条 ≤ 300 字，最后一条必须是用户的提问；开场的综合建议以 assistant 身份放在最前），以及与综合建议同一份去标识概况 `AdviceRequest`（可空）。
 - 需 `AI_CHAT` 同意（与 AI 综合建议分开：对话会发送用户自己打的字）；与解读、建议共用每分钟限速；每日条数 `EYE_LLM_CHAT_DAILY_LIMIT`；迁移 `V4__ai_chat_usage.sql`。
 - 输出 `ChatReplyDto`：`reply`、`urgent`（提问里有眼痛、突然看不清等危险信号，由规则判断）、引用的参考资料、免责说明。对话记录只存在手机本机，服务器不保存。
+- 核心逐步问询移植自本地 `agent_harness` 的 `ask_user` 与诊室流程，经现有 Kotlin/JSON 通道运行，不额外启动 Python/LangGraph 服务。新客户端请求带 `inquiryVersion=1`，旧客户端默认为 0，继续使用普通文字回复。
+- `question` 为可空的结构化问题：`prompt`、至多 6 个简短 `options`、`allowFreeText`、`finalConfirmation`。一次响应最多一个问题，返回后等待下一次用户发送；问题随助手消息保存在本机并带入后续历史。用户可以自由回答、换话题或发送「结束问询」。
+- 最后确认只允许「没有」选项并支持自由补充。收到确认回答后，`inquiryComplete=true` 表示五段总结结束，不能同时返回新问题。危险信号由规则判定：回答必须建议尽快到医院眼科，且不允许再返回问题（问询随之中止），不合格就重试；「结束问询」由规则直接回复，不调用模型、不占每日条数。
+- 新版本需更新后端并重启服务、重新构建双端客户端才可在实际设备上使用；仅更改头像或只更新客户端不会启用问询。真实模型选题质量仍需使用项目配置的模型验证；自动测试使用脚本模型，不消耗密钥额度。
 - 费用参考：每条约 1.5–3k 输入 + 0.2k 输出 token，约 0.003–0.005 元。
 
 ## AI 综合建议（`POST /v1/advice`）

@@ -4,6 +4,7 @@ import com.zkyjss.eyeproject.core.sync.AdviceRequest
 import com.zkyjss.eyeproject.core.sync.ChatMessage
 import com.zkyjss.eyeproject.core.sync.ChatReplyDto
 import com.zkyjss.eyeproject.core.sync.ChatRequest
+import com.zkyjss.eyeproject.core.sync.ChatQuestion
 import com.zkyjss.eyeproject.core.sync.Chats
 import com.zkyjss.eyeproject.core.sync.ConsentInput
 import com.zkyjss.eyeproject.core.sync.ConsentType
@@ -80,7 +81,7 @@ class ChatTest {
     }
 
     private suspend fun HttpClient.chat(token: String, vararg messages: ChatMessage, ctx: AdviceRequest? = context): HttpResponse =
-        post("/v1/chat") { bearerAuth(token); contentType(ContentType.Application.Json); setBody(ChatRequest(messages.toList(), ctx)) }
+        post("/v1/chat") { bearerAuth(token); contentType(ContentType.Application.Json); setBody(ChatRequest(messages.toList(), ctx, inquiryVersion = 1)) }
 
     private fun user(text: String) = ChatMessage(Chats.USER, text)
 
@@ -114,13 +115,15 @@ class ChatTest {
     }
 
     @Test fun redFlagsAreDecidedByRulesAndTheReplyMustSendThemToADoctor() {
-        // 第一次回答没提就医：判为不合格，重试一次
-        val llm = FakeLlm(reply("多休息，热敷一下就好。"), reply("眼睛疼又突然看不清，请尽快到医院眼科就诊，必要时去急诊。在这之前不要揉眼。"))
+        // 第一次回答还想继续追问：判为不合格，重试一次；危险信号时问询必须中止
+        val llm = FakeLlm(
+            """{"reply":"请尽快到医院眼科就诊。","question":{"prompt":"疼了多久？","options":["今天","几天了"]}}""",
+            reply("眼睛疼又突然看不清，请尽快到医院眼科就诊，必要时去急诊。在这之前不要揉眼。"))
         api(llm) { client, _ ->
             val dto = client.chat(client.signUp(ConsentType.AI_CHAT), user("今天眼睛疼，还突然看不清")).body<ChatReplyDto>()
             assertTrue(dto.urgent)
             assertTrue("眼科" in dto.reply)
-            assertEquals(2, llm.conversations.size)
+            assertEquals(null, dto.question)
             assertTrue("危险信号" in llm.systems.first())
             assertTrue("不合格" in llm.conversations.last().last().content)
         }
@@ -145,10 +148,61 @@ class ChatTest {
     }
 
     @Test fun sharedRequestKeepsRecentTurnsAndOpening() {
-        val history = (1..20).map { com.zkyjss.eyeproject.core.sync.ChatEntry(if (it % 2 == 1) Chats.USER else Chats.ASSISTANT, "第 $it 条", it.toLong()) }
+        val history = (1..40).map { com.zkyjss.eyeproject.core.sync.ChatEntry(if (it % 2 == 1) Chats.USER else Chats.ASSISTANT, "第 $it 条", it.toLong()) }
         val request = Chats.request(history.dropLast(1), null, context)
         assertEquals(Chats.MAX_HISTORY, request.messages.size)
-        assertEquals("第 19 条", request.messages.last().text)
+        assertEquals("第 39 条", request.messages.last().text)
         assertTrue(Chats.redFlag("右眼突然重影") && !Chats.redFlag("眼睛有点干"))
+    }
+
+    @Test fun inquiryAsksWaitsConfirmsAndSummarizesThroughTheRealApi() {
+        val summary = "综合判断：目前信息仅供参考。就医建议：不适持续到眼科检查。就医前的缓解与注意事项：适当休息。需要警惕的信号：突然看不清应及时就医。复诊与跟进：记录变化。"
+        val llm = FakeLlm(
+            """{"reply":"我先了解一下。","question":{"prompt":"主要是哪种不适？","options":["干涩","酸胀"]}}""",
+            """{"reply":"再确认一下。","question":{"prompt":"还有没有其他需要补充的？","options":["没有"],"allowFreeText":true,"finalConfirmation":true}}""",
+            """{"reply":"$summary","inquiryComplete":true}""",
+            reply("好的，日常记得适当休息。"))
+        api(llm) { client, _ ->
+            val token = client.signUp(ConsentType.AI_CHAT)
+            val turns = mutableListOf(user(Chats.START_INQUIRY))
+            val first = client.chat(token, *turns.toTypedArray()).body<ChatReplyDto>()
+            assertEquals(listOf("干涩", "酸胀"), first.question!!.options)
+            assertFalse(first.inquiryComplete)
+            assertEquals(1, llm.conversations.size, "提问后本轮结束，不能替用户回答或继续调用")
+            turns += ChatMessage(Chats.ASSISTANT, first.reply, first.question)
+            turns += user("干涩")
+            val second = client.chat(token, *turns.toTypedArray()).body<ChatReplyDto>()
+            assertTrue(second.question!!.finalConfirmation)
+            assertTrue(llm.conversations.last().any { "主要是哪种不适" in it.content })
+            turns += ChatMessage(Chats.ASSISTANT, second.reply, second.question)
+            turns += user("没有")
+            val last = client.chat(token, *turns.toTypedArray()).body<ChatReplyDto>()
+            assertTrue(last.inquiryComplete)
+            assertEquals(null, last.question)
+            assertEquals(summary, last.reply)
+            turns += ChatMessage(Chats.ASSISTANT, last.reply, inquiryComplete = true)
+            turns += user("谢谢，平时怎么休息")
+            assertEquals(null, client.chat(token, *turns.toTypedArray()).body<ChatReplyDto>().question)
+        }
+    }
+
+    @Test fun inquiryRejectsMalformedQuestionsAndPrematureSummary() {
+        val malformed = listOf(
+            """{"reply":"好","question":{"prompt":"补充？","options":["干眼","青光眼"],"finalConfirmation":true}}""",
+            """{"reply":"好","question":{"prompt":"问题","options":[],"allowFreeText":false}}""",
+            """{"reply":"好","question":{"prompt":"问题","options":["有","有"]}}""",
+            """{"reply":"好","inquiryComplete":true}""",
+            """{"reply":"好","inquiryComplete":"true"}""",
+            """{"reply":"好","question":{"prompt":"问题"},"inquiryComplete":true}"""
+        )
+        malformed.forEach { assertTrue(ChatOutput.parse(it, false) is ChatOutput.Result.Invalid, it) }
+        assertTrue(ChatOutput.parse(reply("直接建议"), false, requireQuestion = true) is ChatOutput.Result.Invalid)
+        assertTrue(ChatOutput.parse("""{"reply":"请就医","question":{"prompt":"继续？"}}""", true) is ChatOutput.Result.Invalid)
+    }
+
+    @Test fun inquiryCanBeStoppedWithoutCallingTheModel() = api(FakeLlm()) { client, _ ->
+        val dto = client.chat(client.signUp(ConsentType.AI_CHAT), user(Chats.STOP_INQUIRY)).body<ChatReplyDto>()
+        assertTrue(dto.reply.startsWith("已结束"))
+        assertEquals(null, dto.question)
     }
 }

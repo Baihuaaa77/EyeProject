@@ -85,6 +85,44 @@ class CloudClientEndToEndTest {
         """{"protocolVersion":5,"kind":"$kind","assessment":{"modelVersion":"rules-2","quality":"可用于探索性评估","riskLevel":"LOW","features":{}},
            "profile":{"年龄":"30"},"subject":{"id":"$subjectId","relation":"$relation"}}"""
 
+    @Test fun iosInquiryBridgePreservesQuestionAcrossRestartAndSendsAnswer() {
+        val replies = ArrayDeque(listOf(
+            """{"reply":"先了解一下","question":{"prompt":"从什么时候开始？","options":["今天","几天前"]}}""",
+            """{"reply":"再确认一下","question":{"prompt":"还有没有其他需要补充的？","options":["没有"],"finalConfirmation":true}}""",
+            """{"reply":"综合判断：信息仅供参考。就医建议：持续不适到眼科检查。就医前的缓解与注意事项：适当休息。需要警惕的信号：突然看不清及时就医。复诊与跟进：记录变化。","inquiryComplete":true}"""))
+        val llm = object : LlmClient {
+            override val model = "scripted"
+            override suspend fun complete(system: String, user: String) = LlmReply(replies.removeFirst(), 10, 10)
+        }
+        val config = ServerConfig.forTest(UUID.randomUUID().toString())
+        val services = Services(config, llm) { now }
+        try {
+            testApplication {
+                application { eyeProjectModule(config, services, runJobs = false) }
+                val http = createClient { }
+                coroutineScope {
+                    val device = Device()
+                    val client = CloudClient(KtorTransport(http, this), device, this) { }
+                    client.setServer("http://localhost")
+                    client.register("inquiry@example.com", "secret-123"); client.awaitIdle()
+                    client.sendChat(com.zkyjss.eyeproject.core.sync.Chats.START_INQUIRY, "", true, true); client.awaitIdle()
+                    fun messages(c: CloudClient) = SyncContract.json.parseToJsonElement(c.chatJson()).jsonObject["messages"] as JsonArray
+                    assertEquals("从什么时候开始？", messages(client).last().jsonObject["question"]!!.jsonObject["prompt"]!!.jsonPrimitive.content)
+                    val restarted = CloudClient(KtorTransport(http, this), device, this) { }
+                    assertEquals(messages(client), messages(restarted))
+                    restarted.sendChat("今天", "", false, false); restarted.awaitIdle()
+                    assertEquals("true", messages(restarted).last().jsonObject["question"]!!.jsonObject["finalConfirmation"]!!.jsonPrimitive.content)
+                    restarted.sendChat("没有", "", false, false); restarted.awaitIdle()
+                    assertEquals("true", messages(restarted).last().jsonObject["inquiryComplete"]!!.jsonPrimitive.content)
+                    assertNull(messages(restarted).last().jsonObject["question"])
+                    restarted.clearChat()
+                    assertTrue(messages(restarted).isEmpty())
+                    assertTrue(replies.isEmpty())
+                }
+            }
+        } finally { services.close() }
+    }
+
     @Test fun iosClientSyncsMembersProfilesAndRecordsWithTheRealServer() {
         val config = ServerConfig.forTest(UUID.randomUUID().toString())
         val services = Services(config) { now }

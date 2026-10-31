@@ -161,7 +161,15 @@ internal fun EyeChatContent(
                 Chats.SUGGESTIONS.forEach { text -> ChoiceChip(text, false) { input = text } }
             }
         }
-        messages.forEach { ChatBubble(it) }
+        messages.forEachIndexed { index, entry ->
+            ChatBubble(entry, active = index == messages.lastIndex && state?.sending != true &&
+                state?.access != ChatAccess.NEEDS_ACCOUNT, onOption = { input = it })
+        }
+        if (state?.sending != true && messages.isNotEmpty()) {
+            val pending = Chats.pendingQuestion(messages)
+            val label = if (pending != null) Chats.STOP_INQUIRY else "开始新的问询"
+            ChoiceChip(label, false) { input = if (pending != null) Chats.STOP_INQUIRY else Chats.START_INQUIRY }
+        }
         if (state?.sending == true) Row(verticalAlignment = Alignment.CenterVertically) {
             EyechoAvatar(34.dp)
             Spacer(Modifier.width(8.dp))
@@ -259,7 +267,8 @@ internal fun ChatConsentDialog(onAgree: (Boolean) -> Unit, onDecline: () -> Unit
 
 /** 一条对话：用户的靠右（浅主色底），爱科的靠左（白底，带参考资料）；提到危险信号时在提问下方醒目提示尽快就医。 */
 @Composable
-private fun ChatBubble(entry: ChatEntry) {
+@OptIn(ExperimentalLayoutApi::class)
+private fun ChatBubble(entry: ChatEntry, active: Boolean = false, onOption: (String) -> Unit = {}) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
     val mine = entry.role == Chats.USER
@@ -270,6 +279,19 @@ private fun ChatBubble(entry: ChatEntry) {
             Column(Modifier.widthIn(max = 300.dp).clip(EyeShapes.panel).background(if (mine) colors.primarySoft else colors.panelBackground)
                 .padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 EyeText(entry.text, style = typography.body, color = colors.textPrimary)
+                if (entry.inquiryComplete && !entry.urgent) EyeText("本次问询已总结", style = typography.bodySecondary, color = colors.primary)
+                entry.question?.let { q ->
+                    EyeText(q.prompt, style = typography.subtitle, color = colors.textPrimary)
+                    if (active) {
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            q.options.forEach { option -> ChoiceChip(option, false) { onOption(option) } }
+                        }
+                        EyeText(if (q.allowFreeText) "选择选项或输入回答，然后点发送；也可以换个话题。" else "选择选项后点发送；也可以换个话题。",
+                            style = typography.bodySecondary, color = colors.textSecondary)
+                    } else if (q.options.isNotEmpty()) {
+                        EyeText(q.options.joinToString(" / "), style = typography.bodySecondary, color = colors.textSecondary)
+                    }
+                }
                 if (entry.sources.isNotEmpty()) EyeText("参考：" + entry.sources.joinToString("；") { "${it.title}（${it.publisher}）" },
                     style = typography.bodySecondary, color = colors.textSecondary)
             }

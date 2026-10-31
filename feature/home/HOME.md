@@ -44,3 +44,5 @@
   接着是综合建议卡（`AiExplanationCard(text = AiCardText.ADVICE)`，取自 `HomeViewModel.aiAdvice`），下面是与爱科的对话（`ChatViewModel` → `core:data` `ChatRepository`），
   未登录提示去登录；按钮一律「发送」，同意说明不在页面上，点发送时按需弹 `ChatConsentDialog`（还没同意时每次都弹；已同意但没勾「以后不再提示」时每次进页面首次发送弹一次；
   「不同意」只关闭、保留输入）；提到危险信号时在提问下方醒目提示尽快就医；记录只存本机，可清空。与苹果端 `AiChatView.swift` 一致。
+  逐步问询：选「帮我一步步梳理眼部不适」并发送，爱科一次问一个关键问题；问题卡支持选项与自由回答，选项只填入输入框，确认发送后才进入下一轮。
+  历史问题只读；当前问题重启后仍可回答；最后确认补充后生成五段总结，也可发送「结束问询」或直接换话题。协议与流程见 `backend/server/SERVER.md`。

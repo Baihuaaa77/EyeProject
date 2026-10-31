@@ -13,6 +13,17 @@ data class ChatMessage(
     /** [Chats.USER] 或 [Chats.ASSISTANT] */
     val role: String,
     val text: String,
+    val question: ChatQuestion? = null,
+    val inquiryComplete: Boolean = false,
+)
+
+/** 移植 agent_harness.ask_user：问题随助手消息保存；下一条用户消息回答或作废它。 */
+@Serializable
+data class ChatQuestion(
+    val prompt: String,
+    val options: List<String> = emptyList(),
+    val allowFreeText: Boolean = true,
+    val finalConfirmation: Boolean = false,
 )
 
 @Serializable
@@ -21,6 +32,8 @@ data class ChatRequest(
     val messages: List<ChatMessage>,
     /** 用眼概况；用户没有概况（如刚装好）时为空 */
     val context: AdviceRequest? = null,
+    /** 旧客户端为 0，仅返回普通文字；支持问题卡与流程恢复的客户端为 1。 */
+    val inquiryVersion: Int = 0,
 )
 
 @Serializable
@@ -32,6 +45,8 @@ data class ChatReplyDto(
     val model: String,
     val generatedAt: Long,
     val disclaimer: String = Chats.DISCLAIMER,
+    val question: ChatQuestion? = null,
+    val inquiryComplete: Boolean = false,
 )
 
 /** 本机保存的一条对话（两端同一格式）。 */
@@ -42,6 +57,8 @@ data class ChatEntry(
     val time: Long,
     val urgent: Boolean = false,
     val sources: List<KnowledgeSourceDto> = emptyList(),
+    val question: ChatQuestion? = null,
+    val inquiryComplete: Boolean = false,
 )
 
 object Chats {
@@ -60,13 +77,25 @@ object Chats {
     /** 输入框一条消息的字数上限 */
     const val INPUT_LIMIT = 300
     /** 每次发给模型的最近对话条数 */
-    const val MAX_HISTORY = 12
+    const val MAX_HISTORY = 24
+    const val START_INQUIRY = "帮我一步步梳理眼部不适"
+    const val STOP_INQUIRY = "结束问询"
     /** 历史里一条回答最多带多少字（更早的长回答截断，控制费用） */
     const val MAX_HISTORY_TEXT = 600
     /** 本机最多保留的对话条数 */
     const val MAX_STORED = 200
     /** 打开对话页时的快捷提问 */
-    val SUGGESTIONS = listOf("今天眼睛有点干涩", "看屏幕久了眼睛酸胀怎么办", "晚上玩手机怎样更护眼", "我的眨眼次数正常吗")
+    val SUGGESTIONS = listOf(START_INQUIRY, "今天眼睛有点干涩", "看屏幕久了眼睛酸胀怎么办", "晚上玩手机怎样更护眼", "我的眨眼次数正常吗")
+
+    /** 仅末条助手消息的问题可作答；回答、改聊别的或清空后，旧问题不再可操作。 */
+    fun pendingQuestion(history: List<ChatEntry>): ChatQuestion? =
+        history.lastOrNull()?.takeIf { it.role == ASSISTANT && !it.urgent }?.question
+
+    fun validQuestion(q: ChatQuestion): Boolean = q.prompt.isNotBlank() && q.prompt.length <= INPUT_LIMIT &&
+        q.options.size <= 6 && q.options.distinct().size == q.options.size &&
+        q.options.all { it.isNotBlank() && it.length <= 40 } &&
+        (q.allowFreeText || q.options.isNotEmpty()) &&
+        (!q.finalConfirmation || (q.options == listOf("没有") && q.allowFreeText))
 
     private val RED_FLAGS = listOf("眼痛", "眼睛痛", "眼睛疼", "眼疼", "剧痛", "突然看不清", "突然看不见", "视力突然", "突然模糊",
         "突然重影", "重影", "闪光", "黑影", "飞蚊突然", "眼前有幕", "视野缺", "红肿", "外伤", "撞到眼", "戳到眼", "溅到眼", "溅入", "化学", "烧伤")
@@ -86,17 +115,19 @@ object Chats {
     fun request(history: List<ChatEntry>, opening: AdviceDto?, context: AdviceRequest?): ChatRequest {
         val messages = buildList {
             opening?.let { add(ChatMessage(ASSISTANT, openingText(it))) }
-            history.forEach { add(ChatMessage(it.role, it.text)) }
+            history.forEach { add(ChatMessage(it.role, it.text, it.question, it.inquiryComplete)) }
         }.takeLast(MAX_HISTORY)
-        return ChatRequest(messages.map { it.copy(text = it.text.take(MAX_HISTORY_TEXT)) }, context)
+        return ChatRequest(messages.map { it.copy(text = it.text.take(MAX_HISTORY_TEXT)) }, context, inquiryVersion = 1)
     }
 
     /** 服务端校验与截断：角色只认两种，最后一条必须是用户的；用户消息不超过 [INPUT_LIMIT] 字。 */
     fun ChatRequest.bounded(): ChatRequest? {
         val kept = messages.filter { it.role == USER || it.role == ASSISTANT }.takeLast(MAX_HISTORY)
-            .map { m -> m.copy(text = m.text.trim().take(if (m.role == USER) INPUT_LIMIT else MAX_HISTORY_TEXT)) }
+            .map { m -> m.copy(text = m.text.trim().take(if (m.role == USER) INPUT_LIMIT else MAX_HISTORY_TEXT),
+                question = m.question?.takeIf { m.role == ASSISTANT && validQuestion(it) },
+                inquiryComplete = m.role == ASSISTANT && m.inquiryComplete) }
             .filter { it.text.isNotEmpty() }
         if (kept.lastOrNull()?.role != USER) return null
-        return ChatRequest(kept, context)
+        return ChatRequest(kept, context, inquiryVersion.coerceIn(0, 1))
     }
 }

@@ -437,6 +437,11 @@ class CloudClient(
         put("messages", JsonArray(chatHistory.map { e ->
             buildJsonObject {
                 put("role", e.role); put("text", e.text); put("urgent", e.urgent)
+                put("inquiryComplete", e.inquiryComplete)
+                e.question?.let { q -> put("question", buildJsonObject {
+                    put("prompt", q.prompt); put("options", JsonArray(q.options.map(::JsonPrimitive)))
+                    put("allowFreeText", q.allowFreeText); put("finalConfirmation", q.finalConfirmation)
+                }) }
                 put("sources", JsonArray(e.sources.map { JsonPrimitive("${it.title}（${it.publisher}）") }))
             }
         }))
@@ -473,7 +478,7 @@ class CloudClient(
                 when (val result = authorized { api.chat(it, Chats.request(chatHistory, opening, context)) }) {
                     is ApiResult.Ok -> {
                         val r = result.value
-                        appendChat(ChatEntry(Chats.ASSISTANT, r.reply, platform.nowMs(), r.urgent, r.sources))
+                        appendChat(ChatEntry(Chats.ASSISTANT, r.reply, platform.nowMs(), r.urgent, r.sources, r.question, r.inquiryComplete))
                         null
                     }
                     is ApiResult.Failed -> when {

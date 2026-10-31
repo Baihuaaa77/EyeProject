@@ -45,8 +45,16 @@ struct AiChatPage: View {
                         EyechoIntro()
                         AiAdviceView()
                         if messages.isEmpty { suggestions(info) }
-                        ForEach(Array(messages.enumerated()), id: \.offset) { _, m in
-                            ChatBubble(message: m, urgentNotice: info["urgentNotice"] as? String ?? "")
+                        ForEach(Array(messages.enumerated()), id: \.offset) { index, m in
+                            ChatBubble(message: m, urgentNotice: info["urgentNotice"] as? String ?? "",
+                                active: index == messages.count - 1 && !sending && (info["state"] as? String) != "locked",
+                                onOption: { draft = $0 })
+                        }
+                        if !sending && !messages.isEmpty {
+                            let pending = (messages.last?["question"] as? [String: Any]) != nil
+                            ChoiceChip(label: pending ? "结束问询" : "开始新的问询", selected: false) {
+                                draft = pending ? "结束问询" : "帮我一步步梳理眼部不适"
+                            }
                         }
                         if sending { typing }
                         if let error = info["error"] as? String, !error.isEmpty {
@@ -224,6 +232,8 @@ private struct ChatConsentView: View {
 private struct ChatBubble: View {
     let message: [String: Any]
     let urgentNotice: String
+    let active: Bool
+    let onOption: (String) -> Void
     var body: some View {
         let mine = message["role"] as? String == "user"
         let urgent = message["urgent"] as? Bool ?? false
@@ -236,6 +246,26 @@ private struct ChatBubble: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(message["text"] as? String ?? "").font(EyeStyle.body).foregroundStyle(EyeStyle.text)
                         .textSelection(.enabled)
+                    if message["inquiryComplete"] as? Bool == true && !urgent {
+                        Text("本次问询已总结").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.primary)
+                    }
+                    if let q = message["question"] as? [String: Any] {
+                        let options = q["options"] as? [String] ?? []
+                        Text(q["prompt"] as? String ?? "").font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text)
+                        if active {
+                            FlowLayout(spacing: 8) {
+                                ForEach(options, id: \.self) { option in
+                                    ChoiceChip(label: option, selected: false) { onOption(option) }
+                                }
+                            }
+                            Text(q["allowFreeText"] as? Bool ?? true
+                                ? "选择选项或输入回答，然后点发送；也可以换个话题。"
+                                : "选择选项后点发送；也可以换个话题。")
+                                .font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
+                        } else if !options.isEmpty {
+                            Text(options.joined(separator: " / ")).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
+                        }
+                    }
                     if !sources.isEmpty {
                         Text("参考：" + sources.joined(separator: "；")).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
                     }

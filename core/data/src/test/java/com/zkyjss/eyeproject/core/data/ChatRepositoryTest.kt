@@ -127,4 +127,23 @@ class ChatRepositoryTest {
         assertEquals(ChatAccess.NEEDS_CONSENT, state.access)
         assertEquals("需要先同意 AI 对话", state.error)
     }
+
+    @Test
+    fun questionSurvivesRestartAndAnswerCarriesItsMetadata() = runTest {
+        signIn(ConsentType.AI_CHAT)
+        val q = com.zkyjss.eyeproject.core.sync.ChatQuestion("什么时候开始的？", listOf("今天", "几天前"))
+        network.chatResult = NetworkResult.Success(status = 200, value = com.zkyjss.eyeproject.core.sync.ChatReplyDto(
+            "先了解一下", model = "fake", generatedAt = 1, question = q))
+        repository().send(Chats.START_INQUIRY, null)
+        val restarted = repository()
+        assertEquals(q, Chats.pendingQuestion(restarted.state.first().messages))
+        network.chatResult = NetworkResult.Success(status = 200, value = com.zkyjss.eyeproject.core.sync.ChatReplyDto(
+            "还有补充吗", model = "fake", generatedAt = 2,
+            question = com.zkyjss.eyeproject.core.sync.ChatQuestion("还有补充吗？", listOf("没有"), finalConfirmation = true)))
+        restarted.send("今天", null)
+        assertEquals(q, network.chats.last().messages.dropLast(1).last().question)
+        assertTrue(Chats.pendingQuestion(restarted.state.first().messages)!!.finalConfirmation)
+        restarted.clear()
+        assertEquals(null, Chats.pendingQuestion(repository().state.first().messages))
+    }
 }
