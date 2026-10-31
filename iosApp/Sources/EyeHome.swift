@@ -15,7 +15,7 @@ private func ringColor(_ level: String) -> Color {
     switch level { case "LOW": return EyeStyle.success; case "MEDIUM": return EyeStyle.accent; case "HIGH": return EyeStyle.danger; default: return EyeStyle.borderSubtle }
 }
 
-/// 首页：问候与日期（右上角账户、系统设置）→ 今日用眼 → AI 综合建议（和小瞳聊聊）→ 今日感受 → 多源感知 → 主动服务。
+/// 首页：问候与日期（右上角账户、系统设置）→ 今日用眼 → AI 综合建议（和爱科聊聊）→ 今日感受 → 多源感知 → 主动服务。
 struct HomePage: View {
     let navigate: (AppRoute) -> Void
     let openTest: (String) -> Void

@@ -19,7 +19,7 @@ struct AiCardText {
         action: "生成解读", firstGroup: "这说明", secondGroup: "可以这样做", firstKey: "meaning", secondKey: "suggestions")
     static let advice = AiCardText(
         title: "AI 综合建议",
-        help: "小瞳把今天的用眼概况、自测结果和你记录的感受交给大模型，结合眼科知识库给出建议。用眼负荷仍以规则为准，不是诊断。",
+        help: "爱科把今天的用眼概况、自测结果和你记录的感受交给大模型，结合眼科知识库给出建议。用眼负荷仍以规则为准，不是诊断。",
         intro: "结合今天的用眼情况，说说最该先做的事和值得养成的习惯。",
         action: "生成建议", firstGroup: "先做这些", secondGroup: "养成习惯", firstKey: "priorities", secondKey: "habits")
 }

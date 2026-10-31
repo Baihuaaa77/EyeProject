@@ -1,16 +1,16 @@
 import SwiftUI
 
-/// 首页「AI 综合建议」入口（放在「今日感受」上方）：一个按钮，点了进入对话页。与安卓 ChatEntryCard 一致。
+/// 首页「AI 综合建议」入口（放在「今日感受」上方）：爱科头像 + 一个按钮，点了进入对话页。与安卓 ChatEntryCard 一致。
 struct ChatEntryCard: View {
     let open: () -> Void
     var body: some View {
         Button { EyeHaptics.tap(); open() } label: {
             Panel {
-                HStack(spacing: 10) {
-                    IconTile(glyph: .bulb, tone: .accent, size: 32)
+                HStack(spacing: 12) {
+                    EyechoAvatar(size: 40)
                     VStack(alignment: .leading, spacing: 2) {
                         Text("AI 综合建议").font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text)
-                        Text("和小瞳聊聊今天的用眼感受").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
+                        Text("和爱科聊聊今天的用眼感受").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
                     }.frame(maxWidth: .infinity, alignment: .leading)
                     Image(systemName: "chevron.right").font(.system(size: 14, weight: .semibold)).foregroundStyle(EyeStyle.secondary)
                 }
@@ -19,7 +19,8 @@ struct ChatEntryCard: View {
     }
 }
 
-/// 「AI 综合建议」对话页：开场是今天的综合建议卡片，下面和小瞳自由对话；记录只存在本机，可清空。
+/// 「AI 综合建议」对话页：由爱尔眼科数字人「爱科 Eyecho」主持。顶部是爱科的自我介绍，接着是今天的综合建议卡片，
+/// 下面和爱科自由对话；记录只存在本机，可清空。
 /// 同意说明平时不展示，发送时按需弹窗（见 ChatConsentView）。
 /// 状态与请求在共用 CloudClient（chatJson / sendChat / clearChat），与安卓 EyeChatScreen 同一规则与文案。
 struct AiChatPage: View {
@@ -41,6 +42,7 @@ struct AiChatPage: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
+                        EyechoIntro()
                         AiAdviceView()
                         if messages.isEmpty { suggestions(info) }
                         ForEach(Array(messages.enumerated()), id: \.offset) { _, m in
@@ -92,7 +94,7 @@ struct AiChatPage: View {
 
     private func suggestions(_ info: [String: Any]) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("可以这样问小瞳").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
+            Text("可以这样问爱科").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
             FlowLayout(spacing: 8) {
                 ForEach(info["suggestions"] as? [String] ?? [], id: \.self) { text in
                     ChoiceChip(label: text, selected: false) { draft = text; focused = true }
@@ -103,8 +105,8 @@ struct AiChatPage: View {
 
     private var typing: some View {
         HStack(spacing: 8) {
-            MascotStage(mood: .happy, interactive: false).frame(width: 34, height: 34)
-            Text("小瞳正在想…").font(EyeStyle.body).foregroundStyle(EyeStyle.secondary)
+            EyechoAvatar(size: 34)
+            Text("爱科正在想…").font(EyeStyle.body).foregroundStyle(EyeStyle.secondary)
         }
     }
 
@@ -143,6 +145,37 @@ struct AiChatPage: View {
     }
 }
 
+/// 爱科 Eyecho 圆形头像（浅主色底）。与安卓 EyechoAvatar 一致。
+struct EyechoAvatar: View {
+    let size: CGFloat
+    var body: some View {
+        Image("EyechoAvatar").resizable().scaledToFill()
+            .frame(width: size, height: size)
+            .background(EyeStyle.primarySoft).clipShape(Circle())
+            .accessibilityHidden(true)
+    }
+}
+
+/// 对话页顶部：爱科半身像站在卡片底边上，右侧自我介绍。与安卓 EyechoIntro 同一文案。
+private struct EyechoIntro: View {
+    var body: some View {
+        // 半身像最高，决定卡片高度并贴住底边；文字竖直居中
+        HStack(alignment: .center, spacing: 14) {
+            Image("EyechoHalf").resizable().scaledToFit().frame(height: 132)
+                .accessibilityLabel("爱科 Eyecho")
+            VStack(alignment: .leading, spacing: 4) {
+                Text("你好，我是爱科").font(EyeStyle.title).foregroundStyle(EyeStyle.primary)
+                Text("爱尔眼科 AI 助手。眼睛不舒服、用眼习惯、测试结果，都可以问我。").font(EyeStyle.bodySecondary)
+                    .foregroundStyle(EyeStyle.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.bottom, 16)
+        }
+        .padding(.horizontal, 16).padding(.top, 12)
+        .background(EyeStyle.primarySoft, in: RoundedRectangle(cornerRadius: 22))
+    }
+}
+
 /// 发送前的同意说明弹窗：还没同意时每次发送都弹；已同意但没勾「以后不再提示」时，每次进入对话页第一次发送弹一次。
 /// 「同意」后发送（带上是否勾了「以后不再提示」），「不同意」只关闭、输入框里的字保留。与安卓 ChatConsentDialog 同一文案。
 private struct ChatConsentView: View {
@@ -155,7 +188,7 @@ private struct ChatConsentView: View {
             EyeStyle.ink.opacity(0.55).ignoresSafeArea().contentShape(Rectangle()).onTapGesture { decline() }
             VStack(alignment: .leading, spacing: 14) {
                 HStack(spacing: 10) {
-                    MascotStage(mood: .happy, interactive: false).frame(width: 40, height: 40)
+                    EyechoAvatar(size: 40)
                     Text(info["consentTitle"] as? String ?? "").font(EyeStyle.title).foregroundStyle(EyeStyle.text)
                 }
                 Text(info["consentText"] as? String ?? "").font(EyeStyle.body).foregroundStyle(EyeStyle.secondary)
@@ -187,7 +220,7 @@ private struct ChatConsentView: View {
     }
 }
 
-/// 一条对话：用户的靠右（浅主色底），小瞳的靠左（白底，带参考资料）；提到危险信号时在提问下方醒目提示尽快就医。
+/// 一条对话：用户的靠右（浅主色底），爱科的靠左（白底，带参考资料）；提到危险信号时在提问下方醒目提示尽快就医。
 private struct ChatBubble: View {
     let message: [String: Any]
     let urgentNotice: String
@@ -198,7 +231,7 @@ private struct ChatBubble: View {
         VStack(alignment: mine ? .trailing : .leading, spacing: 8) {
             HStack(alignment: .top, spacing: 8) {
                 if mine { Spacer(minLength: 48) } else {
-                    MascotStage(mood: .happy, interactive: false).frame(width: 34, height: 34)
+                    EyechoAvatar(size: 34)
                 }
                 VStack(alignment: .leading, spacing: 6) {
                     Text(message["text"] as? String ?? "").font(EyeStyle.body).foregroundStyle(EyeStyle.text)

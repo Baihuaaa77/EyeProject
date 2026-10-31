@@ -3,7 +3,7 @@ package com.zkyjss.eyeproject.core.sync
 import kotlinx.serialization.Serializable
 
 /*
- * 和小瞳聊聊（AI 对话）：用户自由描述今天的用眼感受或提问，大模型结合「AI 综合建议」同一份去标识用眼概况
+ * 和爱科聊聊（AI 对话）：用户自由描述今天的用眼感受或提问，大模型结合「AI 综合建议」同一份去标识用眼概况
  * （[AdviceRequest]，用户已确认的清单）与眼科知识库回答。对话记录只存在手机本机，服务器只转发、不保存内容。
  * 需要单独的 AI_CHAT 同意（用户自己打的字可能含健康信息）。
  */
@@ -49,10 +49,10 @@ object Chats {
     const val ASSISTANT = "assistant"
     const val DISCLAIMER = "AI 回答只作科普和生活建议，不是诊断，也不能代替眼科检查。"
     /** 首次发送时弹窗的标题与「以后不再提示」勾选项（两端一致）；同意说明平时不在对话页展示。 */
-    const val CONSENT_TITLE = "和小瞳聊天前"
+    const val CONSENT_TITLE = "和爱科聊天前"
     const val DONT_ASK_AGAIN = "以后不再提示"
     /** 同意说明（两端一致）。 */
-    const val CONSENT_TEXT = "和小瞳聊天时，会把你输入的文字、最近几轮对话，以及「AI 综合建议」用到的去标识用眼概况" +
+    const val CONSENT_TEXT = "和爱科聊天时，会把你输入的文字、最近几轮对话，以及「AI 综合建议」用到的去标识用眼概况" +
         "（年龄段、用屏与休息、眨眼与距离、自测等级、今天的感受等）发送到云端服务，由第三方大模型（DeepSeek）回答；" +
         "不发送姓名、账号、照片或视频。服务器不保存对话内容，对话记录只存在这台手机上。可随时在「我的 → 云端同步」中关闭。"
     const val URGENT_NOTICE = "你提到的情况可能需要尽快就医：眼睛疼痛、突然看不清、突然重影、眼前闪光或黑影增多、眼外伤或化学物质溅入，" +

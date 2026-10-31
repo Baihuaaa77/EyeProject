@@ -49,7 +49,7 @@ data class ChatState(
 )
 
 /**
- * AI 综合建议的对话（和小瞳聊聊）：用户自由描述用眼感受或提问，云端大模型结合同一份去标识概况与知识库回答；
+ * AI 综合建议的对话（和爱科聊聊）：用户自由描述用眼感受或提问，云端大模型结合同一份去标识概况与知识库回答；
  * 已生成的综合建议作为开场一起发给模型。需要单独的「AI 对话」同意。对话记录只存在本机（`ai_chat.json`），可清空。
  * 与苹果端 CloudClient.chatJson / sendChat / clearChat 同一规则。
  */
@@ -98,8 +98,8 @@ internal class DefaultChatRepository(
         val status = combine(sending, error, noPrompt) { busy, failure, quiet -> Triple(busy, failure, !quiet) }
         emitAll(combine(history, status, sessions.session, serverAddress) { messages, (busy, failure, ask), session, address ->
             val (access, message) = when {
-                address.isBlank() -> ChatAccess.NEEDS_ACCOUNT to "连接云端服务并登录后，就可以和小瞳聊天了"
-                session == null -> ChatAccess.NEEDS_ACCOUNT to "登录账户后，就可以和小瞳聊聊今天的用眼感受"
+                address.isBlank() -> ChatAccess.NEEDS_ACCOUNT to "连接云端服务并登录后，就可以和爱科聊天了"
+                session == null -> ChatAccess.NEEDS_ACCOUNT to "登录账户后，就可以和爱科聊聊今天的用眼感受"
                 session.consents[ConsentType.AI_CHAT] != true -> ChatAccess.NEEDS_CONSENT to null
                 else -> ChatAccess.READY to null
             }

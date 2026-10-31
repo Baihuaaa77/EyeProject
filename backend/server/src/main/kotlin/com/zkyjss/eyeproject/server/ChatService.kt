@@ -20,7 +20,7 @@ import java.time.Instant
 import java.time.ZoneId
 
 /**
- * AI 对话（和小瞳聊聊）：用户自由描述用眼感受或提问，模型结合去标识用眼概况与知识库回答。
+ * AI 对话（和爱科聊聊）：用户自由描述用眼感受或提问，模型结合去标识用眼概况与知识库回答。
  * 流程：校验与截断 → 检查「AI 对话」同意 → 每日条数额度（与解读、综合建议分开）→ 规则判断危险信号 → 检索知识库 →
  * 调用模型 → 校验输出（诊断性措辞、长度、有危险信号时必须建议就医）→ 不合格重试一次。
  * 对话内容不入库、不进日志与审计（审计只记次数与是否有危险信号），不缓存。
@@ -40,7 +40,7 @@ class ChatService(
         val context = request.context?.takeIf { it.fatigueLevel in Advices.LEVELS }?.bounded()
         db.transaction {
             if (!consentGranted(accountId, ConsentType.AI_CHAT))
-                throw ApiException.consentRequired("和小瞳聊天前需要同意把你输入的文字与去标识的用眼概况发送给大模型")
+                throw ApiException.consentRequired("和爱科聊天前需要同意把你输入的文字与去标识的用眼概况发送给大模型")
         }
         val client = llm ?: throw ApiException(HttpStatusCode.ServiceUnavailable, ErrorCodes.AI_UNAVAILABLE, "服务器尚未开启 AI 对话")
         val question = request.messages.last().text
@@ -50,7 +50,7 @@ class ChatService(
         db.transaction {
             if (usedToday(accountId, day) >= config.llmChatDailyLimit) {
                 audit.write(this, AuditAction.AI_CHAT, accountId, "chat", target, "QUOTA", ip)
-                throw ApiException(HttpStatusCode.TooManyRequests, ErrorCodes.AI_QUOTA_EXCEEDED, "今天和小瞳聊得够多啦，明天再来吧")
+                throw ApiException(HttpStatusCode.TooManyRequests, ErrorCodes.AI_QUOTA_EXCEEDED, "今天和爱科聊得够多啦，明天再来吧")
             }
             addUsage(accountId, day)
         }
@@ -66,7 +66,7 @@ class ChatService(
             } catch (error: LlmException) {
                 log.warn("AI 对话调用失败：{}", error.message)
                 db.transaction { audit.write(this, AuditAction.AI_CHAT, accountId, "chat", target, "FAILED", ip) }
-                throw ApiException(HttpStatusCode.ServiceUnavailable, ErrorCodes.AI_UNAVAILABLE, "小瞳暂时联系不上大模型，请稍后再试")
+                throw ApiException(HttpStatusCode.ServiceUnavailable, ErrorCodes.AI_UNAVAILABLE, "爱科暂时联系不上大模型，请稍后再试")
             }
             log.info("AI 对话：模型 {}，输入 {} tokens，输出 {} tokens", client.model, reply.promptTokens, reply.completionTokens)
             when (val result = ChatOutput.parse(reply.content, urgent)) {
@@ -105,7 +105,7 @@ class ChatService(
 /** 提示词：规则部分固定不变，背景（用眼概况 + 本轮检索到的知识）随提问变化。 */
 object ChatPrompt {
     val SYSTEM = """
-        你是眼健康 App 里的吉祥物「小瞳」，用温和、口语化的中文和用户聊用眼感受与护眼方法。必须遵守：
+        你是爱尔眼科的 AI 助手「爱科」（Eyecho），在眼健康 App 里用温和、口语化的中文和用户聊用眼感受与护眼方法。必须遵守：
         1. 你是科普助手，不是医生：不得下诊断，不说「确诊」「患有」「你得了」「肯定是」，也不说「不用就医」；可以说「可能和……有关」。
         2. 应用规则算出的用眼负荷等级与自测风险等级以【用眼概况】为准，不得改变或质疑。
         3. 只依据【用眼概况】【参考知识】和对话内容回答，不编造研究、数据或用户没说过的情况；不确定时直说，并建议到眼科检查。

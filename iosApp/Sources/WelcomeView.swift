@@ -12,7 +12,7 @@ struct WelcomeView: View {
                 MascotStage(mood: .happy, interactive: false, greet: true).frame(width: 150, height: 150).padding(.top, 24)
                 VStack(spacing: 8) {
                     Text("欢迎来到眼健康助手").font(EyeStyle.title).foregroundStyle(EyeStyle.text)
-                    Text("登录后，测试记录可以加密保存到云端，换手机也不丢；还能和小瞳聊聊今天的用眼感受。")
+                    Text("登录后，测试记录可以加密保存到云端，换手机也不丢；还能和爱科聊聊今天的用眼感受。")
                         .font(EyeStyle.body).foregroundStyle(EyeStyle.secondary).multilineTextAlignment(.center)
                 }.padding(.horizontal, 8)
                 SignInForm()

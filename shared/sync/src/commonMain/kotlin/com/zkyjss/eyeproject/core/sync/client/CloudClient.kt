@@ -357,8 +357,8 @@ class CloudClient(
             }
             key in adviceLoading -> put("state", "loading")
             key in adviceFailures -> { put("state", "failed"); put("message", adviceFailures[key]) }
-            !api.configured -> { put("state", "locked"); put("message", "连接云端服务并登录后，小瞳可以结合大模型给你综合建议") }
-            s == null -> { put("state", "locked"); put("message", "登录账户后，小瞳可以结合大模型给你综合建议") }
+            !api.configured -> { put("state", "locked"); put("message", "连接云端服务并登录后，爱科可以结合大模型给你综合建议") }
+            s == null -> { put("state", "locked"); put("message", "登录账户后，爱科可以结合大模型给你综合建议") }
             s.consents[ConsentType.AI_ADVICE] != true -> { put("state", "consent"); put("consentText", Advices.CONSENT_TEXT) }
             else -> put("state", "ready")
         }
@@ -425,8 +425,8 @@ class CloudClient(
     fun chatJson(): String = buildJsonObject {
         val s = session
         when {
-            !api.configured -> { put("state", "locked"); put("message", "连接云端服务并登录后，就可以和小瞳聊天了") }
-            s == null -> { put("state", "locked"); put("message", "登录账户后，就可以和小瞳聊聊今天的用眼感受") }
+            !api.configured -> { put("state", "locked"); put("message", "连接云端服务并登录后，就可以和爱科聊天了") }
+            s == null -> { put("state", "locked"); put("message", "登录账户后，就可以和爱科聊聊今天的用眼感受") }
             s.consents[ConsentType.AI_CHAT] != true -> put("state", "consent")
             else -> put("state", "ready")
         }

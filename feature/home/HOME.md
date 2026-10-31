@@ -37,7 +37,10 @@
 评分阈值为工程默认值（见 `shared/SHARED.md`「主动护眼」），待眼科专家确认。
 
 本地界面检查：`./gradlew.bat :feature:home:testDebugUnitTest`，截图在 `feature/home/build/reports/ui/` 并同步到 `docs/界面截图-2026-10-23/安卓/`。
-- AI 综合建议对话（`EyeChatPage.kt`）：首页「今日感受」上方的 `ChatEntryCard`（只有一个按钮行）→ `EyeChatScreen`（`EyeChatRoute`）：
-  开场是综合建议卡（`AiExplanationCard(text = AiCardText.ADVICE)`，取自 `HomeViewModel.aiAdvice`），下面是与小瞳的对话（`ChatViewModel` → `core:data` `ChatRepository`），
+- AI 综合建议对话（`EyeChatPage.kt`）：由爱尔眼科数字人「爱科 Eyecho」主持（小瞳仍是首页、测试等其余地方的吉祥物）。
+  图片在 `core:designsystem` 的 `drawable-nodpi/eyecho_avatar.png`（256 圆形头像）与 `eyecho_half.png`（半身、底边平切），
+  苹果端同名素材 `EyechoAvatar` / `EyechoHalf`；`EyechoAvatar(size)` 用在入口、对话气泡、「正在想」与同意弹窗。
+  首页「今日感受」上方的 `ChatEntryCard`（爱科头像 + 一个按钮行）→ `EyeChatScreen`（`EyeChatRoute`）：顶部 `EyechoIntro`（半身像站在卡片底边 + 自我介绍），
+  接着是综合建议卡（`AiExplanationCard(text = AiCardText.ADVICE)`，取自 `HomeViewModel.aiAdvice`），下面是与爱科的对话（`ChatViewModel` → `core:data` `ChatRepository`），
   未登录提示去登录；按钮一律「发送」，同意说明不在页面上，点发送时按需弹 `ChatConsentDialog`（还没同意时每次都弹；已同意但没勾「以后不再提示」时每次进页面首次发送弹一次；
   「不同意」只关闭、保留输入）；提到危险信号时在提问下方醒目提示尽快就医；记录只存本机，可清空。与苹果端 `AiChatView.swift` 一致。

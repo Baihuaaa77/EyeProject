@@ -66,7 +66,7 @@ internal fun WelcomeContent(busy: Boolean, message: String?, actions: AccountAct
     ) {
         XiaoTong(MascotMood.HAPPY, Modifier.size(150.dp), interactive = false, greet = true)
         EyeText("欢迎来到眼健康助手", style = typography.title, color = colors.textPrimary)
-        EyeText("登录后，测试记录可以加密保存到云端，换手机也不丢；还能和小瞳聊聊今天的用眼感受。",
+        EyeText("登录后，测试记录可以加密保存到云端，换手机也不丢；还能和爱科聊聊今天的用眼感受。",
             style = typography.body, color = colors.textSecondary, textAlign = TextAlign.Center)
         SignInForm(busy, message, actions)
         EyeText("先跳过，随便看看", Modifier.heightIn(min = 48.dp).clickable(role = Role.Button, onClick = onSkip).padding(12.dp),

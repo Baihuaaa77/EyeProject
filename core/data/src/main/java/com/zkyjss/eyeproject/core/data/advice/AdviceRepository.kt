@@ -86,8 +86,8 @@ internal class DefaultAdviceRepository(
             cached[key]?.let { return@combine AiAdviceState.Done(it) }
             running[key]?.let { return@combine it }
             when {
-                address.isBlank() -> AiAdviceState.NeedsAccount("连接云端服务并登录后，小瞳可以结合大模型给你综合建议")
-                session == null -> AiAdviceState.NeedsAccount("登录账户后，小瞳可以结合大模型给你综合建议")
+                address.isBlank() -> AiAdviceState.NeedsAccount("连接云端服务并登录后，爱科可以结合大模型给你综合建议")
+                session == null -> AiAdviceState.NeedsAccount("登录账户后，爱科可以结合大模型给你综合建议")
                 session.consents[ConsentType.AI_ADVICE] != true -> AiAdviceState.NeedsConsent(Advices.CONSENT_TEXT)
                 else -> AiAdviceState.Ready
             }

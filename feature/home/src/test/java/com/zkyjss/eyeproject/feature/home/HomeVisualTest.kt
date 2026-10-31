@@ -209,6 +209,9 @@ class HomeVisualTest {
                 }
             }
         }
+        // 对话由爱科主持：顶部是爱科的自我介绍
+        compose.onNodeWithText(EYECHO_HELLO).assertExists()
+        compose.onNodeWithContentDescription("爱科 Eyecho").assertExists()
         compose.onNodeWithText(com.zkyjss.eyeproject.core.sync.Chats.URGENT_NOTICE).assertExists()
         // 同意说明平时不在页面上
         compose.onNodeWithText(com.zkyjss.eyeproject.core.sync.Chats.CONSENT_TEXT).assertDoesNotExist()
