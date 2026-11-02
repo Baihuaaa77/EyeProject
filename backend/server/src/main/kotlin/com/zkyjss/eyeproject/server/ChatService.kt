@@ -2,6 +2,7 @@ package com.zkyjss.eyeproject.server
 
 import com.zkyjss.eyeproject.core.sync.Advices
 import com.zkyjss.eyeproject.core.sync.Advices.bounded
+import com.zkyjss.eyeproject.core.sync.ChatMessage
 import com.zkyjss.eyeproject.core.sync.ChatReplyDto
 import com.zkyjss.eyeproject.core.sync.ChatRequest
 import com.zkyjss.eyeproject.core.sync.ChatQuestion
@@ -15,6 +16,8 @@ import com.zkyjss.eyeproject.server.ProfileService.Companion.consentGranted
 import io.ktor.http.HttpStatusCode
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import kotlinx.serialization.json.jsonObject
 import org.slf4j.LoggerFactory
 import java.time.Instant
@@ -65,12 +68,18 @@ class ChatService(
         val previousQuestion = request.messages.dropLast(1).lastOrNull()?.question
         val chunks = knowledge.searchChat(questions, context, urgent)
         val system = ChatPrompt.SYSTEM + (if (inquiryEnabled) "\n\n" + InquiryPrompt.SYSTEM else "") + "\n\n" + ChatPrompt.background(context, chunks, knowledge, urgent)
-        val turns = request.messages.map { m -> LlmTurn(m.role, m.text + (m.question?.let {
-            "\n【本条助手提出的问题】${SyncContract.json.encodeToString(ChatQuestion.serializer(), it)}"
-        } ?: "") + if (m.inquiryComplete) "\n【本次问询已总结结束】" else "") }
+        // 问询模式下，助手的历史回答按它自己应输出的 JSON 回放：与 JSON 模式一致，模型才不容易返回空白
+        val turns = request.messages.map { m ->
+            LlmTurn(m.role, if (inquiryEnabled && m.role == Chats.ASSISTANT) ChatOutput.replay(m) else m.text)
+        }
+        // problem 记最后一次失败原因（写日志）；hint 只记回答不合格的原因（带给模型改正），空白不算
         var problem: String? = null
-        repeat(MAX_ATTEMPTS) {
-            val asked = problem?.let { turns + LlmTurn("user", "（系统提示：上一次回答不合格：$it。请改正后重新只输出 JSON，回答我上面的问题。）") } ?: turns
+        var hint: String? = null
+        val started = System.nanoTime()
+        repeat(MAX_ATTEMPTS) { attempt ->
+            // 重试有总时长上限：别让手机端（读超时 60 秒）先等不及
+            if (attempt > 0 && System.nanoTime() - started > RETRY_BUDGET_NS) return@repeat
+            val asked = hint?.let { turns + LlmTurn("user", "（系统提示：上一次回答不合格：$it。请改正后重新只输出 JSON，回答我上面的问题。）") } ?: turns
             val reply = try {
                 client.chat(system, asked)
             } catch (error: LlmException) {
@@ -79,9 +88,15 @@ class ChatService(
                 throw ApiException(HttpStatusCode.ServiceUnavailable, ErrorCodes.AI_UNAVAILABLE, "爱科暂时联系不上大模型，请稍后再试")
             }
             log.info("AI 对话：模型 {}，输入 {} tokens，输出 {} tokens", client.model, reply.promptTokens, reply.completionTokens)
+            // DeepSeek 的 JSON 模式偶尔只返回空白：不是回答不合格，原样重试，不追加「不合格」提示
+            if (reply.content.isBlank()) {
+                problem = "模型返回空内容"
+                log.warn("AI 对话：模型返回空内容，重试")
+                return@repeat
+            }
             when (val result = ChatOutput.parse(reply.content, urgent, previousQuestion,
                 requireQuestion = inquiryEnabled && question == Chats.START_INQUIRY, inquiryEnabled = inquiryEnabled)) {
-                is ChatOutput.Result.Invalid -> problem = result.reason
+                is ChatOutput.Result.Invalid -> { problem = result.reason; hint = result.reason; log.warn("AI 对话：回答不合格（{}），重试", result.reason) }
                 is ChatOutput.Result.Valid -> {
                     db.transaction { audit.write(this, AuditAction.AI_CHAT, accountId, "chat", target, "OK", ip) }
                     return ChatReplyDto(result.reply, urgent, sourcesFor(result.refs, chunks), client.model, clock(),
@@ -89,7 +104,7 @@ class ChatService(
                 }
             }
         }
-        log.warn("AI 对话输出两次不合格：{}", problem)
+        log.warn("AI 对话输出多次不合格：{}", problem)
         db.transaction { audit.write(this, AuditAction.AI_CHAT, accountId, "chat", target, "INVALID_OUTPUT", ip) }
         throw ApiException(HttpStatusCode.BadGateway, ErrorCodes.AI_UNAVAILABLE, "这次没能给出合适的回答，换个说法再试试吧")
     }
@@ -109,7 +124,9 @@ class ChatService(
             .mapNotNull(knowledge.sources::get).take(3)
 
     companion object {
-        private const val MAX_ATTEMPTS = 2
+        /** 含空白重试；每次约 1–3 秒 */
+        private const val MAX_ATTEMPTS = 3
+        private const val RETRY_BUDGET_NS = 35_000_000_000L
         private val ZONE: ZoneId = ZoneId.of("Asia/Shanghai")
     }
 }
@@ -155,13 +172,28 @@ object ChatOutput {
     }
 
     private const val MAX_LENGTH = 400
+    private val MARKDOWN_HEADING = Regex("""(?m)^\s*#{1,6}\s*""")
+
+    /** App 按纯文本显示：去掉模型偶尔带出的 Markdown 加粗与标题符号。 */
+    fun plain(text: String): String = text.replace("**", "").replace(MARKDOWN_HEADING, "").trim()
+
+    /** 用户本来就能自由输入，「其他（可自己描述）」这类选项点了只会把字填进输入框，去掉。 */
+    private fun ChatQuestion.withoutOther(): ChatQuestion =
+        if (allowFreeText && !finalConfirmation) copy(options = options.filterNot { it.trim().startsWith("其他") }) else this
     private val SEE_DOCTOR = listOf("就医", "医院", "眼科", "急诊", "就诊", "看医生")
+
+    /** 把一条助手历史消息还原成模型应输出的 JSON（问询模式下回放给模型）。 */
+    fun replay(m: ChatMessage): String = buildJsonObject {
+        put("reply", m.text)
+        m.question?.let { put("question", SyncContract.json.encodeToJsonElement(ChatQuestion.serializer(), it)) }
+        put("inquiryComplete", m.inquiryComplete)
+    }.toString()
 
     fun parse(content: String, urgent: Boolean, previousQuestion: ChatQuestion? = null, requireQuestion: Boolean = false,
               inquiryEnabled: Boolean = true): Result {
         val root = runCatching { SyncContract.json.parseToJsonElement(content.trim()).jsonObject }.getOrNull()
             ?: return Result.Invalid("不是 JSON 对象")
-        val reply = (root["reply"] as? JsonPrimitive)?.takeIf { it.isString }?.content?.trim().orEmpty()
+        val reply = (root["reply"] as? JsonPrimitive)?.takeIf { it.isString }?.content?.let(::plain).orEmpty()
         val refs = (root["refs"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.content }
         if (reply.isEmpty()) return Result.Invalid("缺少 reply")
         val completeValue = root["inquiryComplete"]
@@ -170,6 +202,7 @@ object ChatOutput {
         val questionValue = root["question"]?.takeIf { it.toString() != "null" }
         val question = questionValue?.let { value ->
             runCatching { SyncContract.json.decodeFromString(ChatQuestion.serializer(), value.toString()) }.getOrNull()
+                ?.let { it.copy(prompt = plain(it.prompt)).withoutOther() }
                 ?: return Result.Invalid("question 必须包含问题正文、简短选项及布尔标记")
         }
         if (!inquiryEnabled && (question != null || complete)) return Result.Invalid("旧客户端仅支持普通 reply 文本，不返回 question 或 inquiryComplete")

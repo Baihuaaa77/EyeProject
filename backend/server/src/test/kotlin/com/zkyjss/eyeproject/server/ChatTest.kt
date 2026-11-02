@@ -130,7 +130,7 @@ class ChatTest {
     }
 
     @Test fun rejectsDiagnosesAndBadRequests() {
-        api(FakeLlm(reply("你得了干眼症。"), reply("你肯定是干眼症。"))) { client, _ ->
+        api(FakeLlm(reply("你得了干眼症。"), reply("你肯定是干眼症。"), reply("你患有干眼症。"))) { client, _ ->
             val token = client.signUp(ConsentType.AI_CHAT)
             assertEquals(HttpStatusCode.BadGateway, client.chat(token, user("眼睛干")).status)
             // 最后一条不是用户的提问
@@ -198,6 +198,27 @@ class ChatTest {
         malformed.forEach { assertTrue(ChatOutput.parse(it, false) is ChatOutput.Result.Invalid, it) }
         assertTrue(ChatOutput.parse(reply("直接建议"), false, requireQuestion = true) is ChatOutput.Result.Invalid)
         assertTrue(ChatOutput.parse("""{"reply":"请就医","question":{"prompt":"继续？"}}""", true) is ChatOutput.Result.Invalid)
+    }
+
+    @Test fun repliesArePlainTextAndOtherOptionsAreDropped() {
+        val result = ChatOutput.parse("""{"reply":"**先说结论**\n## 小结\n多眨眼","question":{"prompt":"**哪种**不适？","options":["干涩","其他（可自己描述）"]}}""", false)
+        val valid = result as ChatOutput.Result.Valid
+        assertEquals("先说结论\n小结\n多眨眼", valid.reply)
+        assertEquals("哪种不适？", valid.question!!.prompt)
+        assertEquals(listOf("干涩"), valid.question!!.options)
+    }
+
+    @Test fun blankModelOutputIsRetriedWithoutBlamingTheModel() {
+        // DeepSeek 的 JSON 模式偶尔只回空白：原样重试，不追加「不合格」提示；助手历史按 JSON 回放
+        val llm = FakeLlm("   ", reply("每看屏幕 20 分钟抬头看远处 20 秒。"))
+        api(llm) { client, _ ->
+            val dto = client.chat(client.signUp(ConsentType.AI_CHAT), ChatMessage(Chats.ASSISTANT, "先了解一下",
+                ChatQuestion("主要是哪种不适？", listOf("干涩", "酸胀"))), user("干涩")).body<ChatReplyDto>()
+            assertTrue("远处" in dto.reply, dto.reply)
+            assertEquals(2, llm.conversations.size)
+            assertTrue(llm.conversations.last().none { "不合格" in it.content }, llm.conversations.last().toString())
+            assertTrue(llm.conversations.last().first().content.startsWith("{\"reply\":\"先了解一下\""), llm.conversations.last().toString())
+        }
     }
 
     @Test fun inquiryCanBeStoppedWithoutCallingTheModel() = api(FakeLlm()) { client, _ ->

@@ -67,7 +67,8 @@ final class CloudModel: ObservableObject {
 final class CloudTransport: NSObject, HttpTransport {
     func send(method: String, url: String, headers: [String: String], body: String?, callback: HttpCallback) {
         guard let target = URL(string: url) else { callback.onFailure(message: "服务器地址无效"); return }
-        var request = URLRequest(url: target, timeoutInterval: 20)
+        // AI 请求要等大模型（含重试最长约 35 秒）：与安卓读超时一致取 60 秒
+        var request = URLRequest(url: target, timeoutInterval: 60)
         request.httpMethod = method
         headers.forEach { request.setValue($0.value, forHTTPHeaderField: $0.key) }
         request.httpBody = body?.data(using: .utf8)

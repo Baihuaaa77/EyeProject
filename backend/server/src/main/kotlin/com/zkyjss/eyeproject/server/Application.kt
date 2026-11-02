@@ -110,9 +110,10 @@ fun Application.eyeProjectModule(config: ServerConfig, services: Services = Serv
             rateLimiter(limit = config.authRatePerMinute, refillPeriod = 1.minutes)
             requestKey { call -> call.request.origin.remoteHost }
         }
-        // 每个账号每分钟最多 6 次解读请求（另有每日额度），防止连点刷费用
+        // 每个账号每分钟最多 12 次 AI 请求（解读、建议、对话合计；另有每日额度），防止连点刷费用；
+        // 逐步问询点选项作答节奏较快，6 次会误伤
         register(ai) {
-            rateLimiter(limit = 6, refillPeriod = 1.minutes)
+            rateLimiter(limit = 12, refillPeriod = 1.minutes)
             requestKey { call -> call.principal<AccountPrincipal>()?.accountId ?: call.request.origin.remoteHost }
         }
         // 管理口令只有一个：每 IP 每分钟最多试 5 次
