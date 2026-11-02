@@ -181,6 +181,11 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, onEditSubje
     val activeTest = !s.guidePending && s.step !in setOf(ScreeningStep.PROFILE, ScreeningStep.ENVIRONMENT, ScreeningStep.RESULT)
     val gazeTask = activeTest && s.step in setOf(ScreeningStep.GAZE_CALIBRATION, ScreeningStep.FIXATION, ScreeningStep.FAR_FIXATION,
         ScreeningStep.COVER, ScreeningStep.PURSUIT)
+    val opticTask = activeTest && !gazeTask
+    val notice = s.gazeWarning ?: s.warning ?: guidance?.takeUnless {
+        it == "保持稳定" || it == "慢慢移近" || it.startsWith("太近") || it.startsWith("太远") || it.startsWith("请移动到") ||
+            (distance != null && it == "请正对屏幕")
+    }
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
     Box(modifier.fillMaxSize()) {
@@ -193,13 +198,11 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, onEditSubje
             statusAtBottom = kind == ScreeningKind.STRABISMUS,
             // 注视类任务里距离条固定为单行，文字变化不改变高度，避免挤动画布
             status = { distance?.let { DistanceBanner(it, compact = true, singleLine = gazeTask) } },
+            // 视标类任务（近视力、移近法、多距离视力、翻转拍）：提示浮在上方淡入，不把视标卡片往下挤
+            overlay = { if (opticTask) TestNoticeOverlay(notice) },
         ) {
-            val notice = s.gazeWarning ?: s.warning ?: guidance?.takeUnless {
-                it == "保持稳定" || it == "慢慢移近" || it.startsWith("太近") || it.startsWith("太远") || it.startsWith("请移动到") ||
-                    (distance != null && it == "请正对屏幕")
-            }
             // 注视类任务的提示位放在舞台下方：舞台紧贴顶部，提示出现与否不挪动目标
-            if (!gazeTask) TestNotice(notice.takeIf { !s.guidePending })
+            if (!gazeTask && !opticTask) TestNotice(notice.takeIf { !s.guidePending })
             if (s.guidePending && s.glassesCheckPending) {
                 GlassesCheckContent(viewModel::confirmGlassesRemoved)
             } else if (s.guidePending) {

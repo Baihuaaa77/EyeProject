@@ -117,6 +117,7 @@ internal fun TestSessionLayout(
     scroll: ScrollState = rememberScrollState(),
     progress: TestProgress? = null,
     status: @Composable () -> Unit = {},
+    overlay: @Composable BoxScope.() -> Unit = {},
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val colors = LocalEyeColors.current
@@ -151,6 +152,8 @@ internal fun TestSessionLayout(
                     }, verticalArrangement = Arrangement.spacedBy(8.dp), content = content)
                 }
             }
+            // 浮在内容区之上、不参与布局（如视标类任务的质量提醒）
+            overlay()
         }
         if (statusAtBottom) Box(Modifier.padding(bottom = 8.dp)) { status() }
     }

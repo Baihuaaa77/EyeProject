@@ -90,14 +90,18 @@ struct TestNoticeSlot: View {
     }
 }
 
+/// [floating] 时浮在视标卡片上方：不透明底 + 轻阴影，只淡入淡出，不占布局。
 struct TestNotice: View {
     let text: String
+    var floating = false
     var body: some View {
         if !text.isEmpty {
-            Text(text).font(.body).foregroundStyle(EyeStyle.warning).multilineTextAlignment(.center)
+            Text(text).font(.body).foregroundStyle(EyeStyle.warning).multilineTextAlignment(.center).lineLimit(floating ? 2 : nil)
                 .padding(.horizontal, 16).padding(.vertical, 10).frame(maxWidth: .infinity)
                 .background(EyeStyle.warning.opacity(0.12), in: Capsule())
-                .transition(.opacity.combined(with: .move(edge: .top)))
+                .background(floating ? EyeStyle.panel : Color.clear, in: Capsule())
+                .shadow(color: floating ? .black.opacity(0.12) : .clear, radius: 4, y: 2)
+                .transition(floating ? .opacity : .opacity.combined(with: .move(edge: .top)))
         }
     }
 }

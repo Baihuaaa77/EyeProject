@@ -43,6 +43,11 @@ struct EyeTestView: View {
                     }
                 }
             }
+            // 视标类任务（近视力、移近法、多距离视力、翻转拍）：提示浮在上方淡入，不把视标卡片往下挤（与安卓 TestNoticeOverlay 一致）
+            .overlay(alignment: .top) {
+                if isOpticTask { TestNotice(text: noticeText, floating: true).padding(.horizontal).padding(.top, 8) }
+            }
+            .animation(.easeInOut(duration: 0.28), value: isOpticTask ? noticeText : "")
             // 斜视：距离条放到底部，注视目标紧贴顶栏下方（与安卓一致）
             if showsDistance && distanceAtBottom {
                 TestDistanceBanner(runtime: runtime).padding(.horizontal, 16).padding(.bottom, 8)
@@ -98,14 +103,19 @@ struct EyeTestView: View {
                 }
             } else {
                 // 注视类任务的提示位放在舞台下方：舞台紧贴顶部，提示出现与否不挪动目标
-                if !isGazeTask { TestNotice(text: runtime.error ?? runtime.cameraNote ?? warningText) }
+                if !isGazeTask && !isOpticTask { TestNotice(text: noticeText) }
                 if isProfile { SubjectPickerView(runtime: runtime) }
                 else if runtime.kind == "COLOR_VISION" { ColorVisionContent(runtime: runtime) }
                 else if isRunning { VStack(spacing: EyeStyle.spacing) { testContent }.modifier(TestStagePanel()) }
                 else { testContent }
-                if isGazeTask { TestNoticeSlot(text: runtime.error ?? runtime.cameraNote ?? warningText) }
+                if isGazeTask { TestNoticeSlot(text: noticeText) }
             }
-        }.animation(.easeInOut(duration: 0.28), value: runtime.error ?? runtime.cameraNote ?? warningText)
+        }.animation(.easeInOut(duration: 0.28), value: isOpticTask ? "" : noticeText)
+    }
+    private var noticeText: String { runtime.error ?? runtime.cameraNote ?? warningText }
+    /// 视标类任务：提示浮层显示，不占布局
+    private var isOpticTask: Bool {
+        pixelsPerMm > 0 && !runtime.bool("guidePending") && ["NEAR_VISION","PUSH_UP","DISTANCE_CURVE","FLIPPER"].contains(phase)
     }
     private var phase: String { runtime.string("phase") }
     /// 色觉自测不需要毫米级视标尺寸，不必先用尺子校准屏幕；其余测试校准后才能开始。

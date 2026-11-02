@@ -9,6 +9,7 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -60,6 +61,26 @@ internal fun TestNotice(text: String?, modifier: Modifier = Modifier) {
     ) {
         EyeText(last, style = LocalEyeTypography.current.body, color = colors.warning, textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth().clip(EyeShapes.chip).background(colors.warningSoft)
+                .semantics { liveRegion = LiveRegionMode.Polite }
+                .padding(horizontal = 16.dp, vertical = 10.dp))
+    }
+}
+
+/**
+ * 视标类任务（近视力、移近法、多距离视力、翻转拍）的质量提醒：浮在内容区顶部淡入淡出，不占布局，
+ * 提示出现或消失都不把视标卡片往下挤。放在 [TestSessionLayout] 的 overlay 里。
+ */
+@Composable
+internal fun BoxScope.TestNoticeOverlay(text: String?) {
+    val colors = LocalEyeColors.current
+    var last by remember { mutableStateOf(text.orEmpty()) }
+    if (text != null) last = text
+    AnimatedVisibility(
+        visible = text != null, modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth().padding(top = 8.dp),
+        enter = fadeIn(tween(EyeMotion.MEDIUM)), exit = fadeOut(tween(EyeMotion.SHORT)),
+    ) {
+        EyeText(last, style = LocalEyeTypography.current.body, color = colors.warning, textAlign = TextAlign.Center, maxLines = 2,
+            modifier = Modifier.fillMaxWidth().shadow(4.dp, EyeShapes.chip).clip(EyeShapes.chip).background(colors.warningSoft)
                 .semantics { liveRegion = LiveRegionMode.Polite }
                 .padding(horizontal = 16.dp, vertical = 10.dp))
     }
