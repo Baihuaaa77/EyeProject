@@ -74,15 +74,16 @@ internal fun SubjectPicker(
 }
 
 /**
- * 测前快问（[PreTestCheck]）：选好人后在开始页下方问两三个这几天的情况，答完「开始测试」。
- * 答案只写入这次记录；换人时清空重答。与苹果端 PreTestCheckView 同一排版与文案。
+ * 测前快问（[PreTestCheck]）：选好人后在开始页下方问两三个这几天的情况（老视为戴镜问卷），答完「开始测试」。
+ * 答案只写入这次记录；换人时清空重答，[initial] 为预填答案（老视换一种戴镜方式再测时保留的前几题）。
+ * 与苹果端 PreTestCheckView 同一排版与文案。
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-internal fun PreTestQuestions(kind: String, subjectId: String, onConfirm: (Map<String, String>) -> Unit) {
+internal fun PreTestQuestions(kind: String, subjectId: String, initial: Map<String, String> = emptyMap(), onConfirm: (Map<String, String>) -> Unit) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
-    var answers by remember(subjectId) { mutableStateOf(emptyMap<String, String>()) }
+    var answers by remember(subjectId) { mutableStateOf(initial) }
     val requester = remember { BringIntoViewRequester() }
     LaunchedEffect(subjectId) { requester.bringIntoView() }
     Column(

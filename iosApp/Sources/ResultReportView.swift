@@ -62,6 +62,10 @@ struct ResultReportView: View {
         if runtime.bool("canRest") { Button("闭眼休息 1 分钟后再测") { runtime.act("rest") }.buttonStyle(EyeButtonStyle(role: .secondary)) }
         Button(runtime.kind == "DRY_EYE" ? "重新检测" : "重新测试") { runtime.act("restart") }
             .buttonStyle(EyeButtonStyle(role: retestFirst && !runtime.bool("canExtend") ? .primary : .secondary))
+        // 老视：允许换一种戴镜状态重复检查，各次独立记录、分别解释（与安卓一致）
+        if runtime.kind == "PRESBYOPIA" && !runtime.string("subjectId").isEmpty {
+            Button("换一种戴镜方式再测") { runtime.act("otherGlasses") }.buttonStyle(EyeButtonStyle(role: .secondary))
+        }
     }
 }
 

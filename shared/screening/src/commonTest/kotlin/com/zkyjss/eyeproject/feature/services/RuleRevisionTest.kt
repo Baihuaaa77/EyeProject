@@ -139,12 +139,16 @@ class RuleRevisionTest {
 
     // region 老视
 
-    private fun presbyopia(age: Int, nearCm: Float, mode: String = PRESBYOPIA_MODE_STANDARD, level: Float = 0.8f,
-                           fields: Map<String, String> = emptyMap()): ScreeningAssessment {
+    /** 每只眼 3 次移近：[nearCm]、+0.5 cm、[nearCm]；或直接给 [points]。 */
+    private fun presbyopia(age: Int, nearCm: Float, path: PresbyopiaPath = PresbyopiaPath.A1, level: Float = 0.8f,
+                           fields: Map<String, String> = emptyMap(), points: List<NearPoint>? = null): ScreeningAssessment {
         val answers = VisionEye.entries.flatMap { eye -> List(4) { VisionAnswer(ScreeningStep.NEAR_VISION, 40f, level, 0, 0, true, 500, 20f, eye) } } +
             List(8) { VisionAnswer(ScreeningStep.FLIPPER, if (it % 2 == 0) 50f else 25f, 0.2f, 1, if (it < 2) 1 else 0, it < 2, 500, 20f) }
-        return ScreeningAssessmentModel.presbyopia(ScreeningState(fields = mapOf("年龄" to "$age") + fields, mode = mode, answers = answers,
-            nearPoints = listOf(NearPoint(nearCm), NearPoint(nearCm + 0.5f)), curvePoints = listOf(CurvePoint(60f, 0.8f), CurvePoint(33f, 0.8f))))
+        val nearPoints = points ?: PresbyopiaProtocol.PUSH_EYES.flatMap { eye ->
+            listOf(nearCm, nearCm + 0.5f, nearCm).map { NearPoint(it, eye = eye) } }
+        return ScreeningAssessmentModel.presbyopia(ScreeningState(fields = mapOf("年龄" to "$age") + fields, presbyopiaPath = path,
+            answers = answers, nearPoints = if (path.standardAmplitude) nearPoints else emptyList(),
+            curvePoints = listOf(CurvePoint(67f, 0.8f), CurvePoint(50f, 0.8f), CurvePoint(33f, 0.8f))))
     }
 
     @Test fun ageCutoffNoLongerFlipsAt45() {
@@ -165,16 +169,83 @@ class RuleRevisionTest {
         assertEquals(EvidenceStatus.UNCERTAIN, result.evidence.first { it.key == "amplitude" }.status)
     }
 
-    @Test fun dailyModeIsNotComparedWithAgeNorms() {
-        val result = presbyopia(50, 60f, mode = PRESBYOPIA_MODE_DAILY)
-        assertEquals(EvidenceStatus.UNAVAILABLE, result.evidence.first { it.key == "amplitude" }.status)
-        assertEquals(ScreeningRiskLevel.LOW, result.riskLevel)
-        assertEquals(ScreeningRiskLevel.MEDIUM, presbyopia(50, 60f, mode = PRESBYOPIA_MODE_DAILY, level = 0.3f).riskLevel)
+    @Test fun nearGlassesAndLimitedPathsSkipAmplitudeAndAdd() {
+        for (path in listOf(PresbyopiaPath.B, PresbyopiaPath.C)) {
+            val result = presbyopia(50, 60f, path = path)
+            assertEquals(EvidenceStatus.UNAVAILABLE, result.evidence.first { it.key == "amplitude" }.status)
+            assertEquals(ScreeningRiskLevel.LOW, result.riskLevel)
+            assertNull(result.features["amplitude_d"]); assertNull(result.features["add_d"])
+            assertEquals(ScreeningRiskLevel.MEDIUM, presbyopia(50, 60f, path = path, level = 0.3f).riskLevel)
+        }
+        // 没有年龄也能给出 B / C 的近视觉结果（不与同龄比较）
+        assertEquals(ScreeningRiskLevel.LOW, ScreeningAssessmentModel.presbyopia(presbyopiaState(PresbyopiaPath.C)).riskLevel)
     }
 
-    @Test fun uncorrectedRefractionMakesAmplitudeUncertain() {
-        val result = presbyopia(45, 60f, fields = mapOf("屈光情况" to "远视", "日常矫正方式" to "不戴眼镜"))
-        assertEquals(EvidenceStatus.UNCERTAIN, result.evidence.first { it.key == "amplitude" }.status)
+    private fun presbyopiaState(path: PresbyopiaPath) = ScreeningState(presbyopiaPath = path,
+        answers = VisionEye.entries.flatMap { eye -> List(4) { VisionAnswer(ScreeningStep.NEAR_VISION, 40f, 0.8f, 0, 0, true, 500, 20f, eye) } },
+        curvePoints = listOf(CurvePoint(67f, 0.8f), CurvePoint(50f, 0.8f), CurvePoint(33f, 0.8f)))
+
+    @Test fun eachEyeAveragesThreeAmplitudesAndGivesTentativeAdd() {
+        // 三次近点 20 / 25 / 50 cm → 5 / 4 / 2 D，算术平均 3.67 D（不是近点中位数 25 cm 的 4 D）
+        val right = listOf(20f, 25f, 50f).map { NearPoint(it, eye = VisionEye.RIGHT) }
+        val left = List(3) { NearPoint(40f, eye = VisionEye.LEFT) }
+        val result = presbyopia(50, 0f, points = right + left)
+        assertEquals(11.0 / 3, result.features["amplitude_right_d"]!!, 1e-9)
+        assertEquals(2.5, result.features["amplitude_left_d"]!!, 1e-9)
+        // 较差眼 2.5 D：初步 ADD = 2.5 − 2.5 / 2 = 1.25 D
+        assertEquals(2.5, result.features["amplitude_d"]!!, 1e-9)
+        assertEquals(1.25, result.features["add_d"]!!, 1e-9)
+        assertTrue(result.findings.any { "初步 ADD 约 +1.25 D" in it })
+        assertEquals(0.0, PresbyopiaProtocol.tentativeAdd(8.0))
+        assertEquals(2.0, PresbyopiaProtocol.tentativeAdd(1.0))
+    }
+
+    @Test fun amplitudeNeedsThreeValidPushUpsPerEye() {
+        val result = presbyopia(50, 0f, points = List(3) { NearPoint(30f, eye = VisionEye.RIGHT) } + List(2) { NearPoint(30f, eye = VisionEye.LEFT) })
+        assertEquals(ScreeningRiskLevel.UNKNOWN, result.riskLevel)
+        assertTrue(result.findings.any { "左眼有效移近测量不足 3 次" in it })
+    }
+
+    @Test fun flipperCountsComplete50To25To50Cycles() {
+        fun answers(vararg correct: Boolean) = correct.map { VisionAnswer(ScreeningStep.FLIPPER, 50f, 0.2f, 0, 0, it, 500, 20f) }
+        assertEquals(0, PresbyopiaProtocol.flipperCycles(answers(true, true)), "50 → 25 还没回到 50")
+        assertEquals(1, PresbyopiaProtocol.flipperCycles(answers(true, true, true)))
+        assertEquals(2, PresbyopiaProtocol.flipperCycles(answers(true, true, true, true, true, true)))
+        assertEquals(1, PresbyopiaProtocol.flipperCycles(answers(true, false, true, true, true)), "答错的那一来回不算")
+        // 未完成时只记录原因，不给循环数
+        val skipped = ScreeningAssessmentModel.presbyopia(ScreeningState(fields = mapOf("年龄" to "50"), presbyopiaPath = PresbyopiaPath.A2,
+            answers = presbyopiaState(PresbyopiaPath.A2).answers, curvePoints = presbyopiaState(PresbyopiaPath.A2).curvePoints,
+            nearPoints = PresbyopiaProtocol.PUSH_EYES.flatMap { eye -> List(3) { NearPoint(30f, eye = eye) } },
+            flipperIncomplete = "未达到测试条件：25 cm 处看不清视标"))
+        assertNull(skipped.features["flipper_cycles_per_min"])
+        assertTrue(skipped.findings.any { "远近切换未完成：未达到测试条件" in it })
+    }
+
+    @Test fun intakeRoutesToTheExpertPaths() {
+        fun route(state: String, use: String, need: String, refraction: String = PresbyopiaIntake.REFRACTION_NO, zones: String? = null) =
+            PresbyopiaIntake.route(mapOf(PresbyopiaIntake.REFRACTION to refraction, PresbyopiaIntake.GLASSES_USE to use,
+                PresbyopiaIntake.DISTANCE_NEED to need, PresbyopiaIntake.TEST_STATE to state) + (zones?.let { mapOf(PresbyopiaIntake.LENS_ZONES to it) } ?: emptyMap()))
+        with(PresbyopiaIntake) {
+            assertEquals(PresbyopiaPath.A2, route(STATE_NONE, USE_NONE, NEED_NONE))
+            assertEquals(PresbyopiaPath.C, route(STATE_NONE, USE_NONE, NEED_UNSURE))
+            assertEquals(PresbyopiaPath.A1, route(STATE_DISTANCE, USE_DISTANCE, NEED_CLEAR_WITH, REFRACTION_YES))
+            assertEquals(PresbyopiaPath.C, route(STATE_DISTANCE, USE_DISTANCE, NEED_UNCLEAR_WITH, REFRACTION_YES))
+            assertEquals(PresbyopiaPath.C, route(STATE_NONE, USE_DISTANCE, NEED_CLEAR_WITH, REFRACTION_YES), "摘掉看远的眼镜")
+            assertEquals(PresbyopiaPath.A2, route(STATE_NONE, USE_READING, NEED_NONE), "摘掉老花镜且符合裸眼条件")
+            assertEquals(PresbyopiaPath.B, route(STATE_READING, USE_READING, NEED_NONE))
+            assertEquals(PresbyopiaPath.A1, route(STATE_DISTANCE, USE_SAME, NEED_CLEAR_WITH, REFRACTION_YES, ZONES_NO))
+            assertEquals(PresbyopiaPath.B, route(STATE_DISTANCE, USE_SAME, NEED_CLEAR_WITH, REFRACTION_YES, ZONES_YES))
+            assertEquals(PresbyopiaPath.C, route(STATE_DISTANCE, USE_SAME, NEED_UNSURE, REFRACTION_YES, ZONES_UNKNOWN))
+            assertEquals(PresbyopiaPath.A1, route(STATE_DISTANCE, USE_SEPARATE, NEED_CLEAR_WITH, REFRACTION_YES))
+            assertEquals(PresbyopiaPath.B, route(STATE_READING, USE_SEPARATE, NEED_CLEAR_WITH, REFRACTION_YES))
+            assertEquals(PresbyopiaPath.C, route(STATE_OTHER, USE_OTHER, NEED_UNSURE, REFRACTION_UNKNOWN))
+            // 补充规则：自述有屈光不正却说裸眼看远清楚、或不清楚有没有屈光不正，都不直接认定 A2
+            assertEquals(PresbyopiaPath.C, route(STATE_NONE, USE_NONE, NEED_NONE, REFRACTION_YES))
+            assertEquals(PresbyopiaPath.C, route(STATE_NONE, USE_NONE, NEED_NONE, REFRACTION_UNKNOWN))
+            // 戴镜后看远仍不清楚，不论戴哪副都不进入标准 AA
+            assertFalse(route(STATE_MULTIFOCAL, USE_SAME, NEED_UNCLEAR_WITH, REFRACTION_YES, ZONES_YES).standardAmplitude)
+            assertEquals(PresbyopiaPath.C, PresbyopiaIntake.route(emptyMap()), "没回答按限制性筛查")
+        }
     }
 
     // endregion

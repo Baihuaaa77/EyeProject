@@ -82,20 +82,24 @@ fun screeningProgress(s: ScreeningState): TestProgress? {
     if (s.step in setOf(ScreeningStep.PROFILE, ScreeningStep.ENVIRONMENT, ScreeningStep.RESULT)) return null
     val est = TestProgressEstimate
     return if (s.kind == ScreeningKind.PRESBYOPIA) {
-        val durations = listOf(est.NEAR_VISION_PER_EYE * 3, est.PUSH_UP_PER_TRIAL * PresbyopiaProtocol.PUSH_REPEATS,
-            est.CURVE_PER_DISTANCE * PresbyopiaProtocol.CURVE_DISTANCES.size, 60f)
+        // 顺序：近视力 → 多距离视力 →（A1 / A2）单眼移近法 → 远近切换（可选）
+        val pushTrials = PresbyopiaProtocol.PUSH_REPEATS * PresbyopiaProtocol.PUSH_EYES.size
+        val durations = buildList {
+            add(est.NEAR_VISION_PER_EYE * 3); add(est.CURVE_PER_DISTANCE * PresbyopiaProtocol.CURVE_DISTANCES.size)
+            if (s.presbyopiaPath?.standardAmplitude == true) { add(est.PUSH_UP_PER_TRIAL * pushTrials); add(PresbyopiaProtocol.FLIPPER_SECONDS.toFloat()) }
+        }
         val (order, elapsed) = when (s.step) {
             ScreeningStep.NEAR_VISION -> 0 to (s.visionEye.ordinal * est.NEAR_VISION_PER_EYE +
                 (s.answers.count { it.step == ScreeningStep.NEAR_VISION && it.eye == s.visionEye } * est.SECONDS_PER_ANSWER)
                     .coerceAtMost(est.NEAR_VISION_PER_EYE * 0.95f))
-            ScreeningStep.PUSH_UP -> 1 to (s.nearPoints.size * est.PUSH_UP_PER_TRIAL +
-                if (s.pushStage == PushStage.APPROACH) est.PUSH_UP_PER_TRIAL / 2 else 0f)
-            ScreeningStep.DISTANCE_CURVE -> 2 to (s.curveIndex * est.CURVE_PER_DISTANCE + (s.answers.count {
+            ScreeningStep.DISTANCE_CURVE -> 1 to (s.curveIndex * est.CURVE_PER_DISTANCE + (s.answers.count {
                 it.step == ScreeningStep.DISTANCE_CURVE && it.targetCm == PresbyopiaProtocol.CURVE_DISTANCES.getOrNull(s.curveIndex)
             } * est.SECONDS_PER_ANSWER).coerceAtMost(est.CURVE_PER_DISTANCE * 0.95f))
-            else -> 3 to if (s.guidePending) 0f else (60 - s.secondsLeft).toFloat()
+            ScreeningStep.PUSH_UP -> 2 to (s.nearPoints.size * est.PUSH_UP_PER_TRIAL +
+                if (s.pushStage == PushStage.APPROACH) est.PUSH_UP_PER_TRIAL / 2 else 0f)
+            else -> 3 to if (s.guidePending || s.flipperCheck) 0f else (PresbyopiaProtocol.FLIPPER_SECONDS - s.secondsLeft).toFloat()
         }
-        progressOf(stagesAt(durations, order, elapsed))
+        progressOf(stagesAt(durations, order.coerceAtMost(durations.lastIndex), elapsed))
     } else {
         val calibration = StrabismusGaze.calibrationTargets.size * StrabismusGaze.CALIBRATION_POINT_MS / 1000f
         val durations = listOf(calibration, StrabismusProtocol.FIXATION_SECONDS.toFloat(),

@@ -38,7 +38,6 @@ class ScreeningTestViewModel @Inject constructor(
     val subjects: StateFlow<List<SubjectProfile>> =
         subjectRepository.subjects.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     fun useSubject(profile: SubjectProfile) = engine.useSubject(profile)
-    fun setMode(mode: String) = engine.setMode(mode)
     fun cameraPermissionDenied() = engine.cameraPermissionDenied()
     fun nextFromProfile() = engine.nextFromProfile()
     fun skipProfile() = engine.skipProfile()
@@ -53,7 +52,9 @@ class ScreeningTestViewModel @Inject constructor(
     fun markCover() = engine.markCover()
     fun startFarCountdown() = engine.startFarCountdown()
     fun confirmGuide() = engine.confirmGuide()
-    fun confirmGlassesRemoved() = engine.confirmGlassesRemoved()
+    fun confirmGlasses() = engine.confirmGlasses()
+    fun skipFlipper() = engine.skipFlipper()
+    fun retestWithOtherGlasses() = engine.retestWithOtherGlasses()
     fun retryGazeCalibration() = engine.retryGazeCalibration()
     fun reportGazeTarget(xPx: Float, yPx: Float) = engine.reportGazeTarget(xPx, yPx)
     fun reportPursuitCapacity(maxXDeg: Float, maxYDeg: Float) = engine.reportPursuitCapacity(maxXDeg, maxYDeg)

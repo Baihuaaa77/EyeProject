@@ -61,12 +61,10 @@ class MobileScreeningController(
         kind = name
         if (kind == "PRESBYOPIA" || kind == "STRABISMUS") screening.configure(ScreeningKind.valueOf(kind))
     }
-    fun setMode(mode: String) = screening.setMode(mode)
 
     /**
      * 选定被测者（[profileJson] 为 [SubjectProfiles.toJson] 数组中的一个对象），带入其资料。
-     * 老视还需 [setMode] 后调用 [proceedFromProfile]；有测前快问的测试答完调用 [confirmCheck]；
-     * 其余直接进入准备页。返回是否已进入准备页。
+     * 有测前快问的测试（老视的戴镜问卷、干眼、眼位）答完调用 [confirmCheck]；其余直接进入准备页。返回是否已进入准备页。
      */
     fun useSubject(profileJson: String): Boolean {
         val profile = SubjectProfiles.fromJson("[$profileJson]").firstOrNull() ?: return false
@@ -75,7 +73,7 @@ class MobileScreeningController(
             "COLOR_VISION" -> { color.useSubject(profile); return true }
             else -> screening.useSubject(profile)
         }
-        return kind != "PRESBYOPIA" && !PreTestCheck.needed(kind) && proceedFromProfile()
+        return !PreTestCheck.needed(kind) && proceedFromProfile()
     }
 
     /** 当前测试的测前快问（应显示的题目，JSON）；为空数组表示没有这一步。[answersJson] 为已选答案。 */
@@ -84,6 +82,10 @@ class MobileScreeningController(
     fun checkNeeded(): Boolean = PreTestCheck.needed(kind)
 
     fun checkComplete(answersJson: String): Boolean = PreTestCheck.completeJson(kind, answersJson)
+
+    /** 测前快问的预填答案（老视「换一种戴镜方式再测」时保留的前几题），JSON 对象。 */
+    fun checkInitialJson(): String =
+        if (kind == "PRESBYOPIA") RecordObject(PreTestCheck.clean(kind, screening.state.value.fields)).toString() else "{}"
 
     /** 测前快问答完：答案写入本次记录并进入准备页。没答完或资料不全返回 false。 */
     fun confirmCheck(answersJson: String): Boolean {
@@ -98,7 +100,7 @@ class MobileScreeningController(
         return RecordArray(SubjectProfiles.missing(kind, profile, platform.epochMs())).toString()
     }
 
-    /** 离开选人页进入准备页并启动相机；老视未选戴镜方式或资料不全时返回 false。 */
+    /** 离开选人页进入准备页并启动相机；老视没答完戴镜问卷或资料不全时返回 false。 */
     fun proceedFromProfile(): Boolean {
         if (kind == "COLOR_VISION") return color.uiState.value.phase == ColorVisionPhase.Setup
         if (display.xdpi <= 0) return false
@@ -117,7 +119,9 @@ class MobileScreeningController(
             "practice" -> dry.confirmPracticeGuide()
             "formal" -> dry.confirmFormalGuide()
             "guide" -> screening.confirmGuide()
-            "glassesRemoved" -> screening.confirmGlassesRemoved()
+            "glassesConfirmed" -> screening.confirmGlasses()
+            "skipFlipper" -> screening.skipFlipper()
+            "otherGlasses" -> screening.retestWithOtherGlasses()
             "eyeReady" -> screening.readyForNearEye()
             "pushStart" -> screening.startPushTrial()
             "blur" -> screening.markPushBlur()
@@ -272,8 +276,10 @@ class MobileScreeningController(
             result.apply {
                 put("phase",s.step.name); put("title",if (s.kind == ScreeningKind.PRESBYOPIA) "老视自测" else "眼位自测")
                 put("instruction",s.instruction); put("stepTitle",stepTitle(s.step)); put("guidePending",s.guidePending)
-                put("subjectName",s.subject?.name); put("mode",s.mode)
+                put("subjectName",s.subject?.name); put("subjectId",s.subject?.id); put("mode",s.mode)
                 put("guideText",screeningGuideText(s)); put("glassesCheck",s.glassesCheckPending)
+                PresbyopiaIntake.glassesCheck(s.fields).let { put("glassesTitle",it.title); put("glassesButton",it.button) }
+                put("flipperCheck",s.flipperCheck); put("pushEye",s.visionEye.label); put("pushDone",s.nearPoints.count { it.eye == s.visionEye })
                 put("calibrationPaused",s.gazeCalibrationPaused)
                 put("distanceCm",s.distanceCm); put("faceDetected",s.faceDetected); put("warning",s.gazeWarning ?: s.warning ?: screeningGuidance(s)?.takeUnless { it == "保持稳定" || it.startsWith("请移动到") })
                 put("secondsLeft",s.secondsLeft); put("trialVisible",s.trialVisible); put("trialId",s.trialId)

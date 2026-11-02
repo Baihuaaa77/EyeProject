@@ -110,10 +110,9 @@ object SubjectProfiles {
     }.getOrDefault(emptyMap())
 
     /** 各项测试开始前资料里必须填好的项（评估规则会用到的长期信息）；症状等测前现问，见 [PreTestCheck]。 */
-    fun requiredKeys(kind: String, @Suppress("UNUSED_PARAMETER") fields: Map<String, String>): List<String> = buildList {
-        add(BIRTH_YEAR)
-        if (kind == "PRESBYOPIA") { add("日常矫正方式"); add("屈光情况") }
-    }
+    fun requiredKeys(@Suppress("UNUSED_PARAMETER") kind: String, @Suppress("UNUSED_PARAMETER") fields: Map<String, String>): List<String> =
+        // 老视的戴镜与屈光情况改为每次测试前问（[PresbyopiaIntake]），资料里只需出生年份
+        listOf(BIRTH_YEAR)
 
     /** 各项测试的适用年龄（与原问卷一致）。 */
     fun ageRange(kind: String): IntRange = when (kind) {

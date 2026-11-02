@@ -47,17 +47,39 @@ data class ScreeningAssessment(
 
 object ScreeningAssessmentModel {
     /**
-     * rules-2：调节幅度带测距误差区间、日常模式不与同龄比较、远近切换不参与分级；斜视眼位按中位数误差判定、
-     * 再注视扣除噪声底、双眼协调受屏幕幅度限制时不评估；新增「结果不确定」。
+     * 斜视 rules-2：眼位按中位数误差判定、再注视扣除噪声底、双眼协调受屏幕幅度限制时不评估；新增「结果不确定」。
      */
     const val VERSION = "protocol-9.18-rules-2"
 
+    /**
+     * 老视 rules-3（专家 2026-11-02）：按测前戴镜问卷分 A1 / A2 / B / C 检查路径；只有 A1 / A2 做单眼移近法
+     * （每眼 3 次有效测量、调节幅度取算术平均）、与同龄参考比较并估算初步 ADD；B、C 只评价当前戴镜状态下的近视觉；
+     * 多距离视力改为 67 / 50 / 33 cm；远近切换可选，只描述不判定。
+     */
+    const val PRESBYOPIA_VERSION = "presbyopia-11.02-rules-3"
+
+    fun version(kind: ScreeningKind): String = if (kind == ScreeningKind.PRESBYOPIA) PRESBYOPIA_VERSION else VERSION
+
     // region 老视
 
+    /** 一只眼的调节幅度：每次近点按 100 / 近点（cm）换算为 D，三次取算术平均；近点 < 12 cm 按可测上限计。 */
+    private class EyeAmplitude(val eye: VisionEye, points: List<NearPoint>) {
+        val count = points.size
+        private val censored = points.count { it.censored }
+        val values = points.map { if (it.censored || it.distanceCm <= 0f) PresbyopiaProtocol.MAX_AMPLITUDE_D else 100.0 / it.distanceCm }
+        val mean: Double? = values.takeIf { it.isNotEmpty() }?.average()
+        val sd: Double? = mean?.takeIf { values.size >= 2 }?.let { m -> sqrt(values.sumOf { (it - m) * (it - m) } / (values.size - 1)) }
+        val range = PresbyopiaProtocol.amplitudeRange(points.filter { !it.censored }.map { it.distanceCm.toDouble() }, censored > 0)
+        val speed = median(points.mapNotNull { it.speedCmPerSec?.toDouble() })
+        val rangeText get() = "${fmt(range.first)}–${if (range.second >= PresbyopiaProtocol.MAX_AMPLITUDE_D) "${fmt(range.second)}+" else fmt(range.second)} D"
+    }
+
     fun presbyopia(state: ScreeningState): ScreeningAssessment {
+        // 旧状态（无路径）按原「标准 / 日常模式」对应 A1 / B
+        val path = state.presbyopiaPath ?: if (state.mode.startsWith("标准")) PresbyopiaPath.A1 else PresbyopiaPath.B
+        val standard = path.standardAmplitude
         val near = state.answers.filter { it.step == ScreeningStep.NEAR_VISION }
         val flip = state.answers.filter { it.step == ScreeningStep.FLIPPER }
-        val points = state.nearPoints.filter { !it.censored && it.distanceCm > 0f }
         fun threshold(eye: VisionEye): Double? = near.filter { it.eye == eye }.groupBy { it.level }
             .filterValues { it.size >= 4 && it.count(VisionAnswer::correct) >= 3 }.keys.maxOrNull()?.toDouble()
         val right = threshold(VisionEye.RIGHT)
@@ -65,104 +87,110 @@ object ScreeningAssessmentModel {
         val both = threshold(VisionEye.BOTH)
         val reducedEyes = listOf(VisionEye.RIGHT to right, VisionEye.LEFT to left, VisionEye.BOTH to both)
             .filter { (_, value) -> value == null || value < 0.5 }.map { it.first }
-        val pointCm = median(points.map { it.distanceCm.toDouble() })
-        val pointMad = pointCm?.let { mid -> median(points.map { abs(it.distanceCm - mid) }) }
-        val censoredNear = state.nearPoints.count { it.censored }
-        val amplitude = pointCm?.let { 100.0 / it }
-        val speed = median(points.mapNotNull { it.speedCmPerSec?.toDouble() })
         val age = state.fields["年龄"]?.toDoubleOrNull()
         val minAmp = age?.let(PresbyopiaProtocol::minimumAmplitude)
         val avgAmp = age?.let(PresbyopiaProtocol::averageAmplitude)
-        // 标准模式：测试时摘下老花镜/渐进镜，戴看远的眼镜或不戴镜
-        val standardMode = state.mode.startsWith("标准")
-        val ampAge = if (standardMode) amplitude?.let(PresbyopiaProtocol::amplitudeAge) else null
-        val cycles = flip.chunked(2).count { it.size == 2 && it.all(VisionAnswer::correct) }
-        val nearFlip = flip.filter { it.distanceCm < 35f }
-        val farFlip = flip.filter { it.distanceCm >= 35f }
+        val eyes = if (standard) PresbyopiaProtocol.PUSH_EYES.map { eye -> EyeAmplitude(eye, state.nearPoints.filter { it.eye == eye }) } else emptyList()
+        // 与同龄比较、阅读储备与 ADD 按调节幅度较低的一只眼
+        val worse = eyes.filter { it.mean != null }.minByOrNull { it.mean!! }
+        val amplitude = worse?.mean
+        val ampAge = amplitude?.let(PresbyopiaProtocol::amplitudeAge)
+        val addD = amplitude?.let(PresbyopiaProtocol::tentativeAdd)
+        val flipDone = standard && state.flipperIncomplete == null && flip.isNotEmpty()
+        val cycles = PresbyopiaProtocol.flipperCycles(flip)
         val curve = state.curvePoints
+        fun curveAt(cm: Float) = curve.firstOrNull { it.distanceCm == cm }?.thresholdDecimal?.toDouble()
+        fun eye(e: VisionEye) = eyes.firstOrNull { it.eye == e }
         val features = linkedMapOf<String, Double?>(
             "age_years" to age,
             "near_right_decimal" to right, "near_left_decimal" to left, "near_both_decimal" to both,
-            "near_point_cm" to pointCm,
-            "near_point_mad_cm" to pointMad,
+            "amplitude_right_d" to eye(VisionEye.RIGHT)?.mean, "amplitude_left_d" to eye(VisionEye.LEFT)?.mean,
+            "amplitude_right_sd_d" to eye(VisionEye.RIGHT)?.sd, "amplitude_left_sd_d" to eye(VisionEye.LEFT)?.sd,
             "amplitude_d" to amplitude,
-            "push_speed_cm_s" to speed,
+            "amplitude_low_d" to worse?.range?.first, "amplitude_high_d" to worse?.range?.second,
+            "near_point_cm" to amplitude?.let { 100.0 / it },
+            "push_speed_cm_s" to median(eyes.mapNotNull { it.speed }),
             "hofstetter_min_d" to minAmp,
             "hofstetter_mean_d" to avgAmp,
             "amplitude_age_years" to ampAge,
-            "flipper_cycles_per_min" to cycles.toDouble(),
-            "flipper_errors" to flip.count { !it.correct }.toDouble(),
-            "curve_60_decimal" to curve.firstOrNull { it.distanceCm == 60f }?.thresholdDecimal?.toDouble(),
-            "curve_33_decimal" to curve.firstOrNull { it.distanceCm == 33f }?.thresholdDecimal?.toDouble(),
-            "curve_25_decimal" to curve.firstOrNull { it.distanceCm == 25f }?.thresholdDecimal?.toDouble(),
-            "daily_correction_mode" to if (standardMode) 0.0 else 1.0,
-            "near_correction_in_use" to if (nearCorrectionInUse(state.fields)) 1.0 else 0.0,
+            "add_d" to addD,
+            "flipper_cycles_per_min" to if (flipDone) cycles.toDouble() else null,
+            "flipper_errors" to if (flipDone) flip.count { !it.correct }.toDouble() else null,
+            "flipper_completed" to if (flipDone) 1.0 else 0.0,
+            "curve_67_decimal" to curveAt(67f), "curve_50_decimal" to curveAt(50f), "curve_33_decimal" to curveAt(33f),
+            "path_standard_amplitude" to if (standard) 1.0 else 0.0,
+            "path_near_glasses" to if (path == PresbyopiaPath.B) 1.0 else 0.0,
+            "path_limited" to if (path == PresbyopiaPath.C) 1.0 else 0.0,
             "invalid_trials" to state.invalidTrialCount.toDouble(),
         )
         val qualityReasons = buildList {
             if (VisionEye.entries.any { eye -> near.count { it.eye == eye } < 4 }) add("单眼或双眼近视力题数不足")
-            if (points.size < 2 && censoredNear < 2) add("有效移近法测量不足 2 次")
-            if (pointMad != null && pointMad > 5.0) add("近点重复测量差异较大（> 5 cm）")
-            if (flip.size < 4 || nearFlip.isEmpty() || farFlip.isEmpty()) add("远近切换两种距离的数据不足")
             if (curve.count { it.thresholdDecimal != null } < 2) add("多距离视力有效距离不足 2 个")
-            if (age == null) add("缺少年龄，无法与同龄参考对照")
+            if (standard) {
+                eyes.filter { it.count < PresbyopiaProtocol.PUSH_REPEATS }
+                    .forEach { add("${it.eye.label}有效移近测量不足 ${PresbyopiaProtocol.PUSH_REPEATS} 次") }
+                if (age == null) add("缺少年龄，无法与同龄参考对照")
+            }
         }
-        val riskScope = if (standardMode) "标准远用矫正下的残余调节能力（老视风险）" else "日常矫正条件下的近距离视觉表现"
-        if (qualityReasons.isNotEmpty()) return ScreeningAssessment(VERSION, "不足", ScreeningRiskLevel.UNKNOWN,
-            riskScope, "暂无法评估，请复测", features, qualityReasons,
-            listOf("前置相机测距未经实物校准；近点为主观持续模糊终点。"))
+        if (qualityReasons.isNotEmpty()) return ScreeningAssessment(PRESBYOPIA_VERSION, "不足", ScreeningRiskLevel.UNKNOWN,
+            path.scope, "暂无法评估，请复测", features, qualityReasons,
+            listOf("前置相机测距未经实物校准；近点为主观首次持续模糊终点。"))
 
-        // 原文：以 15 − 0.25×年龄 为最小调节幅度参考，结合 40 cm 阅读需求与调节储备判断。
-        // rules-2：调节幅度带测距误差范围；只有误差范围整体低于参考才算偏低，越线但范围覆盖参考线 → 不确定。
-        age!!
-        val effectiveAmp = amplitude ?: (100.0 / PresbyopiaProtocol.PUSH_MIN_CM) // 近点 < 12 cm 时按下限计
-        val (ampLow, ampHigh) = PresbyopiaProtocol.amplitudeRange(points.map { it.distanceCm.toDouble() }, censoredNear > 0)
-        val refractionConfounded = standardMode && uncorrectedRefraction(state.fields)
-        val ampStatus = when {
-            !standardMode -> EvidenceStatus.UNAVAILABLE
-            refractionConfounded -> EvidenceStatus.UNCERTAIN
-            else -> guardBand(effectiveAmp, ampLow, ampHigh, normalMin = minAmp!!)
-        }
-        // 较早老视样下降：45 岁前、可靠地低于同龄最小值且不足舒适阅读所需（误差范围上界都不够）
-        val early = ampStatus == EvidenceStatus.ABNORMAL && age < 45 && ampHigh < PresbyopiaProtocol.COMFORT_RESERVE_D
         val nearStatus = if (reducedEyes.isEmpty()) EvidenceStatus.NORMAL else EvidenceStatus.ABNORMAL
+        val nearText = "右眼 ${right?.let(::fmt) ?: "未通过最大档"} · 左眼 ${left?.let(::fmt) ?: "未通过最大档"} · 双眼 ${both?.let(::fmt) ?: "未通过最大档"}"
+        val curveText = PresbyopiaProtocol.CURVE_DISTANCES.joinToString(" · ") { cm -> "${cm.toInt()} cm ${curveAt(cm)?.let(::fmt) ?: "未通过"}" }
+        // 原文：以 15 − 0.25×年龄 为最小调节幅度参考；误差范围整体低于参考才算偏低，越线但范围覆盖参考线 → 不确定。
+        val eyeStatus = eyes.associate { e -> e.eye to guardBand(e.mean!!, e.range.first, e.range.second, normalMin = minAmp!!) }
+        val ampStatus = if (standard) combineStatus(eyeStatus.values.toList()) else EvidenceStatus.UNAVAILABLE
+        // 较早老视样下降：45 岁前、可靠地低于同龄最小值且不足舒适阅读所需（误差范围上界都不够）
+        val early = ampStatus == EvidenceStatus.ABNORMAL && age!! < 45 && worse!!.range.second < PresbyopiaProtocol.COMFORT_RESERVE_D
         val status = when {
-            !standardMode -> if (reducedEyes.isEmpty()) "戴日常眼镜时看近基本够用" else "戴日常眼镜时看近仍较吃力"
+            path == PresbyopiaPath.B -> if (reducedEyes.isEmpty()) "戴现有眼镜时看近基本够用" else "戴现有眼镜时看近仍较吃力"
+            path == PresbyopiaPath.C -> if (reducedEyes.isEmpty()) "当前戴镜状态下看近基本够用" else "当前戴镜状态下看近较吃力"
             early -> "存在较早老视样功能下降"
             ampStatus == EvidenceStatus.ABNORMAL -> "调节功能较同龄人偏低"
             ampStatus == EvidenceStatus.UNCERTAIN -> "调节能力接近同龄参考线，建议复测"
             else -> "调节能力与实际年龄基本匹配"
         }
-        val ampRangeText = "${fmt(ampLow)}–${if (ampHigh >= PresbyopiaProtocol.MAX_AMPLITUDE_D) "${fmt(ampHigh)}+" else fmt(ampHigh)} D"
         val evidence = listOf(
             Evidence("amplitude", "调节能力与同龄人比较", ampStatus,
                 when {
-                    !standardMode -> "戴看近用的眼镜测试，不与同龄人比较调节能力"
-                    refractionConfounded -> "自述有近视或远视但未戴看远的眼镜，调节能力可能被高估或低估"
+                    path == PresbyopiaPath.B -> "戴近用眼镜测试，不做标准调节幅度测量"
+                    path == PresbyopiaPath.C -> "远用矫正条件不符合标准，不做标准调节幅度测量"
                     early -> "调节能力明显低于同龄最低参考，也不够舒适阅读"
                     ampStatus == EvidenceStatus.ABNORMAL -> "调节能力明显低于同龄最低参考（${fmt(minAmp!!)} D）"
                     ampStatus == EvidenceStatus.UNCERTAIN -> "调节能力略低于同龄参考，但在测量误差范围内"
                     else -> "调节能力不低于同龄最低参考（${fmt(minAmp!!)} D）"
                 },
-                buildList {
-                    add("看清最近距离 ${pointCm?.let { decimalString(it, 1) + " cm" } ?: "< 12 cm"} → 调节幅度约 ${fmt(effectiveAmp)} D（考虑测距误差 ${ampRangeText}）")
-                    minAmp?.let { add("同龄参考：最低 ${fmt(it)} D、平均 ${fmt(avgAmp!!)} D（Hofstetter 公式，${age.toInt()} 岁）") }
+                if (!standard) listOf("检查路径 ${path.code}：${path.title}") else buildList {
+                    eyes.forEach { e ->
+                        add("${e.eye.label}：${e.values.joinToString(" / ") { fmt(it) }} D → 平均 ${fmt(e.mean!!)} D" +
+                            "（标准差 ${e.sd?.let(::fmt) ?: "—"} D，考虑测距误差 ${e.rangeText}）")
+                    }
+                    add("同龄参考：最低 ${fmt(minAmp!!)} D、平均 ${fmt(avgAmp!!)} D（Hofstetter 公式，${age!!.toInt()} 岁）")
                     add("40 cm 阅读需调节 ${fmt(PresbyopiaProtocol.READING_DEMAND_D)} D，舒适阅读约需 ${fmt(PresbyopiaProtocol.COMFORT_RESERVE_D)} D")
-                    pointMad?.let { add("近点 ${points.size} 次测量差异（中位绝对偏差）${decimalString(it, 1)} cm") }
-                    add("判定：误差范围整体低于同龄最低参考才算偏低")
+                    add("判定：每只眼的误差范围整体低于同龄最低参考才算偏低；两只眼取较差的结论")
                 }),
             Evidence("near", "40 cm 看近视力", nearStatus,
                 if (reducedEyes.isEmpty()) "右眼、左眼、双眼在 40 cm 都能看清 0.5 及以上"
                 else "${reducedEyes.joinToString("、") { it.label }}在 40 cm 看近视力低于 0.5",
-                listOf("右眼 ${right?.let(::fmt) ?: "未通过最大档"} · 左眼 ${left?.let(::fmt) ?: "未通过最大档"} · 双眼 ${both?.let(::fmt) ?: "未通过最大档"}",
-                    "每档 4 题、对 3 题算通过；参考 ≥ 0.5")),
+                listOf(nearText, "不同距离双眼视力：$curveText", "每档 4 题、对 3 题算通过；参考 ≥ 0.5")),
         )
         val findings = buildList {
-            if (standardMode) add("$status：调节幅度约 ${fmt(effectiveAmp)} D（近点 ${pointCm?.let { decimalString(it, 1) + " cm" } ?: "< 12 cm"}，误差范围 ${ampRangeText}），同龄最小参考 ${minAmp?.let(::fmt) ?: "—"} D、平均 ${avgAmp?.let(::fmt) ?: "—"} D。")
-            else add("$status：戴日常眼镜时调节幅度约 ${fmt(effectiveAmp)} D（含眼镜的近用度数，不与同龄人比较）。")
-            add("40 cm 阅读需调节 ${fmt(PresbyopiaProtocol.READING_DEMAND_D)} D；舒适阅读一般需约 ${fmt(PresbyopiaProtocol.COMFORT_RESERVE_D)} D（保留一半储备），本次${if (effectiveAmp >= PresbyopiaProtocol.COMFORT_RESERVE_D) "可满足" else "不足"}。")
+            if (standard) {
+                add("$status：${eyes.joinToString("、") { "${it.eye.label}调节幅度约 ${fmt(it.mean!!)} D" }}（每眼 ${PresbyopiaProtocol.PUSH_REPEATS} 次平均），" +
+                    "同龄最低参考 ${fmt(minAmp!!)} D、平均 ${fmt(avgAmp!!)} D。")
+                add("40 cm 阅读需调节 ${fmt(PresbyopiaProtocol.READING_DEMAND_D)} D；舒适阅读一般需约 ${fmt(PresbyopiaProtocol.COMFORT_RESERVE_D)} D（保留一半储备），" +
+                    "本次${if (amplitude!! >= PresbyopiaProtocol.COMFORT_RESERVE_D) "可满足" else "不足"}。")
+                add(if (addD!! > 0.0) "初步 ADD 约 +${decimalString(addD, 2)} D（40 cm 阅读需求减去一半调节幅度估算，仅供参考，配镜以验光为准）。"
+                    else "按调节幅度估算，40 cm 阅读暂不需要加光（初步估算，仅供参考）。")
+            } else {
+                add("$status：40 cm 近视力 $nearText（${path.title}）。")
+                add("不同距离双眼视力：$curveText。")
+            }
             if (reducedEyes.isNotEmpty()) add("${reducedEyes.joinToString("、") { it.label }}在 40 cm 处看近的视力低于 0.5，看小字可能吃力。")
-            add("远近切换 1 分钟完成 $cycles 次（含移动手机的时间，仅作参考，不参与判断）。")
+            if (standard) add(if (flipDone) "远近切换 60 秒完成 $cycles 个正确完整循环（50 → 25 → 50 cm）、答错 ${flip.count { !it.correct }} 次；" +
+                "探索性指标，暂无正常范围，不参与判断。" else "远近切换未完成：${state.flipperIncomplete ?: "未进行"}。")
             ampAge?.let { add("调节年龄参考约 ${it.toInt()} 岁（按平均调节幅度公式反推，未经验证，仅供参考）。") }
         }
         val riskLevel = when {
@@ -171,18 +199,21 @@ object ScreeningAssessmentModel {
             ampStatus == EvidenceStatus.UNCERTAIN -> ScreeningRiskLevel.UNCERTAIN
             else -> ScreeningRiskLevel.LOW
         }
-        features["amplitude_low_d"] = ampLow
-        features["amplitude_high_d"] = ampHigh
-        return ScreeningAssessment(VERSION, "可用于探索性评估", riskLevel, riskScope, status, features, findings,
+        return ScreeningAssessment(PRESBYOPIA_VERSION, "可用于探索性评估", riskLevel, path.scope, status, features, findings,
             buildList {
-                if (!standardMode) add("戴着看近用的眼镜测试，结果反映的是戴镜后的效果，不代表眼睛本身的调节能力；可摘下老花镜再测一次对比。")
+                when (path) {
+                    PresbyopiaPath.B -> {
+                        add("戴着现有的近用眼镜测试，结果反映戴镜后的效果，不代表眼睛本身的调节能力，也不估算 ADD。")
+                        add(if (PresbyopiaIntake.a2WithoutGlasses(state.fields)) "您摘下老花镜后符合裸眼标准测试条件，可「换一种戴镜方式再测」选不戴眼镜，评估调节能力。"
+                            else "可「换一种戴镜方式再测」，对比不同戴镜状态下的看近表现。")
+                    }
+                    PresbyopiaPath.C -> add("${PresbyopiaIntake.limitedReason(state.fields)}；本次只评价当前状态下的近视觉，" +
+                        "不做标准调节幅度测量，也不估算 ADD。建议验光确认看远的矫正后再测。")
+                    else -> Unit
+                }
                 add("前置相机测距及屏幕像素密度未经实物校准；分级规则未经临床验证，需结合验光与调节检查解释。")
             }, evidence)
     }
-
-    /** 标准模式下自述近视/远视却不戴眼镜：未矫正屈光不正会让移近法的调节幅度失真。 */
-    private fun uncorrectedRefraction(fields: Map<String, String>): Boolean =
-        fields.hasAny("屈光情况", "近视", "远视") && fields.hasAny("日常矫正方式", "不戴眼镜")
 
     // endregion
 

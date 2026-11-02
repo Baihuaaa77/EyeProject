@@ -23,22 +23,51 @@ object PresbyopiaProtocol {
 
     /** 移近法：起点须在 45 cm 以外，由远向近缓慢连续移动。 */
     const val PUSH_START_MIN_CM = 45f
-    /** 候选：移动速度上限（cm/秒），超过则本次不计、请放慢重做。 */
+    /**
+     * 移近速度（专家 2026-11-02）：推荐 1–2 cm/秒；超过 [PUSH_SLOW_DOWN_CM_S] 提示放慢（多留 1 cm/秒给测距抖动），
+     * 确认模糊前 1 秒内的平均速度仍超过 [PUSH_MAX_SPEED_CM_S]（持续过快，易高估调节幅度）则本次无效、重新测量。
+     */
+    const val PUSH_SLOW_DOWN_CM_S = 3f
     const val PUSH_MAX_SPEED_CM_S = 5f
     /** 低于该距离仍未模糊记为「近点 < 12 cm」（虹膜测距在更近处不可靠）。 */
     const val PUSH_MIN_CM = 12f
+    /** 每只眼的有效移近次数（专家：每眼 3 次有效测量，取三次调节幅度的算术平均）。 */
     const val PUSH_REPEATS = 3
-    /** 移近视标：取双眼 40 cm 近视力阈值，但不小于 0.5 档的物理尺寸（候选）。 */
+    /** 单眼移近法依次测右眼、左眼。 */
+    val PUSH_EYES = listOf(VisionEye.RIGHT, VisionEye.LEFT)
+    /** 移近视标：取该眼 40 cm 近视力阈值，但不小于 0.5 档的物理尺寸（候选）；移动中物理尺寸不变。 */
     const val PUSH_MAX_LEVEL = 0.5f
 
-    /** 距离—视觉表现曲线的附加测试距离（40 cm 已由近视力任务覆盖）。 */
-    val CURVE_DISTANCES = listOf(60f, 33f, 25f)
+    /** 距离—视觉表现曲线的附加测试距离（专家流程 F2：67 / 50 / 33 cm；40 cm 已由近视力任务覆盖）。 */
+    val CURVE_DISTANCES = listOf(67f, 50f, 33f)
+
+    /**
+     * 远近动态焦点转换（专家：探索性评估，不等同于临床调节灵敏度，暂不设正常与异常阈值）：
+     * 50 cm 与 25 cm 交替，60 秒内记正确完整循环（50 → 25 → 50 两处都答对）、错误次数与未完成原因。
+     * 开始计时前先在两个距离各确认能看清视标（各 [FLIPPER_CHECK_TRIES] 次机会）；近端看不清记为未达到测试条件。
+     */
+    const val FLIPPER_FAR_CM = 50f
+    const val FLIPPER_NEAR_CM = 25f
+    const val FLIPPER_SECONDS = 60
+    const val FLIPPER_LEVEL = 0.2f
+    const val FLIPPER_CHECK_TRIES = 2
+
+    /** 第 i 个循环为第 2i、2i+1、2i+2 题（50 → 25 → 50），三题都答对才算一个正确完整循环。 */
+    fun flipperCycles(answers: List<VisionAnswer>): Int =
+        (0 until (answers.size - 1) / 2).count { i -> (2 * i..2 * i + 2).all { answers[it].correct } }
     const val CURVE_TRIALS_PER_LEVEL = 3
     const val CURVE_PASS = 2
 
     /** 40 cm 阅读的调节需求（D）与舒适阅读所需的一半储备。 */
     const val READING_DEMAND_D = 2.5
     const val COMFORT_RESERVE_D = 5.0
+
+    /**
+     * 初步 ADD（D）：40 cm 阅读需求减去一半调节幅度（保留一半储备），按 0.25 D 取整，不小于 0。
+     * 只用符合标准测试条件（A1 / A2）的有效调节幅度计算；仅供参考，配镜以验光为准。
+     */
+    fun tentativeAdd(amplitudeD: Double): Double =
+        (kotlin.math.round((READING_DEMAND_D - amplitudeD / 2).coerceAtLeast(0.0) / 0.25) * 0.25)
 
     /** Hofstetter 最小调节幅度：15 − 0.25 × 年龄（原文引用）。 */
     fun minimumAmplitude(age: Double) = 15.0 - 0.25 * age
@@ -151,13 +180,4 @@ object StrabismusProtocol {
 
 /** 一个遮盖动作：执行时遮住 [covered]，此刻被解除遮盖的是 [uncovered]，需保持 [holdMs]。 */
 data class CoverAction(val label: String, val covered: VisionEye?, val holdMs: Long, val uncovered: VisionEye?)
-
-/** 老视测试的两种戴镜方式（存储值以「标准」「日常」开头，评估按前缀判断）。 */
-const val PRESBYOPIA_MODE_STANDARD = "标准模式"
-const val PRESBYOPIA_MODE_DAILY = "日常模式"
-
-/** 平时是否戴看近用的眼镜（老花镜 / 渐进多焦点）：即原「近用 Add」，由日常戴镜情况推断，不再单独询问。 */
-fun nearCorrectionInUse(fields: Map<String, String>): Boolean =
-    fields.hasAny("日常矫正方式", "老花镜", "渐进多焦点眼镜")
-
 

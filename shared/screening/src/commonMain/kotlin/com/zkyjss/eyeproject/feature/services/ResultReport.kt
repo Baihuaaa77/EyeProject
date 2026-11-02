@@ -130,6 +130,7 @@ object ResultReports {
     fun screening(s: ScreeningState): ResultReport? {
         if (s.step != ScreeningStep.RESULT) return null
         val strabismus = s.kind == ScreeningKind.STRABISMUS
+        val path = s.presbyopiaPath ?: if (s.mode.startsWith("标准")) PresbyopiaPath.A1 else PresbyopiaPath.B
         val level = s.riskLevel
         val valid = level != ScreeningRiskLevel.UNKNOWN
         val badge = when {
@@ -159,9 +160,12 @@ object ResultReports {
             strabismus && level == ScreeningRiskLevel.HIGH -> "建议尽快到斜视专科就诊，做遮盖试验与三棱镜检查。"
             strabismus && level == ScreeningRiskLevel.MEDIUM -> "建议近期到眼科复查眼位；平时留意孩子是否歪头、眯眼或一只眼往外飘。"
             strabismus -> "本次未见明显眼位异常，建议每半年复测一次。"
+            path == PresbyopiaPath.B -> if (level == ScreeningRiskLevel.LOW) "戴这副眼镜看近基本够用；如果看近处不舒服，仍建议到眼科检查。"
+                else "戴现有眼镜看近仍吃力，建议到眼科验光，看看眼镜度数是否合适。"
+            path == PresbyopiaPath.C -> if (level == ScreeningRiskLevel.LOW) "当前状态下看近基本够用；建议验光确认看远的矫正后，再做一次标准测试。"
+                else "看近较吃力，建议到眼科验光，确认看远和看近的矫正。"
             level == ScreeningRiskLevel.HIGH -> "建议到眼科验光并检查调节功能，评估是否需要配老花镜。"
             level == ScreeningRiskLevel.MEDIUM -> "建议用同样的眼镜再测一次；看近处吃力时请到眼科检查。"
-            !s.mode.startsWith("标准") -> "戴这副眼镜看近基本够用；如果看近处不舒服，仍建议到眼科检查。"
             else -> "调节能力与年龄基本相符；如果看近处不舒服，仍建议到眼科检查。"
         }
         val f = s.features
@@ -172,12 +176,16 @@ object ResultReports {
                 ?.let { "${fmt1(kotlin.math.abs(it))} Δ" } ?: "—", status("far")),
             ResultMetric("遮盖后眼睛移动", f["cover_refix_median_prism"]?.let { "${fmt1(it)} Δ" } ?: "—", status("cover")),
             ResultMetric("双眼协调", f["bsi"]?.let { decimalString(it, 2) } ?: "—", status("coordination")),
-        ) else listOf(
-            ResultMetric("调节能力", f["amplitude_d"]?.let { "${fmt1(it)} D" } ?: "≥ ${fmt1(PresbyopiaProtocol.MAX_AMPLITUDE_D)} D", status("amplitude")),
-            ResultMetric("看清最近距离", f["near_point_cm"]?.let { "${it.toInt()} cm" } ?: "< 12 cm", status("amplitude")),
+        ) else if (path.standardAmplitude) listOf(
+            ResultMetric("调节能力（较差眼）", f["amplitude_d"]?.let { "${fmt1(it)} D" } ?: "—", status("amplitude")),
+            ResultMetric("初步 ADD", f["add_d"]?.let { if (it > 0.0) "+${decimalString(it, 2)} D" else "暂不需要" } ?: "—", EvidenceStatus.UNAVAILABLE),
             ResultMetric("40 cm 双眼视力", f["near_both_decimal"]?.let { decimalString(it, 1) } ?: "< 0.1", status("near")),
-            f["amplitude_age_years"]?.let { ResultMetric("调节年龄参考", "约 ${it.toInt()} 岁", EvidenceStatus.UNAVAILABLE) }
-                ?: ResultMetric("远近切换", f["flipper_cycles_per_min"]?.let { "${it.toInt()} 次/分" } ?: "—", EvidenceStatus.UNAVAILABLE),
+            ResultMetric("看清最近距离", f["near_point_cm"]?.let { "${it.toInt()} cm" } ?: "—", status("amplitude")),
+        ) else listOf(
+            ResultMetric("40 cm 右眼", f["near_right_decimal"]?.let { decimalString(it, 1) } ?: "< 0.1", status("near")),
+            ResultMetric("40 cm 左眼", f["near_left_decimal"]?.let { decimalString(it, 1) } ?: "< 0.1", status("near")),
+            ResultMetric("40 cm 双眼", f["near_both_decimal"]?.let { decimalString(it, 1) } ?: "< 0.1", status("near")),
+            ResultMetric("检查方式", "${path.code} ${path.short}", EvidenceStatus.UNAVAILABLE),
         )
         val sections = buildList {
             if (strabismus) {
@@ -216,24 +224,31 @@ object ResultReports {
                     ResultRow("双眼", f["near_both_decimal"]?.let { decimalString(it, 1) } ?: "未通过最大档"),
                     ResultRow("作答", "${near.size} 题，答对 ${near.count { it.correct }} 题"),
                 )))
-                add(ResultSection("移近法（看清最近距离）", s.nearPoints.mapIndexed { i, p ->
-                    ResultRow("第 ${i + 1} 次", if (p.censored) "< ${PresbyopiaProtocol.PUSH_MIN_CM.toInt()} cm 仍清晰" else
-                        "${fmt1(p.distanceCm.toDouble())} cm · 速度 ${p.speedCmPerSec?.let { fmt1(it.toDouble()) } ?: "—"} cm/秒")
-                } + listOf(
-                    ResultRow("调节幅度", "${fmt1(f["amplitude_d"])} D（误差 ${fmt1(f["amplitude_low_d"])}–${fmt1(f["amplitude_high_d"])}）"),
-                    ResultRow("同龄参考", "最低 ${fmt1(f["hofstetter_min_d"])} D · 平均 ${fmt1(f["hofstetter_mean_d"])} D"),
-                )))
                 add(ResultSection("不同距离的视力", s.curvePoints.map { c ->
                     ResultRow("${c.distanceCm.toInt()} cm", c.thresholdDecimal?.let { decimalString(it.toDouble(), 1) } ?: "未通过")
                 }))
-                add(ResultSection("远近切换（仅供参考）", listOf(
-                    ResultRow("1 分钟完成", "${f["flipper_cycles_per_min"]?.toInt() ?: 0} 次"),
-                    ResultRow("答错", "${f["flipper_errors"]?.toInt() ?: 0} 题"),
-                )))
-                add(ResultSection("测试条件", listOf(
-                    ResultRow("戴镜方式", if (s.mode.startsWith("标准")) "看远的眼镜或不戴镜" else "看近用的眼镜"),
-                    ResultRow("作废的移近", "${s.invalidTrialCount} 次"),
-                )))
+                if (path.standardAmplitude) {
+                    add(ResultSection("单眼移近法（看清最近距离）", s.nearPoints.groupBy { it.eye }.flatMap { (eye, points) ->
+                        points.mapIndexed { i, p ->
+                            ResultRow("${eye.label}第 ${i + 1} 次", if (p.censored) "< ${PresbyopiaProtocol.PUSH_MIN_CM.toInt()} cm 仍清晰" else
+                                "${fmt1(p.distanceCm.toDouble())} cm（${fmt1(100.0 / p.distanceCm)} D）· 速度 ${p.speedCmPerSec?.let { fmt1(it.toDouble()) } ?: "—"} cm/秒")
+                        }
+                    } + listOf(
+                        ResultRow("右眼调节幅度", "${fmt1(f["amplitude_right_d"])} D（标准差 ${fmt1(f["amplitude_right_sd_d"])}）"),
+                        ResultRow("左眼调节幅度", "${fmt1(f["amplitude_left_d"])} D（标准差 ${fmt1(f["amplitude_left_sd_d"])}）"),
+                        ResultRow("同龄参考", "最低 ${fmt1(f["hofstetter_min_d"])} D · 平均 ${fmt1(f["hofstetter_mean_d"])} D"),
+                        ResultRow("初步 ADD", f["add_d"]?.let { "+${decimalString(it, 2)} D（仅供参考，配镜以验光为准）" } ?: "—"),
+                    )))
+                    add(ResultSection("远近切换（探索性，不参与判断）", if (f["flipper_completed"] == 1.0) listOf(
+                        ResultRow("60 秒正确完整循环", "${f["flipper_cycles_per_min"]?.toInt() ?: 0} 个"),
+                        ResultRow("答错", "${f["flipper_errors"]?.toInt() ?: 0} 题"),
+                    ) else listOf(ResultRow("未完成", s.flipperIncomplete ?: "未进行"))))
+                }
+                add(ResultSection("测试条件", buildList {
+                    add(ResultRow("检查路径", "${path.code} ${path.title}"))
+                    PresbyopiaIntake.questions.forEach { q -> s.fields[q.key]?.let { add(ResultRow(q.key, it)) } }
+                    if (path.standardAmplitude) add(ResultRow("作废的移近", "${s.invalidTrialCount} 次"))
+                }))
             }
             if (s.history.isNotEmpty()) add(ResultSection("与上次对比", s.history.map { ResultRow("", it) }))
             profileSection(s.fields, s.subject)?.let(::add)
@@ -242,7 +257,7 @@ object ResultReports {
         return ResultReport(
             kind = s.kind.name, level = level, badge = badge, title = title, advice = advice, mood = mood(level),
             metrics = metrics, evidence = s.evidence, problems = if (valid) emptyList() else s.findings,
-            sections = sections, version = ScreeningAssessmentModel.VERSION,
+            sections = sections, version = ScreeningAssessmentModel.version(s.kind),
         )
     }
 

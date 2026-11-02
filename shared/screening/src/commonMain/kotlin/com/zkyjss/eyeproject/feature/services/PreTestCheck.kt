@@ -7,7 +7,7 @@ import kotlinx.serialization.json.JsonPrimitive
 /**
  * 测前快问：每次测试前现问的两三个问题——与这项测试有关、而且会随时间变化（这几天的症状、正在用的眼药水、
  * 这次谁来帮忙）。年龄、性别、手术史等长期资料在「我的 → 家庭成员」维护，不再重复问；
- * 没有这类问题的测试（老视：戴镜方式在开始页单独选）不出现这一步。
+ * 老视问的是测前戴镜问卷（[PresbyopiaIntake]，决定检查路径）；没有这类问题的测试不出现这一步。
  * 答案只写入本次测试的记录，不改长期资料；字段键沿用原资料（评估规则按键读取）。两端共用。
  */
 object PreTestCheck {
@@ -22,11 +22,13 @@ object PreTestCheck {
 
     /**
      * 某项测试的测前快问（全部题目，含按答案出现的追问）；空表示这项测试没有这一步。
-     * 干眼：症状、这几天用眼、眼药水三题（报告了症状再追问频率），均为干眼问卷文档要求的项；眼位：重影、谁来帮忙两题。
+     * 干眼：症状、这几天用眼、眼药水三题（报告了症状再追问频率），均为干眼问卷文档要求的项；眼位：重影、谁来帮忙两题；
+     * 老视：屈光不正、戴镜方式、看远是否需要眼镜与本次戴镜状态（专家 2026-11-02）。
      */
     fun questions(kind: String): List<Question> = when (kind) {
         "DRY_EYE" -> listOf(dryEyeSymptoms, symptomFrequency, eyeUse, eyeDrops)
         "STRABISMUS" -> listOf(doubleVision, helper)
+        "PRESBYOPIA" -> PresbyopiaIntake.questions
         else -> emptyList()
     }
 
@@ -43,7 +45,8 @@ object PreTestCheck {
         visible(kind, answers).mapNotNull { q -> answers[q.key]?.takeIf { it.isNotBlank() }?.let { q.key to it } }.toMap()
 
     /** 会随时间变化、改为测前现问的字段。旧资料里若还存着这些值，带入测试前去掉，避免把几个月前的答案当成这次的情况。 */
-    val VOLATILE_KEYS: Set<String> = setOf("干眼症状", "症状频率", "近期眼部用药", "近期重影", "协助测试者", "近期用眼情况")
+    val VOLATILE_KEYS: Set<String> = setOf("干眼症状", "症状频率", "近期眼部用药", "近期重影", "协助测试者", "近期用眼情况") +
+        PresbyopiaIntake.keys
 
     // region 苹果端
 

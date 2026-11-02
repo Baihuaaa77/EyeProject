@@ -1,17 +1,11 @@
 package com.zkyjss.eyeproject.feature.services
 
-import kotlin.math.abs
-
 /** 仅对本机实际采到的数据作描述统计，不输出医学诊断。 */
 object PresbyopiaMetrics {
-    fun summarize(answers: List<VisionAnswer>, points: List<NearPoint>, curve: List<CurvePoint>, resolutionLimitedEyes: Set<VisionEye>): List<String> {
+    fun summarize(answers: List<VisionAnswer>, points: List<NearPoint>, curve: List<CurvePoint>, resolutionLimitedEyes: Set<VisionEye>,
+                  flipperIncomplete: String? = null): List<String> {
         val near = answers.filter { it.step == ScreeningStep.NEAR_VISION }
         val flip = answers.filter { it.step == ScreeningStep.FLIPPER }
-        val valid = points.filter { !it.censored }
-        val sorted = valid.map { it.distanceCm }.sorted()
-        val medianPoint = sorted.takeIf { it.isNotEmpty() }?.get(sorted.size / 2)
-        val spread = medianPoint?.let { mid -> valid.map { abs(it.distanceCm - mid) }.sorted()[valid.size / 2] }
-        val correctCycles = flip.chunked(2).count { it.size == 2 && it.all(VisionAnswer::correct) }
         return buildList {
             VisionEye.entries.forEach { eye ->
                 val eyeAnswers = near.filter { it.eye == eye }
@@ -19,11 +13,15 @@ object PresbyopiaMetrics {
                     .filterValues { group -> group.size == 4 && group.count { it.correct } >= 3 }.keys.maxOrNull()
                 add("40 cm ${eye.label}近视力：${threshold?.let { "最高通过 $it" } ?: "未通过测试等级"}；${eyeAnswers.count { it.correct }}/${eyeAnswers.size} 题正确${if (eye in resolutionLimitedEyes) "；更小视标受屏幕像素限制" else ""}")
             }
-            add("移近法近点：${points.joinToString("、") { p -> if (p.censored) "< ${PresbyopiaProtocol.PUSH_MIN_CM.toInt()} cm" else "%.1f cm".reportFormat(p.distanceCm) + (p.speedCmPerSec?.let { "（%.1f cm/秒）".reportFormat(it) } ?: "") }}")
-            add("近点中位数 ${medianPoint?.let { "%.1f cm".reportFormat(it) } ?: "—"}；重复差异中位数 ${spread?.let { "%.1f cm".reportFormat(it) } ?: "—"}；调节幅度约 ${medianPoint?.let { "%.2f D".reportFormat(100.0 / it) } ?: "—"}")
             add("距离—视觉表现：40 cm ${near.filter { it.eye == VisionEye.BOTH }.groupBy { it.level }.filterValues { g -> g.size == 4 && g.count { it.correct } >= 3 }.keys.maxOrNull() ?: "—"} · " +
                 curve.joinToString(" · ") { "${it.distanceCm.toInt()} cm ${it.thresholdDecimal ?: "—"}${if (it.resolutionLimited) "（像素受限）" else ""}" })
-            add("调节灵敏度（真实远近移动 50/25 cm）：60 秒 $correctCycles 个正确循环；错误 ${flip.count { !it.correct }} 次；平均移动稳定 ${flip.mapNotNull { it.movementMs }.average().takeIf { !it.isNaN() }?.let { "%.0f ms".reportFormat(it) } ?: "—"}；平均反应 ${flip.mapNotNull { it.clarityMs }.average().takeIf { !it.isNaN() }?.let { "%.0f ms".reportFormat(it) } ?: "—"}")
+            points.groupBy { it.eye }.forEach { (eye, eyePoints) ->
+                val values = eyePoints.map { if (it.censored) PresbyopiaProtocol.MAX_AMPLITUDE_D else 100.0 / it.distanceCm }
+                add("${eye.label}移近法近点：${eyePoints.joinToString("、") { p -> if (p.censored) "< ${PresbyopiaProtocol.PUSH_MIN_CM.toInt()} cm" else "%.1f cm".reportFormat(p.distanceCm) + (p.speedCmPerSec?.let { "（%.1f cm/秒）".reportFormat(it) } ?: "") }}" +
+                    "；调节幅度平均 ${"%.2f D".reportFormat(values.average())}")
+            }
+            if (flip.isNotEmpty() || flipperIncomplete != null) add(if (flipperIncomplete != null) "远近切换未完成：$flipperIncomplete" else
+                "远近切换（50/25 cm）：60 秒 ${PresbyopiaProtocol.flipperCycles(flip)} 个正确完整循环；错误 ${flip.count { !it.correct }} 次；平均移动稳定 ${flip.mapNotNull { it.movementMs }.average().takeIf { !it.isNaN() }?.let { "%.0f ms".reportFormat(it) } ?: "—"}；平均反应 ${flip.mapNotNull { it.clarityMs }.average().takeIf { !it.isNaN() }?.let { "%.0f ms".reportFormat(it) } ?: "—"}")
         }
     }
 }

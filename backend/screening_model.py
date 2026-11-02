@@ -14,8 +14,8 @@ from pathlib import Path
 # 每个病种的评估规则版本；与 shared/screening 中写入记录的版本常量逐一对应，规则或特征口径升版本时这里同步改。
 INPUT_VERSIONS = {
     "DRY_EYE": "dryeye-9.18-rules-2",          # DryEyeAssessment.VERSION，写在记录顶层 assessmentVersion
-    "PRESBYOPIA": "protocol-9.18-rules-2",     # ScreeningAssessmentModel.VERSION，写在 assessment.modelVersion
-    "STRABISMUS": "protocol-9.18-rules-2",
+    "PRESBYOPIA": "presbyopia-11.02-rules-3",  # ScreeningAssessmentModel.PRESBYOPIA_VERSION，写在 assessment.modelVersion
+    "STRABISMUS": "protocol-9.18-rules-2",     # ScreeningAssessmentModel.VERSION
 }
 
 # 特征键与顺序照搬 DryEyeAssessment.evaluate 与 ScreeningAssessmentModel 的 features 映射。
@@ -27,11 +27,12 @@ FEATURES = {
     ],
     "PRESBYOPIA": [
         "age_years", "near_right_decimal", "near_left_decimal", "near_both_decimal",
-        "near_point_cm", "near_point_mad_cm", "amplitude_d", "push_speed_cm_s",
-        "hofstetter_min_d", "hofstetter_mean_d", "amplitude_age_years",
-        "flipper_cycles_per_min", "flipper_errors",
-        "curve_60_decimal", "curve_33_decimal", "curve_25_decimal",
-        "daily_correction_mode", "near_correction_in_use", "invalid_trials",
+        "amplitude_right_d", "amplitude_left_d", "amplitude_right_sd_d", "amplitude_left_sd_d",
+        "amplitude_d", "amplitude_low_d", "amplitude_high_d", "near_point_cm", "push_speed_cm_s",
+        "hofstetter_min_d", "hofstetter_mean_d", "amplitude_age_years", "add_d",
+        "flipper_cycles_per_min", "flipper_errors", "flipper_completed",
+        "curve_67_decimal", "curve_50_decimal", "curve_33_decimal",
+        "path_standard_amplitude", "path_near_glasses", "path_limited", "invalid_trials",
     ],
     "STRABISMUS": [
         "age_years", "quality_rate",

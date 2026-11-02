@@ -169,14 +169,18 @@ final class EyeRuntime: ObservableObject {
     func missing(_ s: SubjectProfileItem) -> [String] {
         (try? JSONSerialization.jsonObject(with: Data(controller.missingJson(profileJson: s.jsonText).utf8))) as? [String] ?? []
     }
-    /// 选定被测者：资料带入共用引擎；老视还需选戴镜方式后 [proceed]。
+    /// 选定被测者：资料带入共用引擎；有测前快问的（含老视戴镜问卷）答完 [confirmCheck]。
     func useSubject(_ s: SubjectProfileItem) {
         error = nil
         _ = controller.useSubject(profileJson: s.jsonText)
         refresh()
     }
-    /// 当前测试有没有测前快问（共用 PreTestCheck；老视没有）。
+    /// 当前测试有没有测前快问（共用 PreTestCheck；老视为戴镜问卷）。
     var checkNeeded: Bool { controller.checkNeeded() }
+    /// 测前快问的预填答案（老视换一种戴镜方式再测时保留前几题）。
+    var checkInitial: [String: String] {
+        (try? JSONSerialization.jsonObject(with: Data(controller.checkInitialJson().utf8))) as? [String: String] ?? [:]
+    }
     /// 按已选答案应显示的测前快问题目（与资料编辑页同一题目格式）。
     func checkQuestions(_ answers: [String: String]) -> [[String: Any]] {
         (try? JSONSerialization.jsonObject(with: Data(controller.checkQuestionsJson(answersJson: Self.json(answers)).utf8))) as? [[String: Any]] ?? []
@@ -202,11 +206,6 @@ final class EyeRuntime: ObservableObject {
         let values = (try? JSONSerialization.jsonObject(with: Data(controller.colorPlateDotsJson(plateId: plateId).utf8))) as? [Double] ?? []
         colorDots[plateId] = values
         return values
-    }
-    func proceed(mode: String) {
-        controller.setMode(mode: mode)
-        if !controller.proceedFromProfile() { error = "请先在资料里填好必需项，并选择这次戴哪副眼镜。" }
-        refresh()
     }
     func interrupt() {
         isForeground = false

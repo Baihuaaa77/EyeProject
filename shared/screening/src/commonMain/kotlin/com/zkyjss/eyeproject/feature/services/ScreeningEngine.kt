@@ -44,6 +44,8 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
     private val nearLevels = listOf(0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.8f, 1.0f)
     private var nextTrialId = 0
     private var flipperMoveStartMs = 0L
+    /** 远近切换看清确认：当前距离答错的次数。 */
+    private var flipperCheckMisses = 0
     private val distanceTracker = ScreeningDistanceTracker()
     private val nearDistanceToleranceCm = PresbyopiaProtocol.DISTANCE_TOLERANCE_CM
     /** 上一帧的目标距离；变化时进入「请移动到 xx 厘米处」。 */
@@ -100,7 +102,6 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
     }
 
     fun setField(key: String, value: String) = _state.update { it.copy(fields = it.fields + (key to value)) }
-    fun setMode(mode: String) = _state.update { it.copy(mode = mode) }
 
     fun startCamera() {
         if (cameraAttached) return
@@ -134,13 +135,12 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
 
     /**
      * 选定被测者：带入其资料（含由出生年份换算的年龄），不再逐题填写问卷。
-     * 老视还需在本页选「这次戴哪副眼镜」再继续；其余测试直接进入准备页。
+     * 有测前快问的（老视的戴镜问卷、眼位）答完 [confirmCheck] 再继续；其余测试直接进入准备页。
      */
     fun useSubject(profile: SubjectProfile) {
         _state.update { it.copy(fields = SubjectProfiles.testFields(profile, platform.epochMs()),
             subject = TestSubject(profile.id, profile.nickname, profile.relation), profileSkipped = false, warning = null) }
-        // 老视还要选戴镜方式；有测前快问的（眼位）答完 [confirmCheck] 再继续
-        if (_state.value.kind != ScreeningKind.PRESBYOPIA && !PreTestCheck.needed(_state.value.kind.name)) nextFromProfile()
+        if (!PreTestCheck.needed(_state.value.kind.name)) nextFromProfile()
     }
 
     /** 测前快问答完：本次答案并入测试字段（只写入这次记录），进入环境检查。没答完返回 false。 */
@@ -158,17 +158,33 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
         if (age == null || age !in range) {
             _state.update { it.copy(warning = "请先在「我的」填写出生年份（本测试适合 ${range.first} 岁以上）") }; return
         }
-        if (_state.value.kind == ScreeningKind.PRESBYOPIA &&
-            (_state.value.mode.isBlank() || _state.value.fields["日常矫正方式"].isNullOrBlank())) {
-            _state.update { it.copy(warning = "请在资料里填写平时戴的眼镜，并选择这次测试戴哪副眼镜") }; return
+        if (_state.value.kind == ScreeningKind.PRESBYOPIA) {
+            if (!PreTestCheck.complete(_state.value.kind.name, _state.value.fields)) {
+                _state.update { it.copy(warning = "请先回答测试前的几个戴镜问题") }; return
+            }
+            val path = PresbyopiaIntake.route(_state.value.fields)
+            _state.update { it.copy(presbyopiaPath = path, mode = path.modeLabel) }
         }
         _state.update { it.copy(step = ScreeningStep.ENVIRONMENT, warning = null) }
     }
 
-    /** 不选成员直接测试：老视默认标准模式；年龄缺失时评估会如实说明无法与同龄对照。 */
+    /** 不选成员直接测试：老视没有戴镜问卷，按限制性筛查（C）；年龄缺失时评估会如实说明无法与同龄对照。 */
     fun skipProfile() {
+        val path = if (_state.value.kind == ScreeningKind.PRESBYOPIA) PresbyopiaPath.C else null
         _state.update { it.copy(step = ScreeningStep.ENVIRONMENT, fields = emptyMap(), subject = null, profileSkipped = true, warning = null,
-            mode = if (it.kind == ScreeningKind.PRESBYOPIA && it.mode.isBlank()) "标准模式" else it.mode) }
+            presbyopiaPath = path, mode = path?.modeLabel.orEmpty()) }
+    }
+
+    /**
+     * 老视结果页「换一种戴镜方式再测」（专家：允许同一用户在不同戴镜状态下重复检查，各次独立记录、分别解释）：
+     * 回到开始页，保留被测者和前几题答案，只重新选择本次戴镜状态。未选成员时等同重新测试。
+     */
+    fun retestWithOtherGlasses() {
+        val current = _state.value
+        if (current.kind != ScreeningKind.PRESBYOPIA || current.subject == null) { restart(); return }
+        timer?.cancel(); stopCamera(); samples.clear(); distanceTracker.clear()
+        _state.value = ScreeningState(kind = current.kind, subject = current.subject,
+            fields = current.fields - PresbyopiaIntake.TEST_STATE)
     }
 
     fun begin() {
@@ -193,14 +209,13 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
 
     private fun startNearVision() {
         timer?.cancel()
-        // 标准模式测的是不戴近用眼镜时的调节能力：平时戴老花镜/渐进镜（或没填问卷、无从得知）时，先确认已摘下
-        val s0 = _state.value
-        val glassesCheck = s0.mode.startsWith("标准") && (nearCorrectionInUse(s0.fields) || s0.profileSkipped)
+        // 先确认已按本次戴镜状态戴好或摘下眼镜：同一组测试的矫正状态必须一致
+        val check = PresbyopiaIntake.glassesCheck(_state.value.fields)
         _state.update { it.copy(step = ScreeningStep.NEAR_VISION, guidePending = true, visionEye = VisionEye.RIGHT,
             nearAwaitingEyeReady = true, nearDescending = false, trialVisible = false,
-            trialIndex = 0, direction = Random.nextInt(4), visionLevel = 0.3f, glassesCheckPending = glassesCheck,
-            answers = emptyList(), warning = null,
-            instruction = if (glassesCheck) GLASSES_REMOVAL_PROMPT else "先遮住左眼，露出右眼；每级 4 题，停稳后再显示视标。") }
+            trialIndex = 0, direction = Random.nextInt(4), visionLevel = 0.3f, glassesCheckPending = true,
+            answers = emptyList(), nearPoints = emptyList(), curvePoints = emptyList(), flipperCheck = false, flipperIncomplete = null,
+            warning = null, instruction = check.prompt) }
     }
 
     fun readyForNearEye() {
@@ -279,6 +294,12 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
             return
         }
         val latency = now - questionStartMs
+        if (s.step == ScreeningStep.FLIPPER && s.flipperCheck) {
+            platform.feedback(ScreeningFeedbackCue.ANSWER)
+            questionStartMs = 0L
+            answerFlipperCheck(s, direction == s.direction, now)
+            return
+        }
         val answer = VisionAnswer(s.step, s.trialDistanceCm, s.visionLevel, s.direction, direction,
             direction == s.direction, latency, s.trialOptotypePx, s.visionEye, questionStartMs,
             s.trialMovementMs, if (s.step == ScreeningStep.FLIPPER) latency else null,
@@ -328,7 +349,7 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
             VisionEye.LEFT -> VisionEye.BOTH
             VisionEye.BOTH -> null
         }
-        if (next == null) startPushUp()
+        if (next == null) startDistanceCurve()
         else _state.update { it.copy(visionEye = next, nearAwaitingEyeReady = true,
             nearDescending = false, trialVisible = false, trialIndex = 0, visionLevel = 0.3f,
             direction = Random.nextInt(4), nearStopReason = null, instruction = when (next) {
@@ -341,26 +362,34 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
     private fun trialTargetCm(s: ScreeningState): Float? = when (s.step) {
         ScreeningStep.NEAR_VISION -> PresbyopiaProtocol.NEAR_DISTANCE_CM
         ScreeningStep.DISTANCE_CURVE -> PresbyopiaProtocol.CURVE_DISTANCES.getOrNull(s.curveIndex)
-        ScreeningStep.FLIPPER -> if (s.trialIndex % 2 == 0) 50f else 25f
+        ScreeningStep.FLIPPER -> if (s.trialIndex % 2 == 0) PresbyopiaProtocol.FLIPPER_FAR_CM else PresbyopiaProtocol.FLIPPER_NEAR_CM
         else -> null
     }
 
-    /** 双眼 40 cm 近视力通过的最高等级。 */
-    private fun bestBinocularLevel(answers: List<VisionAnswer>): Float? =
-        answers.filter { it.step == ScreeningStep.NEAR_VISION && it.eye == VisionEye.BOTH }
+    /** 某只眼 40 cm 近视力通过的最高等级。 */
+    private fun bestNearLevel(answers: List<VisionAnswer>, eye: VisionEye): Float? =
+        answers.filter { it.step == ScreeningStep.NEAR_VISION && it.eye == eye }
             .groupBy { it.level }.filterValues { g -> g.size >= 4 && g.count { it.correct } >= 3 }.keys.maxOrNull()
 
+    private fun bestBinocularLevel(answers: List<VisionAnswer>): Float? = bestNearLevel(answers, VisionEye.BOTH)
+
+    /** 移近视标：该眼 40 cm 近视力阈值，不小于 0.5 档的物理尺寸。 */
+    private fun pushLevel(eye: VisionEye): Float =
+        (bestNearLevel(_state.value.answers, eye) ?: 0.3f).coerceAtMost(PresbyopiaProtocol.PUSH_MAX_LEVEL)
+
     /**
-     * 移近法（原文）：手机由远向近缓慢连续移动，视标首次持续模糊时确认，记录近点与移动速度，重复测量。
-     * 视标物理尺寸固定为 40 cm 处的双眼近视力阈值（不小于 0.5 档）。
+     * 单眼移近法（专家 2026-11-02，仅 A1 / A2）：遮住另一只眼，手机由远向近以 1–2 cm/秒移动，
+     * 视标首次持续模糊时确认；视标物理尺寸固定。每只眼 3 次有效测量，先右眼后左眼。
      */
     private fun startPushUp() {
         stepStartMs = platform.nowMs()
-        val level = (bestBinocularLevel(_state.value.answers) ?: 0.3f).coerceAtMost(PresbyopiaProtocol.PUSH_MAX_LEVEL)
         _state.update { it.copy(step = ScreeningStep.PUSH_UP, guidePending = true, nearPoints = emptyList(), trialIndex = 0,
-            pushStage = PushStage.READY, trialVisible = false, visionLevel = level, pushSpeedCmPerSec = null,
-            instruction = "从 45 cm 以外开始，看着 E 把手机慢慢移近；E 一开始持续模糊就点按。共 ${PresbyopiaProtocol.PUSH_REPEATS} 次。", warning = null) }
+            pushStage = PushStage.READY, trialVisible = false, visionEye = VisionEye.RIGHT, visionLevel = pushLevel(VisionEye.RIGHT),
+            pushSpeedCmPerSec = null, instruction = pushInstruction(VisionEye.RIGHT), warning = null) }
     }
+
+    private fun pushInstruction(eye: VisionEye) =
+        "${if (eye == VisionEye.RIGHT) "遮住左眼，用右眼" else "遮住右眼，用左眼"}看 E：从 45 cm 以外慢慢移近，E 模糊后停一下仍看不清就点按。这只眼做 ${PresbyopiaProtocol.PUSH_REPEATS} 次。"
 
     fun startPushTrial() {
         val s = _state.value
@@ -402,21 +431,26 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
             return
         }
         platform.feedback(ScreeningFeedbackCue.ANSWER)
-        finishPushTrial(NearPoint(distance, speed, s.pushStartCm))
+        finishPushTrial(NearPoint(distance, speed, s.pushStartCm, eye = s.visionEye))
     }
 
     /** 最近 1 秒的靠近速度（cm/秒，靠近为正）。 */
     private fun recentApproachSpeed(now: Long): Float? = distanceTracker.velocityCmPerSec(now)?.let { -it }
 
     private fun finishPushTrial(point: NearPoint) {
-        val points = _state.value.nearPoints + point.copy(trace = pushTrace.toList())
-        _state.update { it.copy(nearPoints = points, trialIndex = points.size,
+        val eye = _state.value.visionEye
+        val points = _state.value.nearPoints + point.copy(trace = pushTrace.toList(), eye = eye)
+        val done = points.count { it.eye == eye }
+        _state.update { it.copy(nearPoints = points, trialIndex = done,
             pushStage = PushStage.READY, trialVisible = false, pushSpeedCmPerSec = null,
             warning = if (point.censored) "移近到 ${PresbyopiaProtocol.PUSH_MIN_CM.toInt()} cm 仍未模糊，已记为「近点 < ${PresbyopiaProtocol.PUSH_MIN_CM.toInt()} cm」" else null) }
-        if (points.size >= PresbyopiaProtocol.PUSH_REPEATS) startDistanceCurve()
+        if (done < PresbyopiaProtocol.PUSH_REPEATS) return
+        val next = PresbyopiaProtocol.PUSH_EYES.getOrNull(PresbyopiaProtocol.PUSH_EYES.indexOf(eye) + 1)
+        if (next == null) startFlipper()
+        else _state.update { it.copy(visionEye = next, trialIndex = 0, visionLevel = pushLevel(next), instruction = pushInstruction(next)) }
     }
 
-    /** 距离—视觉表现曲线：在 60 / 33 / 25 cm 分别测双眼阈值（40 cm 已由近视力任务覆盖）。 */
+    /** 距离—视觉表现曲线：在 67 / 50 / 33 cm 分别测双眼阈值（40 cm 已由近视力任务覆盖）。 */
     private fun startDistanceCurve() {
         stepStartMs = platform.nowMs()
         questionStartMs = 0L
@@ -425,7 +459,7 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
         _state.update { it.copy(step = ScreeningStep.DISTANCE_CURVE, guidePending = true, curveIndex = 0, curvePoints = emptyList(),
             trialIndex = 0, visionLevel = start, nearDescending = false, visionEye = VisionEye.BOTH, trialVisible = false,
             direction = Random.nextInt(4), nearStopReason = null,
-            instruction = "依次在 60、33、25 cm 停稳，视标会自动出现，点选开口方向。", warning = null) }
+            instruction = "依次在 67、50、33 cm 停稳，视标会自动出现，点选开口方向。", warning = null) }
     }
 
     private fun answerCurve(s: ScreeningState, answers: List<VisionAnswer>, target: Float) {
@@ -462,7 +496,8 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
         val nextIndex = s.curveIndex + 1
         if (nextIndex >= PresbyopiaProtocol.CURVE_DISTANCES.size) {
             _state.update { it.copy(curvePoints = points) }
-            startFlipper()
+            // 只有满足标准调节幅度条件（A1 / A2）才做单眼移近法与远近切换，其余路径到此结束
+            if (s.presbyopiaPath?.standardAmplitude == true) startPushUp() else finish()
         } else {
             _state.update { it.copy(curvePoints = points, curveIndex = nextIndex, trialIndex = 0, nearDescending = false,
                 visionLevel = bestBinocularLevel(it.answers) ?: 0.3f, direction = Random.nextInt(4), trialVisible = false,
@@ -471,14 +506,52 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
         }
     }
 
+    /** 远近切换（可选）：引导页可选择跳过；开始后先在两个距离确认看得清，再计时 60 秒。 */
     private fun startFlipper() {
         stepStartMs = platform.nowMs()
         flipperMoveStartMs = stepStartMs
         questionStartMs = 0L
-        _state.update { it.copy(step = ScreeningStep.FLIPPER, guidePending = true, trialIndex = 0, direction = Random.nextInt(4), visionLevel = 0.2f,
-            trialVisible = false, visionEye = VisionEye.BOTH, secondsLeft = 60,
-            instruction = "真实交替到 50 cm 与 25 cm。停稳后才呈现视标；分别记录移动和辨认时间，限时 60 秒。", warning = null) }
+        flipperCheckMisses = 0
+        _state.update { it.copy(step = ScreeningStep.FLIPPER, guidePending = true, trialIndex = 0, direction = Random.nextInt(4),
+            visionLevel = PresbyopiaProtocol.FLIPPER_LEVEL, trialVisible = false, visionEye = VisionEye.BOTH,
+            secondsLeft = PresbyopiaProtocol.FLIPPER_SECONDS, flipperCheck = false, flipperIncomplete = null,
+            instruction = "可选：在 50 cm 与 25 cm 之间来回移动手机，停稳后点选 E 的开口方向，限时 60 秒。", warning = null) }
+    }
 
+    /** 远近切换引导页选择跳过：直接出结果，记录未完成原因。 */
+    fun skipFlipper() {
+        val s = _state.value
+        if (s.step != ScreeningStep.FLIPPER || !s.guidePending) return
+        _state.update { it.copy(guidePending = false, flipperIncomplete = "选择跳过") }
+        finish()
+    }
+
+    /** 看清确认中答了一题：答对进入下一距离（近端也对就开始计时），同一距离答错 [PresbyopiaProtocol.FLIPPER_CHECK_TRIES] 次记为未达到测试条件。 */
+    private fun answerFlipperCheck(s: ScreeningState, correct: Boolean, now: Long) {
+        flipperMoveStartMs = now
+        if (!correct && ++flipperCheckMisses < PresbyopiaProtocol.FLIPPER_CHECK_TRIES) {
+            _state.update { it.copy(trialVisible = false, direction = Random.nextInt(4), warning = null) }
+            return
+        }
+        if (!correct) {
+            val target = trialTargetCm(s)?.toInt()
+            _state.update { it.copy(trialVisible = false, flipperCheck = false,
+                flipperIncomplete = "未达到测试条件：$target cm 处看不清视标") }
+            finish(); return
+        }
+        flipperCheckMisses = 0
+        if (s.trialIndex == 0) {
+            _state.update { it.copy(trialIndex = 1, trialVisible = false, direction = Random.nextInt(4), warning = null) }
+            return
+        }
+        // 两个距离都看得清：回到 50 cm 开始计时
+        platform.feedback(ScreeningFeedbackCue.PHASE)
+        _state.update { it.copy(flipperCheck = false, trialIndex = 0, trialVisible = false, direction = Random.nextInt(4), warning = null) }
+        timer?.cancel()
+        timer = scope.launch {
+            repeat(PresbyopiaProtocol.FLIPPER_SECONDS) { index -> delay(1000); _state.update { it.copy(secondsLeft = PresbyopiaProtocol.FLIPPER_SECONDS - 1 - index) } }
+            finish()
+        }
     }
 
     private fun startFixation() {
@@ -556,11 +629,11 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
 
     }
 
-    /** 老视标准模式：受试者确认已摘下老花镜/渐进镜后，才进入近视力示范。 */
-    fun confirmGlassesRemoved() {
+    /** 老视：受试者确认已按本次戴镜状态戴好或摘下眼镜后，才进入近视力示范。 */
+    fun confirmGlasses() {
         if (!_state.value.glassesCheckPending) return
         platform.feedback(ScreeningFeedbackCue.ANSWER)
-        _state.update { it.copy(glassesCheckPending = false, glassesRemovedConfirmed = true,
+        _state.update { it.copy(glassesCheckPending = false, glassesConfirmed = true,
             instruction = "先遮住左眼，露出右眼；每级 4 题，停稳后再显示视标。") }
     }
 
@@ -575,13 +648,8 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
         _state.update { it.copy(guidePending = false) }
         when (s.step) {
             ScreeningStep.NEAR_VISION -> readyForNearEye()
-            ScreeningStep.FLIPPER -> {
-                timer?.cancel()
-                timer = scope.launch {
-                    repeat(60) { index -> delay(1000); _state.update { it.copy(secondsLeft = 59 - index) } }
-                    finish()
-                }
-            }
+            // 先确认两个距离都看得清，确认通过后才开始计时（见 answerFlipperCheck）
+            ScreeningStep.FLIPPER -> { flipperCheckMisses = 0; _state.update { it.copy(flipperCheck = true, trialIndex = 0) } }
             ScreeningStep.FIXATION -> retryGazeCalibration()
             ScreeningStep.PURSUIT -> runTimedStep(StrabismusProtocol.PURSUIT_SECONDS) { finish() }
             ScreeningStep.FAR_FIXATION -> _state.update { it.copy(farWaiting = true) }
@@ -677,7 +745,7 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
         val s = _state.value
         val assessment = if (s.kind == ScreeningKind.PRESBYOPIA) ScreeningAssessmentModel.presbyopia(s)
         else ScreeningAssessmentModel.strabismus(s, samples, qualityEligibleFrames, qualityEligibleValidFrames)
-        val metrics = if (s.kind == ScreeningKind.PRESBYOPIA) PresbyopiaMetrics.summarize(s.answers, s.nearPoints, s.curvePoints, s.nearResolutionLimitedEyes)
+        val metrics = if (s.kind == ScreeningKind.PRESBYOPIA) PresbyopiaMetrics.summarize(s.answers, s.nearPoints, s.curvePoints, s.nearResolutionLimitedEyes, s.flipperIncomplete)
         else StrabismusMetrics.summarize(samples, s.coverMarks, totalFrames, validFrames,
             qualityEligibleFrames, qualityEligibleValidFrames, s.pursuitMaxDeg)
         val result = assessment.displayLines() + metrics
@@ -720,7 +788,9 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
                         put("evidence", assessment.evidence.toRecordArray())
                     })
                     put("mode", s.mode)
-                    put("glassesRemovedConfirmed", s.glassesRemovedConfirmed)
+                    s.presbyopiaPath?.let { put("presbyopiaPath", it.code) }
+                    put("glassesConfirmed", s.glassesConfirmed)
+                    put("flipperIncomplete", s.flipperIncomplete ?: RecordObject.NULL)
                     put("profile", RecordObject(s.fields))
                     s.subject?.let { put("subject", it.toRecordObject()) }
                     put("profileSkipped", s.profileSkipped)
@@ -764,7 +834,7 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
                         put("distanceCm", p.distanceCm.toDouble())
                         put("speedCmPerSec", p.speedCmPerSec?.toDouble() ?: RecordObject.NULL)
                         put("startCm", p.startCm?.toDouble() ?: RecordObject.NULL)
-                        put("censored", p.censored)
+                        put("censored", p.censored); put("eye", p.eye.name)
                         put("trace", RecordArray(p.trace.map { (t, d) -> RecordArray(listOf(t.toDouble(), d.toDouble())) }))
                     }) } })
                     put("curvePoints", RecordArray().apply { s.curvePoints.forEach { c -> put(RecordObject().apply {
@@ -844,7 +914,7 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
         distanceTracker.clear()
         // 环境检查尚未开始计时，切后台只需释放相机，不提示「测试已中断」。
         _state.value = ScreeningState(kind = current.kind, fields = current.fields, subject = current.subject,
-            profileSkipped = current.profileSkipped, mode = current.mode,
+            profileSkipped = current.profileSkipped, mode = current.mode, presbyopiaPath = current.presbyopiaPath,
             step = ScreeningStep.ENVIRONMENT,
             warning = if (current.step == ScreeningStep.ENVIRONMENT) null else "测试已中断，请重新开始")
     }

@@ -131,7 +131,7 @@ class ServiceVisualTest {
         assertEquals(false, started)
     }
 
-    /** 测试开始页只选人：缺必需项的成员去「我的」补充，资料齐全的直接开始（老视再选戴镜方式）。 */
+    /** 测试开始页只选人：缺必需项的成员去「我的」补充，资料齐全的直接开始（老视再答戴镜问卷，按答案分检查路径）。 */
     @Test fun subjectPickerStartsCompleteMembersAndSendsOthersToProfile() {
         val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
         val members = listOf(
@@ -156,12 +156,14 @@ class ServiceVisualTest {
         compose.onNodeWithText("添加家庭成员").performScrollTo().performClick()
         assertEquals(null, edited)
         compose.onNodeWithText("妈妈").performScrollTo().performClick()
-        compose.onNodeWithText("这次测试戴哪副眼镜？").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("开始").assertIsNotEnabled()
-        compose.onNodeWithText("戴看远的眼镜，或不戴眼镜").performScrollTo().performClick()
+        compose.onNodeWithText("这次测试准备怎么戴镜？").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("开始测试").assertIsNotEnabled()
+        listOf(PresbyopiaIntake.REFRACTION_NO, PresbyopiaIntake.USE_READING, PresbyopiaIntake.NEED_NONE, PresbyopiaIntake.STATE_READING)
+            .forEach { compose.onNodeWithText(it).performScrollTo().performClick() }
         capture("profile")
-        compose.onNodeWithText("开始").performScrollTo().performClick()
+        compose.onNodeWithText("开始测试").performScrollTo().performClick()
         compose.runOnIdle { assertEquals(ScreeningStep.ENVIRONMENT, vm.state.value.step) }
+        assertEquals(PresbyopiaPath.B, vm.state.value.presbyopiaPath)
         // 年龄由出生年份换算
         assertEquals((java.time.Year.now().value - 1975).toString(), vm.state.value.fields["年龄"])
     }
@@ -618,7 +620,7 @@ class ServiceVisualTest {
                 Column(Modifier.fillMaxSize().background(LocalEyeColors.current.appBackground).verticalScroll(rememberScrollState()).padding(20.dp)) {
                     if (kind == ScreeningKind.PRESBYOPIA) {
                         ScreeningResultContent(ScreeningState(kind = ScreeningKind.PRESBYOPIA, step = ScreeningStep.RESULT,
-                            riskLevel = ScreeningRiskLevel.MEDIUM, category = "调节功能较同龄人偏低", mode = PRESBYOPIA_MODE_STANDARD,
+                            riskLevel = ScreeningRiskLevel.MEDIUM, category = "调节功能较同龄人偏低", presbyopiaPath = PresbyopiaPath.A1,
                             findings = listOf("调节功能较同龄人偏低：调节幅度约 2.4 D", "40 cm 双眼近视力未通过 0.5 档。"),
                             features = mapOf("amplitude_d" to 2.4, "hofstetter_min_d" to 3.75, "near_point_cm" to 42.0,
                                 "near_both_decimal" to 0.4, "flipper_cycles_per_min" to 5.0),

@@ -22,7 +22,8 @@ class SubjectProfileTest {
         val blank = member(fields = emptyMap())
         // 资料里只要求长期信息；症状等改为测前现问
         assertEquals(listOf("出生年份"), SubjectProfiles.missing("DRY_EYE", blank, now))
-        assertEquals(listOf("出生年份", "平时戴什么眼镜？", "知道自己有以下情况吗？"), SubjectProfiles.missing("PRESBYOPIA", blank, now))
+        // 老视的戴镜与屈光情况改为测前问卷
+        assertEquals(listOf("出生年份"), SubjectProfiles.missing("PRESBYOPIA", blank, now))
         assertEquals(listOf("出生年份"), SubjectProfiles.missing("STRABISMUS", blank, now))
         // 年龄不在适用范围
         val child = member("CHILD", mapOf("出生年份" to "2020", "日常矫正方式" to "不戴眼镜", "屈光情况" to "近视"))
@@ -30,7 +31,7 @@ class SubjectProfileTest {
         assertTrue(SubjectProfiles.missing("STRABISMUS", child, now).isEmpty())
     }
 
-    /** 测前快问：干眼、眼位各两三题（报告了症状才追问频率），老视没有这一步；资料编辑页不再出现这些题。 */
+    /** 测前快问：干眼、眼位各两三题（报告了症状才追问频率），老视为戴镜问卷；资料编辑页不再出现这些题。 */
     @Test fun preTestCheckAsksOnlyAFewChangingQuestions() {
         assertEquals(listOf("干眼症状", "近期用眼情况", "近期眼部用药"), PreTestCheck.visible("DRY_EYE", emptyMap()).map { it.key })
         val symptoms = mapOf("干眼症状" to "怕光")
@@ -40,7 +41,9 @@ class SubjectProfileTest {
         assertTrue(PreTestCheck.complete("DRY_EYE", noSymptom))
         assertFalse("症状频率" in PreTestCheck.clean("DRY_EYE", noSymptom), "改成都没有后不保留之前选的频率")
         assertEquals(listOf("近期重影", "协助测试者"), PreTestCheck.visible("STRABISMUS", emptyMap()).map { it.key })
-        assertFalse(PreTestCheck.needed("PRESBYOPIA"))
+        assertEquals(listOf("已知屈光不正", "眼镜使用方式", "看远是否需要眼镜", "本次戴镜状态"), PreTestCheck.visible("PRESBYOPIA", emptyMap()).map { it.key })
+        assertTrue("眼镜镜片分区" in PreTestCheck.visible("PRESBYOPIA", mapOf("眼镜使用方式" to PresbyopiaIntake.USE_SAME)).map { it.key },
+            "同一副眼镜看远看近才追问镜片分区")
         assertTrue(PreTestCheck.visible("DRY_EYE", emptyMap()).size <= 3 && PreTestCheck.questions("STRABISMUS").size <= 3, "平时只问两三题")
         val editorKeys = SubjectProfiles.questions.map { it.key }.toSet()
         assertTrue(PreTestCheck.VOLATILE_KEYS.none { it in editorKeys }, "随时变化的问题不放在资料里")
@@ -79,13 +82,18 @@ class SubjectProfileTest {
             val state = Json.parseToJsonElement(controller.snapshotJson()).jsonObject
             assertEquals("ENVIRONMENT", state["phase"]!!.jsonPrimitive.content)
             assertEquals("小明", state["subjectName"]!!.jsonPrimitive.content)
-            // 老视：选人后还要选戴镜方式
+            // 老视：选人后先答戴镜问卷，按答案分路径
             controller.selectTest("PRESBYOPIA")
-            val adult = """{"id":"me","relation":"SELF","nickname":"我","fields":{"出生年份":"1970","日常矫正方式":"老花镜","屈光情况":"老花"},"updatedAt":0}"""
+            val adult = """{"id":"me","relation":"SELF","nickname":"我","fields":{"出生年份":"1970"},"updatedAt":0}"""
             assertFalse(controller.useSubject(adult))
             assertFalse(controller.proceedFromProfile())
-            controller.setMode(PRESBYOPIA_MODE_STANDARD)
-            assertTrue(controller.proceedFromProfile())
+            assertTrue("本次戴镜状态" in controller.checkQuestionsJson("{}"))
+            assertFalse(controller.confirmCheck("""{"已知屈光不正":"有"}"""))
+            assertTrue(controller.confirmCheck("""{"已知屈光不正":"有","眼镜使用方式":"${PresbyopiaIntake.USE_DISTANCE}",""" +
+                """"看远是否需要眼镜":"${PresbyopiaIntake.NEED_CLEAR_WITH}","本次戴镜状态":"${PresbyopiaIntake.STATE_DISTANCE}"}"""))
+            val presbyopia = Json.parseToJsonElement(controller.snapshotJson()).jsonObject
+            assertEquals("标准模式（A1）", presbyopia["mode"]!!.jsonPrimitive.content)
+            assertEquals("me", presbyopia["subjectId"]!!.jsonPrimitive.content)
         } finally { controller.close(); Dispatchers.resetMain() }
         assertEquals("", saved)
     }

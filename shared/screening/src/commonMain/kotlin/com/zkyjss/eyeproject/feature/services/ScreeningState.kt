@@ -77,6 +77,8 @@ data class NearPoint(
     val censored: Boolean = false,
     /** 本次移近的距离轨迹：(相对开始移近的秒数, 平滑距离 cm)，约每 100 ms 一点，用于离线评估反应延迟。 */
     val trace: List<Pair<Float, Float>> = emptyList(),
+    /** 测的是哪只眼（单眼移近法）；旧记录为双眼。 */
+    val eye: VisionEye = VisionEye.BOTH,
 )
 
 /** 距离—视觉表现曲线上的一点：该距离下双眼通过的最高小数视力。 */
@@ -93,10 +95,12 @@ data class ScreeningState(
     /** 未选成员、没有资料直接测试；记录中注明，依赖资料的评估（如同龄对照）会说明无法评估。 */
     val profileSkipped: Boolean = false,
     val mode: String = "",
-    /** 老视标准模式开始前需确认已摘下老花镜/渐进镜（摘镜提醒页）。 */
+    /** 老视检查路径（由测前问卷决定，见 [PresbyopiaIntake.route]）；眼位测试为空。 */
+    val presbyopiaPath: PresbyopiaPath? = null,
+    /** 老视开始前的戴镜确认页（按本次戴镜状态提示戴好或摘下眼镜，整组测试保持不变）。 */
     val glassesCheckPending: Boolean = false,
-    /** 受试者已在摘镜提醒页确认摘下近用眼镜；写入记录。 */
-    val glassesRemovedConfirmed: Boolean = false,
+    /** 受试者已在戴镜确认页确认；写入记录。 */
+    val glassesConfirmed: Boolean = false,
     val faceDetected: Boolean = false,
     val distanceCm: Float = 0f,
     val lux: Float? = null,
@@ -136,6 +140,10 @@ data class ScreeningState(
     val pushSpeedCmPerSec: Float? = null,
     val pushStartCm: Float? = null,
     val nearPoints: List<NearPoint> = emptyList(),
+    /** 远近切换：计时前在 50 cm 与 25 cm 确认能看清视标。 */
+    val flipperCheck: Boolean = false,
+    /** 远近切换没有完成的原因（未达到测试条件、选择跳过）；为空表示已完成或未进行到这一步。 */
+    val flipperIncomplete: String? = null,
     val curveIndex: Int = 0,
     val curvePoints: List<CurvePoint> = emptyList(),
     /**

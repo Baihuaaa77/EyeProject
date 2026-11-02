@@ -282,7 +282,6 @@ struct SubjectPickerView: View {
     @ObservedObject var store = SubjectStore.shared
     @State private var editing: SubjectProfileItem?
     @State private var chosenId: String?
-    @State private var mode = "标准模式"
 
     var body: some View {
         VStack(alignment: .leading, spacing: EyeStyle.spacing) {
@@ -304,15 +303,7 @@ struct SubjectPickerView: View {
             }
             Button("添加家庭成员") { editing = SubjectStore.newMember() }.buttonStyle(EyeButtonStyle(role: .secondary))
             if let chosenId, runtime.checkNeeded {
-                PreTestCheckView(runtime: runtime).id(chosenId)
-            }
-            if runtime.kind == "PRESBYOPIA" && chosenId != nil {
-                Text("这次测试戴哪副眼镜？").font(EyeStyle.subtitle)
-                Picker("测试模式", selection: $mode) {
-                    Text("戴看远的眼镜，或不戴眼镜（推荐）").tag("标准模式")
-                    Text("戴平时看近用的眼镜").tag("日常模式")
-                }.pickerStyle(.inline)
-                Button("开始") { runtime.proceed(mode: mode) }.buttonStyle(EyeButtonStyle())
+                PreTestCheckView(runtime: runtime, initial: runtime.checkInitial).id(chosenId)
             }
             VStack(spacing: 2) {
                 Button("暂不选择，直接测试") { runtime.act("skipProfile") }
@@ -322,14 +313,21 @@ struct SubjectPickerView: View {
         }.fullScreenCover(item: $editing) { item in
             NavigationStack { SubjectEditView(item: item, modal: true) }.tint(EyeStyle.primary)
         }
+        // 老视「换一种戴镜方式再测」回到本页时被测者已选好
+        .onAppear { if chosenId == nil, !runtime.string("subjectId").isEmpty { chosenId = runtime.string("subjectId") } }
     }
 }
 
-/// 测前快问（共用 PreTestCheck）：选好人后问两三个这几天的情况，答完「开始测试」。答案只写入这次记录；
-/// 换人时整块重建、清空重答。与安卓 PreTestQuestions 同一排版与文案。
+/// 测前快问（共用 PreTestCheck）：选好人后问两三个这几天的情况（老视为戴镜问卷），答完「开始测试」。答案只写入这次记录；
+/// 换人时整块重建、清空重答；[initial] 为预填答案。与安卓 PreTestQuestions 同一排版与文案。
 struct PreTestCheckView: View {
     @ObservedObject var runtime: EyeRuntime
-    @State private var answers: [String: String] = [:]
+    @State private var answers: [String: String]
+
+    init(runtime: EyeRuntime, initial: [String: String] = [:]) {
+        self.runtime = runtime
+        _answers = State(initialValue: initial)
+    }
 
     var body: some View {
         let questions = runtime.checkQuestions(answers)

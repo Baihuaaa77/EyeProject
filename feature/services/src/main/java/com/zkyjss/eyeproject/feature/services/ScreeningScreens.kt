@@ -116,9 +116,11 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, onEditSubje
         ScreeningStep.PROFILE -> ""
         ScreeningStep.ENVIRONMENT -> if (kind == ScreeningKind.PRESBYOPIA) "请正对屏幕，保持约四十厘米，检查光照和距离。" else "请正对屏幕，保持三十三厘米，由家长协助后续遮眼任务。"
         ScreeningStep.NEAR_VISION -> if (s.nearAwaitingEyeReady) s.instruction else "${s.visionEye.label}测试。保持四十厘米，停稳后显示视标。"
-        ScreeningStep.PUSH_UP -> if (s.pushStage == PushStage.READY) "第${s.nearPoints.size + 1}次移近。先移到四十五厘米以外。" else "看着E，慢慢移近。一开始持续模糊就点按。"
+        ScreeningStep.PUSH_UP -> if (s.pushStage == PushStage.READY) "${pushEyeCue(s.visionEye)}，第${s.nearPoints.count { it.eye == s.visionEye } + 1}次移近。先移到四十五厘米以外。"
+            else "看着E，慢慢移近。模糊后停一下，仍看不清就点按。"
         // 换距离的「请移动到 xx 厘米处」由距离提示播报，到位后不再重复
-        ScreeningStep.DISTANCE_CURVE, ScreeningStep.FLIPPER -> "停稳后视标会自动出现，请选择开口方向。"
+        ScreeningStep.DISTANCE_CURVE -> "停稳后视标会自动出现，请选择开口方向。"
+        ScreeningStep.FLIPPER -> if (s.flipperCheck) "先确认两个距离都能看清。停稳后视标会自动出现，请选择开口方向。" else "停稳后视标会自动出现，请选择开口方向。"
         ScreeningStep.FIXATION -> "请保持三十三厘米，看着上方闪烁的小瞳，头和手机都不要动。"
         ScreeningStep.FAR_FIXATION -> if (s.farWaiting) FAR_WAIT_PROMPT else "请看六米以外的目标，眼睛不要看手机，头和手机都不要动。"
         ScreeningStep.GAZE_CALIBRATION -> "请只用眼睛依次看着圆点，头和手机都不要动。"
@@ -204,9 +206,11 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, onEditSubje
             // 注视类任务的提示位放在舞台下方：舞台紧贴顶部，提示出现与否不挪动目标
             if (!gazeTask && !opticTask) TestNotice(notice.takeIf { !s.guidePending })
             if (s.guidePending && s.glassesCheckPending) {
-                GlassesCheckContent(viewModel::confirmGlassesRemoved)
+                GlassesCheckContent(PresbyopiaIntake.glassesCheck(s.fields), viewModel::confirmGlasses)
             } else if (s.guidePending) {
                 TestGuide(guideMotion(s.step), stepTitle(s.step), guideCue(s.step), viewModel::confirmGuide)
+                // 远近切换是可选的探索性检查
+                if (s.step == ScreeningStep.FLIPPER) EyeButton("跳过，查看结果", EyeButtonRole.SECONDARY, viewModel::skipFlipper, Modifier.fillMaxWidth())
             } else when (s.step) {
                 ScreeningStep.PROFILE -> ProfileContent(kind, s, viewModel, onEditSubject)
                 ScreeningStep.ENVIRONMENT -> EnvironmentContent(kind, s, viewModel, retryCamera)
@@ -245,33 +249,13 @@ private fun lightingLabel(s: ScreeningState): String = when {
     else -> "读取中"
 }
 
-/** 开始页：先选「这次测谁」（资料在「我的」维护）；眼位选好人后回答测前快问，老视选好人后再选这次戴哪副眼镜。 */
+/** 开始页：先选「这次测谁」（资料在「我的」维护），选好人后回答测前快问（老视为决定检查路径的戴镜问卷）。 */
 @Composable
 internal fun ProfileContent(kind: ScreeningKind, s: ScreeningState, vm: ScreeningTestViewModel, onEditSubject: (String?) -> Unit) {
-    val colors = LocalEyeColors.current
-    val typography = LocalEyeTypography.current
     val subjects by vm.subjects.collectAsStateWithLifecycle()
     SubjectPicker(kind.name, subjects, s.subject?.id, vm::useSubject, onEditSubject, vm::skipProfile)
-    if (PreTestCheck.needed(kind.name)) s.subject?.let { subject -> PreTestQuestions(kind.name, subject.id) { vm.confirmCheck(it) } }
-    if (kind == ScreeningKind.PRESBYOPIA && s.subject != null) {
-        Column(
-            Modifier.fillMaxWidth().clip(EyeShapes.panel).background(colors.panelBackground).padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            EyeText("这次测试戴哪副眼镜？", style = typography.title, color = colors.textPrimary)
-            EyeOptionRow("戴看远的眼镜，或不戴眼镜", "推荐：能测出眼睛本身的调节能力",
-                s.mode.startsWith("标准"), multiple = false) { vm.setMode(PRESBYOPIA_MODE_STANDARD) }
-            EyeOptionRow("戴平时看近用的眼镜", "老花镜或渐进镜：看戴镜后的实际效果",
-                s.mode.startsWith("日常"), multiple = false) { vm.setMode(PRESBYOPIA_MODE_DAILY) }
-            if (nearCorrectionInUse(s.fields) && s.mode.startsWith("标准")) {
-                EyeText("请先摘下老花镜或渐进镜。", style = typography.body, color = colors.warning)
-            }
-            val age = s.fields["年龄"]?.toIntOrNull()
-            if (age != null && age < PresbyopiaProtocol.TARGET_MIN_AGE) {
-                EyeText("这项测试主要适合 35 岁以上，结果仅供参考。", style = typography.body, color = colors.textSecondary)
-            }
-            EyeButton("开始", EyeButtonRole.PRIMARY, vm::nextFromProfile, Modifier.fillMaxWidth(), s.mode.isNotBlank())
-        }
+    if (PreTestCheck.needed(kind.name)) s.subject?.let { subject ->
+        PreTestQuestions(kind.name, subject.id, PreTestCheck.clean(kind.name, s.fields)) { vm.confirmCheck(it) }
     }
 }
 
@@ -306,14 +290,15 @@ internal fun PushUpContent(s: ScreeningState, vm: ScreeningTestViewModel) {
     val size = with(LocalDensity.current) { s.trialOptotypePx.toDp() }
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
-    TestStageCard(title = "第 ${(s.nearPoints.size + 1).coerceAtMost(PresbyopiaProtocol.PUSH_REPEATS)}/${PresbyopiaProtocol.PUSH_REPEATS} 次") {
+    val done = s.nearPoints.count { it.eye == s.visionEye }
+    TestStageCard(title = "${s.visionEye.label} · 第 ${(done + 1).coerceAtMost(PresbyopiaProtocol.PUSH_REPEATS)}/${PresbyopiaProtocol.PUSH_REPEATS} 次") {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
             if (s.pushStage == PushStage.READY) {
-                EyeText("先把手机移到 45 cm 以外，再点开始", typography.body, colors.textPrimary)
-                EyeButton("开始第 ${s.nearPoints.size + 1} 次", EyeButtonRole.PRIMARY, vm::startPushTrial,
+                EyeText("${pushEyeCue(s.visionEye)}；先把手机移到 45 cm 以外，再点开始", typography.body, colors.textPrimary)
+                EyeButton("开始第 ${done + 1} 次", EyeButtonRole.PRIMARY, vm::startPushTrial,
                     enabled = s.distanceCm >= PresbyopiaProtocol.PUSH_START_MIN_CM)
             } else {
-                EyeText("缓慢移近", typography.body, colors.textPrimary)
+                EyeText("缓慢移近，每秒一两厘米", typography.body, colors.textPrimary)
                 if (s.trialVisible) OptotypeSurface(0, size)
                 EyeButton("开始持续模糊", EyeButtonRole.PRIMARY, vm::markPushBlur, Modifier.fillMaxWidth())
             }
@@ -322,7 +307,10 @@ internal fun PushUpContent(s: ScreeningState, vm: ScreeningTestViewModel) {
     }
 }
 
-/** 距离—视觉表现：在 60 / 33 / 25 cm 依次停稳，视标自动出现。 */
+/** 单眼移近法遮哪只眼（界面与语音共用）。 */
+internal fun pushEyeCue(eye: VisionEye) = if (eye == VisionEye.LEFT) "遮住右眼，用左眼看" else "遮住左眼，用右眼看"
+
+/** 距离—视觉表现：在 67 / 50 / 33 cm 依次停稳，视标自动出现。 */
 @Composable
 private fun CurveContent(s: ScreeningState, vm: ScreeningTestViewModel) {
     val size = with(LocalDensity.current) { s.trialOptotypePx.toDp() }
@@ -339,9 +327,11 @@ private fun CurveContent(s: ScreeningState, vm: ScreeningTestViewModel) {
 @Composable
 internal fun FlipperContent(s: ScreeningState, vm: ScreeningTestViewModel) {
     val size = with(LocalDensity.current) { s.trialOptotypePx.toDp() }
-    TestStageCard(title = "${if (s.trialIndex % 2 == 0) 50 else 25} cm · ${s.secondsLeft} 秒") {
+    val target = if (s.trialIndex % 2 == 0) PresbyopiaProtocol.FLIPPER_FAR_CM else PresbyopiaProtocol.FLIPPER_NEAR_CM
+    TestStageCard(title = if (s.flipperCheck) "先确认看得清 · ${target.toInt()} cm" else "${target.toInt()} cm · ${s.secondsLeft} 秒") {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-            if (!s.trialVisible) EyeText("停稳后开始", LocalEyeTypography.current.subtitle, LocalEyeColors.current.textSecondary)
+            if (!s.trialVisible) EyeText(if (s.flipperCheck) "移到 ${target.toInt()} cm 停稳" else "停稳后开始",
+                LocalEyeTypography.current.subtitle, LocalEyeColors.current.textSecondary)
             OptotypeAnswerPad(s.direction, size, s.trialVisible) { vm.answer(it) }
 
         }
@@ -548,6 +538,9 @@ internal fun ScreeningResultContent(s: ScreeningState, vm: ScreeningTestViewMode
     ResultReportView(report, export, aiCard = aiCard, onExplain = vm::explain, actions = {
         EyeButton("重新测试", if (report.level == ScreeningRiskLevel.UNCERTAIN || !report.valid) EyeButtonRole.PRIMARY else EyeButtonRole.SECONDARY,
             vm::restart, Modifier.fillMaxWidth())
+        // 老视：允许换一种戴镜状态重复检查，各次独立记录、分别解释
+        if (s.kind == ScreeningKind.PRESBYOPIA && s.subject != null)
+            EyeButton("换一种戴镜方式再测", EyeButtonRole.SECONDARY, vm::retestWithOtherGlasses, Modifier.fillMaxWidth())
     }) {
         DataPanel("测试环境") {
             EyeText("光照 ${lightingLabel(s)}", LocalEyeTypography.current.body, LocalEyeColors.current.textSecondary)
@@ -572,9 +565,9 @@ internal fun OptotypeSurface(direction: Int, size: androidx.compose.ui.unit.Dp) 
     }
 }
 
-/** 老视标准模式开始前的摘镜提醒：小瞳 + 一句话 + 确认按钮，语音同步播报。 */
+/** 老视开始前的戴镜确认：小瞳 + 按本次戴镜状态的一句话 + 确认按钮，语音同步播报。与苹果端 GlassesCheckView 一致。 */
 @Composable
-private fun GlassesCheckContent(onConfirm: () -> Unit) {
+private fun GlassesCheckContent(check: PresbyopiaIntake.GlassesCheck, onConfirm: () -> Unit) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
     TestStageCard {
@@ -583,10 +576,9 @@ private fun GlassesCheckContent(onConfirm: () -> Unit) {
                 val s = size.minDimension
                 drawMascot(colors, Offset(s / 2, s * 0.58f), s * 0.8f, gaze = Offset(0f, -0.3f))
             }
-            EyeText("先摘下老花镜", typography.title, colors.textPrimary)
-            BaseEyeText("这项测试要看眼睛本身的调节能力。请摘下老花镜或渐进镜；看远用的近视眼镜可以继续戴。",
-                style = typography.body, color = colors.textSecondary, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-            EyeButton("已摘下，继续", EyeButtonRole.PRIMARY, onConfirm, Modifier.fillMaxWidth())
+            EyeText(check.title, typography.title, colors.textPrimary)
+            BaseEyeText(check.prompt, style = typography.body, color = colors.textSecondary, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            EyeButton(check.button, EyeButtonRole.PRIMARY, onConfirm, Modifier.fillMaxWidth())
         }
     }
 }

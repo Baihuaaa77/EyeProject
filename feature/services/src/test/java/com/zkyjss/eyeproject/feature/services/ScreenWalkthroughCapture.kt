@@ -97,67 +97,72 @@ class ScreenWalkthroughCapture {
     // region 老视
 
     @Test fun presbyopia() {
-        val vm = ScreeningTestViewModel(context, CameraController(context), CameraIntrinsicsProvider(context), TestScreeningRecordRepository(context), TestSubjectRepository(), TestExplanationRepository())
+        val me = SubjectProfile("me", "SELF", "妈妈", mapOf("出生年份" to "1974"), 0L)
+        val vm = ScreeningTestViewModel(context, CameraController(context), CameraIntrinsicsProvider(context), TestScreeningRecordRepository(context), TestSubjectRepository(listOf(me)), TestExplanationRepository())
         val state = stateOf(vm)
-        val base = ScreeningState(kind = ScreeningKind.PRESBYOPIA, mode = PRESBYOPIA_MODE_STANDARD, faceDetected = true, distanceCm = 40f,
-            fields = mapOf("年龄" to "52", "日常矫正方式" to "老花镜"), lux = 300f, lightSensorAvailable = true)
-        state.value = base.copy(step = ScreeningStep.PROFILE)
+        val intake = with(PresbyopiaIntake) { mapOf(REFRACTION to REFRACTION_YES, GLASSES_USE to USE_DISTANCE,
+            DISTANCE_NEED to NEED_CLEAR_WITH, TEST_STATE to STATE_DISTANCE) }
+        val base = ScreeningState(kind = ScreeningKind.PRESBYOPIA, presbyopiaPath = PresbyopiaPath.A1, mode = PresbyopiaPath.A1.modeLabel,
+            faceDetected = true, distanceCm = 40f, fields = mapOf("年龄" to "52") + intake, lux = 300f, lightSensorAvailable = true,
+            subject = TestSubject("me", "妈妈", "SELF"))
+        state.value = base.copy(step = ScreeningStep.PROFILE, fields = mapOf("年龄" to "52"))
         compose.setContent { EyeProjectTheme { PresbyopiaScreen(onBack = {}, onEditSubject = {}, viewModel = vm) } }
-        shot("老视-01-选择被测者")
+        shot("老视-01-选择被测者与戴镜问卷")
+        compose.onNodeWithText(PresbyopiaIntake.REFRACTION_YES).performScrollTo().performClick()
+        compose.onNodeWithText(PresbyopiaIntake.USE_SAME).performScrollTo().performClick()
+        shot("老视-01a-戴镜问卷-同一副眼镜追问")
         state.value = base.copy(step = ScreeningStep.ENVIRONMENT, trackingStatus = "双眼跟踪与测距正常")
         shot("老视-02-准备与测距")
-        state.value = base.copy(step = ScreeningStep.ENVIRONMENT, distanceCm = 31f, trackingStatus = "双眼跟踪与测距正常")
-        shot("老视-02a-准备-太近")
-        state.value = base.copy(step = ScreeningStep.ENVIRONMENT, faceDetected = false, distanceCm = 0f, trackingStatus = "相机已工作，未识别人脸")
-        shot("老视-02b-准备-未看到双眼")
         state.value = base.copy(step = ScreeningStep.NEAR_VISION, guidePending = true, glassesCheckPending = true,
-            nearAwaitingEyeReady = true, instruction = GLASSES_REMOVAL_PROMPT)
-        shot("老视-03-摘镜确认")
-        state.value = base.copy(step = ScreeningStep.NEAR_VISION, guidePending = true, nearAwaitingEyeReady = true)
-        shot("老视-04-近视力说明")
-        state.value = base.copy(step = ScreeningStep.NEAR_VISION, nearAwaitingEyeReady = true, visionEye = VisionEye.RIGHT,
-            instruction = "先遮住左眼，露出右眼；每级 4 题，停稳后再显示视标。")
-        shot("老视-05-近视力-遮眼准备")
+            nearAwaitingEyeReady = true, instruction = PresbyopiaIntake.glassesCheck(base.fields).prompt)
+        shot("老视-03-戴镜确认")
         state.value = base.copy(step = ScreeningStep.NEAR_VISION, visionEye = VisionEye.RIGHT, trialVisible = true, trialId = 1,
             direction = 2, trialOptotypePx = 20f, visionLevel = 0.5f)
-        shot("老视-06-近视力-作答")
-        state.value = state.value.copy(distanceCm = 33f)
-        shot("老视-06a-近视力-太近")
-        state.value = state.value.copy(distanceCm = 49f)
-        shot("老视-06b-近视力-太远")
-        state.value = base.copy(step = ScreeningStep.PUSH_UP, pushStage = PushStage.READY, distanceCm = 48f, visionLevel = 0.5f)
-        shot("老视-07-移近法-准备")
-        state.value = base.copy(step = ScreeningStep.PUSH_UP, pushStage = PushStage.APPROACH, distanceCm = 27f, trialVisible = true,
-            trialId = 2, trialOptotypePx = 20f, pushSpeedCmPerSec = 2.4f, nearPoints = listOf(NearPoint(24.5f, 2.1f, 50f)))
-        shot("老视-08-移近法-移近中")
-        state.value = base.copy(step = ScreeningStep.DISTANCE_CURVE, curveIndex = 0, distanceCm = 60f, trialVisible = true, trialId = 3,
+        shot("老视-04-近视力-作答")
+        state.value = base.copy(step = ScreeningStep.DISTANCE_CURVE, curveIndex = 0, distanceCm = 67f, trialVisible = true, trialId = 3,
             direction = 1, trialOptotypePx = 22f)
-        shot("老视-09-多距离视力")
-        state.value = base.copy(step = ScreeningStep.DISTANCE_CURVE, curveIndex = 1, distanceCm = 58f, distanceMoveToCm = 33f)
-        shot("老视-09a-多距离-请移动到33厘米")
-        state.value = base.copy(step = ScreeningStep.DISTANCE_CURVE, curveIndex = 2, distanceCm = 34f)
-        shot("老视-09b-多距离-25厘米太远")
-        state.value = base.copy(step = ScreeningStep.FLIPPER, distanceCm = 25f, secondsLeft = 38, trialIndex = 1, trialVisible = true,
-            trialId = 4, direction = 0, trialOptotypePx = 16f)
-        shot("老视-10-远近切换")
-        state.value = base.copy(step = ScreeningStep.FLIPPER, distanceCm = 27f, secondsLeft = 31, trialIndex = 2, distanceMoveToCm = 50f)
-        shot("老视-10a-远近切换-请移动到50厘米")
-        state.value = base.copy(step = ScreeningStep.FLIPPER, distanceCm = 57f, secondsLeft = 29, trialIndex = 2)
-        shot("老视-10b-远近切换-太远")
+        shot("老视-05-多距离视力-67厘米")
+        state.value = base.copy(step = ScreeningStep.DISTANCE_CURVE, curveIndex = 1, distanceCm = 64f, distanceMoveToCm = 50f)
+        shot("老视-05a-多距离-请移动到50厘米")
+        state.value = base.copy(step = ScreeningStep.PUSH_UP, guidePending = true)
+        shot("老视-06-单眼移近法说明")
+        state.value = base.copy(step = ScreeningStep.PUSH_UP, pushStage = PushStage.READY, distanceCm = 48f, visionLevel = 0.5f,
+            visionEye = VisionEye.LEFT, nearPoints = List(3) { NearPoint(30f, 1.6f, 50f, eye = VisionEye.RIGHT) })
+        shot("老视-06a-移近法-左眼准备")
+        state.value = base.copy(step = ScreeningStep.PUSH_UP, pushStage = PushStage.APPROACH, distanceCm = 27f, trialVisible = true,
+            trialId = 2, trialOptotypePx = 20f, pushSpeedCmPerSec = 4f, visionEye = VisionEye.RIGHT)
+        shot("老视-06b-移近法-慢一点")
+        state.value = base.copy(step = ScreeningStep.FLIPPER, guidePending = true)
+        shot("老视-07-远近切换-可选")
+        state.value = base.copy(step = ScreeningStep.FLIPPER, flipperCheck = true, distanceCm = 25f, secondsLeft = 60, trialIndex = 1,
+            trialVisible = true, trialId = 4, direction = 0, trialOptotypePx = 16f)
+        shot("老视-07a-远近切换-先确认看得清")
+        state.value = base.copy(step = ScreeningStep.FLIPPER, distanceCm = 50f, secondsLeft = 38, trialIndex = 2, trialVisible = true,
+            trialId = 5, direction = 3, trialOptotypePx = 16f)
+        shot("老视-07b-远近切换-计时中")
 
         val answers = VisionEye.entries.flatMap { eye -> List(4) { VisionAnswer(ScreeningStep.NEAR_VISION, 40f, 0.6f, 0, 0, true, 700, 20f, eye) } } +
-            List(8) { VisionAnswer(ScreeningStep.FLIPPER, if (it % 2 == 0) 50f else 25f, 0.2f, 1, 1, true, 900, 20f) }
-        val measured = base.copy(answers = answers, nearPoints = listOf(NearPoint(32f, 2.2f, 50f), NearPoint(33.5f, 2.6f, 49f), NearPoint(32.5f, 2.0f, 51f)),
-            curvePoints = listOf(CurvePoint(60f, 0.8f), CurvePoint(33f, 0.6f), CurvePoint(25f, 0.4f)))
-        val assessment = ScreeningAssessmentModel.presbyopia(measured)
-        state.value = measured.copy(step = ScreeningStep.RESULT, riskLevel = assessment.riskLevel, category = assessment.category,
-            findings = assessment.findings, limitations = assessment.limitations, features = assessment.features,
-            evidence = assessment.evidence, result = assessment.displayLines(), savedFile = "presbyopia_demo.json")
-        shot("老视-11-结果")
+            List(9) { VisionAnswer(ScreeningStep.FLIPPER, if (it % 2 == 0) 50f else 25f, 0.2f, 1, 1, it != 5, 900, 20f) }
+        val curve = listOf(CurvePoint(67f, 0.8f), CurvePoint(50f, 0.6f), CurvePoint(33f, 0.4f))
+        val measured = base.copy(answers = answers, curvePoints = curve, nearPoints =
+            listOf(32f, 33.5f, 32.5f).map { NearPoint(it, 1.8f, 50f, eye = VisionEye.RIGHT) } +
+            listOf(35f, 36f, 34f).map { NearPoint(it, 1.6f, 50f, eye = VisionEye.LEFT) })
+        fun result(s: ScreeningState) = ScreeningAssessmentModel.presbyopia(s).let { a ->
+            s.copy(step = ScreeningStep.RESULT, riskLevel = a.riskLevel, category = a.category, riskScope = a.riskScope,
+                findings = a.findings, limitations = a.limitations, features = a.features,
+                evidence = a.evidence, result = a.displayLines(), savedFile = "presbyopia_demo.json")
+        }
+        state.value = result(measured)
+        shot("老视-08-结果-A1")
         compose.onNodeWithText("查看本次数据").performScrollTo()
-        shot("老视-12-结果-底部操作")
+        shot("老视-08a-结果-底部操作")
         compose.onNodeWithText("查看本次数据").performClick()
-        shot("老视-13-本次测试数据", popup = true)
+        shot("老视-08b-本次测试数据", popup = true)
+        // B：戴老花镜测，只评价戴镜后的近视觉
+        state.value = result(base.copy(presbyopiaPath = PresbyopiaPath.B, mode = PresbyopiaPath.B.modeLabel,
+            fields = base.fields + (PresbyopiaIntake.TEST_STATE to PresbyopiaIntake.STATE_READING), answers = answers.filter { it.step == ScreeningStep.NEAR_VISION },
+            curvePoints = curve))
+        shot("老视-09-结果-B-戴老花镜")
     }
 
     // endregion

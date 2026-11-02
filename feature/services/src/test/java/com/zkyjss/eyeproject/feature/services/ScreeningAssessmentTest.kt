@@ -17,16 +17,18 @@ class ScreeningAssessmentTest {
         assertEquals("暂无法评估，请复测", result.category)
     }
 
-    private fun presbyopiaState(age: Int, level: Float, nearPointCm: Float, mode: String = "标准模式：远用矫正，无近用 Add"): ScreeningState {
+    /** 每只眼 3 次移近：[nearPointCm]、+1 cm、[nearPointCm]。 */
+    private fun presbyopiaState(age: Int, level: Float, nearPointCm: Float, path: PresbyopiaPath = PresbyopiaPath.A1): ScreeningState {
         val answers = VisionEye.entries.flatMap { eye ->
             (0 until 4).map { VisionAnswer(ScreeningStep.NEAR_VISION, 40f, level, 0, 0, true, 800L, 20f, eye) }
         } + (0 until 8).map { index ->
             VisionAnswer(ScreeningStep.FLIPPER, if (index % 2 == 0) 50f else 25f, 0.2f, 0, 0, true, 800L, 20f)
         }
         return ScreeningState(
-            mode = mode, fields = mapOf("年龄" to "$age"), answers = answers,
-            nearPoints = listOf(NearPoint(nearPointCm, 3f, 50f), NearPoint(nearPointCm + 1f, 3f, 50f)),
-            curvePoints = listOf(CurvePoint(60f, 0.6f), CurvePoint(33f, 0.5f), CurvePoint(25f, 0.4f)),
+            presbyopiaPath = path, fields = mapOf("年龄" to "$age"), answers = answers,
+            nearPoints = if (!path.standardAmplitude) emptyList() else PresbyopiaProtocol.PUSH_EYES.flatMap { eye ->
+                listOf(nearPointCm, nearPointCm + 1f, nearPointCm).map { NearPoint(it, 1.5f, 50f, eye = eye) } },
+            curvePoints = listOf(CurvePoint(67f, 0.6f), CurvePoint(50f, 0.5f), CurvePoint(33f, 0.4f)),
         )
     }
 
@@ -35,7 +37,8 @@ class ScreeningAssessmentTest {
         val matched = ScreeningAssessmentModel.presbyopia(presbyopiaState(45, 0.8f, 25f))
         assertEquals(ScreeningRiskLevel.LOW, matched.riskLevel)
         assertEquals("调节能力与实际年龄基本匹配", matched.category)
-        assertEquals(25.5, matched.features["near_point_cm"]!!, 0.001)
+        // 每只眼 4 / 3.85 / 4 D 取算术平均，换回近点
+        assertEquals(100.0 / ((8 + 100.0 / 26) / 3), matched.features["near_point_cm"]!!, 0.001)
         assertEquals(3.75, matched.features["hofstetter_min_d"]!!, 0.001)
 
         val lower = ScreeningAssessmentModel.presbyopia(presbyopiaState(45, 0.8f, 42f))
@@ -53,9 +56,9 @@ class ScreeningAssessmentTest {
     }
 
     @Test fun dailyModeDoesNotReportAmplitudeAge() {
-        val result = ScreeningAssessmentModel.presbyopia(presbyopiaState(50, 0.8f, 30f, mode = "日常模式：保持近用或渐进矫正"))
+        val result = ScreeningAssessmentModel.presbyopia(presbyopiaState(50, 0.8f, 30f, path = PresbyopiaPath.B))
         assertEquals(null, result.features["amplitude_age_years"])
-        assertTrue(result.limitations.any { it.contains("看近用的眼镜") })
+        assertTrue(result.limitations.any { it.contains("近用眼镜") })
     }
 
     // endregion

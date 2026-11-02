@@ -26,12 +26,15 @@ class SharedParityTest {
     @Test fun presbyopiaGoldenSessionProducesLowRisk() {
         val answers = VisionEye.entries.flatMap { eye -> List(4) { VisionAnswer(ScreeningStep.NEAR_VISION,40f,0.8f,0,0,true,500,20f,eye) } } +
             List(8) { VisionAnswer(ScreeningStep.FLIPPER,if (it % 2 == 0) 50f else 25f,0.2f,1,1,true,500,20f) }
-        val state = ScreeningState(fields = mapOf("年龄" to "50"),mode = PRESBYOPIA_MODE_STANDARD,answers = answers,
-            nearPoints = listOf(NearPoint(20f),NearPoint(20f)),curvePoints = listOf(CurvePoint(60f,0.8f),CurvePoint(33f,0.8f)))
+        val state = ScreeningState(fields = mapOf("年龄" to "50"),presbyopiaPath = PresbyopiaPath.A1,answers = answers,
+            nearPoints = PresbyopiaProtocol.PUSH_EYES.flatMap { eye -> List(3) { NearPoint(20f,eye = eye) } },
+            curvePoints = listOf(CurvePoint(67f,0.8f),CurvePoint(50f,0.8f),CurvePoint(33f,0.8f)))
         val result = ScreeningAssessmentModel.presbyopia(state)
         assertEquals(ScreeningRiskLevel.LOW,result.riskLevel)
         assertEquals(5.0,result.features["amplitude_d"])
-        assertEquals(4.0,result.features["flipper_cycles_per_min"])
+        assertEquals(0.0,result.features["add_d"])
+        // 8 题全对：50→25→50 完整循环 3 个
+        assertEquals(3.0,result.features["flipper_cycles_per_min"])
     }
     @Test fun missingMeasurementsNeverBecomeNormal() {
         assertEquals(ScreeningRiskLevel.UNKNOWN,ScreeningAssessmentModel.presbyopia(ScreeningState()).riskLevel)
@@ -167,11 +170,18 @@ class SharedParityTest {
         assertFalse(engine.state.value.gazeCalibrationPaused)
         engine.close()
     }
-    @Test fun standardModeWithReadingGlassesAsksToRemoveThemFirst() = runTest {
+    @Test fun presbyopiaRoutesFromIntakeAndConfirmsGlassesFirst() = runTest {
         val platform = TestPlatform { 1_000 + testScheduler.currentTime }
         val engine = ScreeningEngine(platform,backgroundScope)
-        engine.configure(ScreeningKind.PRESBYOPIA); engine.setField("年龄","55"); engine.setField("日常矫正方式","老花镜")
-        engine.setMode(PRESBYOPIA_MODE_STANDARD); engine.nextFromProfile(); engine.startCamera(); runCurrent()
+        engine.configure(ScreeningKind.PRESBYOPIA); engine.setField("年龄","55")
+        engine.nextFromProfile()
+        assertEquals(ScreeningStep.PROFILE,engine.state.value.step, "没答戴镜问卷不能开始")
+        mapOf(PresbyopiaIntake.REFRACTION to PresbyopiaIntake.REFRACTION_NO, PresbyopiaIntake.GLASSES_USE to PresbyopiaIntake.USE_READING,
+            PresbyopiaIntake.DISTANCE_NEED to PresbyopiaIntake.NEED_NONE, PresbyopiaIntake.TEST_STATE to PresbyopiaIntake.STATE_NONE)
+            .forEach { (k, v) -> engine.setField(k, v) }
+        engine.nextFromProfile(); engine.startCamera(); runCurrent()
+        assertEquals(PresbyopiaPath.A2,engine.state.value.presbyopiaPath)
+        assertEquals("标准模式（A2）",engine.state.value.mode)
         repeat(20) {
             val now = platform.nowMs()
             val eye = EyeLandmarks("LEFT",listOf(Point2f(0f,0f),Point2f(20f,-10f),Point2f(60f,-10f),Point2f(80f,0f),Point2f(60f,10f),Point2f(20f,10f)),
@@ -183,11 +193,11 @@ class SharedParityTest {
         engine.begin(); runCurrent()
         assertEquals(ScreeningStep.NEAR_VISION,engine.state.value.step)
         assertTrue(engine.state.value.glassesCheckPending)
-        assertEquals(GLASSES_REMOVAL_PROMPT,screeningGuideText(engine.state.value))
+        assertTrue(screeningGuideText(engine.state.value).contains("不戴眼镜测试"))
         engine.confirmGuide()
-        assertTrue(engine.state.value.guidePending, "确认摘镜前不能跳过")
-        engine.confirmGlassesRemoved()
-        assertFalse(engine.state.value.glassesCheckPending); assertTrue(engine.state.value.glassesRemovedConfirmed)
+        assertTrue(engine.state.value.guidePending, "确认戴镜状态前不能跳过")
+        engine.confirmGlasses()
+        assertFalse(engine.state.value.glassesCheckPending); assertTrue(engine.state.value.glassesConfirmed)
         engine.confirmGuide()
         assertFalse(engine.state.value.guidePending)
         engine.close()

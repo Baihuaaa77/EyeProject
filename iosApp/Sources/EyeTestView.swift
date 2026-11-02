@@ -180,12 +180,15 @@ struct EyeTestView: View {
                 runtime.act("formal")
             }
         } else if runtime.bool("guidePending") && runtime.bool("glassesCheck") {
-            GlassesCheckView { runtime.act("glassesRemoved") }
+            GlassesCheckView(title: runtime.string("glassesTitle"), prompt: runtime.string("guideText"),
+                button: runtime.string("glassesButton")) { runtime.act("glassesConfirmed") }
         } else if runtime.bool("guidePending") {
             TestGuideView(motion: .forStep(phase), title: runtime.string("stepTitle"),
                 cue: runtime.string("guideText").isEmpty ? runtime.string("instruction") : runtime.string("guideText")) {
                 runtime.act("guide")
             }
+            // 远近切换是可选的探索性检查
+            if phase == "FLIPPER" { Button("跳过，查看结果") { runtime.act("skipFlipper") }.buttonStyle(EyeButtonStyle(role: .secondary)) }
         } else if phase == "Result" || phase == "RESULT" {
             // 结论、关键指标、判断依据、本次数据与导出：与安卓共用 ResultReport 内容
             ResultReportView(runtime: runtime)
@@ -222,20 +225,22 @@ struct EyeTestView: View {
                 Text(["RIGHT": "右眼", "LEFT": "左眼", "BOTH": "双眼"][runtime.string("eye")] ?? "")
             } else if phase == "FLIPPER" || phase == "DISTANCE_CURVE" {
                 HStack {
-                    Text("\(Int(runtime.number("targetDistanceCm"))) cm")
+                    Text((runtime.bool("flipperCheck") ? "先确认看得清 · " : "") + "\(Int(runtime.number("targetDistanceCm"))) cm")
                     Spacer()
-                    if runtime.number("secondsLeft") > 0 { Text("\(Int(runtime.number("secondsLeft"))) 秒").monospacedDigit() }
+                    if phase == "FLIPPER" && !runtime.bool("flipperCheck") { Text("\(Int(runtime.number("secondsLeft"))) 秒").monospacedDigit() }
                 }
+            } else if phase == "PUSH_UP" {
+                Text("\(runtime.string("pushEye")) · 第 \(min(Int(runtime.number("pushDone")) + 1, 3))/3 次")
             }
             if runtime.bool("nearAwaitingEyeReady") {
                 Text(runtime.string("instruction"))
                 Button("遮盖准备好了") { runtime.act("eyeReady") }.buttonStyle(EyeButtonStyle())
             } else if phase == "PUSH_UP" && runtime.string("pushStage") == "READY" {
-                Text("先移到 45 cm 以外")
-                Button("开始移近") { runtime.act("pushStart") }.buttonStyle(EyeButtonStyle())
+                Text((runtime.string("pushEye") == "左眼" ? "遮住右眼，用左眼看" : "遮住左眼，用右眼看") + "；先移到 45 cm 以外")
+                Button("开始第 \(Int(runtime.number("pushDone")) + 1) 次") { runtime.act("pushStart") }.buttonStyle(EyeButtonStyle())
             } else {
                 if phase == "PUSH_UP" {
-                    Text("缓慢移近")
+                    Text("缓慢移近，每秒一两厘米")
                     TumblingEView(runtime: runtime).stageHeight(max(180, ringDiameter(CGFloat(runtime.number("optotypePx")) / UIScreen.main.scale) + 24))
                     Button("开始持续模糊了") { runtime.act("blur") }.buttonStyle(EyeButtonStyle())
                 } else {
@@ -540,16 +545,19 @@ private struct CalibrationDot: View {
     }
 }
 
-/// 老视标准模式开始前的摘镜提醒：小瞳 + 一句话 + 确认按钮，语音同步播报。与安卓 GlassesCheckContent 一致。
+/// 老视开始前的戴镜确认：小瞳 + 按本次戴镜状态的一句话 + 确认按钮，语音同步播报。与安卓 GlassesCheckContent 一致（文案在共用 PresbyopiaIntake）。
 private struct GlassesCheckView: View {
+    let title: String
+    let prompt: String
+    let button: String
     let confirm: () -> Void
     var body: some View {
         VStack(spacing: 16) {
             MascotView(scale: 0.8, centerY: 0.58).frame(width: 112, height: 112)
-            Text("先摘下老花镜").font(EyeStyle.title)
-            Text("这项测试要看眼睛本身的调节能力。请摘下老花镜或渐进镜；看远用的近视眼镜可以继续戴。")
+            Text(title).font(EyeStyle.title)
+            Text(prompt)
                 .font(EyeStyle.body).foregroundStyle(EyeStyle.secondary).multilineTextAlignment(.center)
-            Button("已摘下，继续", action: confirm).buttonStyle(EyeButtonStyle())
+            Button(button, action: confirm).buttonStyle(EyeButtonStyle())
         }.padding(20).frame(maxWidth: .infinity)
             .background(EyeStyle.panel, in: RoundedRectangle(cornerRadius: EyeStyle.radius))
     }
