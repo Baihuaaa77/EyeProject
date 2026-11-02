@@ -46,7 +46,9 @@ class ExplanationTest {
         }
     }
 
-    private val good = """{"summary":"眨眼偏少，眼睛表面容易干","meaning":["专注看屏幕时眨眼会变少"],
+    private val good = """{"summary":"眨眼偏少，眼睛表面容易干",
+        "findings":[{"indicator":"眨眼频率","observation":"每分钟 6 次，低于参考 10–16 次","possible":"可能提示泪膜不够稳定，眼睛表面容易干"}],
+        "meaning":["专注看屏幕时眨眼会变少"],
         "suggestions":["看屏幕时有意识地多眨眼","避免空调直吹"],"seeDoctor":"不适持续几周或眼痛时去眼科","refs":["dry-screen-blink"]}"""
 
     private val request = ExplanationRequest(
@@ -133,10 +135,26 @@ class ExplanationTest {
             assertEquals(2, llm.prompts.size)
             assertTrue("不允许的说法「患有」" in llm.prompts[1])
         }
-        api(FakeLlm(invented, invented)) { client ->
+        api(FakeLlm(invented, invented, invented)) { client ->
             val failed = client.explain(client.signUp())
             assertEquals(HttpStatusCode.BadGateway, failed.status)
             assertEquals(ErrorCodes.AI_UNAVAILABLE, failed.error())
+        }
+    }
+
+    @Test fun abnormalIndicatorsMustBeAnalysedNotJustTheRuleLevel() {
+        // 有异常指标却只复述等级：不合格；逐项说明测到什么、可能提示什么：合格，并原样返回给两端
+        val levelOnly = good.replace(Regex("""\"findings\":\[.*?\],\s*""", RegexOption.DOT_MATCHES_ALL), "")
+        assertTrue(ExplanationOutput.parse(levelOnly, request, setOf("6", "10", "16")) is ExplanationOutput.Result.Invalid)
+        val valid = ExplanationOutput.parse(good, request, setOf("6", "10", "16"))
+        assertEquals("眨眼频率", (valid as ExplanationOutput.Result.Valid).findings.single().indicator)
+        // 都正常时不强求
+        val normal = request.copy(riskLevel = "LOW", metrics = request.metrics.map { it.copy(status = "NORMAL") },
+            evidence = request.evidence.map { it.copy(status = "NORMAL") })
+        assertTrue(ExplanationOutput.parse(levelOnly, normal, setOf("6", "10", "16")) is ExplanationOutput.Result.Valid)
+        api(FakeLlm(levelOnly, good)) { client ->
+            val dto = client.explain(client.signUp()).body<ExplanationDto>()
+            assertEquals("可能提示泪膜不够稳定，眼睛表面容易干", dto.findings.single().possible)
         }
     }
 
@@ -187,6 +205,10 @@ class ExplanationTest {
         assertEquals("30–39 岁", parsed.ageGroup)
         assertEquals(mapOf("干眼症状" to "眼睛发干、发涩"), parsed.background)
         assertEquals("dryeye-9.18-rules-2", parsed.assessmentVersion)
+        // 规则在测试中发现的具体问题一并带上，解读据此分析异常指标
+        val withFindings = assertNotNull(Explanations.fromRecord(record.replace("\"valid\":true,", "\"valid\":true,\"findings\":[\"眨眼频率偏低\"],")))
+        assertEquals(listOf("眨眼频率偏低"), withFindings.ruleFindings)
+        assertTrue("测试中发现的问题" in ExplanationPrompt.user(withFindings, emptyList(), KnowledgeBase.load()))
         val text = SyncContract.json.encodeToString(ExplanationRequest.serializer(), parsed)
         assertTrue("小明" !in text && "s-1" !in text && "1992" !in text)
         // 旧记录没有结果页快照：退回规则依据

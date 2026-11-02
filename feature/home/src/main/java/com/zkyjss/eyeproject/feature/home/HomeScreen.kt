@@ -43,6 +43,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
@@ -92,13 +93,11 @@ internal data class HomeActions(
 
 internal const val LOOP_HELP = "小瞳按「感知 → 评估 → 归因 → 干预 → 反馈」帮你管理用眼：汇总用屏、眨眼、距离、环境光和你的档案，" +
     "评估今天的用眼负荷（0–100，越高越累），找出主要原因，给出马上能做的建议，再根据你每天的感受调整。结果仅供参考，不是诊断。"
-internal const val PERCEPTION_HELP = "基础数据来自系统用屏统计与光线传感器；视觉行为来自实时检测（画面只在本机处理，不保存）；" +
-    "个体档案来自「我的 → 家庭成员」里本人的资料。这些数据都只保存在本机。"
 internal const val USAGE_HELP_ANDROID = "需要在系统设置里允许「使用情况访问」，小瞳才能统计每天用屏多久、连续用了多久和夜间使用；统计只在本机进行。"
 
 /**
- * 首页：问候与日期（右上角账户、系统设置）→ 今日用眼（负荷分、小瞳、闭环进度）→ AI 综合建议（和小瞳聊聊）→ 今日感受 →
- * 多源感知（基础数据 / 视觉行为与实时检测 / 个体档案）→ 主动服务（休息提醒、趋势报告、健康建议、亮度与蓝光）。
+ * 首页：问候与日期（右上角账户、系统设置）→ 今日用眼（负荷分、小瞳、闭环进度）→ AI 主动问诊（爱科）→ 今日感受 →
+ * 基础数据 → 实时检测 → 护眼操、休息提醒 → 用眼趋势报告、亮度与蓝光。不分小节标题。
  * 与苹果端 HomePage 同一顺序、排版与文案（苹果端没有开发者工具）。
  */
 @Composable
@@ -139,7 +138,7 @@ internal fun HomeContent(
     var breakOpen by rememberSaveable { mutableStateOf(false) }
     var exerciseOpen by rememberSaveable { mutableStateOf(false) }
     var liveRequests by rememberSaveable { mutableIntStateOf(0) }
-    val behavior = remember { BringIntoViewRequester() }
+    val live = remember { BringIntoViewRequester() }
     val basic = remember { BringIntoViewRequester() }
     var scrollTarget by remember { mutableStateOf<BringIntoViewRequester?>(null) }
     LaunchedEffect(scrollTarget) { scrollTarget?.bringIntoView(); scrollTarget = null }
@@ -159,15 +158,13 @@ internal fun HomeContent(
                 "TEST" -> tip.target?.let(navigation.onOpenTest)
                 "PROFILE" -> navigation.onEditProfile(state.selfId)
                 "USAGE_ACCESS" -> actions.openUsageAccess()
-                "LIVE" -> { liveRequests++; scrollTarget = behavior }
+                "LIVE" -> { liveRequests++; scrollTarget = live }
             }
         }
         ChatEntryCard(navigation.onOpenChat)
         CheckInCard(report, actions.checkIn)
-        SectionTitle("多源感知", PERCEPTION_HELP)
         BasicDataCard(state, actions, Modifier.bringIntoViewRequester(basic))
-        BehaviorCard(report, Modifier.bringIntoViewRequester(behavior)) { liveEye(liveRequests) }
-        SectionTitle("主动服务", null)
+        LiveCard(Modifier.bringIntoViewRequester(live)) { liveEye(liveRequests) }
         ExerciseCard { exerciseOpen = true }
         ReminderCard(state, actions)
         ServiceTiles(state, navigation)
@@ -185,14 +182,6 @@ private fun greeting(): String = when (LocalTime.now().hour) {
     in 11..12 -> "中午好"
     in 13..17 -> "下午好"
     else -> "晚上好"
-}
-
-@Composable
-private fun SectionTitle(title: String, help: String?) {
-    Row(Modifier.padding(start = 4.dp, top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-        EyeText(title, style = LocalEyeTypography.current.title, color = LocalEyeColors.current.textPrimary)
-        if (help != null) EyeHelpButton(title, help)
-    }
 }
 
 // region 今日用眼
@@ -302,45 +291,91 @@ private fun LoopStrip(stages: List<LoopStage>) {
 
 private const val NO_DISCOMFORT = "没有不适"
 
-/** 今日感受打卡：与「视觉行为」同样的卡片标题；没打卡时展开选项，打卡后收成一行，可修改。 */
+/** 今日感受：卡片只显示已记下的感受（标签）；点「记录」/「修改」弹出选择框。与苹果端 CheckInCard 一致。 */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun CheckInCard(report: EyeCareReport?, onCheckIn: (List<String>) -> Unit) {
     val colors = LocalEyeColors.current
-    val typography = LocalEyeTypography.current
-    val haptics = rememberEyeHaptics()
     val checked = report?.checkedInToday == true
+    val symptoms = report?.todaySymptoms.orEmpty()
     var editing by rememberSaveable { mutableStateOf(false) }
-    var selected by remember(report?.todaySymptoms, checked) {
-        mutableStateOf(if (checked) report?.todaySymptoms.orEmpty().ifEmpty { listOf(NO_DISCOMFORT) } else emptyList())
-    }
     Column(Modifier.fillMaxWidth().clip(EyeShapes.panel).background(colors.panelBackground).animateContentSize().padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        val fine = report?.todaySymptoms.isNullOrEmpty()
-        CardHeader("今日感受", EyeGlyph.HEART, if (checked && !fine) EyeTileTone.ACCENT else EyeTileTone.SUCCESS) {
-            if (checked && !editing) PillButton("修改", primary = false) { editing = true }
+        CardHeader("今日感受", EyeGlyph.HEART, if (checked && symptoms.isNotEmpty()) EyeTileTone.ACCENT else EyeTileTone.SUCCESS) {
+            PillButton(if (checked) "修改" else "记录", primary = !checked) { editing = true }
         }
-        if (checked && !editing) {
-            EyeText(report?.todaySymptoms?.joinToString("、")?.ifEmpty { NO_DISCOMFORT } ?: NO_DISCOMFORT,
-                style = typography.subtitle, color = if (fine) colors.textPrimary else colors.warning)
-        } else {
-            EyeText("今天眼睛感觉怎么样？", style = typography.body, color = colors.textSecondary)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                (listOf(NO_DISCOMFORT) + EyeCareEngine.SYMPTOMS).forEach { label ->
-                    val on = label in selected
-                    ChoiceChip(label, on) {
-                        selected = when {
-                            label == NO_DISCOMFORT -> if (on) emptyList() else listOf(NO_DISCOMFORT)
-                            on -> selected - label
-                            else -> selected - NO_DISCOMFORT + label
-                        }
-                    }
+        if (checked) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            symptoms.ifEmpty { listOf(NO_DISCOMFORT) }.forEach { FeelingTag(it, attention = symptoms.isNotEmpty()) }
+        }
+    }
+    if (editing) FeelingDialog(
+        initial = if (checked) symptoms.ifEmpty { listOf(NO_DISCOMFORT) } else emptyList(),
+        onSave = { onCheckIn(it - NO_DISCOMFORT); editing = false },
+        onDismiss = { editing = false },
+    )
+}
+
+/** 已记下的一项感受：有不适用提醒色，「没有不适」用安心的绿色。 */
+@Composable
+private fun FeelingTag(label: String, attention: Boolean) {
+    val colors = LocalEyeColors.current
+    EyeText(label, Modifier.clip(EyeShapes.chip).background(if (attention) colors.warningSoft else colors.successSoft)
+        .padding(horizontal = 12.dp, vertical = 6.dp),
+        style = LocalEyeTypography.current.body, color = if (attention) colors.warning else colors.success, fontWeight = FontWeight.SemiBold)
+}
+
+/** 选择今天的感受：「没有不适」占一整行，其余等宽两列；选了才能保存。与苹果端 FeelingSheet 一致。 */
+@Composable
+internal fun FeelingDialog(initial: List<String>, onSave: (List<String>) -> Unit, onDismiss: () -> Unit) {
+    Dialog(onDismissRequest = onDismiss) { FeelingPicker(initial, onSave) }
+}
+
+/** 选择框本体（弹窗内容，界面检查可单独渲染）。 */
+@Composable
+internal fun FeelingPicker(initial: List<String>, onSave: (List<String>) -> Unit) {
+    val colors = LocalEyeColors.current
+    val typography = LocalEyeTypography.current
+    val haptics = rememberEyeHaptics()
+    var selected by remember { mutableStateOf(initial) }
+    fun toggle(label: String) {
+        val on = label in selected
+        selected = when {
+            label == NO_DISCOMFORT -> if (on) emptyList() else listOf(NO_DISCOMFORT)
+            on -> selected - label
+            else -> selected - NO_DISCOMFORT + label
+        }
+    }
+    run {
+        Column(Modifier.fillMaxWidth().clip(EyeShapes.panel).background(colors.panelBackground).padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            EyeText("今天眼睛感觉怎么样？", Modifier.padding(bottom = 6.dp), style = typography.title, color = colors.textPrimary)
+            FeelingOption(NO_DISCOMFORT, NO_DISCOMFORT in selected, Modifier.fillMaxWidth()) { toggle(NO_DISCOMFORT) }
+            EyeCareEngine.SYMPTOMS.chunked(2).forEach { row ->
+                // 同一行两格等高：长选项折行时另一格跟着变高
+                Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    row.forEach { label -> FeelingOption(label, label in selected, Modifier.weight(1f).fillMaxHeight()) { toggle(label) } }
+                    if (row.size == 1) Spacer(Modifier.weight(1f))
                 }
             }
-            EyeButton("记录今天的感受", EyeButtonRole.PRIMARY, {
-                haptics.success(); onCheckIn(selected - NO_DISCOMFORT); editing = false
-            }, Modifier.fillMaxWidth(), enabled = selected.isNotEmpty())
+            Spacer(Modifier.height(4.dp))
+            EyeButton("保存", EyeButtonRole.PRIMARY, { haptics.success(); onSave(selected) }, Modifier.fillMaxWidth(),
+                enabled = selected.isNotEmpty())
         }
+    }
+}
+
+/** 选择框里的一格：等高圆角块，选中时浅主色底 + 主色描边 + 主色字。 */
+@Composable
+private fun FeelingOption(label: String, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    val colors = LocalEyeColors.current
+    val haptics = rememberEyeHaptics()
+    Box(modifier.heightIn(min = 52.dp).clip(EyeShapes.medium)
+        .background(if (selected) colors.primarySoft else colors.appBackground)
+        .border(1.5.dp, if (selected) colors.primary else colors.appBackground, EyeShapes.medium)
+        .toggleable(selected, role = Role.Checkbox) { haptics.toggle(it); onClick() }
+        .padding(horizontal = 6.dp, vertical = 12.dp), contentAlignment = Alignment.Center) {
+        EyeText(label, style = LocalEyeTypography.current.body, color = if (selected) colors.primary else colors.textPrimary,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal, textAlign = TextAlign.Center)
     }
 }
 
@@ -393,7 +428,7 @@ internal fun PillButton(label: String, primary: Boolean = true, onClick: () -> U
 
 // endregion
 
-// region 多源感知
+// region 基础数据与实时检测
 
 /** 一格读数：名称、数值（需要留意时琥珀色并带小圆点）、可选的来源说明。 */
 @Composable
@@ -453,26 +488,16 @@ internal fun SignalGrid(signals: List<EyeSignal>, columns: Int) {
     }
 }
 
-/** 视觉行为：眨眼频率、观看距离、头部姿态 + 实时检测（默认关闭，打开后看到画面与检测结果）。 */
+/** 实时检测（默认关闭，打开后看到画面与眨眼、距离结果）。 */
 @Composable
-private fun BehaviorCard(report: EyeCareReport?, modifier: Modifier, live: @Composable () -> Unit) {
-    val colors = LocalEyeColors.current
-    val typography = LocalEyeTypography.current
-    val signals = report?.signals.orEmpty().filter { it.group == "BEHAVIOR" }
-    Column(modifier.fillMaxWidth().clip(EyeShapes.panel).background(colors.panelBackground).animateContentSize().padding(18.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        CardHeader("视觉行为", EyeGlyph.EYE, EyeTileTone.PRIMARY) {
-            signals.firstOrNull()?.note?.let { EyeText(it, style = typography.chip, color = colors.textSecondary) }
-        }
-        SignalGrid(signals, columns = 3)
-        Box(Modifier.fillMaxWidth().height(1.dp).background(colors.borderSubtle))
-        live()
-    }
+private fun LiveCard(modifier: Modifier, live: @Composable () -> Unit) {
+    Column(modifier.fillMaxWidth().clip(EyeShapes.panel).background(LocalEyeColors.current.panelBackground).animateContentSize()
+        .padding(horizontal = 18.dp, vertical = 8.dp)) { live() }
 }
 
 // endregion
 
-// region 主动服务
+// region 护眼操、提醒与服务入口
 
 /** 护眼操入口：跟小瞳转转眼球（向左、右、上、下看），约 1 分钟。 */
 @Composable
@@ -522,20 +547,14 @@ private fun ReminderCard(state: HomeUiState, actions: HomeActions) {
     }
 }
 
-/** 服务入口：用眼趋势报告、专业咨询建议，下一行亮度与蓝光（AI 综合建议已移到首页「今日感受」上方）。 */
+/** 服务入口：用眼趋势报告、亮度与蓝光并排。 */
 @Composable
 private fun ServiceTiles(state: HomeUiState, navigation: HomeNavigation) {
-    val report = state.report
-    val trend = report?.trend?.averageScreenMinutes?.let { "日均用屏 ${EyeCareEngine.duration(it)}" } ?: "近 7 天变化"
-    val urgent = report?.consults?.any { it.urgent } == true
-    val consult = report?.consults?.firstOrNull()?.title ?: "结合自测与档案"
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            ServiceTile("用眼趋势报告", trend, EyeGlyph.CHART, EyeTileTone.SUCCESS, Modifier.weight(1f), navigation.onOpenTrend)
-            ServiceTile("专业咨询建议", consult, EyeGlyph.CHAT, if (urgent) EyeTileTone.DANGER else EyeTileTone.BLUE, Modifier.weight(1f), navigation.onOpenAdvice)
-        }
+    val trend = state.report?.trend?.averageScreenMinutes?.let { "日均用屏 ${EyeCareEngine.duration(it)}" } ?: "近 7 天变化"
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        ServiceTile("用眼趋势报告", trend, EyeGlyph.CHART, EyeTileTone.SUCCESS, Modifier.weight(1f), navigation.onOpenTrend)
         ServiceTile("亮度与蓝光", state.screenBrightness?.let { "屏幕亮度 ${(it * 100).toInt()}%" } ?: "夜间模式与护眼",
-            EyeGlyph.SUN, EyeTileTone.ACCENT, Modifier.fillMaxWidth(), navigation.onOpenBrightness)
+            EyeGlyph.SUN, EyeTileTone.ACCENT, Modifier.weight(1f), navigation.onOpenBrightness)
     }
 }
 

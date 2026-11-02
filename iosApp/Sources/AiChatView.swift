@@ -1,25 +1,26 @@
 import SwiftUI
 
-/// 首页「AI 综合建议」入口（放在「今日感受」上方）：爱科头像 + 一个按钮，点了进入对话页。与安卓 ChatEntryCard 一致。
+/// 入口与对话页标题（与安卓 CHAT_TITLE 一致）。
+let chatTitle = "AI 主动问诊"
+
+/// 首页「AI 主动问诊」入口（放在「今日感受」上方）：主色块上爱科头像 + 标题，点了进入对话页。与安卓 ChatEntryCard 一致。
 struct ChatEntryCard: View {
     let open: () -> Void
     var body: some View {
         Button { EyeHaptics.tap(); open() } label: {
-            Panel {
-                HStack(spacing: 12) {
-                    EyechoAvatar(size: 40)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("AI 综合建议").font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text)
-                        Text("和爱科聊聊今天的用眼感受").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
-                    }.frame(maxWidth: .infinity, alignment: .leading)
-                    Image(systemName: "chevron.right").font(.system(size: 14, weight: .semibold)).foregroundStyle(EyeStyle.secondary)
-                }
-            }.contentShape(Rectangle())
+            HStack(spacing: 12) {
+                EyechoAvatar(size: 44)
+                Text(chatTitle).font(EyeStyle.subtitle.weight(.bold)).foregroundStyle(.white).frame(maxWidth: .infinity, alignment: .leading)
+                Image(systemName: "chevron.right").font(.system(size: 15, weight: .bold)).foregroundStyle(.white)
+            }
+            .padding(.horizontal, 18).padding(.vertical, 16)
+            .background(EyeStyle.primary, in: RoundedRectangle(cornerRadius: 22))
+            .contentShape(RoundedRectangle(cornerRadius: 22))
         }.buttonStyle(PressScale(scale: 0.98))
     }
 }
 
-/// 「AI 综合建议」对话页：由爱尔眼科数字人「爱科 Eyecho」主持。顶部是爱科的自我介绍，接着是今天的综合建议卡片，
+/// 「AI 主动问诊」对话页：由爱尔眼科数字人「爱科 Eyecho」主持。顶部是爱科的自我介绍，接着是今天的综合建议卡片，
 /// 下面和爱科自由对话；记录只存在本机，可清空。
 /// 同意说明平时不展示，发送时按需弹窗（见 ChatConsentView）。
 /// 状态与请求在共用 CloudClient（chatJson / sendChat / clearChat），与安卓 EyeChatScreen 同一规则与文案。
@@ -82,7 +83,7 @@ struct AiChatPage: View {
         }
         .animation(.easeOut(duration: 0.2), value: confirming)
         .background(EyeStyle.background.ignoresSafeArea())
-        .navigationTitle("AI 综合建议").navigationBarTitleDisplayMode(.inline)
+        .navigationTitle(chatTitle).navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(EyeStyle.background, for: .navigationBar)
         .toolbar {
             if !messages.isEmpty {

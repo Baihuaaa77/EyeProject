@@ -254,7 +254,7 @@ class CloudClient(
 
     /**
      * 一条本机记录的 AI 解读状态（JSON）。`state` 为 unsupported / locked（message）/ consent（consentText）/
-     * ready / loading / failed（message）/ done（summary、meaning、suggestions、seeDoctor、sources、footnote、urgent）。
+     * ready / loading / failed（message）/ done（summary、meaning、suggestions、findings、seeDoctor、sources、footnote、urgent）。
      */
     fun explanationJson(fileName: String): String = buildJsonObject {
         val request = aiRequest(fileName)
@@ -268,6 +268,9 @@ class CloudClient(
                 put("summary", done.summary); put("seeDoctor", done.seeDoctor); put("footnote", done.disclaimer)
                 put("meaning", JsonArray(done.meaning.map(::JsonPrimitive)))
                 put("suggestions", JsonArray(done.suggestions.map(::JsonPrimitive)))
+                put("findings", JsonArray(done.findings.map { f ->
+                    buildJsonObject { put("indicator", f.indicator); put("observation", f.observation); put("possible", f.possible) }
+                }))
                 put("sources", JsonArray(done.sources.map { JsonPrimitive("${it.title}（${it.publisher}）") }))
                 put("urgent", done.riskLevel == "MEDIUM" || done.riskLevel == "HIGH")
             }

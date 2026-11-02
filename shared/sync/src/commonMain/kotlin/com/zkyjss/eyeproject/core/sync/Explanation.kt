@@ -37,7 +37,13 @@ data class ExplanationRequest(
     /** 与病种相关的少量资料答案（键为题目，值为所选项）。 */
     val background: Map<String, String> = emptyMap(),
     val assessmentVersion: String? = null,
+    /** 规则在测试过程中发现的具体问题（如「看远时水平偏斜超过参考线」），解读据此逐项分析异常指标。 */
+    val ruleFindings: List<String> = emptyList(),
 )
+
+/** 一项异常 / 不确定指标的分析：测的是什么、这次测到什么、可能提示什么问题。 */
+@Serializable
+data class ExplanationFinding(val indicator: String, val observation: String, val possible: String)
 
 @Serializable
 data class KnowledgeSourceDto(val id: String, val title: String, val publisher: String, val url: String? = null)
@@ -53,6 +59,8 @@ data class ExplanationDto(
     /** 什么情况下去看眼科。 */
     val seeDoctor: String,
     val sources: List<KnowledgeSourceDto> = emptyList(),
+    /** 异常 / 不确定指标逐项分析（都正常时为空）。 */
+    val findings: List<ExplanationFinding> = emptyList(),
     /** 解读所依据的规则等级（原样回传，便于界面核对）。 */
     val riskLevel: String,
     val model: String,
@@ -103,7 +111,8 @@ object Explanations {
             problems = snapshot.strings("problems"),
             assessmentVersion = snapshot.string("version"),
         ) else legacy(root, kind) ?: return null
-        return request.copy(ageGroup = ageGroup(age), background = background).bounded()
+        val findings = (root["assessment"] as? JsonObject)?.strings("findings").orEmpty().ifEmpty { root.strings("findings") }
+        return request.copy(ageGroup = ageGroup(age), background = background, ruleFindings = findings).bounded()
     }
 
     /** 旧记录：没有结果页快照，用记录里的规则等级与依据。 */
@@ -132,9 +141,12 @@ object Explanations {
         else -> "70 岁及以上"
     }
 
-    /** 同样的输入得到同样的解读：两端与服务端都以此作为缓存键。 */
+    /** 同样的输入得到同样的解读：两端与服务端都以此作为缓存键。前缀是解读格式版本，格式变了旧缓存自动失效。 */
     fun cacheKey(request: ExplanationRequest): String =
-        Sha256.hex(SyncContract.json.encodeToString(ExplanationRequest.serializer(), request))
+        Sha256.hex("$FORMAT_VERSION|" + SyncContract.json.encodeToString(ExplanationRequest.serializer(), request))
+
+    /** v2：加入异常指标逐项分析（findings）。 */
+    private const val FORMAT_VERSION = "v2"
 
     /** 限制条数与长度，控制费用并与服务端校验一致。 */
     fun ExplanationRequest.bounded(): ExplanationRequest = copy(
@@ -147,6 +159,7 @@ object Explanations {
         problems = problems.take(MAX_ITEMS).map { it.take(MAX_TEXT) },
         background = background.entries.take(MAX_BACKGROUND).associate { (k, v) -> k.take(32) to v.take(60) },
         assessmentVersion = assessmentVersion?.take(64),
+        ruleFindings = ruleFindings.take(MAX_ITEMS).map { it.take(MAX_TEXT) },
     )
 
     private fun evidence(o: JsonObject) =

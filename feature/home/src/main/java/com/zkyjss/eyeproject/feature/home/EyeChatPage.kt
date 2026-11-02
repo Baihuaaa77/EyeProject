@@ -76,26 +76,27 @@ class ChatViewModel @Inject constructor(private val chat: ChatRepository) : View
     fun clear() { viewModelScope.launch { chat.clear() } }
 }
 
-/** 首页「AI 综合建议」入口（放在「今日感受」上方）：爱科头像 + 一个按钮，点了进入对话页。与苹果端 ChatEntryCard 一致。 */
+/** 首页「AI 主动问诊」入口（放在「今日感受」上方）：主色块上爱科头像 + 标题，点了进入对话页。与苹果端 ChatEntryCard 一致。 */
 @Composable
 internal fun ChatEntryCard(onOpen: () -> Unit) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
     val haptics = rememberEyeHaptics()
-    Row(Modifier.fillMaxWidth().clip(EyeShapes.panel).background(colors.panelBackground)
-        .clickable(role = Role.Button) { haptics.tap(); onOpen() }.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
-        EyechoAvatar(40.dp)
+    Row(Modifier.fillMaxWidth().clip(EyeShapes.panel).background(colors.primary)
+        .clickable(role = Role.Button) { haptics.tap(); onOpen() }.padding(horizontal = 18.dp, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically) {
+        EyechoAvatar(44.dp)
         Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            EyeText("AI 综合建议", style = typography.subtitle, color = colors.textPrimary)
-            EyeText("和爱科聊聊今天的用眼感受", style = typography.bodySecondary, color = colors.textSecondary)
-        }
-        EyeText("›", style = typography.title, color = colors.textSecondary)
+        EyeText(CHAT_TITLE, Modifier.weight(1f), style = typography.subtitle, color = colors.onPrimary, fontWeight = FontWeight.Bold)
+        EyeText("›", style = typography.title, color = colors.onPrimary)
     }
 }
 
+/** 入口与对话页标题（两端一致）。 */
+internal const val CHAT_TITLE = "AI 主动问诊"
+
 /**
- * 「AI 综合建议」对话页：由爱尔眼科数字人「爱科 Eyecho」主持。顶部是爱科的自我介绍，接着是今天的综合建议卡片，
+ * 「AI 主动问诊」对话页：由爱尔眼科数字人「爱科 Eyecho」主持。顶部是爱科的自我介绍，接着是今天的综合建议卡片，
  * 下面和爱科自由对话；记录只存在本机，可清空。
  * 同意说明平时不展示，发送时按需弹窗（见 [ChatConsentDialog]）。与苹果端 AiChatPage 同一规则与文案。
  */
@@ -148,7 +149,7 @@ internal fun EyeChatContent(
         onAgree = { quiet -> confirming = false; asked = true; send(needsConsent, quiet) },
         onDecline = { confirming = false },
     )
-    EyeSubPage("AI 综合建议", onBack, Modifier.imePadding(), scroll = scroll, bottomBar = {
+    EyeSubPage(CHAT_TITLE, onBack, Modifier.imePadding(), scroll = scroll, bottomBar = {
         ChatInputBar(state, input, { input = it.take(Chats.INPUT_LIMIT) }, onOpenAccount) {
             if (needsConsent || (state?.askConsent == true && !asked)) confirming = true else send(agree = false, quiet = false)
         }

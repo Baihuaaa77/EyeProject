@@ -70,9 +70,10 @@ iOS 连本机服务：在「我的 → 右上角人像（账户）→ 服务器�
 $env:DEEPSEEK_API_KEY = "sk-..."; .\gradlew.bat -p backend/server run
 ```
 
-- 输入 `ExplanationRequest`（`shared/sync` 的 `Explanations.fromRecord` 从本机记录抽取：等级、徽标、指标、依据、可靠性说明、年龄段、几项相关资料选项；不含姓名、账号、成员编号、逐帧数据）。
+- 输入 `ExplanationRequest`（`shared/sync` 的 `Explanations.fromRecord` 从本机记录抽取：等级、徽标、指标、依据、规则在测试中发现的问题 `ruleFindings`、可靠性说明、年龄段、几项相关资料选项；不含姓名、账号、成员编号、逐帧数据）。
+- 输出除总结、说明、建议、就医提示外，还有 `findings`：逐项分析标为异常 / 不确定的指标（测的是什么、这次测到什么、可能提示什么问题）。有异常指标却只复述等级的回答判为不合格（提示词 `p2`；客户端缓存键前缀 `v2`，旧解读自动失效）。
 - 只接受干眼、老视、眼位三项（`RecordSummaries.EXPLAINABLE_KINDS`）；色觉自测记录可同步但不做 AI 解读。
-- 风险等级只来自设备端规则；模型输出与等级矛盾、出现诊断性措辞或编造数字即判为不合格并重试一次，仍不合格返回 502。
+- 风险等级只来自设备端规则；模型输出与等级矛盾、出现诊断性措辞或编造数字即判为不合格并重试（最多 3 次），仍不合格返回 502。
 - 需 `AI_EXPLANATION` 同意（403 `consent_required`）；未配置密钥 503 `ai_unavailable`；超额度 429 `ai_quota_exceeded`；每账号每分钟 AI 请求（解读、建议、对话合计）限 12 次。
 - 缓存键 = 提示词版本 + 模型 + 知识库版本 + 输入哈希；改提示词时递增 `ExplanationService.PROMPT_VERSION`，改知识库时更新文件头「版本」。日志只记 token 数。
 - 费用参考：每次约 1.5k 输入 + 0.3k 输出 token，按 V4 Flash 公开价（约 1 元 / 2 元每百万 token）约 0.002 元；以 DeepSeek 官网价格为准。

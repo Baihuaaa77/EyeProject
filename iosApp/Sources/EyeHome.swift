@@ -4,7 +4,6 @@ import EyeScreening
 // 首页与它的二级页面（用眼趋势报告、健康建议、亮度与蓝光、休息一下）。与安卓 feature:home 同一顺序、排版与文案。
 
 private let loopHelp = "小瞳按「感知 → 评估 → 归因 → 干预 → 反馈」帮你管理用眼：汇总眨眼、距离、屏幕亮度和你的档案，评估今天的用眼负荷（0–100，越高越累），找出主要原因，给出马上能做的建议，再根据你每天的感受调整。结果仅供参考，不是诊断。"
-private let perceptionHelp = "视觉行为来自实时检测（画面只在本机处理，不保存）；个体档案来自「我的 → 家庭成员」里本人的资料。这些数据都只保存在本机。"
 private let noDiscomfort = "没有不适"
 
 /// 等级配色：轻松绿、留意琥珀、偏累红、待感知灰；圆环用更明亮的一组。
@@ -15,7 +14,8 @@ private func ringColor(_ level: String) -> Color {
     switch level { case "LOW": return EyeStyle.success; case "MEDIUM": return EyeStyle.accent; case "HIGH": return EyeStyle.danger; default: return EyeStyle.borderSubtle }
 }
 
-/// 首页：问候与日期（右上角账户、系统设置）→ 今日用眼 → AI 综合建议（和爱科聊聊）→ 今日感受 → 多源感知 → 主动服务。
+/// 首页：问候与日期（右上角账户、系统设置）→ 今日用眼 → AI 主动问诊（爱科）→ 今日感受 → 基础数据 → 实时检测 →
+/// 护眼操、休息提醒 → 用眼趋势报告、亮度与蓝光。不分小节标题。与安卓 HomeContent 一致。
 struct HomePage: View {
     let navigate: (AppRoute) -> Void
     let openTest: (String) -> Void
@@ -25,6 +25,7 @@ struct HomePage: View {
     @State private var breakOpen = false
     @State private var exerciseOpen = false
     @State private var liveRequests = 0
+    @State private var feelingEditing = false
 
     private var greeting: String {
         switch Calendar.current.component(.hour, from: Date()) {
@@ -55,16 +56,14 @@ struct HomePage: View {
                     case "PROFILE": navigate(.subjectEdit(selfId))
                     case "LIVE":
                         liveRequests += 1
-                        withAnimation(.easeOut(duration: 0.3)) { proxy.scrollTo("behavior", anchor: .top) }
+                        withAnimation(.easeOut(duration: 0.3)) { proxy.scrollTo("live", anchor: .top) }
                     default: break
                     }
                 }
                 ChatEntryCard { navigate(.chat) }
-                CheckInCard(report: report) { store.checkIn($0) }
-                SectionTitle(title: "多源感知", help: perceptionHelp)
+                CheckInCard(report: report) { feelingEditing = true }
                 if report.signals("BASIC").contains(where: { $0.id != "brightness" }) { BasicCard(report: report) }
-                BehaviorCard(report: report, liveRequests: liveRequests).id("behavior")
-                SectionTitle(title: "主动服务", help: nil)
+                Panel(padding: 0) { LiveEyeSection(startRequests: liveRequests).padding(.horizontal, 18).padding(.vertical, 8) }.id("live")
                 ExerciseCard { exerciseOpen = true }
                 ReminderCard(reminder: reminder, suggested: report.loaded ? report.suggestedReminderMinutes : nil)
                 ServiceTiles(report: report, navigate: navigate)
@@ -74,17 +73,16 @@ struct HomePage: View {
         .onChange(of: reminder.enabled) { _ in store.refresh() }
         .fullScreenCover(isPresented: $breakOpen) { RestBreakView() }
         .fullScreenCover(isPresented: $exerciseOpen) { EyeExerciseView() }
-    }
-}
-
-private struct SectionTitle: View {
-    let title: String
-    let help: String?
-    var body: some View {
-        HStack(spacing: 0) {
-            Text(title).font(EyeStyle.title).foregroundStyle(EyeStyle.text)
-            if let help { HelpButton(title: title, text: help) }
-        }.padding(.leading, 4).padding(.top, 6)
+        .overlay {
+            if feelingEditing {
+                let fine = report.todaySymptoms.isEmpty
+                FeelingSheet(initial: report.checkedInToday ? (fine ? [noDiscomfort] : report.todaySymptoms) : [],
+                             save: { picked in feelingEditing = false; store.checkIn(picked.filter { $0 != noDiscomfort }) },
+                             dismiss: { feelingEditing = false })
+                .transition(.opacity)
+            }
+        }
+        .animation(.easeOut(duration: 0.2), value: feelingEditing)
     }
 }
 
@@ -205,44 +203,74 @@ struct FlowLayout: Layout {
     }
 }
 
-/// 今日感受打卡：与「视觉行为」同样的卡片标题；没打卡时展开选项，打卡后收成一行，可修改。
+/// 今日感受：卡片只显示已记下的感受（标签）；点「记录」/「修改」弹出选择框（FeelingSheet）。与安卓 CheckInCard 一致。
 private struct CheckInCard: View {
     let report: CareReport
-    let onCheckIn: ([String]) -> Void
-    @State private var editing = false
-    @State private var selected: [String] = []
+    let edit: () -> Void
     var body: some View {
         Panel {
-            let checked = report.checkedInToday && !editing
-            let fine = report.todaySymptoms.isEmpty
+            let checked = report.checkedInToday
+            let symptoms = report.todaySymptoms
             HStack(spacing: 10) {
-                IconTile(glyph: .heart, tone: report.checkedInToday && !fine ? .accent : .success, size: 32)
+                IconTile(glyph: .heart, tone: checked && !symptoms.isEmpty ? .accent : .success, size: 32)
                 Text("今日感受").font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text).frame(maxWidth: .infinity, alignment: .leading)
-                if checked {
-                    PillButton(label: "修改", primary: false) {
-                        selected = fine ? [noDiscomfort] : report.todaySymptoms
-                        editing = true
-                    }
-                }
+                PillButton(label: checked ? "修改" : "记录", primary: !checked, action: edit)
             }
             if checked {
-                Text(fine ? noDiscomfort : report.todaySymptoms.joined(separator: "、"))
-                    .font(EyeStyle.subtitle).foregroundStyle(fine ? EyeStyle.text : EyeStyle.warning)
-            } else {
-                Text("今天眼睛感觉怎么样？").font(EyeStyle.body).foregroundStyle(EyeStyle.secondary)
                 FlowLayout(spacing: 8) {
-                    ForEach([noDiscomfort] + EyeCareBridge.shared.symptoms, id: \.self) { label in
-                        ChoiceChip(label: label, selected: selected.contains(label)) { toggle(label) }
+                    ForEach(symptoms.isEmpty ? [noDiscomfort] : symptoms, id: \.self) { label in
+                        let attention = !symptoms.isEmpty
+                        Text(label).font(EyeStyle.body.weight(.semibold))
+                            .foregroundStyle(attention ? EyeStyle.warning : EyeStyle.success)
+                            .padding(.horizontal, 12).padding(.vertical, 6)
+                            .background(attention ? EyeStyle.warningSoft : EyeStyle.successSoft, in: Capsule())
                     }
                 }
-                Button("记录今天的感受") {
-                    EyeHaptics.success()
-                    onCheckIn(selected.filter { $0 != noDiscomfort })
-                    editing = false
-                }.buttonStyle(EyeButtonStyle()).disabled(selected.isEmpty)
             }
         }
-        .animation(.easeOut(duration: 0.25), value: editing)
+    }
+}
+
+/// 选择今天的感受：屏幕中间的弹窗，「没有不适」占一整行，其余等宽两列；选了才能保存。与安卓 FeelingDialog 一致。
+private struct FeelingSheet: View {
+    let save: ([String]) -> Void
+    let dismiss: () -> Void
+    @State private var selected: [String]
+    init(initial: [String], save: @escaping ([String]) -> Void, dismiss: @escaping () -> Void) {
+        self.save = save; self.dismiss = dismiss
+        _selected = State(initialValue: initial)
+    }
+    var body: some View {
+        ZStack {
+            EyeStyle.ink.opacity(0.55).ignoresSafeArea().contentShape(Rectangle()).onTapGesture { dismiss() }
+            VStack(alignment: .leading, spacing: 10) {
+                Text("今天眼睛感觉怎么样？").font(EyeStyle.title).foregroundStyle(EyeStyle.text).padding(.bottom, 6)
+                option(noDiscomfort)
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+                    ForEach(EyeCareBridge.shared.symptoms, id: \.self) { option($0) }
+                }
+                Button("保存") { EyeHaptics.success(); save(selected) }.buttonStyle(EyeButtonStyle())
+                    .disabled(selected.isEmpty).padding(.top, 4)
+            }
+            .padding(24).frame(maxWidth: .infinity, alignment: .leading)
+            .background(EyeStyle.panel, in: RoundedRectangle(cornerRadius: 22))
+            .padding(24)
+        }
+        .accessibilityAddTraits(.isModal)
+    }
+    private func option(_ label: String) -> some View {
+        let on = selected.contains(label)
+        return Button { EyeHaptics.toggle(); toggle(label) } label: {
+            Text(label).font(on ? EyeStyle.body.weight(.semibold) : EyeStyle.body)
+                .foregroundStyle(on ? EyeStyle.primary : EyeStyle.text).multilineTextAlignment(.center)
+                .lineLimit(1).minimumScaleFactor(0.8)
+                .padding(.horizontal, 6).frame(maxWidth: .infinity, minHeight: 52)
+                .background(on ? EyeStyle.primarySoft : EyeStyle.background, in: RoundedRectangle(cornerRadius: EyeStyle.radiusMedium))
+                .overlay { RoundedRectangle(cornerRadius: EyeStyle.radiusMedium).stroke(on ? EyeStyle.primary : EyeStyle.background, lineWidth: 1.5) }
+                .contentShape(RoundedRectangle(cornerRadius: EyeStyle.radiusMedium))
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(on ? [.isSelected] : [])
     }
     private func toggle(_ label: String) {
         if label == noDiscomfort { selected = selected.contains(label) ? [] : [label]; return }
@@ -269,7 +297,7 @@ func glyphFor(_ kind: String) -> (EyeGlyph, TileTone) {
     }
 }
 
-// MARK: - 多源感知
+// MARK: - 基础数据
 
 /// 一格读数：名称、数值（需要留意时琥珀色并带小圆点）。
 struct SignalCell: View {
@@ -325,22 +353,7 @@ private struct BasicCard: View {
     }
 }
 
-/// 视觉行为：眨眼频率、观看距离、头部姿态 + 实时检测（默认关闭）。
-private struct BehaviorCard: View {
-    let report: CareReport
-    let liveRequests: Int
-    var body: some View {
-        let signals = report.signals("BEHAVIOR")
-        Panel {
-            CardHeader(title: "视觉行为", glyph: .eye, tone: .primary, trailing: signals.first?.note)
-            SignalGrid(signals: signals, columns: 3)
-            Rectangle().fill(EyeStyle.borderSubtle).frame(height: 1)
-            LiveEyeSection(startRequests: liveRequests)
-        }
-    }
-}
-
-// MARK: - 主动服务
+// MARK: - 护眼操、提醒与服务入口
 
 /// 护眼操入口：跟小瞳转转眼球（向左、右、上、下看），约 1 分钟。
 private struct ExerciseCard: View {
@@ -390,17 +403,13 @@ private struct ReminderCard: View {
     }
 }
 
-/// 服务入口：用眼趋势报告、专业咨询建议，下一行亮度与蓝光（AI 综合建议已移到首页「今日感受」上方）。
+/// 服务入口：用眼趋势报告、亮度与蓝光并排。与安卓 ServiceTiles 一致。
 private struct ServiceTiles: View {
     let report: CareReport
     let navigate: (AppRoute) -> Void
     var body: some View {
-        let urgent = report.consults.contains { $0.urgent }
-        VStack(spacing: 10) {
-            HStack(spacing: 10) {
-                tile("用眼趋势报告", "近 7 天变化", .chart, .success) { navigate(.trend) }
-                tile("专业咨询建议", report.consults.first?.title ?? "结合自测与档案", .chat, urgent ? .danger : .blue) { navigate(.advice) }
-            }
+        HStack(spacing: 10) {
+            tile("用眼趋势报告", "近 7 天变化", .chart, .success) { navigate(.trend) }
             tile("亮度与蓝光", report.signal("brightness").map { "屏幕亮度 \($0.value)" } ?? "夜间模式与护眼", .sun, .accent) { navigate(.brightness) }
         }
     }

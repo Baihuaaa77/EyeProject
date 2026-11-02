@@ -3,6 +3,7 @@ package com.zkyjss.eyeproject.server
 import com.zkyjss.eyeproject.core.sync.ConsentType
 import com.zkyjss.eyeproject.core.sync.ErrorCodes
 import com.zkyjss.eyeproject.core.sync.ExplanationDto
+import com.zkyjss.eyeproject.core.sync.ExplanationFinding
 import com.zkyjss.eyeproject.core.sync.ExplanationRequest
 import com.zkyjss.eyeproject.core.sync.Explanations
 import com.zkyjss.eyeproject.core.sync.Explanations.bounded
@@ -75,7 +76,7 @@ class ExplanationService(
                 is ExplanationOutput.Result.Valid -> {
                     val dto = ExplanationDto(
                         summary = result.summary, meaning = result.meaning, suggestions = result.suggestions, seeDoctor = result.seeDoctor,
-                        sources = sourcesFor(result.refs, chunks), riskLevel = request.riskLevel, model = client.model, generatedAt = clock(),
+                        findings = result.findings, sources = sourcesFor(result.refs, chunks), riskLevel = request.riskLevel, model = client.model, generatedAt = clock(),
                     )
                     db.transaction {
                         if (single("SELECT 1 FROM ai_explanations WHERE cache_key = ?", key) { 1 } == null)
@@ -87,7 +88,7 @@ class ExplanationService(
                 }
             }
         }
-        log.warn("AI 解读输出两次不合格：{}", problem)
+        log.warn("AI 解读输出多次不合格：{}", problem)
         db.transaction { audit.write(this, AuditAction.AI_EXPLAIN, accountId, "explanation", request.kind, "INVALID_OUTPUT", ip) }
         throw ApiException(HttpStatusCode.BadGateway, ErrorCodes.AI_UNAVAILABLE, "这次没能生成合格的解读，请稍后再试")
     }
@@ -120,8 +121,9 @@ class ExplanationService(
 
     companion object {
         /** 改动提示词或输出格式时递增，旧缓存随之失效。 */
-        const val PROMPT_VERSION = "p1"
-        private const val MAX_ATTEMPTS = 2
+        /** p2：加入异常指标逐项分析（findings） */
+        const val PROMPT_VERSION = "p2"
+        private const val MAX_ATTEMPTS = 3
         private const val APP_SOURCE = "app-protocol"
         private val ZONE: ZoneId = ZoneId.of("Asia/Shanghai")
     }
@@ -133,13 +135,16 @@ object ExplanationPrompt {
         你是眼健康科普助手，为手机眼部自测的结果写通俗解读，读者是没有医学背景的普通人或孩子家长。必须遵守：
         1. 风险等级已经由测试规则确定，你只能解释，不得改变、质疑或重新判断等级；不得下诊断，不说「确诊」「患有」「得了」。
         2. 只依据【本次结果】和【参考知识】写作，不编造信息；只能使用这两部分里出现过的数字。
-        3. 口语化、简短、不制造焦虑：全部文字合计不超过 220 字；少用术语，必须用时顺带一句解释；不提具体药品名称和剂量，不推荐具体医院。
+        3. 口语化、简短、不制造焦虑：全部文字合计不超过 360 字；少用术语，必须用时顺带一句解释；不提具体药品名称和剂量，不推荐具体医院。
         4. 数据无效（UNKNOWN）时：说明没测好的原因和下次怎么测好，不推测眼睛情况。
         5. 结果不确定（UNCERTAIN）时：说明数值在测量误差范围内，建议复测，不往好或坏的方向猜。
         6. 中风险或高风险时：语气平和，明确建议去哪类门诊、多久内就诊；参考知识里的危险信号要提醒。低风险时给保持习惯的建议，并提醒有不适仍应就医。
         7. 建议要具体、可以马上做到，结合年龄段和相关资料。
+        8. 不要只复述等级：逐项看【关键指标】【判断依据】【测试中发现的问题】里标为异常或不确定的指标，写进 findings——
+           indicator 写指标名称；observation 写这次测到的情况（用输入里的数值，并对照参考范围）；possible 写它可能提示什么问题
+           （用「可能提示」「可能和……有关」，不下诊断），最多 3 项，挑最重要的。全部正常或数据无效时 findings 为空数组。
         只输出一个 JSON 对象，格式：
-        {"summary":"一句话总结，不超过40字","meaning":["这个结果说明什么，1到3条，每条不超过45字"],"suggestions":["可以怎么做，1到3条，每条不超过45字"],"seeDoctor":"什么情况下、去哪类门诊看医生，不超过50字","refs":["实际用到的参考知识编号"]}
+        {"summary":"一句话总结，不超过40字","findings":[{"indicator":"指标名称","observation":"这次测到的情况，不超过45字","possible":"可能提示什么问题，不超过45字"}],"meaning":["这个结果说明什么，1到3条，每条不超过45字"],"suggestions":["可以怎么做，1到3条，每条不超过45字"],"seeDoctor":"什么情况下、去哪类门诊看医生，不超过50字","refs":["实际用到的参考知识编号"]}
     """.trimIndent()
 
     private val KIND_NAMES = mapOf("DRY_EYE" to "干眼自测", "PRESBYOPIA" to "老视（老花眼）自测", "STRABISMUS" to "眼位（斜视）自测")
@@ -166,6 +171,10 @@ object ExplanationPrompt {
                 e.details.forEach { appendLine("  · $it") }
             }
         }
+        if (r.ruleFindings.isNotEmpty()) {
+            appendLine("测试中发现的问题：")
+            r.ruleFindings.forEach { appendLine("- $it") }
+        }
         if (r.qualityNotes.isNotEmpty()) appendLine("数据可靠性说明：" + r.qualityNotes.joinToString("；"))
         if (r.problems.isNotEmpty()) appendLine("没测好的原因：" + r.problems.joinToString("；"))
         if (r.background.isNotEmpty()) appendLine("相关资料：" + r.background.entries.joinToString("；") { "${it.key}=${it.value}" })
@@ -189,7 +198,7 @@ object ExplanationPrompt {
 object ExplanationOutput {
     sealed interface Result {
         data class Valid(val summary: String, val meaning: List<String>, val suggestions: List<String>, val seeDoctor: String,
-                         val refs: List<String>) : Result
+                         val refs: List<String>, val findings: List<ExplanationFinding> = emptyList()) : Result
         data class Invalid(val reason: String) : Result
     }
 
@@ -208,7 +217,8 @@ object ExplanationOutput {
 
     private val SMALL_NUMBERS = setOf("1", "2", "3")
     private const val MAX_ITEM = 80
-    private const val MAX_TOTAL = 400
+    private const val MAX_TOTAL = 650
+    private val FLAGGED = setOf("ABNORMAL", "UNCERTAIN")
 
     fun parse(content: String, request: ExplanationRequest, allowedNumbers: Set<String>): Result {
         val root = runCatching { SyncContract.json.parseToJsonElement(content.trim()).jsonObject }.getOrNull()
@@ -222,11 +232,21 @@ object ExplanationOutput {
         val suggestions = list("suggestions")
         val seeDoctor = text("seeDoctor")
         val refs = (root["refs"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.content }
+        val findings = (root["findings"] as? JsonArray).orEmpty().mapNotNull { item ->
+            val o = item as? JsonObject ?: return@mapNotNull null
+            fun field(key: String) = (o[key] as? JsonPrimitive)?.takeIf { it.isString }?.content?.let(::clean).orEmpty()
+            ExplanationFinding(field("indicator"), field("observation"), field("possible"))
+                .takeIf { it.indicator.isNotEmpty() && it.observation.isNotEmpty() && it.possible.isNotEmpty() }
+        }.take(3)
         if (summary.isEmpty()) return Result.Invalid("缺少 summary")
         if (meaning.isEmpty() && suggestions.isEmpty()) return Result.Invalid("meaning 与 suggestions 不能都为空")
-        val all = listOf(summary, seeDoctor) + meaning + suggestions
+        // 有异常或不确定的指标时，必须逐项分析，不能只复述规则等级
+        val flagged = request.riskLevel != "UNKNOWN" && (request.metrics.any { it.status in FLAGGED } ||
+            request.evidence.any { it.status in FLAGGED } || request.ruleFindings.isNotEmpty())
+        if (flagged && findings.isEmpty()) return Result.Invalid("有异常或不确定的指标，findings 需要逐项说明测到了什么、可能提示什么问题")
+        val all = listOf(summary, seeDoctor) + meaning + suggestions + findings.flatMap { listOf(it.indicator, it.observation, it.possible) }
         all.firstOrNull { it.length > MAX_ITEM }?.let { return Result.Invalid("有一条超过 $MAX_ITEM 字，请精简") }
-        if (all.sumOf { it.length } > MAX_TOTAL) return Result.Invalid("总字数过多，请控制在 220 字左右")
+        if (all.sumOf { it.length } > MAX_TOTAL) return Result.Invalid("总字数过多，请控制在 360 字左右")
         val joined = all.joinToString("\n")
         FORBIDDEN.firstOrNull { it in joined }?.let { return Result.Invalid("出现了不允许的说法「$it」") }
         CONTRADICTIONS[request.riskLevel].orEmpty().firstOrNull { it in joined }?.let {
@@ -236,7 +256,7 @@ object ExplanationOutput {
         ExplanationPrompt.numbers(joined).firstOrNull { it !in allowedNumbers && it !in SMALL_NUMBERS }?.let {
             return Result.Invalid("出现了输入中没有的数字 $it")
         }
-        return Result.Valid(summary, meaning, suggestions, seeDoctor, refs)
+        return Result.Valid(summary, meaning, suggestions, seeDoctor, refs, findings)
     }
 
     /** 去掉模型常加的序号、项目符号与多余空白。 */

@@ -3,6 +3,7 @@ package com.zkyjss.eyeproject.feature.services
 import com.zkyjss.eyeproject.core.data.explanation.AiExplanationState
 import com.zkyjss.eyeproject.core.data.explanation.ExplanationRepository
 import com.zkyjss.eyeproject.core.ui.component.AiCardState
+import com.zkyjss.eyeproject.core.ui.component.AiFinding
 import com.zkyjss.eyeproject.core.ui.component.AiSource
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -27,6 +28,7 @@ internal fun AiExplanationState.toCard(): AiCardState? = when (this) {
     is AiExplanationState.Failed -> AiCardState.Failed(message)
     is AiExplanationState.Done -> with(explanation) {
         AiCardState.Done(summary, meaning, suggestions, seeDoctor, sources.map { AiSource(it.title, it.publisher) }, disclaimer,
-            urgent = riskLevel == "MEDIUM" || riskLevel == "HIGH")
+            urgent = riskLevel == "MEDIUM" || riskLevel == "HIGH",
+            findings = findings.map { AiFinding(it.indicator, it.observation, it.possible) })
     }
 }

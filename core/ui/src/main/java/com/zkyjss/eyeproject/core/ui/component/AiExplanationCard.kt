@@ -58,6 +58,9 @@ import kotlinx.coroutines.delay
 /** 参考资料一行：名称 + 发布机构。 */
 data class AiSource(val title: String, val publisher: String)
 
+/** 一项异常 / 不确定指标的分析：指标、这次测到的情况、可能提示什么。 */
+data class AiFinding(val indicator: String, val observation: String, val possible: String)
+
 /** 卡片文案：「AI 解读」与「AI 综合建议」共用同一张卡片，只换标题、说明与两组要点的名称。 */
 data class AiCardText(
     val title: String = "AI 解读",
@@ -96,6 +99,8 @@ sealed interface AiCardState {
         val footnote: String,
         /** 中 / 高风险时「何时就医」用提醒色。 */
         val urgent: Boolean,
+        /** AI 解读：异常 / 不确定指标逐项分析（综合建议没有）。 */
+        val findings: List<AiFinding> = emptyList(),
     ) : AiCardState
     data class Failed(val message: String) : AiCardState
 }
@@ -212,6 +217,7 @@ private fun DoneContent(done: AiCardState.Done, text: AiCardText) {
     var sourcesOpen by rememberSaveable { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
         EyeText(done.summary, style = typography.subtitle, color = colors.textPrimary)
+        if (done.findings.isNotEmpty()) FindingGroup(done.findings)
         if (done.meaning.isNotEmpty()) BulletGroup(text.firstGroup, done.meaning, colors.textSecondary)
         if (done.suggestions.isNotEmpty()) BulletGroup(text.secondGroup, done.suggestions, colors.primary)
         if (done.seeDoctor.isNotBlank()) {
@@ -248,6 +254,24 @@ private fun BulletGroup(title: String, items: List<String>, dot: Color) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Box(Modifier.padding(top = 8.dp).size(6.dp).clip(EyeShapes.chip).background(dot))
                 EyeText(item, Modifier.weight(1f), style = typography.body, color = colors.textPrimary)
+            }
+        }
+    }
+}
+
+/** 「异常指标」：每项一块浅底，指标名 + 测到的情况，下面一行「可能提示」用提醒色。与苹果端 findings 同一排版。 */
+@Composable
+private fun FindingGroup(findings: List<AiFinding>) {
+    val colors = LocalEyeColors.current
+    val typography = LocalEyeTypography.current
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        EyeText("异常指标", style = typography.chip, color = colors.textSecondary, fontWeight = FontWeight.SemiBold)
+        findings.forEach { f ->
+            Column(Modifier.fillMaxWidth().clip(EyeShapes.medium).background(colors.warningSoft).padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                EyeText(f.indicator, style = typography.body, color = colors.textPrimary, fontWeight = FontWeight.SemiBold)
+                EyeText(f.observation, style = typography.body, color = colors.textPrimary)
+                EyeText("可能提示：${f.possible}", style = typography.body, color = colors.warning)
             }
         }
     }

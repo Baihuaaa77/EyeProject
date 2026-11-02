@@ -128,6 +128,8 @@ struct AiCardView: View {
     private var done: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text(string("summary")).font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text)
+            let findings = info["findings"] as? [[String: Any]] ?? []
+            if !findings.isEmpty { findingGroup(findings) }
             if !list(text.firstKey).isEmpty { bullets(text.firstGroup, list(text.firstKey), dot: EyeStyle.secondary) }
             if !list(text.secondKey).isEmpty { bullets(text.secondGroup, list(text.secondKey), dot: EyeStyle.primary) }
             if !string("seeDoctor").isEmpty {
@@ -152,6 +154,24 @@ struct AiCardView: View {
                 }
             }
             Text(string("footnote")).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
+        }
+    }
+
+    /// 「异常指标」：每项一块浅底，指标名 + 测到的情况，下面一行「可能提示」用提醒色。与安卓 FindingGroup 同一排版。
+    private func findingGroup(_ findings: [[String: Any]]) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("异常指标").font(EyeStyle.chip).foregroundStyle(EyeStyle.secondary)
+            ForEach(Array(findings.enumerated()), id: \.offset) { _, f in
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(f["indicator"] as? String ?? "").font(EyeStyle.body.weight(.semibold)).foregroundStyle(EyeStyle.text)
+                    Text(f["observation"] as? String ?? "").font(EyeStyle.body).foregroundStyle(EyeStyle.text)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("可能提示：" + (f["possible"] as? String ?? "")).font(EyeStyle.body).foregroundStyle(EyeStyle.warning)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+                .background(EyeStyle.warningSoft, in: RoundedRectangle(cornerRadius: EyeStyle.radiusMedium))
+            }
         }
     }
 

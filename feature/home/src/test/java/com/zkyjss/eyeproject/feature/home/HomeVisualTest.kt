@@ -90,6 +90,9 @@ class HomeVisualTest {
         compose.onNodeWithText("留意", useUnmergedTree = true).assertExists()
         compose.onNodeWithText("为你推荐").assertDoesNotExist()
         compose.onNodeWithText("个体档案").assertDoesNotExist()
+        // 首页精简：问诊入口改名、不再分小节标题、去掉专业咨询建议与视觉行为读数
+        compose.onNodeWithText(CHAT_TITLE).assertExists()
+        listOf("AI 综合建议", "多源感知", "主动服务", "专业咨询建议", "视觉行为").forEach { compose.onNodeWithText(it).assertDoesNotExist() }
         // 第一句气泡是今天最该做的事
         compose.mainClock.advanceTimeBy(1_400)
         compose.onNodeWithText("看了好久啦，看看远处 20 秒吧").assertExists()
@@ -129,7 +132,9 @@ class HomeVisualTest {
                 HomeContent(HomeUiState(report = EyeCareEngine.report(LedgerData(), EyeCareContext(today, 21))), HomeNavigation(), HomeActions())
             }
         }
-        compose.onNodeWithText("今天眼睛感觉怎么样？").assertExists()
+        // 还没记录：卡片只有一个「记录」按钮，选项收在弹窗里
+        compose.onNodeWithText("今天眼睛感觉怎么样？").assertDoesNotExist()
+        compose.onNodeWithText("记录").assertExists()
         capture("03-首页-深色-还没有数据")
     }
 
@@ -150,11 +155,17 @@ class HomeVisualTest {
     @Test fun checkInRecordsSymptoms() {
         var saved: List<String>? = null
         compose.setContent { EyeProjectTheme { HomeContent(demoState(checkIn = false), HomeNavigation(), HomeActions(checkIn = { saved = it })) } }
-        compose.onNodeWithText("眼睛酸胀").performScrollTo().performClick()
-        compose.onNodeWithText("头痛").performScrollTo().performClick()
+        compose.onNodeWithText("记录").performScrollTo().performClick()
+        // 弹窗里选，没选不能保存；「没有不适」与具体不适互斥
+        compose.onNodeWithText("今天眼睛感觉怎么样？").assertExists()
+        compose.onNodeWithText("保存").assertIsNotEnabled()
+        compose.onNodeWithText("没有不适").performClick()
+        compose.onNodeWithText("眼睛酸胀").performClick()
+        compose.onNodeWithText("头痛").performClick()
         capture("04-首页-今日感受")
-        compose.onNodeWithText("记录今天的感受").performScrollTo().performClick()
+        compose.onNodeWithText("保存").performClick()
         assertEquals(listOf("眼睛酸胀", "头痛"), saved)
+        compose.onNodeWithText("今天眼睛感觉怎么样？").assertDoesNotExist()
     }
 
     @Test fun liveDetectionIsOffByDefaultAndShowsLandmarksWhenOn() {
