@@ -3,7 +3,7 @@
 'use strict';
 
 const KINDS = { DRY_EYE: '干眼', PRESBYOPIA: '老视', STRABISMUS: '眼位', COLOR_VISION: '色觉' };
-const RISKS = { HIGH: '高风险', MEDIUM: '中风险', LOW: '低风险', UNCERTAIN: '不确定', UNKNOWN: '无法判断' };
+const RISKS = { HIGH: '高风险', MEDIUM: '中风险', LOW: '正常', UNCERTAIN: '低风险', UNKNOWN: '无法判断' };
 const QUALITY = { SUFFICIENT: '有效', INSUFFICIENT: '不足' };
 const RELATIONS = { SELF: '本人', CHILD: '孩子', PARENT: '父母', SPOUSE: '配偶', OTHER: '其他' };
 const PAGE = 50;

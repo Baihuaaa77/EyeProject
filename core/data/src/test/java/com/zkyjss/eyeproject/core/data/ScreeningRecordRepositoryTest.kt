@@ -86,7 +86,7 @@ class ScreeningRecordRepositoryTest {
         assertEquals(listOf("dryeye_1760000000000.json", "presbyopia_1750000000000.json"), records.map { it.fileName })
         assertEquals("需要重测", records.first().badge)
         assertEquals(listOf("距离不稳"), records.first().lines)
-        assertEquals("老视低风险", records.last().badge)
+        assertEquals("老视正常", records.last().badge)
     }
 
     @Test
@@ -179,7 +179,7 @@ class ScreeningRecordRepositoryTest {
         assertTrue(repo.exportRecord(name, Uri.fromFile(textTarget), RecordExportFormat.TEXT))
         assertEquals(json, jsonTarget.readText())
         val text = textTarget.readText()
-        assertTrue(text.contains("结果不确定")); assertTrue(text.contains("archived-version")); assertTrue(text.contains("-2.50"))
+        assertTrue(text.contains("干眼低风险")); assertTrue(text.contains("archived-version")); assertTrue(text.contains("-2.50"))
         assertTrue(text.contains("2025-10"))
         assertTrue(original.contentEquals(File(directory, name).readBytes()))
         assertTrue(network.uploads.isEmpty())

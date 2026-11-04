@@ -122,7 +122,7 @@ class ExplanationService(
     companion object {
         /** 改动提示词或输出格式时递增，旧缓存随之失效。 */
         /** p2：加入异常指标逐项分析（findings） */
-        const val PROMPT_VERSION = "p2"
+        const val PROMPT_VERSION = "p3"
         private const val MAX_ATTEMPTS = 3
         private const val APP_SOURCE = "app-protocol"
         private val ZONE: ZoneId = ZoneId.of("Asia/Shanghai")
@@ -137,10 +137,10 @@ object ExplanationPrompt {
         2. 只依据【本次结果】和【参考知识】写作，不编造信息；只能使用这两部分里出现过的数字。
         3. 口语化、简短、不制造焦虑：全部文字合计不超过 360 字；少用术语，必须用时顺带一句解释；不提具体药品名称和剂量，不推荐具体医院。
         4. 数据无效（UNKNOWN）时：说明没测好的原因和下次怎么测好，不推测眼睛情况。
-        5. 结果不确定（UNCERTAIN）时：说明数值在测量误差范围内，建议复测，不往好或坏的方向猜。
-        6. 中风险或高风险时：语气平和，明确建议去哪类门诊、多久内就诊；参考知识里的危险信号要提醒。低风险时给保持习惯的建议，并提醒有不适仍应就医。
+        5. 低风险（UNCERTAIN）时：说明部分数值在测量误差范围内、风险较低，建议复测确认，不说成「一切正常」，也不往坏的方向猜。
+        6. 中风险或高风险时：语气平和，明确建议去哪类门诊、多久内就诊；参考知识里的危险信号要提醒。正常（LOW）时给保持习惯的建议，并提醒有不适仍应就医。
         7. 建议要具体、可以马上做到，结合年龄段和相关资料。
-        8. 不要只复述等级：逐项看【关键指标】【判断依据】【测试中发现的问题】里标为异常或不确定的指标，写进 findings——
+        8. 不要只复述等级：逐项看【关键指标】【判断依据】【测试中发现的问题】里标为异常或低风险的指标，写进 findings——
            indicator 写指标名称；observation 写这次测到的情况（用输入里的数值，并对照参考范围）；possible 写它可能提示什么问题
            （用「可能提示」「可能和……有关」，不下诊断），最多 3 项，挑最重要的。全部正常或数据无效时 findings 为空数组。
         只输出一个 JSON 对象，格式：
@@ -149,9 +149,9 @@ object ExplanationPrompt {
 
     private val KIND_NAMES = mapOf("DRY_EYE" to "干眼自测", "PRESBYOPIA" to "老视（老花眼）自测", "STRABISMUS" to "眼位（斜视）自测")
     private val LEVEL_NAMES = mapOf(
-        "LOW" to "低风险", "MEDIUM" to "中风险", "HIGH" to "高风险", "UNCERTAIN" to "结果不确定", "UNKNOWN" to "数据无效，无法判断",
+        "LOW" to "正常", "MEDIUM" to "中风险", "HIGH" to "高风险", "UNCERTAIN" to "低风险（部分数值在测量误差范围内）", "UNKNOWN" to "数据无效，无法判断",
     )
-    private val STATUS_NAMES = mapOf("NORMAL" to "正常", "ABNORMAL" to "异常", "UNCERTAIN" to "不确定", "UNAVAILABLE" to "仅供参考")
+    private val STATUS_NAMES = mapOf("NORMAL" to "正常", "ABNORMAL" to "异常", "UNCERTAIN" to "低风险（在测量误差范围内）", "UNAVAILABLE" to "仅供参考")
 
     fun user(r: ExplanationRequest, chunks: List<KnowledgeBase.Entry>, knowledge: KnowledgeBase): String = buildString {
         appendLine("【本次结果】")
@@ -211,7 +211,7 @@ object ExplanationOutput {
         "LOW" to listOf("高度疑似", "高风险", "风险较高", "中风险", "中等风险"),
         "MEDIUM" to listOf("高度疑似", "高风险", "低风险", "一切正常"),
         "HIGH" to listOf("低风险", "一切正常", "不用担心"),
-        "UNCERTAIN" to listOf("高度疑似", "高风险", "低风险", "一切正常"),
+        "UNCERTAIN" to listOf("高度疑似", "高风险", "一切正常"),
         "UNKNOWN" to listOf("高度疑似", "高风险", "低风险", "中风险", "一切正常"),
     )
 

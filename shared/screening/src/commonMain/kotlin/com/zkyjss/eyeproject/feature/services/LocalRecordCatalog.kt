@@ -72,8 +72,8 @@ object LocalRecordCatalog {
                 val level = if (valid) root.string("riskLevel") ?: "UNKNOWN" else "UNKNOWN"
                 val lines = if (!valid) root.strings("validityReasons").ifEmpty { listOf("数据无效，请重新测试") }
                     else root.strings("abnormal").ifEmpty { listOf(when (level) {
-                        "LOW" -> "本次未见明显异常"
-                        "UNCERTAIN" -> "部分指标尚不能确定，请查看判断依据"
+                        "LOW" -> "本次结果正常"
+                        "UNCERTAIN" -> "部分指标在测量误差范围内，风险较低，请查看判断依据"
                         else -> "请结合当时保存的判断依据查看"
                     }) } +
                         (root["evidence"] as? JsonArray).orEmpty().flatMap { (it as? JsonObject)?.strings("details").orEmpty() }
@@ -171,14 +171,13 @@ object LocalRecordCatalog {
     /** 与结果页徽标同一说法。 */
     private fun badge(kind: String, level: String): String = when (level) {
         "UNKNOWN" -> "需要重测"
-        "UNCERTAIN" -> "结果不确定"
         else -> {
             val label = runCatching { ScreeningRiskLevel.valueOf(level).label }.getOrDefault(level)
             when (kind) {
                 "DRY_EYE" -> "干眼$label"
                 "PRESBYOPIA" -> "老视$label"
-                "COLOR_VISION" -> when (level) { "LOW" -> "色觉未见异常"; "MEDIUM" -> "色觉可疑"; else -> "色觉异常可能" }
-                else -> when (level) { "LOW" -> "未见异常"; "MEDIUM" -> "可疑"; else -> "高度疑似" }
+                "COLOR_VISION" -> when (level) { "LOW" -> "色觉正常"; "UNCERTAIN" -> "色觉低风险"; "MEDIUM" -> "色觉可疑"; else -> "色觉异常可能" }
+                else -> when (level) { "LOW" -> "正常"; "UNCERTAIN" -> "低风险"; "MEDIUM" -> "可疑"; else -> "高度疑似" }
             }
         }
     }

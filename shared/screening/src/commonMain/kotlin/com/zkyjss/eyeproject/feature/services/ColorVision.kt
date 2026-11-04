@@ -14,7 +14,7 @@ import kotlin.random.Random
  * - 每类 4 张，对比度由高到低，较低对比度用来发现较轻的色弱；另有 1 张人人都应读出的示例图，读错则本次无效。
  * 颜色按标准 sRGB 屏幕换算（线性 sRGB → CIE XYZ → Hunt-Pointer-Estevez LMS），手机屏幕未经校准，结果只作初筛。
  *
- * 判定参照石原氏图「错读不超过少数几张为正常」的思路：8 张检测图错 0–1 张为未见异常，2–3 张为可疑，
+ * 判定参照石原氏图「错读不超过少数几张为正常」的思路：8 张检测图错 0–1 张为正常，2–3 张为可疑，
  * ≥4 张提示红绿色觉异常；两类图的错读数相差 ≥2 时提示倾向的类型。示例图读错时不下结论。
  */
 
@@ -224,7 +224,7 @@ data class ColorVisionReport(
     val riskLevel: ScreeningRiskLevel,
     val protanErrors: Int,
     val deutanErrors: Int,
-    /** 倾向的类型：PROTAN / DEUTAN / UNCLEAR；未见异常时为 null。 */
+    /** 倾向的类型：PROTAN / DEUTAN / UNCLEAR；正常时为 null。 */
     val type: String?,
     val advice: String,
     val evidence: List<Evidence>,
@@ -285,7 +285,7 @@ object ColorVisionAssessment {
         "PROTAN" -> "倾向红色觉（第一型）异常"
         "DEUTAN" -> "倾向绿色觉（第二型）异常"
         "UNCLEAR" -> "红绿色觉异常，类型未能区分"
-        else -> "未见异常"
+        else -> "正常"
     }
 }
 
@@ -298,7 +298,7 @@ internal fun ResultReports.colorVision(report: ColorVisionReport, answers: List<
                                        subject: TestSubject?): ResultReport {
     val level = report.riskLevel
     val title = when (level) {
-        ScreeningRiskLevel.LOW -> "未见红绿色觉异常"
+        ScreeningRiskLevel.LOW -> "红绿色觉正常"
         ScreeningRiskLevel.MEDIUM -> "色觉结果可疑"
         ScreeningRiskLevel.HIGH -> "提示可能有红绿色觉异常"
         else -> "这次数据无效"
@@ -315,7 +315,7 @@ internal fun ResultReports.colorVision(report: ColorVisionReport, answers: List<
                 (if (a.correct) "读对" else "答「${a.answer}」") + (a.rtMs?.let { " · ${decimalString(it / 1000.0, 1)} 秒" } ?: ""))
         }))
         add(ResultSection("判定标准", listOf(
-            ResultRow("", "8 张检测图读错 0–1 张：未见异常；2–3 张：可疑；4 张及以上：提示红绿色觉异常"),
+            ResultRow("", "8 张检测图读错 0–1 张：正常；2–3 张：可疑；4 张及以上：提示红绿色觉异常"),
             ResultRow("", "红色觉图与绿色觉图的错读数相差 2 张及以上时，提示倾向的类型"),
             ResultRow("", "检测图按视锥细胞单独刺激设计；手机屏幕未经颜色校准，结果只作初筛"),
         )))
@@ -326,7 +326,7 @@ internal fun ResultReports.colorVision(report: ColorVisionReport, answers: List<
     return ResultReport(
         kind = "COLOR_VISION", level = level,
         badge = when (level) {
-            ScreeningRiskLevel.LOW -> "色觉未见异常"
+            ScreeningRiskLevel.LOW -> "色觉正常"
             ScreeningRiskLevel.MEDIUM -> "色觉可疑"
             ScreeningRiskLevel.HIGH -> "色觉异常可能"
             else -> "需要重测"

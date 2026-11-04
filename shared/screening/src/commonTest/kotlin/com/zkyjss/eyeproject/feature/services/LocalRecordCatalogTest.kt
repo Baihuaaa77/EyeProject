@@ -40,7 +40,7 @@ class LocalRecordCatalogTest {
         assertEquals("archived-rules-1", entry.version)
         assertEquals("小明", entry.subjectLabel)
         assertEquals("当时保存的建议", entry.advice)
-        assertTrue(entry.lines.none { "未见异常" in it })
+        assertTrue(entry.lines.none { "本次结果正常" in it })
         assertEquals(listOf("距离波动"), entry.qualityNotes)
         assertTrue(entry.sections.any { s -> s.rows.any { it.label == "存档指标" && it.value == "原值" } })
         val text = entry.reportText("2026-10-20 12:00:00 +0800")

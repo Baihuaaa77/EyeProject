@@ -127,7 +127,7 @@ enum ReportTone {
     }
     static func label(_ value: String) -> String {
         switch value {
-        case "NORMAL": return "正常"; case "ABNORMAL": return "异常"; case "UNCERTAIN": return "不确定"; default: return "无法评估"
+        case "NORMAL": return "正常"; case "ABNORMAL": return "异常"; case "UNCERTAIN": return "低风险"; default: return "无法评估"
         }
     }
 }

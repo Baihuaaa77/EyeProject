@@ -113,7 +113,7 @@ class AdviceService(
 
     companion object {
         /** 改动提示词或输出格式时递增，旧缓存随之失效（与解读的缓存键以前缀区分）。 */
-        const val PROMPT_VERSION = "advice-a1"
+        const val PROMPT_VERSION = "advice-a2"
         private const val MAX_ATTEMPTS = 2
         private val ZONE: ZoneId = ZoneId.of("Asia/Shanghai")
     }
@@ -134,7 +134,7 @@ object AdvicePrompt {
 
     private val LEVEL_NAMES = mapOf("LOW" to "轻松", "MEDIUM" to "留意", "HIGH" to "偏累", "UNKNOWN" to "数据不足，无法评估")
     private val KIND_NAMES = mapOf("DRY_EYE" to "干眼自测", "PRESBYOPIA" to "老视自测", "STRABISMUS" to "眼位自测")
-    private val RISK_NAMES = mapOf("LOW" to "低风险", "MEDIUM" to "中风险", "HIGH" to "高风险", "UNCERTAIN" to "结果不确定", "UNKNOWN" to "数据无效")
+    private val RISK_NAMES = mapOf("LOW" to "正常", "MEDIUM" to "中风险", "HIGH" to "高风险", "UNCERTAIN" to "低风险", "UNKNOWN" to "数据无效")
 
     fun user(r: AdviceRequest, chunks: List<KnowledgeBase.Entry>, knowledge: KnowledgeBase): String = buildString {
         appendLine("【用眼概况】")

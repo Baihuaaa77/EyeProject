@@ -53,7 +53,7 @@ object ResultReports {
             ScreeningRiskLevel.LOW -> "未见明显干眼迹象"
             ScreeningRiskLevel.MEDIUM -> "有一些干眼迹象"
             ScreeningRiskLevel.HIGH -> "干眼迹象比较明显"
-            ScreeningRiskLevel.UNCERTAIN -> "结果还不能确定"
+            ScreeningRiskLevel.UNCERTAIN -> "干眼低风险"
             ScreeningRiskLevel.UNKNOWN -> "这次数据无效"
         }
         val fps = f["analysis_fps"]
@@ -111,11 +111,7 @@ object ResultReports {
         }
         return ResultReport(
             kind = "DRY_EYE", level = level,
-            badge = when (level) {
-                ScreeningRiskLevel.UNKNOWN -> "需要重测"
-                ScreeningRiskLevel.UNCERTAIN -> "结果不确定"
-                else -> "干眼${level.label}"
-            },
+            badge = if (level == ScreeningRiskLevel.UNKNOWN) "需要重测" else "干眼${level.label}",
             title = if (state.afterRest) "休息后复测：$title" else title,
             advice = report.advice, mood = mood(level), metrics = metrics, evidence = report.evidence,
             problems = if (report.valid) emptyList() else report.validityReasons,
@@ -135,9 +131,9 @@ object ResultReports {
         val valid = level != ScreeningRiskLevel.UNKNOWN
         val badge = when {
             !valid -> "需要重测"
-            level == ScreeningRiskLevel.UNCERTAIN -> "结果不确定"
             strabismus -> when (level) {
-                ScreeningRiskLevel.LOW -> "未见异常"
+                ScreeningRiskLevel.LOW -> "正常"
+                ScreeningRiskLevel.UNCERTAIN -> "低风险"
                 ScreeningRiskLevel.MEDIUM -> "可疑"
                 else -> "高度疑似"
             }
@@ -146,9 +142,9 @@ object ResultReports {
         val title = when {
             !valid -> "数据不足，暂时无法判断"
             strabismus -> when (level) {
-                ScreeningRiskLevel.LOW -> "眼位未见明显异常"
+                ScreeningRiskLevel.LOW -> "眼位正常"
                 ScreeningRiskLevel.MEDIUM -> "眼位有可疑表现"
-                ScreeningRiskLevel.UNCERTAIN -> "眼位结果还不能确定"
+                ScreeningRiskLevel.UNCERTAIN -> "眼位低风险"
                 else -> "高度疑似斜视"
             }
             else -> s.category.ifBlank { level.label }
@@ -159,7 +155,7 @@ object ResultReports {
                 else "调节能力接近同龄参考线，建议按提示放慢移近再测一次。"
             strabismus && level == ScreeningRiskLevel.HIGH -> "建议尽快到斜视专科就诊，做遮盖试验与三棱镜检查。"
             strabismus && level == ScreeningRiskLevel.MEDIUM -> "建议近期到眼科复查眼位；平时留意孩子是否歪头、眯眼或一只眼往外飘。"
-            strabismus -> "本次未见明显眼位异常，建议每半年复测一次。"
+            strabismus -> "本次眼位正常，建议每半年复测一次。"
             path == PresbyopiaPath.B -> if (level == ScreeningRiskLevel.LOW) "戴这副眼镜看近基本够用；如果看近处不舒服，仍建议到眼科检查。"
                 else "戴现有眼镜看近仍吃力，建议到眼科验光，看看眼镜度数是否合适。"
             path == PresbyopiaPath.C -> if (level == ScreeningRiskLevel.LOW) "当前状态下看近基本够用；建议验光确认看远的矫正后，再做一次标准测试。"

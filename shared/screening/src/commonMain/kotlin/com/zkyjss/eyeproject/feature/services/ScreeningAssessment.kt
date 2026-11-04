@@ -5,21 +5,22 @@ import kotlin.math.hypot
 import kotlin.math.sqrt
 
 /**
- * 风险等级仅供研究原型演示；UNKNOWN 不能解释为低风险。
+ * 风险等级仅供研究原型演示；UNKNOWN（数据无效）不能解释为正常或低风险。
+ * 界面用语（2026-11 起）：LOW 显示「正常」，UNCERTAIN 显示「低风险」。
  * UNCERTAIN（rules-2 起）：数据有效，但指标落在测量误差范围内、无法区分正常与异常——建议延长测试或复测，
- * 不给出居中等级，也不能解释为低风险。
+ * 不给出居中等级，也不能当作正常。
  */
 enum class ScreeningRiskLevel(val label: String) {
-    LOW("低风险"), MEDIUM("中风险"), HIGH("高风险"), UNCERTAIN("结果不确定"), UNKNOWN("无法评估"),
+    LOW("正常"), MEDIUM("中风险"), HIGH("高风险"), UNCERTAIN("低风险"), UNKNOWN("无法评估"),
 }
 
-/** 按病种的结果用语：斜视按原文输出「未见异常 / 可疑阳性 / 高度疑似斜视」三级。 */
+/** 按病种的结果用语：斜视为「正常 / 可疑阳性 / 高度疑似斜视」三级，误差范围内为「低风险」。 */
 fun ScreeningRiskLevel.labelFor(kind: ScreeningKind): String = when (kind) {
     ScreeningKind.STRABISMUS -> when (this) {
-        ScreeningRiskLevel.LOW -> "未见异常"
+        ScreeningRiskLevel.LOW -> "正常"
         ScreeningRiskLevel.MEDIUM -> "可疑阳性"
         ScreeningRiskLevel.HIGH -> "高度疑似斜视"
-        ScreeningRiskLevel.UNCERTAIN -> "结果不确定，建议复测"
+        ScreeningRiskLevel.UNCERTAIN -> "低风险，建议复测"
         ScreeningRiskLevel.UNKNOWN -> "测试质量不佳，请重新测试"
     }
     ScreeningKind.PRESBYOPIA -> label

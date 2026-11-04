@@ -120,7 +120,7 @@ class ScreeningAssessmentTest {
         val result = strabismus(fixNasal = 0f, refix = 0f)
         assertEquals(0.0, result.features["fixation_hde_prism"]!!, 0.001)
         assertEquals(ScreeningRiskLevel.LOW, result.riskLevel)
-        assertEquals("未见异常", result.category)
+        assertEquals("正常", result.category)
     }
 
     @Test fun coverRefixationAboveSixPrismIsSuspicious() {

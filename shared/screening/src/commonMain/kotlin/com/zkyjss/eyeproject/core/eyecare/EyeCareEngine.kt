@@ -373,7 +373,7 @@ object EyeCareEngine {
             when (t.level) {
                 "HIGH" -> add(EyeConsult("干眼自测提示高风险", "建议 1–2 周内到眼科就诊，做泪膜等检查。", "眼科，可选角膜病或眼表门诊", false))
                 "MEDIUM" -> add(EyeConsult("干眼自测提示中风险", "先调整用眼习惯，2 周后复测；不适持续请到眼科检查。", "眼科", false))
-                "UNCERTAIN" -> add(EyeConsult("干眼自测结果不确定", "换到光线均匀的地方，放松后再测一次。", "暂不需要就医", false))
+                "UNCERTAIN" -> add(EyeConsult("干眼自测提示低风险", "部分指标在测量误差范围内，换到光线均匀的地方，放松后再测一次。", "暂不需要就医", false))
             }
         }
         latest["PRESBYOPIA"]?.let { t ->
