@@ -3,17 +3,25 @@ package com.zkyjss.eyeproject.feature.home
 import androidx.camera.view.PreviewView
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.zkyjss.eyeproject.core.data.live.LiveEyePreferencesRepository
 import com.zkyjss.eyeproject.core.domain.LiveEyeMonitor
 import com.zkyjss.eyeproject.feature.home.live.LiveEyeTracker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 
 /** 首页实时眼部检测视窗的界面状态。 */
 data class LiveEyeUiState(
     val running: Boolean = false,
     val snapshot: LiveEyeMonitor.Snapshot? = null,
     val error: String? = null,
+    /** 预览上是否叠加眼部关键点（眼睑轮廓 + 虹膜圈），默认关闭；只影响画面，检测照常进行 */
+    val showLandmarks: Boolean = false,
 )
 
 /**
@@ -22,8 +30,13 @@ data class LiveEyeUiState(
  * 逐帧逻辑在共用 LiveEyeMonitor（眨眼判据与干眼测试同一份），与苹果端 EyeLiveModel 一致（苹果端退到后台即停止）。
  */
 @HiltViewModel
-class LiveEyeViewModel @Inject constructor(private val tracker: LiveEyeTracker) : ViewModel() {
-    val uiState: StateFlow<LiveEyeUiState> = tracker.state
+class LiveEyeViewModel @Inject constructor(
+    private val tracker: LiveEyeTracker,
+    private val preferences: LiveEyePreferencesRepository,
+) : ViewModel() {
+    val uiState: StateFlow<LiveEyeUiState> = combine(tracker.state, preferences.showLandmarks) { state, show ->
+        state.copy(showLandmarks = show)
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, tracker.state.value)
 
     /** 打开检测（已在检测时只是接上预览）。 */
     fun start(owner: LifecycleOwner, preview: PreviewView) = tracker.start(owner, preview)
@@ -36,4 +49,9 @@ class LiveEyeViewModel @Inject constructor(private val tracker: LiveEyeTracker) 
 
     /** 关掉开关：停止检测，本次统计记入账本。 */
     fun stop() = tracker.stop()
+
+    /** 「显示眼部关键点」开关：持久保存，重启后保留。 */
+    fun setShowLandmarks(show: Boolean) {
+        viewModelScope.launch { preferences.setShowLandmarks(show) }
+    }
 }

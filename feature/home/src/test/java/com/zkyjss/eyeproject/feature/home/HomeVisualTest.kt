@@ -35,6 +35,7 @@ import com.zkyjss.eyeproject.core.model.Point2f
 import com.zkyjss.eyeproject.core.ui.component.EyeSplash
 import com.zkyjss.eyeproject.core.ui.component.EyeText
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -177,19 +178,21 @@ class HomeVisualTest {
         compose.onNodeWithText("今天眼睛感觉怎么样？").assertDoesNotExist()
     }
 
-    @Test fun liveDetectionIsOffByDefaultAndShowsLandmarksWhenOn() {
+    @Test fun liveDetectionIsOffByDefaultAndLandmarksAreOptional() {
         val monitor = LiveEyeMonitor()
         var t = 0L
         repeat(40) { monitor.update(face(0.3f), 720, 1280, t, 900f); t += 33 }
         repeat(3) { monitor.update(face(0.05f), 720, 1280, t, 900f); t += 33 }
         repeat(20) { monitor.update(face(0.3f), 720, 1280, t, 900f); t += 33 }
         var running by mutableStateOf(false)
+        var showLandmarks by mutableStateOf(false)
         var paused = false
         compose.setContent {
             EyeProjectTheme {
                 Box(Modifier.fillMaxSize().background(LocalEyeColors.current.appBackground).padding(16.dp)) {
-                    LiveEyeContent(LiveEyeUiState(running = running, snapshot = if (running) monitor.snapshot(t) else null),
-                        note = null, onStart = { running = true }, onPause = { paused = true; running = false }) {
+                    LiveEyeContent(LiveEyeUiState(running = running, snapshot = if (running) monitor.snapshot(t) else null, showLandmarks = showLandmarks),
+                        note = null, onStart = { running = true }, onPause = { paused = true; running = false },
+                        onShowLandmarksChange = { showLandmarks = it }) {
                         Box(Modifier.fillMaxSize().background(Color(0xFF3A4A48)))
                     }
                 }
@@ -200,7 +203,13 @@ class HomeVisualTest {
         compose.onNodeWithText("运行正常").assertExists()
         compose.onNodeWithText("睁眼").assertExists()
         compose.onNodeWithText("距离 33 厘米").assertExists()
+        // 关键点叠加默认关闭，点一下才画出来；检测读数不受影响
+        assertFalse(showLandmarks)
         capture("05-首页-实时检测-开启")
+        compose.onNodeWithText(SHOW_LANDMARKS).performClick()
+        assertTrue(showLandmarks)
+        compose.onNodeWithText("睁眼").assertExists()
+        capture("05b-首页-实时检测-显示关键点")
         compose.onNodeWithText("实时检测").performClick()
         assertTrue(paused)
     }

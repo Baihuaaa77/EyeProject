@@ -10,6 +10,8 @@ import com.zkyjss.eyeproject.core.data.explanation.DefaultExplanationRepository
 import com.zkyjss.eyeproject.core.data.explanation.ExplanationRepository
 import com.zkyjss.eyeproject.core.data.eyecare.EyeCareRepository
 import com.zkyjss.eyeproject.core.data.eyecare.OfflineFirstEyeCareRepository
+import com.zkyjss.eyeproject.core.data.live.LiveEyePreferencesRepository
+import com.zkyjss.eyeproject.core.data.live.SharedPrefsLiveEyePreferencesRepository
 import com.zkyjss.eyeproject.core.data.record.OfflineFirstScreeningRecordRepository
 import com.zkyjss.eyeproject.core.data.record.ScreeningRecordRepository
 import com.zkyjss.eyeproject.core.data.subject.OfflineFirstSubjectRepository
@@ -47,6 +49,9 @@ internal abstract class DataModule {
 
     @Binds
     abstract fun bindEyeCareRepository(impl: OfflineFirstEyeCareRepository): EyeCareRepository
+
+    @Binds
+    abstract fun bindLiveEyePreferencesRepository(impl: SharedPrefsLiveEyePreferencesRepository): LiveEyePreferencesRepository
 
     @Binds
     abstract fun bindSyncScheduler(impl: WorkManagerSyncScheduler): SyncScheduler

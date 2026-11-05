@@ -41,8 +41,9 @@ import com.zkyjss.eyeproject.core.model.Point2f
 import com.zkyjss.eyeproject.core.ui.component.*
 
 /**
- * 首页「视觉行为」卡里的实时检测：默认关闭，打开后镜像预览叠加双眼关键点（眼睑 6 点 + 虹膜圈），旁边是眨眼次数、
- * 观看距离与当前状态，下方是最近 8 秒 EAR 曲线，每次眨眼画一条绿线。离开首页、退到后台后摘下预览、在后台继续检测
+ * 首页「视觉行为」卡里的实时检测：默认关闭，打开后显示镜像预览，旁边是眨眼次数、
+ * 观看距离与当前状态；预览下方「显示眼部关键点」开关（默认关闭、持久保存）决定是否叠加双眼关键点（眼睑 6 点 + 虹膜圈），
+ * 只影响画面，检测照常进行。下方是最近 8 秒 EAR 曲线，每次眨眼画一条绿线。离开首页、退到后台后摘下预览、在后台继续检测
  * （通知栏常驻），直到关掉开关、点通知里的「停止」或从最近任务划掉应用；统计按段记入主动护眼账本。
  * 与苹果端 LiveEyeSection 同一排版（苹果端退到后台即停止）。[startRequests] 每增加一次（气泡里点了「去检测」）就打开一次。
  */
@@ -91,6 +92,7 @@ internal fun LiveEyeSection(startRequests: Int = 0, viewModel: LiveEyeViewModel 
         note = if (denied) "未获得相机权限，请在系统设置中允许后再开启" else state.error,
         onStart = start,
         onPause = viewModel::stop,
+        onShowLandmarksChange = viewModel::setShowLandmarks,
     ) { AndroidView(factory = { preview }, modifier = Modifier.fillMaxSize()) }
 }
 
@@ -101,6 +103,7 @@ internal fun LiveEyeContent(
     note: String?,
     onStart: () -> Unit,
     onPause: () -> Unit,
+    onShowLandmarksChange: (Boolean) -> Unit = {},
     preview: @Composable () -> Unit,
 ) {
     val colors = LocalEyeColors.current
@@ -127,7 +130,7 @@ internal fun LiveEyeContent(
                 val aspect = if (s != null && s.imageWidth > 0 && s.imageHeight > 0) s.imageWidth.toFloat() / s.imageHeight else 3f / 4f
                 Box(Modifier.width(120.dp).aspectRatio(aspect).clip(EyeShapes.medium).background(colors.ink)) {
                     preview()
-                    LandmarkOverlay(s, Modifier.matchParentSize())
+                    if (state.showLandmarks) LandmarkOverlay(s, Modifier.matchParentSize())
                 }
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -141,13 +144,22 @@ internal fun LiveEyeContent(
                         style = typography.bodySecondary, color = colors.textSecondary)
                 }
             }
+            Row(Modifier.fillMaxWidth().heightIn(min = 40.dp)
+                .toggleable(state.showLandmarks, role = Role.Switch) { on -> haptics.toggle(on); onShowLandmarksChange(on) },
+                verticalAlignment = Alignment.CenterVertically) {
+                EyeText(SHOW_LANDMARKS, Modifier.weight(1f), style = typography.body, color = colors.textSecondary)
+                EyeSwitch(checked = state.showLandmarks, onCheckedChange = null)
+            }
             EarTraceChart(s, Modifier.fillMaxWidth().height(116.dp))
         }
         note?.let { EyeText(it, style = typography.bodySecondary, color = colors.warning) }
     }
 }
 
+internal const val SHOW_LANDMARKS = "显示眼部关键点"
+
 internal const val LIVE_HELP = "用前置摄像头实时检测双眼关键点：数眨眼次数、估计眼睛到屏幕的距离和头部姿态，结果计入「视觉行为」。" +
+    "「显示眼部关键点」只决定预览上是否画出眼睑轮廓和虹膜圈，不影响检测。" +
     "打开后离开首页或退到后台也会继续检测，通知栏会一直显示；关掉开关、点通知里的「停止」或从最近任务划掉应用即停止，熄屏时自动暂停。" +
     "画面只在本机实时处理，不保存、不上传。"
 

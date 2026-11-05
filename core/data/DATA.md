@@ -9,6 +9,7 @@
 | 类型 | 说明 |
 |---|---|
 | `ReminderPreferences` | SharedPreferences 存取提醒启用标记、间隔分钟与下次触发时刻；闹钟调度由 app 的 EyeCareReminderScheduler 实现 |
+| `live/LiveEyePreferencesRepository` | 接口 + `SharedPrefsLiveEyePreferencesRepository`：首页实时检测的显示偏好 `showLandmarks: Flow<Boolean>`（预览上是否叠加眼部关键点，默认关闭）、`setShowLandmarks`；只影响画面，不影响检测 |
 | `account/AccountRepository` | 接口 + `DefaultAccountRepository`：`accountState: Flow<AccountState>`；注册、登录、退出、分项同意、导出云端数据到用户选择的文件、注销云端账号 |
 | `account/SessionStore` | 会话（令牌 + 同意缓存）整体以 Android Keystore 中不可导出的 AES-GCM 密钥加密后存 SharedPreferences；已排除出自动备份 |
 | `account/AuthorizedCaller` | 带令牌调用：快过期先刷新、401 刷新后重试一次；刷新被拒清会话，离线则返回不可达以便稍后重试 |

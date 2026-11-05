@@ -21,7 +21,7 @@ AI 主动问诊入口（主色块）→ 今日感受 → 基础数据 → 实时
   离开后改为无预览、只分析，绑定到服务的生命周期；熄屏暂停、亮屏解锁后继续；每 10 分钟或跨天把一段统计
   （`LiveEyeMonitor.takeSession`）记入账本。服务只在前台由用户打开时启动（Android 14 起相机类前台服务的要求），被系统杀掉不自动重启。
   测试页接管相机时后台绑定作废，回到首页再接上。苹果端不做后台检测（系统不允许后台使用相机）。
-- `LiveEyeSection` / `LiveEyeViewModel`：视觉行为卡里的「实时眼部检测」开关，**默认关闭**；ViewModel 只把开关与预览接上 / 摘下转给 `LiveEyeTracker`。开启后镜像预览叠加双眼关键点（眼睑 6 点轮廓 + 虹膜圈，闭眼变红），
+- `LiveEyeSection` / `LiveEyeViewModel`：视觉行为卡里的「实时眼部检测」开关，**默认关闭**；ViewModel 只把开关与预览接上 / 摘下转给 `LiveEyeTracker`。开启后显示镜像预览；预览下方「显示眼部关键点」开关（`LiveEyePreferencesRepository.showLandmarks`，默认关闭、持久保存；苹果端 `EyeLiveModel.showLandmarks`，UserDefaults `eye.liveShowLandmarks`）打开才叠加双眼关键点（眼睑 6 点轮廓 + 虹膜圈，闭眼变红），只影响画面、检测照常；
   眨眼次数、近 1 分钟次数、睁眼 / 闭眼、EAR 与阈值、帧率、观看距离，下方最近 8 秒 EAR 曲线。逻辑全部在共用 `LiveEyeMonitor`（眨眼判据与干眼测试同一份）；
   相机走 `core:camera` 的 `CameraController`，焦距取相机内参用于测距；记入账本的是眨眼频率、平均距离、过近占比、头部偏转（每段 ≥20 秒才记）。
   画面只在本机处理，不保存、不上传。

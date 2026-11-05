@@ -3,8 +3,9 @@ import SwiftUI
 import UIKit
 import EyeScreening
 
-/// 首页「视觉行为」卡里的实时检测：默认关闭，打开后镜像预览叠加双眼关键点（眼睑 6 点 + 虹膜圈），
-/// 旁边是眨眼次数、观看距离与当前状态，下方是最近 8 秒的 EAR 曲线，每次眨眼画一条绿线。
+/// 首页「视觉行为」卡里的实时检测：默认关闭，打开后显示镜像预览，旁边是眨眼次数、观看距离与当前状态，
+/// 下方「显示眼部关键点」开关（默认关闭、持久保存）决定是否叠加双眼关键点（眼睑 6 点 + 虹膜圈），只影响画面；
+/// 再下方是最近 8 秒的 EAR 曲线，每次眨眼画一条绿线。
 /// 离开首页、退到后台即关闭相机；关闭时本次的眨眼频率与观看距离记入主动护眼账本。与安卓 LiveEyeSection 同一排版。
 /// [startRequests] 每增加一次（「为你推荐」里点了「去检测」）就打开一次。
 struct LiveEyeSection: View {
@@ -12,7 +13,8 @@ struct LiveEyeSection: View {
     @Environment(\.scenePhase) private var scenePhase
     var startRequests = 0
 
-    static let help = "用前置摄像头实时检测双眼关键点：数眨眼次数、估计眼睛到屏幕的距离和头部姿态，结果计入「视觉行为」。画面只在本机实时处理，不保存、不上传；关闭开关或离开首页即停止相机。"
+    static let showLandmarks = "显示眼部关键点"
+    static let help = "用前置摄像头实时检测双眼关键点：数眨眼次数、估计眼睛到屏幕的距离和头部姿态，结果计入「视觉行为」。「显示眼部关键点」只决定预览上是否画出眼睑轮廓和虹膜圈，不影响检测。画面只在本机实时处理，不保存、不上传；关闭开关或离开首页即停止相机。"
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -48,7 +50,7 @@ struct LiveEyeSection: View {
             HStack(alignment: .top, spacing: 14) {
                 ZStack {
                     LivePreview(view: model.previewView)
-                    EyeLandmarkOverlay(snapshot: s)
+                    if model.showLandmarks { EyeLandmarkOverlay(snapshot: s) }
                 }.aspectRatio(aspect, contentMode: .fit).frame(width: 120)
                     .clipShape(RoundedRectangle(cornerRadius: EyeStyle.radiusMedium))
                 VStack(alignment: .leading, spacing: 8) {
@@ -64,6 +66,12 @@ struct LiveEyeSection: View {
                         .font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary).monospacedDigit()
                 }.frame(maxWidth: .infinity, alignment: .leading)
             }
+            Toggle(isOn: Binding(get: { model.showLandmarks }, set: { on in
+                EyeHaptics.toggle()
+                model.showLandmarks = on
+            })) {
+                Text(Self.showLandmarks).font(EyeStyle.body).foregroundStyle(EyeStyle.secondary)
+            }.tint(EyeStyle.primary).frame(minHeight: 40)
             EarTraceChart(snapshot: s).frame(height: 116)
         }
     }

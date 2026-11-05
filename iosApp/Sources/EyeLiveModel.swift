@@ -19,6 +19,10 @@ final class EyeLiveModel: ObservableObject {
     @Published private(set) var cameraNote: String?
     /// 用户在本次使用中开启了检测：默认关闭，打开后切换页面再回来仍保持开启，重启应用后恢复关闭
     @Published var wanted = false
+    /// 预览上是否叠加眼部关键点（眼睑轮廓 + 虹膜圈）：默认关闭、持久保存，只影响画面，检测照常进行。与安卓 LiveEyePreferencesRepository 一致
+    @Published var showLandmarks = UserDefaults.standard.bool(forKey: "eye.liveShowLandmarks") {
+        didSet { UserDefaults.standard.set(showLandmarks, forKey: "eye.liveShowLandmarks") }
+    }
 
     let camera = EyeCamera()
     /// 常驻的预览视图：离开首页只从界面摘下，不析构
