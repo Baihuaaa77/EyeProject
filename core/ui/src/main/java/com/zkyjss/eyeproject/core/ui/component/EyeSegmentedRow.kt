@@ -47,10 +47,10 @@ fun <T> EyeSegmentedRow(
     BoxWithConstraints(
         modifier
             .fillMaxWidth()
-            .height(52.dp)
+            .height(46.dp)
             .clip(EyeShapes.medium)
             .background(colors.surfaceVariant)
-            .padding(4.dp)
+            .padding(3.dp)
     ) {
         val segmentWidth = maxWidth / options.size.coerceAtLeast(1)
         val indicatorOffset by animateDpAsState(
@@ -64,7 +64,7 @@ fun <T> EyeSegmentedRow(
                 .width(segmentWidth)
                 .fillMaxHeight()
                 .clip(EyeShapes.small)
-                .background(colors.primary)
+                .background(colors.buttonBrush)
         )
         Row(Modifier.fillMaxWidth().fillMaxHeight().selectableGroup()) {
             options.forEachIndexed { index, option ->
@@ -84,7 +84,7 @@ fun <T> EyeSegmentedRow(
                         },
                     contentAlignment = Alignment.Center
                 ) {
-                    EyeText(option.label, style = typography.button, color = textColor, textAlign = TextAlign.Center, maxLines = 1)
+                    EyeText(option.label, style = typography.body, color = textColor, fontWeight = if (isSelected) androidx.compose.ui.text.font.FontWeight.SemiBold else null, textAlign = TextAlign.Center, maxLines = 1)
                 }
             }
         }

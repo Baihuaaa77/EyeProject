@@ -28,6 +28,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
@@ -45,19 +46,21 @@ import com.zkyjss.eyeproject.core.designsystem.theme.EyeShapes
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
 import com.zkyjss.eyeproject.core.ui.component.AiCardState
+import com.zkyjss.eyeproject.core.ui.component.eyeGlass
 import com.zkyjss.eyeproject.core.ui.component.AiExplanationCard
 import com.zkyjss.eyeproject.core.ui.component.EyeButton
 import com.zkyjss.eyeproject.core.ui.component.EyeButtonRole
 import com.zkyjss.eyeproject.core.ui.component.EyeFullScreenPage
 import com.zkyjss.eyeproject.core.ui.component.EyeSubPage
-import com.zkyjss.eyeproject.core.ui.component.MascotMood
-import com.zkyjss.eyeproject.core.ui.component.XiaoTong
 import com.zkyjss.eyeproject.core.ui.component.EyeIcon
 import com.zkyjss.eyeproject.core.ui.component.EyeText
+import com.zkyjss.eyeproject.core.ui.component.EyeHeroCard
+import com.zkyjss.eyeproject.core.ui.component.EyeCard
+import com.zkyjss.eyeproject.core.ui.component.EyeMetricRow
 
 /*
  * 三项测试共用的结果页，内容来自共享的 [ResultReport]（与苹果端同一份）：
- * 结论卡（小瞳 + 等级 + 一句结论 + 一句建议）→ 关键指标 2×2 → 判断依据（点开看明细）→ 操作 →
+ * 结论卡（等级 + 一句结论 + 风险分段条 + 一句建议）→ 关键指标 2×2 → 判断依据（点开看明细）→ 操作 →
  * 「查看本次数据」「导出数据」→ 一行说明。首屏不放成段小字，明细都在底板里。
  */
 
@@ -102,7 +105,7 @@ internal fun ResultReportView(
         if (report.valid && report.qualityNotes.isNotEmpty()) {
             val colors = LocalEyeColors.current
             var qualityOpen by rememberSaveable { mutableStateOf(false) }
-            Column(Modifier.fillMaxWidth().clip(EyeShapes.large).background(colors.panelBackground).padding(16.dp),
+            Column(Modifier.fillMaxWidth().eyeGlass(colors, EyeShapes.large).padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 EyeText("数据可靠性说明", style = LocalEyeTypography.current.subtitle, color = colors.textPrimary)
                 EyeText(report.qualityNotes.first(), style = LocalEyeTypography.current.bodySecondary, color = colors.textSecondary)
@@ -138,61 +141,73 @@ internal fun ResultReportView(
     }
 }
 
-/** 结论卡：等级色的柔和渐变底，左侧徽标 + 大号结论，右侧小瞳（神情随等级变化），下面一句建议。 */
+/** 结论卡（主卡）：等级徽标 + 大号结论 + 风险分段条（当前等级亮起），下面一句建议。 */
 @Composable
 private fun ResultHero(report: ResultReport) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
-    val (strong, soft) = colors.toneFor(report.level)
-    Column(
-        Modifier.fillMaxWidth().clip(EyeShapes.panel)
-            .background(Brush.verticalGradient(listOf(soft, colors.panelBackground)))
-            .padding(horizontal = 20.dp, vertical = 22.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                EyeText(report.badge, style = typography.chip, color = colors.onStatus,
-                    modifier = Modifier.clip(EyeShapes.chip).background(strong).padding(horizontal = 12.dp, vertical = 6.dp))
-                // 长结论（如「调节能力与实际年龄基本匹配」）用标题字号，避免大字折成三行
-                EyeText(report.title, style = if (report.title.length > LONG_TITLE) typography.title else typography.headline,
-                    color = colors.textPrimary)
-            }
-            Mascot(report.mood, Modifier.size(104.dp))
-        }
+    val (strong, _) = colors.toneFor(report.level)
+    EyeHeroCard(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        val (fill, ink) = colors.statusFill(strong)
+        EyeText(report.badge, style = typography.chip, color = ink,
+            modifier = Modifier.clip(EyeShapes.chip).background(fill).padding(horizontal = 12.dp, vertical = 5.dp))
+        // 长结论（如「调节能力与实际年龄基本匹配」）用标题字号，避免大字折成三行
+        EyeText(report.title, style = if (report.title.length > LONG_TITLE) typography.title else typography.headline,
+            color = colors.textPrimary)
+        report.highlight?.let { EyeAgeBlock(it) }
+        RiskSegments(report.level)
         EyeText(report.advice, style = typography.body, color = colors.textPrimary)
     }
 }
 
-/** 结果页小瞳：神情随等级（放心 / 思考 / 担心 / 没测好犯困），带待机动画，点一下有互动。 */
+/** 结论卡里的突出结果（老视「你的眼睛年龄」）：细线隔开，名称、大号主色数值、一句说明。 */
 @Composable
-private fun Mascot(mood: ResultMood, modifier: Modifier) {
-    XiaoTong(MascotMood.of(mood.name), modifier, greet = mood == ResultMood.HAPPY, headScale = 0.76f)
+private fun EyeAgeBlock(highlight: ResultHighlight) {
+    val colors = LocalEyeColors.current
+    val typography = LocalEyeTypography.current
+    Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) {}, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Box(Modifier.fillMaxWidth().padding(bottom = 8.dp).height(1.dp).background(colors.borderSubtle))
+        EyeText(highlight.label, style = typography.body, color = colors.textSecondary)
+        EyeText(highlight.value, style = typography.headline, color = colors.primary)
+        EyeText(highlight.note, style = typography.bodySecondary, color = colors.textSecondary)
+    }
 }
 
-/** 关键指标 2×2：名称、大号数值、状态小标签；状态色只用在标签和数值上，卡片本身保持干净。 */
+/** 风险分段条：正常 → 低风险 → 中风险 → 高风险四段，当前等级那段用等级色（深色主题带泛光）；无法评估时全灰。 */
+@Composable
+private fun RiskSegments(level: ScreeningRiskLevel) {
+    val colors = LocalEyeColors.current
+    val order = listOf(ScreeningRiskLevel.LOW, ScreeningRiskLevel.UNCERTAIN, ScreeningRiskLevel.MEDIUM, ScreeningRiskLevel.HIGH)
+    Row(Modifier.fillMaxWidth().semantics(mergeDescendants = true) {}, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        order.forEach { step ->
+            val on = step == level
+            val tone = colors.statusFill(colors.toneFor(step).first).first
+            Box(Modifier.weight(1f).height(6.dp)
+                .then(if (on && colors.hasGlow) Modifier.shadow(6.dp, EyeShapes.chip, ambientColor = tone, spotColor = tone) else Modifier)
+                .clip(EyeShapes.chip).background(if (on) tone else colors.borderSubtle))
+        }
+    }
+}
+
+/** 关键指标 2×2：一张卡里细线分隔；名称、大号数值、状态小标签，状态色只用在标签和数值上。 */
 @Composable
 private fun MetricGrid(metrics: List<ResultMetric>) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        metrics.chunked(2).forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                row.forEach { m ->
-                    val (strong, soft) = colors.toneFor(m.status)
-                    Column(
-                        Modifier.weight(1f).clip(EyeShapes.large).background(colors.panelBackground).padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        EyeText(m.label, style = typography.body, color = colors.textSecondary, maxLines = 1)
-                        EyeText(m.value, style = typography.title,
-                            color = if (m.status == EvidenceStatus.ABNORMAL) colors.warning else colors.textPrimary, maxLines = 1)
-                        EyeText(m.status.metricLabel, style = typography.chip, color = strong,
-                            modifier = Modifier.clip(EyeShapes.chip).background(soft).padding(horizontal = 10.dp, vertical = 4.dp))
-                    }
+    EyeCard(verticalArrangement = Arrangement.Top) {
+        metrics.chunked(2).forEachIndexed { i, row ->
+            if (i > 0) Box(Modifier.fillMaxWidth().padding(vertical = 14.dp).height(1.dp).background(colors.borderSubtle))
+            val cells: List<@Composable (Modifier) -> Unit> = row.map { m -> @Composable { cell: Modifier ->
+                val (strong, soft) = colors.toneFor(m.status)
+                Column(cell, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    EyeText(m.label, style = typography.bodySecondary, color = colors.textSecondary, maxLines = 1)
+                    EyeText(m.value, style = typography.metricValue,
+                        color = if (m.status == EvidenceStatus.ABNORMAL) colors.warning else colors.textPrimary, maxLines = 1)
+                    EyeText(m.status.metricLabel, style = typography.chip, color = strong,
+                        modifier = Modifier.clip(EyeShapes.chip).background(soft).padding(horizontal = 10.dp, vertical = 3.dp))
                 }
-                if (row.size == 1) Box(Modifier.weight(1f))
-            }
+            } } + List(2 - row.size) { @Composable { cell: Modifier -> Box(cell) } }
+            EyeMetricRow(items = cells)
         }
     }
 }
@@ -204,7 +219,7 @@ private fun EvidenceCard(evidence: List<Evidence>) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
     Column(
-        Modifier.fillMaxWidth().clip(EyeShapes.panel).background(colors.panelBackground).padding(horizontal = 20.dp, vertical = 16.dp),
+        Modifier.fillMaxWidth().eyeGlass(colors, EyeShapes.panel).padding(horizontal = 20.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         EyeText("判断依据", style = typography.subtitle, color = colors.textPrimary, modifier = Modifier.padding(bottom = 6.dp))
@@ -259,7 +274,7 @@ private fun ProblemCard(problems: List<String>) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
     Column(
-        Modifier.fillMaxWidth().clip(EyeShapes.panel).background(colors.panelBackground).padding(20.dp),
+        Modifier.fillMaxWidth().eyeGlass(colors, EyeShapes.panel).padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         EyeText("没测好的原因", style = typography.subtitle, color = colors.textPrimary)
@@ -309,7 +324,7 @@ private fun DataSheetContent(report: ResultReport, onExport: (() -> Unit)?, extr
 internal fun DataPanel(title: String, content: @Composable ColumnScope.() -> Unit) {
     val colors = LocalEyeColors.current
     Column(
-        Modifier.fillMaxWidth().clip(EyeShapes.large).background(colors.panelBackground).padding(16.dp),
+        Modifier.fillMaxWidth().eyeGlass(colors, EyeShapes.large).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         EyeText(title, style = LocalEyeTypography.current.subtitle, color = colors.textPrimary)

@@ -90,7 +90,7 @@ struct EyeRootView: View {
 
 private struct TestSelection: Identifiable { let id: String; init(_ id: String) { self.id = id } }
 
-/// 白底细上边框；选中项图标后方的浅主色胶囊以弹簧展开，图标与文字同步变色并轻微放大。
+/// 毛玻璃底栏（iOS 26 起为系统 Liquid Glass）+ 细上边框；选中项图标后方的浅主色胶囊以弹簧展开，图标与文字同步变色并轻微放大。
 private struct EyeBottomBar: View {
     @Binding var selected: TopLevelTab
     var body: some View {
@@ -110,19 +110,31 @@ private struct EyeBottomBar: View {
                     .accessibilityAddTraits(active ? [.isSelected] : [])
                     .animation(.spring(response: 0.35, dampingFraction: 0.8), value: active)
             }
-        }.background(EyeStyle.panel.ignoresSafeArea(edges: .bottom))
-            .overlay(alignment: .top) { Rectangle().fill(EyeStyle.borderSubtle).frame(height: 1) }
+        }.background { TabBarGlass().ignoresSafeArea(edges: .bottom) }
+            .overlay(alignment: .top) { Rectangle().fill(EyeStyle.glassEdgeBottom).frame(height: 1) }
     }
 }
 
-/// 顶层页骨架：浅色背景、左右 20 内边距、竖向滚动。
+/// 底栏背景：系统毛玻璃 + 半透明令牌色；iOS 26 起叠加系统 Liquid Glass，低版本不出现这一层。
+private struct TabBarGlass: View {
+    var body: some View {
+        let base = Rectangle().fill(.ultraThinMaterial).overlay(EyeStyle.glassFill)
+        if #available(iOS 26.0, *) {
+            base.glassEffect(.regular, in: Rectangle())
+        } else {
+            base
+        }
+    }
+}
+
+/// 顶层页骨架：顶部彩色渐变光背景、左右 20 内边距、竖向滚动。
 struct PageScroll<Content: View>: View {
     @ViewBuilder let content: Content
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) { content }
                 .padding(.horizontal, 20).padding(.bottom, 24)
-        }.background(EyeStyle.background)
+        }.background(EyeBackdrop())
     }
 }
 
@@ -142,7 +154,7 @@ private struct SelectCard<Leading: View>: View {
                 }.frame(maxWidth: .infinity, alignment: .leading)
                 Image(systemName: "arrow.right").font(.system(size: 15, weight: .medium)).foregroundStyle(EyeStyle.secondary)
             }.padding(.horizontal, 20).padding(.vertical, 16).frame(minHeight: 80)
-                .background(EyeStyle.panel, in: RoundedRectangle(cornerRadius: 22))
+                .eyeGlass()
                 .contentShape(RoundedRectangle(cornerRadius: 22))
         }.buttonStyle(PressScale(scale: 0.98))
     }
@@ -191,7 +203,7 @@ final class EyeReminder: ObservableObject {
 
 // MARK: 服务
 
-/// 服务页：标题（右上角账户与系统设置）+ 小瞳欢迎卡 + 三个自测入口（顺序、文案、图标与安卓一致）。
+/// 服务页：标题（右上角账户与系统设置）+ 示范主卡 + 四个自测入口（顺序、文案、图标与安卓一致）。
 private struct ServicesPage: View {
     let open: (String) -> Void
     let navigate: (AppRoute) -> Void
@@ -217,14 +229,14 @@ private struct ServicesPage: View {
     }
 }
 
-/// 示范舞台：小瞳随机轮流演示三项自测的做法（每种连播两遍），上方气泡先说这是哪项测试、再说「跟着我一起做吧」。
-/// 点舞台换下一个示范。与安卓 DemoHero 同一排版与文案；系统「减弱动态效果」时停在关键帧、气泡常显。
+/// 示范主卡：随机轮流演示三项自测的做法（每种连播两遍），上方是测试名称与一句做法（随示范淡入淡出）。
+/// 点示范区换下一个。与安卓 DemoHero 同一排版与文案；系统「减弱动态效果」时停在关键帧。
 private struct DemoHeroCard: View {
-    private struct Clip { let motion: GuideMotion; let name: String; let lines: [String] }
+    private struct Clip { let motion: GuideMotion; let name: String; let line: String }
     private static let clips = [
-        Clip(motion: .blink, name: "干眼自测", lines: ["干眼自测：像平时一样眨眨眼", "跟着我一起做吧"]),
-        Clip(motion: .cover, name: "眼位自测", lines: ["眼位自测：遮住一只眼，再移开", "找家人帮忙一起做哦"]),
-        Clip(motion: .near, name: "老视自测", lines: ["老视自测：看清 E 的开口朝哪边", "跟着我一起做吧"]),
+        Clip(motion: .blink, name: "干眼", line: "像平时一样自然眨眼"),
+        Clip(motion: .cover, name: "眼位", line: "遮住一只眼，再移开 · 需一位协助者"),
+        Clip(motion: .near, name: "老视", line: "看清 E 的开口朝哪边"),
     ]
     /// 每种示范连播的遍数。
     private static let repeats: Double = 2
@@ -239,29 +251,22 @@ private struct DemoHeroCard: View {
             let (segment, elapsed) = segmentAt(timeline.date.timeIntervalSince(start), lengths)
             let clip = order[(segment + skip) % order.count]
             let scene = GuideScene.scene(clip.motion)
-            let k = elapsed / lengths[segment]
-            let line = reduceMotion ? 0 : (k >= 0.03 && k <= 0.42 ? 0 : (k >= 0.52 && k <= 0.92 ? 1 : -1))
-            let key = line >= 0 ? "\(clip.name)\(line)" : ""
-            VStack(spacing: 0) {
-                ZStack(alignment: .bottomLeading) {
-                    Color.clear
-                    if line >= 0 {
-                        MascotBubble(line: MascotLine(text: clip.lines[line]), tail: .start)
-                            .id(key)
-                            .transition(reduceMotion ? .opacity : .scale(scale: 0.6, anchor: UnitPoint(x: 0.15, y: 1)).combined(with: .opacity))
-                    }
+            EyeHeroCard(padding: 16, spacing: 10) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("示范：\(clip.name)").font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text)
+                    Text(clip.line).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
                 }
-                .frame(height: 60).padding(.leading, 4)
-                .animation(reduceMotion ? .easeOut(duration: 0.18) : .spring(response: 0.35, dampingFraction: 0.55), value: key)
+                .padding(.horizontal, 4)
+                .id(clip.name).transition(.opacity)
+                .animation(.easeOut(duration: 0.28), value: clip.name)
                 GuideFrame(motion: clip.motion, phase: reduceMotion ? scene.keyframe : elapsed.truncatingRemainder(dividingBy: scene.cycle) / scene.cycle)
+                    .clipShape(RoundedRectangle(cornerRadius: EyeStyle.radiusLarge, style: .continuous))
                     .contentShape(Rectangle())
-                    .onTapGesture { skip += 1; MascotSound.shared.play("eye_pop") }
+                    .onTapGesture { skip += 1; EyeHaptics.tap() }
                     .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("小瞳正在示范\(clip.name)，点一下换下一个示范")
+                    .accessibilityLabel("正在示范\(clip.name)自测，点一下换下一个示范")
                     .accessibilityAddTraits(.isButton)
             }
-            .padding(12)
-            .background(EyeStyle.primarySoft, in: RoundedRectangle(cornerRadius: 22))
         }
     }
 

@@ -19,13 +19,10 @@ import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
 import com.zkyjss.eyeproject.core.ui.component.EyeButton
 import com.zkyjss.eyeproject.core.ui.component.EyeButtonRole
 import com.zkyjss.eyeproject.core.ui.component.EyeText
-import com.zkyjss.eyeproject.core.ui.component.MascotBubble
-import com.zkyjss.eyeproject.core.ui.component.MascotMood
-import com.zkyjss.eyeproject.core.ui.component.XiaoTong
 import com.zkyjss.eyeproject.core.ui.component.rememberEyeHaptics
 
 /**
- * 测试中点返回：屏幕中间弹出确认框，小瞳在上方冒气泡挽留。「继续测试」关闭弹窗，「确认退出」才离开。
+ * 测试中点返回：屏幕中间弹出确认框。「继续测试」关闭弹窗，「确认退出」才离开。
  * 四项测试共用；苹果端 TestExitConfirm 同一文案。
  */
 @Composable
@@ -35,8 +32,6 @@ internal fun TestExitDialog(onStay: () -> Unit, onExit: () -> Unit) {
     val haptics = rememberEyeHaptics()
     Dialog(onDismissRequest = onStay) {
         Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-            MascotBubble(EXIT_BUBBLE)
-            XiaoTong(MascotMood.CONCERNED, Modifier.size(96.dp), interactive = false)
             Column(Modifier.fillMaxWidth().clip(EyeShapes.panel).background(colors.panelBackground).padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 EyeText(EXIT_TITLE, style = typography.title, color = colors.textPrimary)
@@ -48,6 +43,5 @@ internal fun TestExitDialog(onStay: () -> Unit, onExit: () -> Unit) {
     }
 }
 
-internal const val EXIT_BUBBLE = "很快就要测完了哦，再坚持一下～"
 internal const val EXIT_TITLE = "确定要退出测试吗？"
 internal const val EXIT_BODY = "退出后这次测试不会保存，下次要从头开始。"

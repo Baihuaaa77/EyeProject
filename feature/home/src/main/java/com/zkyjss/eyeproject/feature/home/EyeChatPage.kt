@@ -58,6 +58,7 @@ import com.zkyjss.eyeproject.core.ui.component.EyeButtonRole
 import com.zkyjss.eyeproject.core.ui.component.EyeOptionRow
 import com.zkyjss.eyeproject.core.ui.component.EyeSubPage
 import com.zkyjss.eyeproject.core.ui.component.EyeText
+import com.zkyjss.eyeproject.core.ui.component.eyeGlass
 import com.zkyjss.eyeproject.core.ui.component.rememberEyeHaptics
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -76,19 +77,19 @@ class ChatViewModel @Inject constructor(private val chat: ChatRepository) : View
     fun clear() { viewModelScope.launch { chat.clear() } }
 }
 
-/** 首页「AI 主动问诊」入口（放在「今日感受」上方）：主色块上爱科头像 + 标题，点了进入对话页。与苹果端 ChatEntryCard 一致。 */
+/** 首页「AI 主动问诊」入口（放在「今日感受」上方）：玻璃卡上爱科头像 + 标题，点了进入对话页。与苹果端 ChatEntryCard 一致。 */
 @Composable
 internal fun ChatEntryCard(onOpen: () -> Unit) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
     val haptics = rememberEyeHaptics()
-    Row(Modifier.fillMaxWidth().clip(EyeShapes.panel).background(colors.primary)
-        .clickable(role = Role.Button) { haptics.tap(); onOpen() }.padding(horizontal = 18.dp, vertical = 16.dp),
+    Row(Modifier.fillMaxWidth().eyeGlass(colors, EyeShapes.panel)
+        .clickable(role = Role.Button) { haptics.tap(); onOpen() }.padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically) {
         EyechoAvatar(44.dp)
         Spacer(Modifier.width(12.dp))
-        EyeText(CHAT_TITLE, Modifier.weight(1f), style = typography.subtitle, color = colors.onPrimary, fontWeight = FontWeight.Bold)
-        EyeText("›", style = typography.title, color = colors.onPrimary)
+        EyeText(CHAT_TITLE, Modifier.weight(1f), style = typography.subtitle, color = colors.textPrimary)
+        EyeText("›", style = typography.title, color = colors.textTertiary)
     }
 }
 
@@ -200,13 +201,13 @@ internal fun EyechoAvatar(size: Dp) {
 private fun EyechoIntro() {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
-    Row(Modifier.fillMaxWidth().clip(EyeShapes.panel).background(colors.primarySoft).padding(start = 16.dp, end = 16.dp, top = 12.dp),
+    Row(Modifier.fillMaxWidth().eyeGlass(colors, EyeShapes.hero).padding(start = 16.dp, end = 16.dp, top = 12.dp),
         verticalAlignment = Alignment.Bottom) {
         Image(painterResource(R.drawable.eyecho_half), contentDescription = "爱科 Eyecho", Modifier.height(132.dp))
         Column(Modifier.weight(1f).padding(start = 14.dp, bottom = 16.dp).align(Alignment.CenterVertically),
             verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            EyeText(EYECHO_HELLO, style = typography.title, color = colors.primary)
-            EyeText(EYECHO_INTRO, style = typography.bodySecondary, color = colors.textSecondary)
+            EyeText(EYECHO_HELLO, style = typography.title, color = colors.textPrimary)
+            EyeText(EYECHO_INTRO, style = typography.body, color = colors.textSecondary)
         }
     }
 }
@@ -228,7 +229,7 @@ private fun ChatInputBar(state: ChatState?, input: String, onInput: (String) -> 
         }
         else -> {
             Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Box(Modifier.weight(1f).clip(EyeShapes.panel).background(colors.panelBackground).padding(horizontal = 14.dp, vertical = 12.dp)) {
+                Box(Modifier.weight(1f).eyeGlass(colors, EyeShapes.panel).padding(horizontal = 14.dp, vertical = 12.dp)) {
                     if (input.isEmpty()) EyeText("说说今天眼睛的感受…", style = typography.body, color = colors.textSecondary)
                     BasicTextField(input, onInput, Modifier.fillMaxWidth(), textStyle = typography.body.copy(color = colors.textPrimary),
                         cursorBrush = SolidColor(colors.primary), maxLines = 4)

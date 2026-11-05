@@ -271,7 +271,7 @@ struct SubjectEditView: View {
             Text(title).font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text)
             content()
         }.padding(16).frame(maxWidth: .infinity, alignment: .leading)
-            .background(EyeStyle.panel, in: RoundedRectangle(cornerRadius: EyeStyle.radius))
+            .eyeGlass()
     }
 }
 
@@ -339,7 +339,7 @@ struct PreTestCheckView: View {
                 .buttonStyle(EyeButtonStyle()).disabled(!runtime.checkComplete(answers))
         }
         .padding(20).frame(maxWidth: .infinity, alignment: .leading)
-        .background(EyeStyle.panel, in: RoundedRectangle(cornerRadius: 22))
+        .eyeGlass()
     }
 
     @ViewBuilder private func question(_ q: [String: Any]) -> some View {

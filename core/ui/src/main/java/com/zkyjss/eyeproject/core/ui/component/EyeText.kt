@@ -33,3 +33,19 @@ fun EyeText(
         maxLines = maxLines
     )
 }
+
+/** 带分段样式的文字（如「6 小时」数值大、单位小）。 */
+@Composable
+fun EyeText(
+    text: androidx.compose.ui.text.AnnotatedString,
+    modifier: Modifier = Modifier,
+    style: TextStyle,
+    color: Color = Color.Unspecified,
+    textAlign: TextAlign? = null,
+    maxLines: Int = Int.MAX_VALUE
+) {
+    var resolved = style
+    if (color != Color.Unspecified) resolved = resolved.copy(color = color)
+    if (textAlign != null) resolved = resolved.copy(textAlign = textAlign)
+    BasicText(text = text, modifier = modifier, style = resolved, maxLines = maxLines)
+}

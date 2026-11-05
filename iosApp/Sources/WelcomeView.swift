@@ -9,7 +9,7 @@ struct WelcomeView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
-                MascotStage(mood: .happy, interactive: false, greet: true).frame(width: 150, height: 150).padding(.top, 24)
+                BrandMark(size: 88).padding(.top, 48)
                 VStack(spacing: 8) {
                     Text("欢迎来到眼健康助手").font(EyeStyle.title).foregroundStyle(EyeStyle.text)
                     Text("登录后，测试记录可以加密保存到云端，换手机也不丢；还能和爱科聊聊今天的用眼感受。")
@@ -24,7 +24,7 @@ struct WelcomeView: View {
             .padding(.horizontal, 20).padding(.bottom, 28)
         }
         .scrollDismissesKeyboard(.interactively)
-        .background(LinearGradient(colors: [EyeStyle.primarySoft, EyeStyle.background], startPoint: .top, endPoint: .center).ignoresSafeArea())
+        .background(EyeBackdrop())
         .onChange(of: cloud.bool("signedIn")) { signedIn in if signedIn { EyeHaptics.success(); done() } }
     }
 }

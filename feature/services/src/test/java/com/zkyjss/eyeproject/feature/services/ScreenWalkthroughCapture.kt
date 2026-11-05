@@ -198,7 +198,7 @@ class ScreenWalkthroughCapture {
         shot("斜视-06-注视校准-失败重试")
         state.value = base.copy(step = ScreeningStep.FIXATION, gazeCalibrated = true, secondsLeft = 9, targetX = 1f)
         shot("斜视-07-稳定注视")
-        state.value = state.value.copy(distanceCm = 26f, gazeWarning = "注视明显偏离，请看着屏幕上的小瞳")
+        state.value = state.value.copy(distanceCm = 26f, gazeWarning = "注视明显偏离，请看着屏幕上的圆点")
         shot("斜视-07a-稳定注视-太近且偏离")
         state.value = state.value.copy(distanceCm = 0f, faceDetected = false, gazeWarning = "暂时无法确认注视，请保持头部稳定并看着屏幕目标")
         shot("斜视-07b-稳定注视-未看到双眼")
@@ -207,7 +207,7 @@ class ScreenWalkthroughCapture {
         shot("斜视-08-交替遮盖")
         state.value = base.copy(step = ScreeningStep.PURSUIT, gazeCalibrated = true, secondsLeft = 15, targetX = 6f, targetY = 0f)
         shot("斜视-09-追踪")
-        state.value = state.value.copy(distanceCm = 40f, gazeWarning = "未检测到有效跟随，请只用眼睛跟随移动的小瞳")
+        state.value = state.value.copy(distanceCm = 40f, gazeWarning = "未检测到有效跟随，请只用眼睛跟随移动的圆点")
         shot("斜视-09a-追踪-太远且未跟随")
 
         val (samples, marks) = strabismusSamples()

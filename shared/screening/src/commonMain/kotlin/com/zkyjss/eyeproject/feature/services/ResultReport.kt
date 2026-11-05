@@ -3,17 +3,19 @@ package com.zkyjss.eyeproject.feature.services
 /*
  * 结果页的展示模型：安卓 Compose 与苹果 SwiftUI 渲染同一份内容，文案与判定只在这里写一次。
  *
- * 排版约定（两端一致）：结论卡（小瞳 + 等级 + 一句结论 + 一句建议）→ 至多 4 个关键指标 →
+ * 排版约定（两端一致）：结论卡（等级 + 一句结论 + 可选的突出结果，如老视「你的眼睛年龄」+ 风险分段条 + 一句建议）→ 至多 4 个关键指标 →
  * 判断依据（每族一行，点开看明细）→ 操作按钮（延长/复测/重测、查看数据、导出）→ 一行说明。
  * 明细与原始数据全部收在「本次测试数据」里，首屏不出现成段小字。
  */
 
-/** 小瞳在结论卡上的神情。 */
+/** 结论卡的语气（按等级；旧版用于吉祥物神情）。 */
 enum class ResultMood { HAPPY, THINKING, CONCERNED, SLEEPY }
 
 data class ResultMetric(val label: String, val value: String, val status: EvidenceStatus)
 data class ResultRow(val label: String, val value: String)
 data class ResultSection(val title: String, val rows: List<ResultRow>)
+/** 结论卡上的一项突出结果（如老视的「你的眼睛年龄」）：名称、大号数值、一句说明。 */
+data class ResultHighlight(val label: String, val value: String, val note: String)
 
 data class ResultReport(
     val kind: String,
@@ -29,6 +31,8 @@ data class ResultReport(
     val sections: List<ResultSection>,
     val version: String,
     val qualityNotes: List<String> = emptyList(),
+    /** 结论卡上的突出结果；没有可靠数据时为 null，界面不显示这一项。 */
+    val highlight: ResultHighlight? = null,
 ) {
     val valid: Boolean get() = level != ScreeningRiskLevel.UNKNOWN
 }
@@ -254,7 +258,29 @@ object ResultReports {
             kind = s.kind.name, level = level, badge = badge, title = title, advice = advice, mood = mood(level),
             metrics = metrics, evidence = s.evidence, problems = if (valid) emptyList() else s.findings,
             sections = sections, version = ScreeningAssessmentModel.version(s.kind),
+            highlight = if (valid && !strabismus && path.standardAmplitude) eyeAge(f) else null,
         )
+    }
+
+    /**
+     * 老视「你的眼睛年龄」：按较差眼的调节幅度用 Hofstetter 平均公式（18.5 − 0.3 × 年龄）反推。
+     * 只有 A1 / A2 路径做了单眼移近法才有；近点比可测下限还近（调节幅度到上限）时只能说「不超过」某个年龄。
+     */
+    internal fun eyeAge(f: Map<String, Double?>): ResultHighlight? {
+        val ampAge = f["amplitude_age_years"] ?: return null
+        val amplitude = f["amplitude_d"] ?: return null
+        val atLimit = amplitude >= PresbyopiaProtocol.MAX_AMPLITUDE_D - 1e-6
+        val years = kotlin.math.round(ampAge).toInt()
+        val value = if (atLimit) "不超过 $years 岁" else "约 $years 岁"
+        val compare = f["age_years"]?.takeIf { !atLimit }?.let { real ->
+            val diff = years - kotlin.math.round(real).toInt()
+            when {
+                diff >= 3 -> "比实际年龄大 $diff 岁"
+                diff <= -3 -> "比实际年龄小 ${-diff} 岁"
+                else -> "与实际年龄相当"
+            }
+        }
+        return ResultHighlight("你的眼睛年龄", value, listOfNotNull(compare, "按看近调节能力推算，仅供参考").joinToString(" · "))
     }
 
     // endregion
@@ -282,6 +308,7 @@ internal fun ResultReport.toRecordObject(): RecordObject = RecordObject().apply 
     put("evidence", evidence.toRecordArray())
     put("problems", RecordArray(problems))
     put("qualityNotes", RecordArray(qualityNotes))
+    highlight?.let { h -> put("highlight", RecordObject().apply { put("label", h.label); put("value", h.value); put("note", h.note) }) }
     put("sections", RecordArray(sections.map { section -> RecordObject().apply {
         put("title", section.title)
         put("rows", RecordArray(section.rows.map { r -> RecordObject().apply { put("label", r.label); put("value", r.value) } }))

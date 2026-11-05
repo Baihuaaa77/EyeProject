@@ -3,18 +3,18 @@ import SwiftUI
 /// 入口与对话页标题（与安卓 CHAT_TITLE 一致）。
 let chatTitle = "AI 主动问诊"
 
-/// 首页「AI 主动问诊」入口（放在「今日感受」上方）：主色块上爱科头像 + 标题，点了进入对话页。与安卓 ChatEntryCard 一致。
+/// 首页「AI 主动问诊」入口（放在「今日感受」上方）：玻璃卡上爱科头像 + 标题，点了进入对话页。与安卓 ChatEntryCard 一致。
 struct ChatEntryCard: View {
     let open: () -> Void
     var body: some View {
         Button { EyeHaptics.tap(); open() } label: {
             HStack(spacing: 12) {
                 EyechoAvatar(size: 44)
-                Text(chatTitle).font(EyeStyle.subtitle.weight(.bold)).foregroundStyle(.white).frame(maxWidth: .infinity, alignment: .leading)
-                Image(systemName: "chevron.right").font(.system(size: 15, weight: .bold)).foregroundStyle(.white)
+                Text(chatTitle).font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text).frame(maxWidth: .infinity, alignment: .leading)
+                Image(systemName: "chevron.right").font(.system(size: 15, weight: .semibold)).foregroundStyle(EyeStyle.tertiary)
             }
-            .padding(.horizontal, 18).padding(.vertical, 16)
-            .background(EyeStyle.primary, in: RoundedRectangle(cornerRadius: 22))
+            .padding(.horizontal, 16).padding(.vertical, 14)
+            .eyeGlass()
             .contentShape(RoundedRectangle(cornerRadius: 22))
         }.buttonStyle(PressScale(scale: 0.98))
     }
@@ -84,7 +84,6 @@ struct AiChatPage: View {
         .animation(.easeOut(duration: 0.2), value: confirming)
         .background(EyeStyle.background.ignoresSafeArea())
         .navigationTitle(chatTitle).navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(EyeStyle.background, for: .navigationBar)
         .toolbar {
             if !messages.isEmpty {
                 ToolbarItem(placement: .navigationBarTrailing) { Button("清空") { confirmClear = true } }
@@ -173,15 +172,15 @@ private struct EyechoIntro: View {
             Image("EyechoHalf").resizable().scaledToFit().frame(height: 132)
                 .accessibilityLabel("爱科 Eyecho")
             VStack(alignment: .leading, spacing: 4) {
-                Text("你好，我是爱科").font(EyeStyle.title).foregroundStyle(EyeStyle.primary)
-                Text("爱尔眼科 AI 助手。眼睛不舒服、用眼习惯、测试结果，都可以问我。").font(EyeStyle.bodySecondary)
+                Text("你好，我是爱科").font(EyeStyle.title).foregroundStyle(EyeStyle.text)
+                Text("爱尔眼科 AI 助手。眼睛不舒服、用眼习惯、测试结果，都可以问我。").font(EyeStyle.body)
                     .foregroundStyle(EyeStyle.secondary).fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.bottom, 16)
         }
         .padding(.horizontal, 16).padding(.top, 12)
-        .background(EyeStyle.primarySoft, in: RoundedRectangle(cornerRadius: 22))
+        .eyeGlass(cornerRadius: EyeStyle.radiusHero)
     }
 }
 
@@ -207,7 +206,7 @@ private struct ChatConsentView: View {
                         ZStack {
                             RoundedRectangle(cornerRadius: 5).fill(quiet ? EyeStyle.primary : Color.clear)
                             RoundedRectangle(cornerRadius: 5).stroke(quiet ? EyeStyle.primary : EyeStyle.borderSubtle, lineWidth: 2)
-                            if quiet { Image(systemName: "checkmark").font(.system(size: 12, weight: .bold)).foregroundStyle(EyeStyle.panel) }
+                            if quiet { Image(systemName: "checkmark").font(.system(size: 12, weight: .bold)).foregroundStyle(EyeStyle.onPrimary) }
                         }.frame(width: 22, height: 22)
                         Text(info["dontAskAgain"] as? String ?? "").font(EyeStyle.body).foregroundStyle(EyeStyle.text)
                         Spacer()
@@ -222,7 +221,7 @@ private struct ChatConsentView: View {
                 Button("不同意") { EyeHaptics.tap(); decline() }.buttonStyle(EyeButtonStyle(role: .secondary))
             }
             .padding(24).frame(maxWidth: .infinity, alignment: .leading)
-            .background(EyeStyle.panel, in: RoundedRectangle(cornerRadius: 22))
+            .eyeGlass()
             .padding(24)
         }
         .accessibilityAddTraits(.isModal)

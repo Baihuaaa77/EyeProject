@@ -74,8 +74,9 @@ struct LiveEyeSection: View {
             if !s.ready { return ("建立基线", EyeStyle.warning) }
             return s.closed ? ("闭眼", EyeStyle.danger) : ("睁眼", EyeStyle.success)
         }()
-        return Text(text).font(EyeStyle.chip).foregroundStyle(EyeStyle.onStatus)
-            .padding(.horizontal, 10).padding(.vertical, 4).background(color, in: Capsule())
+        let chip = EyeStyle.statusFill(color)
+        return Text(text).font(EyeStyle.chip).foregroundStyle(chip.1)
+            .padding(.horizontal, 10).padding(.vertical, 4).background(chip.0, in: Capsule())
     }
 
     private var statusChip: some View {

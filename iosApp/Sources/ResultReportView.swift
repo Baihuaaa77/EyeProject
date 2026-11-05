@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// 结果页：内容来自共用核心的 ResultReport（快照里的 "report"），与安卓 ReportComponents 同一排版：
-/// 结论卡（小瞳 + 等级 + 一句结论 + 一句建议）→ 关键指标 2×2 → 判断依据（点开看明细）→ 操作 →
+/// 结论卡（等级 + 一句结论 + 风险分段条 + 一句建议）→ 关键指标 2×2 → 判断依据（点开看明细）→ 操作 →
 /// 「查看本次数据」「导出数据」→ 一行说明。首屏不放成段小字，明细都在数据页里。
 struct ResultReportView: View {
     @ObservedObject var runtime: EyeRuntime
@@ -24,7 +24,7 @@ struct ResultReportView: View {
                             }
                         }
                     }.padding(16).frame(maxWidth: .infinity, alignment: .leading)
-                        .background(EyeStyle.panel, in: RoundedRectangle(cornerRadius: EyeStyle.radius))
+                        .eyeGlass()
                 }
                 if !report.valid {
                     ProblemCard(problems: report.problems)
@@ -81,6 +81,8 @@ struct ReportModel {
     let valid: Bool
     let qualityNotes: [String]
     let metrics: [Metric], evidence: [Evidence], problems: [String], sections: [Section]
+    /// 结论卡上的突出结果（老视「你的眼睛年龄」）：名称、数值、说明；没有时为 nil。
+    let highlight: (label: String, value: String, note: String)?
 
     init?(_ dict: [String: Any]?) {
         guard let d = dict, let level = d["level"] as? String else { return nil }
@@ -90,6 +92,11 @@ struct ReportModel {
         footnote = d["footnote"] as? String ?? ""; version = d["version"] as? String ?? ""
         valid = d["valid"] as? Bool ?? false
         qualityNotes = d["qualityNotes"] as? [String] ?? []
+        if let h = d["highlight"] as? [String: Any], let value = h["value"] as? String {
+            highlight = (h["label"] as? String ?? "", value, h["note"] as? String ?? "")
+        } else {
+            highlight = nil
+        }
         metrics = (d["metrics"] as? [[String: Any]] ?? []).enumerated().map { i, m in
             Metric(id: i, label: m["label"] as? String ?? "", value: m["value"] as? String ?? "—", status: m["status"] as? String ?? "UNAVAILABLE")
         }
@@ -138,54 +145,73 @@ private struct ResultHero: View {
     let report: ReportModel
     var body: some View {
         let tone = ReportTone.level(report.level)
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .center) {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text(report.badge).font(EyeStyle.chip).foregroundStyle(EyeStyle.onStatus)
-                        .padding(.horizontal, 12).padding(.vertical, 6).background(tone.0, in: Capsule())
-                    // 长结论用标题字号，避免大字折成三行；与安卓 LONG_TITLE 一致
-                    Text(report.title).font(report.title.count > 8 ? EyeStyle.title : EyeStyle.headline).foregroundStyle(EyeStyle.text)
+        EyeHeroCard(spacing: 14) {
+            let badge = EyeStyle.statusFill(tone.0)
+            Text(report.badge).font(EyeStyle.chip).foregroundStyle(badge.1)
+                .padding(.horizontal, 12).padding(.vertical, 5).background(badge.0, in: Capsule())
+            // 长结论用标题字号，避免大字折成三行；与安卓 LONG_TITLE 一致
+            Text(report.title).font(report.title.count > 8 ? EyeStyle.title : EyeStyle.headline).foregroundStyle(EyeStyle.text)
+                .fixedSize(horizontal: false, vertical: true)
+            if let highlight = report.highlight {
+                VStack(alignment: .leading, spacing: 4) {
+                    Rectangle().fill(EyeStyle.borderSubtle).frame(height: 1).padding(.bottom, 8)
+                    Text(highlight.label).font(EyeStyle.body).foregroundStyle(EyeStyle.secondary)
+                    Text(highlight.value).font(EyeStyle.headline).foregroundStyle(EyeStyle.primary)
+                    Text(highlight.note).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                Spacer(minLength: 8)
-                MoodMascot(mood: report.mood).frame(width: 104, height: 104)
+                .accessibilityElement(children: .combine)
             }
+            RiskSegments(level: report.level)
             Text(report.advice).font(EyeStyle.body).foregroundStyle(EyeStyle.text).fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.horizontal, 20).padding(.vertical, 22)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(LinearGradient(colors: [tone.1, EyeStyle.panel], startPoint: .top, endPoint: .bottom),
-            in: RoundedRectangle(cornerRadius: 22))
     }
 }
 
-/// 小瞳的神情随等级：放心（开心蹦一下）、思考（冒问号）、担心（冒汗）、没测好（犯困），带待机动画，点一下会互动。
-private struct MoodMascot: View {
-    let mood: String
+/// 风险分段条：正常 → 低风险 → 中风险 → 高风险四段，当前等级那段用等级色（深色主题带泛光）；无法评估时全灰。与安卓 RiskSegments 一致。
+private struct RiskSegments: View {
+    let level: String
+    @Environment(\.colorScheme) private var scheme
     var body: some View {
-        MascotStage(mood: MascotMood(code: mood), greet: mood == "HAPPY", headScale: 0.76)
+        HStack(spacing: 4) {
+            ForEach(["LOW", "UNCERTAIN", "MEDIUM", "HIGH"], id: \.self) { step in
+                let on = step == level
+                let color = EyeStyle.statusFill(ReportTone.level(step).0).0
+                Capsule().fill(on ? color : EyeStyle.borderSubtle).frame(height: 6)
+                    .shadow(color: on && scheme == .dark ? color.opacity(0.7) : .clear, radius: 5)
+            }
+        }
+        .accessibilityHidden(true)
     }
 }
 
 // MARK: - 指标与依据
 
+/// 关键指标 2×2：一张卡里细线分隔；名称、大号数值、状态小标签（与安卓 MetricGrid 一致）。
 private struct MetricGrid: View {
     let metrics: [ReportModel.Metric]
     var body: some View {
-        LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
-            ForEach(metrics) { m in
-                let tone = ReportTone.status(m.status)
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(m.label).font(EyeStyle.body).foregroundStyle(EyeStyle.secondary).lineLimit(1)
-                    Text(m.value).font(EyeStyle.title).foregroundStyle(m.status == "ABNORMAL" ? EyeStyle.warning : EyeStyle.text)
-                        .lineLimit(1).minimumScaleFactor(0.7)
-                    Text(m.status == "UNAVAILABLE" ? "参考" : ReportTone.label(m.status)).font(EyeStyle.chip).foregroundStyle(tone.0)
-                        .padding(.horizontal, 10).padding(.vertical, 4).background(tone.1, in: Capsule())
-                }
-                .padding(16).frame(maxWidth: .infinity, alignment: .leading)
-                .background(EyeStyle.panel, in: RoundedRectangle(cornerRadius: EyeStyle.radiusLarge))
+        let rows = stride(from: 0, to: metrics.count, by: 2).map { Array(metrics[$0..<min($0 + 2, metrics.count)]) }
+        EyeCard(spacing: 0) {
+            ForEach(Array(rows.enumerated()), id: \.offset) { i, row in
+                if i > 0 { Rectangle().fill(EyeStyle.borderSubtle).frame(height: 1).padding(.vertical, 14) }
+                HStack(spacing: 0) {
+                    cell(row[0])
+                    VDivider()
+                    if row.count > 1 { cell(row[1]) } else { Color.clear.frame(maxWidth: .infinity) }
+                }.fixedSize(horizontal: false, vertical: true)
             }
         }
+    }
+    private func cell(_ m: ReportModel.Metric) -> some View {
+        let tone = ReportTone.status(m.status)
+        return VStack(alignment: .leading, spacing: 6) {
+            Text(m.label).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary).lineLimit(1)
+            Text(m.value).font(EyeStyle.metricValue).foregroundStyle(m.status == "ABNORMAL" ? EyeStyle.warning : EyeStyle.text)
+                .lineLimit(1).minimumScaleFactor(0.7)
+            Text(m.status == "UNAVAILABLE" ? "参考" : ReportTone.label(m.status)).font(EyeStyle.chip).foregroundStyle(tone.0)
+                .padding(.horizontal, 10).padding(.vertical, 3).background(tone.1, in: Capsule())
+        }.frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -201,7 +227,7 @@ private struct EvidenceCard: View {
         }
         .padding(.horizontal, 20).padding(.vertical, 16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(EyeStyle.panel, in: RoundedRectangle(cornerRadius: 22))
+        .eyeGlass()
     }
 }
 
@@ -259,7 +285,7 @@ private struct ProblemCard: View {
             }
         }
         .padding(20).frame(maxWidth: .infinity, alignment: .leading)
-        .background(EyeStyle.panel, in: RoundedRectangle(cornerRadius: 22))
+        .eyeGlass()
     }
 }
 
@@ -326,6 +352,6 @@ private struct DataPanel<Content: View>: View {
             content
         }
         .padding(16).frame(maxWidth: .infinity, alignment: .leading)
-        .background(EyeStyle.panel, in: RoundedRectangle(cornerRadius: EyeStyle.radiusLarge))
+        .eyeGlass(cornerRadius: EyeStyle.radiusLarge)
     }
 }

@@ -234,7 +234,7 @@ object PursuitGazeCheck {
                 add("${stepTitle(step)}未获得足够的有效注视，请看着屏幕目标重新测试")
         }
         for (segment in 0..2) if (follows(samples, segment) != true)
-            add("${listOf("水平", "垂直", "斜向")[segment]}跟随未获得有效轨迹，请跟随小瞳重新测试")
+            add("${listOf("水平", "垂直", "斜向")[segment]}跟随未获得有效轨迹，请跟随圆点重新测试")
     }
 
     private const val MIN_JUDGED_FRAMES = 10

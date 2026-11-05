@@ -28,6 +28,7 @@ import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
 import com.zkyjss.eyeproject.core.sync.ConsentType
 import com.zkyjss.eyeproject.core.ui.component.EyeButton
+import com.zkyjss.eyeproject.core.ui.component.eyeGlass
 import com.zkyjss.eyeproject.core.ui.component.EyeButtonRole
 import com.zkyjss.eyeproject.core.ui.component.EyeGlyph
 import com.zkyjss.eyeproject.core.ui.component.EyeIconTile
@@ -94,7 +95,7 @@ internal fun CloudSyncContent(state: CloudSyncUiState, actions: CloudSyncActions
 private fun SignInPrompt(title: String, text: String, onOpenAccount: () -> Unit) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
-    Column(Modifier.fillMaxWidth().clip(EyeShapes.panel).background(colors.panelBackground).padding(20.dp),
+    Column(Modifier.fillMaxWidth().eyeGlass(colors, EyeShapes.panel).padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         EyeIconTile(EyeGlyph.CLOUD, EyeTileTone.BLUE, 48.dp)
         EyeText(title, style = typography.subtitle, color = colors.textPrimary)
@@ -108,7 +109,7 @@ private fun SignedInPanel(state: CloudSyncUiState.SignedIn, actions: CloudSyncAc
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
     val haptics = rememberEyeHaptics()
-    Column(Modifier.fillMaxWidth().clip(EyeShapes.panel).background(colors.panelBackground).padding(20.dp),
+    Column(Modifier.fillMaxWidth().eyeGlass(colors, EyeShapes.panel).padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {

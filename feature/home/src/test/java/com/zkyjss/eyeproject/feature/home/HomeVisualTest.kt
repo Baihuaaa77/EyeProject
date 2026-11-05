@@ -34,8 +34,6 @@ import com.zkyjss.eyeproject.core.model.FaceMetrics
 import com.zkyjss.eyeproject.core.model.Point2f
 import com.zkyjss.eyeproject.core.ui.component.EyeSplash
 import com.zkyjss.eyeproject.core.ui.component.EyeText
-import com.zkyjss.eyeproject.core.ui.component.MascotMood
-import com.zkyjss.eyeproject.core.ui.component.XiaoTong
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -46,7 +44,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.io.File
 
-/** 新首页、二级页面与小瞳表情的界面检查与截图（虚构数据，不连接相机与服务器）。 */
+/** 新首页、二级页面的界面检查与截图（虚构数据，不连接相机与服务器）。 */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], qualifiers = "zh-rCN-w390dp-h844dp-mdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -77,7 +75,7 @@ class HomeVisualTest {
         var reminder = false
         var trend = false
         var openedModel = false
-        // 小瞳的气泡靠无限动画轮换，自动推进的测试时钟会停掉它，先用手动时钟
+        // AI 光球等无限动画会让自动推进的测试时钟停不下来，先用手动时钟
         compose.mainClock.autoAdvance = false
         compose.setContent {
             EyeProjectTheme {
@@ -93,9 +91,9 @@ class HomeVisualTest {
         // 首页精简：问诊入口改名、不再分小节标题、去掉专业咨询建议与视觉行为读数
         compose.onNodeWithText(CHAT_TITLE).assertExists()
         listOf("AI 综合建议", "多源感知", "主动服务", "专业咨询建议", "视觉行为").forEach { compose.onNodeWithText(it).assertDoesNotExist() }
-        // 第一句气泡是今天最该做的事
+        // 主卡只放第一条建议的主按钮（今天最该做的事），其余收在「更多建议」
         compose.mainClock.advanceTimeBy(1_400)
-        compose.onNodeWithText("看了好久啦，看看远处 20 秒吧").assertExists()
+        compose.onNodeWithText("去休息").assertExists()
         capture("01-首页-首屏", advance = false)
         compose.mainClock.autoAdvance = true
         compose.onNodeWithText("休息提醒").performScrollTo().performClick()
@@ -107,12 +105,12 @@ class HomeVisualTest {
         assertTrue(openedModel)
     }
 
-    /** 点可执行的气泡直接去做：「去休息」打开 20 秒休息页。 */
-    @Test fun tappingAnActionableBubbleStartsIt() {
+    /** 主卡里第一条建议的按钮直接去做：「去休息」打开 20 秒休息页。 */
+    @Test fun tappingTheFirstTipActionStartsIt() {
         compose.mainClock.autoAdvance = false
         compose.setContent { EyeProjectTheme { HomeContent(demoState(), HomeNavigation(), HomeActions()) } }
         compose.mainClock.advanceTimeBy(1_500)
-        compose.onNodeWithText("去休息 ›").performClick()
+        compose.onNodeWithText("去休息").performClick()
         compose.mainClock.advanceTimeBy(500)
         compose.onNodeWithText("提前结束").assertExists()
     }
@@ -138,8 +136,8 @@ class HomeVisualTest {
         capture("03-首页-深色-还没有数据")
     }
 
-    /** 负荷偏高的一天：小瞳疲惫（眼皮耷拉、黑眼圈、嫩芽打蔫），第一句气泡劝你闭眼歇会儿。 */
-    @Test fun tiredXiaoTongWhenLoadIsHigh() {
+    /** 负荷偏高的一天：主卡第一条建议劝你闭眼歇会儿。 */
+    @Test fun highLoadDaySuggestsRest() {
         val usage = UsageDay(today, screenMinutes = 7 * 60, longestSessionMinutes = 130, nightMinutes = 70, breaks = 2)
         val ledger = LedgerData().withSession(today, 1L, LiveEyeMonitor.Session(120_000, 12, 6f, 24f, 0.8f, 10f))
             .withCheckIn(today, listOf("眼睛干涩"), 3L)
@@ -148,7 +146,7 @@ class HomeVisualTest {
         compose.mainClock.autoAdvance = false
         compose.setContent { EyeProjectTheme { HomeContent(HomeUiState(report = report), HomeNavigation(), HomeActions()) } }
         compose.mainClock.advanceTimeBy(2_400)
-        compose.onNodeWithText("眼睛累坏啦，闭上眼歇一会儿吧").assertExists()
+        compose.onNodeWithText("去休息").assertExists()
         capture("01b-首页-负荷偏高", advance = false)
     }
 
@@ -201,6 +199,13 @@ class HomeVisualTest {
         compose.setContent { EyeProjectTheme { EyeTrendContent(demoState().report, {}) } }
         compose.onNodeWithText("近 7 天日均用屏").assertExists()
         capture("06-用眼趋势报告")
+    }
+
+    @Test @Config(qualifiers = "zh-rCN-w390dp-h1500dp-mdpi")
+    fun trendReportDark() {
+        compose.setContent { EyeProjectTheme(darkTheme = true) { EyeTrendContent(demoState().report, {}) } }
+        compose.onNodeWithText("近 7 天日均用屏").assertExists()
+        capture("06b-用眼趋势报告-深色")
     }
 
     @Test @Config(qualifiers = "zh-rCN-w390dp-h1200dp-mdpi")
@@ -282,37 +287,19 @@ class HomeVisualTest {
         capture("08-亮度与蓝光")
     }
 
-    @Test fun splashAndMascotMoods() {
-        var showSplash by mutableStateOf(true)
+    @Test fun splash() {
         compose.mainClock.autoAdvance = false
-        compose.setContent {
-            EyeProjectTheme {
-                if (showSplash) EyeSplash(onFinished = {}) else Column(Modifier.fillMaxSize().background(LocalEyeColors.current.appBackground).padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    MascotMood.entries.chunked(2).forEach { row ->
-                        Row { row.forEach { mood -> Column { XiaoTong(mood, Modifier.size(170.dp)); EyeText(mood.name, style = com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography.current.chip) } } }
-                    }
-                }
-            }
-        }
+        compose.setContent { EyeProjectTheme { EyeSplash(onFinished = {}) } }
         compose.mainClock.advanceTimeBy(700)
         capture("09-启动动画", advance = false)
-        showSplash = false
-        // 待机周期 6 秒：避开 0.3 处的眨眼，停在 0.4 左右
-        compose.mainClock.advanceTimeBy(2_400)
-        capture("10-小瞳五种心情", advance = false)
-        val first = compose.onAllNodesWithContentDescription("小瞳，点一下和它互动，长按摸摸头")[0]
-        first.performClick()
-        compose.mainClock.advanceTimeBy(400)
-        capture("11-小瞳点按互动", advance = false)
-        compose.mainClock.advanceTimeBy(1_600)
-        repeat(5) { first.performClick(); compose.mainClock.advanceTimeBy(60) }
-        compose.mainClock.advanceTimeBy(500)
-        capture("11b-小瞳连点转晕", advance = false)
-        compose.mainClock.advanceTimeBy(1_600)
-        first.performTouchInput { longClick() }
-        compose.mainClock.advanceTimeBy(600)
-        capture("11c-小瞳长按比心", advance = false)
+    }
+
+    @Test @Config(qualifiers = "zh-rCN-w390dp-h2600dp-mdpi")
+    fun fullHomePageDark() {
+        compose.mainClock.autoAdvance = false
+        compose.setContent { EyeProjectTheme(darkTheme = true) { HomeContent(demoState(), HomeNavigation(), HomeActions()) } }
+        compose.mainClock.advanceTimeBy(1_500)
+        capture("02b-首页-整页-深色", advance = false)
     }
 
     /** 眼裂宽 100 px、上下各偏 h 的 6 点（EAR = 2h / 100 × 100），落在画面中部；虹膜直径 36 px。 */

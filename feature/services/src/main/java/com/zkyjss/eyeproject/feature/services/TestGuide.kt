@@ -58,11 +58,12 @@ import com.zkyjss.eyeproject.core.ui.component.EyeButton
 import com.zkyjss.eyeproject.core.ui.component.EyeButtonRole
 import com.zkyjss.eyeproject.core.ui.component.EyeSectionCard
 import com.zkyjss.eyeproject.core.ui.component.EyeText
-import com.zkyjss.eyeproject.core.ui.component.drawCartoonPhone
-import com.zkyjss.eyeproject.core.ui.component.drawMascot
-import com.zkyjss.eyeproject.core.ui.component.drawMitten
+import com.zkyjss.eyeproject.core.ui.component.drawPhone
+import com.zkyjss.eyeproject.core.ui.component.drawFixationTarget
+import com.zkyjss.eyeproject.core.ui.component.drawFigure
+import com.zkyjss.eyeproject.core.ui.component.drawHand
 import com.zkyjss.eyeproject.core.ui.component.drawTumblingE
-import com.zkyjss.eyeproject.core.ui.component.mascotEyeCenter
+import com.zkyjss.eyeproject.core.ui.component.figureEyeCenter
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
@@ -105,7 +106,7 @@ private class SceneScope(
 }
 
 /**
- * 测试前的方法演示卡：卡通吉祥物「小瞳」演示动作 + 与动画同步高亮的分镜步骤 + 文字提示。
+ * 测试前的方法演示卡：示意人物演示动作 + 与动画同步高亮的分镜步骤 + 文字提示。
  * 示范画布只出现在准备阶段，不参与正式刺激呈现或计时。
  * 点按舞台可暂停/继续；系统「移除动画」时停在关键帧并展示全部步骤。
  */
@@ -287,16 +288,16 @@ private fun SceneScope.headLock(cx: Float, cy: Float, half: Float) {
     }
 }
 
-/** 准备姿势：手机在小瞳面前前后微调到合适距离后出现对勾；左上角灯光示意光线均匀。 */
+/** 准备姿势：手机在人物面前前后微调到合适距离后出现对勾；左上角灯光示意光线均匀。 */
 private val postureScene = GuideScene(
     cycleMs = 5200,
     beats = listOf(GuideBeat(0f, "① 正对屏幕，露出双眼"), GuideBeat(0.25f, "② 前后微调到提示的距离"), GuideBeat(0.6f, "③ 光线均匀，避免逆光")),
     keyframe = 0.7f,
 ) { phase ->
     floorShadow(82f, 182f, 100f)
-    scope.drawMascot(colors, p(82f, 112f), u(100f), gaze = Offset(0.9f, 0f))
+    scope.drawFigure(colors, p(82f, 112f), u(100f), gaze = Offset(0.9f, 0f))
     val x = keyframes(phase, 0f to 290f, 0.15f to 290f, 0.3f to 215f, 0.4f to 250f, 0.5f to 238f, 1f to 238f)
-    val (tl, screen) = scope.drawCartoonPhone(colors, p(x, 104f), u(128f))
+    val (tl, screen) = scope.drawPhone(colors, p(x, 104f), u(128f))
     // 屏幕里的取景框：到位后变成对勾
     val ok = seg(phase, 0.5f, 0.56f)
     val c = Offset(tl.x + screen.width / 2, tl.y + screen.height / 2)
@@ -333,7 +334,7 @@ private val blinkScene = GuideScene(
 ) { phase ->
     floorShadow(160f, 178f, 120f)
     val lid = blinkTimes.maxOf { tri(phase, it, 0.035f) }
-    scope.drawMascot(colors, p(160f, 108f), u(118f), lid = lid)
+    scope.drawFigure(colors, p(160f, 108f), u(118f), lid = lid)
     // 每次眨眼后飘起「+1」
     blinkTimes.forEach { t ->
         val k = (phase - t) / 0.22f
@@ -352,12 +353,12 @@ private val openScene = GuideScene(
     floorShadow(130f, 178f, 120f)
     val rest = tri(phase, 0.92f, 0.04f)
     val wide = 1f + 0.22f * seg(phase, 0.02f, 0.15f) * (1f - seg(phase, 0.86f, 0.9f))
-    scope.drawMascot(colors, p(130f, 108f), u(118f), lid = rest, wide = wide)
+    scope.drawFigure(colors, p(130f, 108f), u(118f), lid = rest, wide = wide)
     // 眼旁闪光，表达「睁开」
     if (phase in 0.15f..0.86f) {
         val twinkle = (sin(phase * 40f) + 1f) / 2f
         for (side in listOf(-1, 1)) {
-            val eye = mascotEyeCenter(p(130f, 108f), u(118f), side)
+            val eye = figureEyeCenter(p(130f, 108f), u(118f), side)
             val c = Offset(eye.x + side * u(26f), eye.y - u(22f))
             val r = u(3f + 3f * twinkle)
             scope.drawLine(colors.accent, Offset(c.x - r, c.y), Offset(c.x + r, c.y), u(2.5f), StrokeCap.Round)
@@ -406,13 +407,13 @@ private val nearScene = GuideScene(
 ) { phase ->
     floorShadow(95f, 182f, 110f)
     val mascot = p(95f, 110f)
-    scope.drawMascot(colors, mascot, u(108f), gaze = Offset(0.8f, 0f))
-    // 手掌从下方抬起，遮住小瞳的左眼（画面右侧那只）
-    val eye = mascotEyeCenter(mascot, u(108f), 1)
+    scope.drawFigure(colors, mascot, u(108f), gaze = Offset(0.8f, 0f))
+    // 手掌从下方抬起，遮住人物的左眼（画面右侧那只）
+    val eye = figureEyeCenter(mascot, u(108f), 1)
     val rise = seg(phase, 0.02f, 0.16f)
     val hand = Offset(eye.x + u(2f), lerp(eye.y + u(90f), eye.y + u(3f), rise))
-    scope.drawMitten(colors, hand, u(46f), angle = -12f, armFrom = Offset(hand.x + u(18f), p(0f, 210f).y))
-    val (tl, screen) = scope.drawCartoonPhone(colors, p(242f, 100f), u(160f))
+    scope.drawHand(colors, hand, u(46f), angle = -12f, armFrom = Offset(hand.x + u(18f), p(0f, 210f).y))
+    val (tl, screen) = scope.drawPhone(colors, p(242f, 100f), u(160f))
     val segment = ((phase - 0.2f) / 0.2f).toInt().coerceIn(0, 3)
     val dir = nearDirections[segment]
     scope.drawTumblingE(colors.ink, Offset(tl.x + screen.width / 2, tl.y + screen.height * 0.3f), screen.width * 0.36f, dir)
@@ -448,11 +449,11 @@ private val moveScene = GuideScene(
     keyframe = 0.66f,
 ) { phase ->
     floorShadow(62f, 182f, 96f)
-    scope.drawMascot(colors, p(62f, 112f), u(96f), gaze = Offset(1f, 0f))
+    scope.drawFigure(colors, p(62f, 112f), u(96f), gaze = Offset(1f, 0f))
     ruler(120f, 300f, 188f)
     // 连续、匀速地由远向近，记录近点后再移回远处
     val x = keyframes(phase, 0f to 290f, 0.15f to 290f, 0.68f to 150f, 0.76f to 150f, 0.9f to 290f, 1f to 290f)
-    val (tl, screen) = scope.drawCartoonPhone(colors, p(x, 104f), u(118f))
+    val (tl, screen) = scope.drawPhone(colors, p(x, 104f), u(118f))
     val eCenter = Offset(tl.x + screen.width / 2, tl.y + screen.height / 2)
     val blur = seg(phase, 0.58f, 0.68f) * (1f - seg(phase, 0.78f, 0.84f))
     if (blur > 0.05f) {
@@ -475,10 +476,10 @@ private val switchScene = GuideScene(
     keyframe = 0.45f,
 ) { phase ->
     floorShadow(62f, 182f, 96f)
-    scope.drawMascot(colors, p(62f, 112f), u(96f), gaze = Offset(1f, 0f))
+    scope.drawFigure(colors, p(62f, 112f), u(96f), gaze = Offset(1f, 0f))
     ruler(120f, 300f, 188f)
     val x = keyframes(phase, 0f to 268f, 0.15f to 268f, 0.3f to 170f, 0.55f to 170f, 0.7f to 268f, 1f to 268f)
-    val (tl, screen) = scope.drawCartoonPhone(colors, p(x, 102f), u(150f))
+    val (tl, screen) = scope.drawPhone(colors, p(x, 102f), u(150f))
     val dir = when {
         phase < 0.3f -> 0
         phase < 0.7f -> 3
@@ -499,29 +500,29 @@ private val switchScene = GuideScene(
 
 private val fixateScene = GuideScene(
     cycleMs = 4000,
-    beats = listOf(GuideBeat(0f, "① 看着屏幕上方闪烁的小瞳"), GuideBeat(0.45f, "② 头和手机都保持不动")),
+    beats = listOf(GuideBeat(0f, "① 看着屏幕上方闪烁的圆点"), GuideBeat(0.45f, "② 头和手机都保持不动")),
     keyframe = 0.5f,
 ) { phase ->
     floorShadow(95f, 182f, 110f)
     val mascot = p(95f, 110f)
-    scope.drawMascot(colors, mascot, u(108f), gaze = Offset(0.9f, -0.1f))
+    scope.drawFigure(colors, mascot, u(108f), gaze = Offset(0.9f, -0.1f))
     if (phase >= 0.45f) headLock(95f, 106f, 66f)
-    val (tl, screen) = scope.drawCartoonPhone(colors, p(242f, 100f), u(160f))
+    val (tl, screen) = scope.drawPhone(colors, p(242f, 100f), u(160f))
     val dot = Offset(tl.x + screen.width / 2, tl.y + screen.height * 0.2f)
     val pulse = (sin(phase * 2f * PI.toFloat() * 2f) + 1f) / 2f
     scope.drawContext.canvas.saveLayer(Rect(dot - Offset(u(20f), u(20f)), Size(u(40f), u(40f))),
         Paint().apply { alpha = if (pulse > 0.5f) 1f else 0.3f })
-    scope.drawMascot(colors, dot, u(22f))
+    scope.drawFixationTarget(colors, dot, u(26f))
     scope.drawContext.canvas.restore()
-    // 视线：从双眼流向屏幕小瞳的虚线
-    val eye = mascotEyeCenter(mascot, u(108f), 1)
+    // 视线：从双眼流向屏幕注视点的虚线
+    val eye = figureEyeCenter(mascot, u(108f), 1)
     scope.drawLine(
         colors.primary.copy(alpha = 0.45f), Offset(eye.x + u(16f), eye.y), Offset(dot.x - u(14f), dot.y), u(2f),
         cap = StrokeCap.Round, pathEffect = PathEffect.dashPathEffect(floatArrayOf(u(5f), u(6f)), phase = -phase * u(110f))
     )
 }
 
-/** 看远：手机在小瞳面前、略低于视线；视线越过手机，落到远处的目标上，保持约 10 秒。 */
+/** 看远：手机在人物面前、略低于视线；视线越过手机，落到远处的目标上，保持约 10 秒。 */
 private val farScene = GuideScene(
     cycleMs = 5200,
     beats = listOf(
@@ -534,9 +535,9 @@ private val farScene = GuideScene(
     floorShadow(62f, 182f, 90f)
     val mascot = p(62f, 104f)
     val look = seg(phase, 0.3f, 0.4f)
-    scope.drawMascot(colors, mascot, u(92f), gaze = Offset(0.9f, -0.15f * look))
+    scope.drawFigure(colors, mascot, u(92f), gaze = Offset(0.9f, -0.15f * look))
     if (phase >= 0.65f) headLock(62f, 100f, 56f)
-    scope.drawCartoonPhone(colors, p(142f, 128f), u(78f))
+    scope.drawPhone(colors, p(142f, 128f), u(78f))
     // 远处的目标：一扇门，旁边标注距离
     val door = p(272f, 70f)
     scope.drawRoundRect(colors.panelBackground, Offset(door.x - u(17f), door.y - u(30f)), Size(u(34f), u(60f)), CornerRadius(u(4f)))
@@ -545,7 +546,7 @@ private val farScene = GuideScene(
     label("${StrabismusProtocol.FAR_TARGET_M} 米外", 272f, 120f, colors.textSecondary)
     // 视线：从双眼越过手机顶部流向远处
     if (look > 0f) {
-        val eye = mascotEyeCenter(mascot, u(92f), 1)
+        val eye = figureEyeCenter(mascot, u(92f), 1)
         scope.drawLine(
             colors.primary.copy(alpha = 0.45f * look), Offset(eye.x + u(14f), eye.y), Offset(door.x - u(20f), door.y), u(2f),
             cap = StrokeCap.Round, pathEffect = PathEffect.dashPathEffect(floatArrayOf(u(5f), u(6f)), phase = -phase * u(160f))
@@ -564,10 +565,10 @@ private val coverScene = GuideScene(
 ) { phase ->
     floorShadow(160f, 184f, 120f)
     val mascot = p(160f, 112f)
-    scope.drawMascot(colors, mascot, u(118f))
-    // 小瞳面向我们：它的右眼在画面左侧（side=-1），左眼在画面右侧（side=+1）
-    val rEye = mascotEyeCenter(mascot, u(118f), -1).x
-    val lEye = mascotEyeCenter(mascot, u(118f), 1).x
+    scope.drawFigure(colors, mascot, u(118f))
+    // 人物面向我们：它的右眼在画面左侧（side=-1），左眼在画面右侧（side=+1）
+    val rEye = figureEyeCenter(mascot, u(118f), -1).x
+    val lEye = figureEyeCenter(mascot, u(118f), 1).x
     val away = lEye + u(150f)
     val hx = keyframes(
         phase,
@@ -576,8 +577,8 @@ private val coverScene = GuideScene(
         0.74f to rEye, 0.78f to rEye, 0.81f to lEye, 0.85f to lEye,
         0.88f to rEye, 0.91f to rEye, 0.94f to lEye, 0.97f to lEye, 1f to away,
     )
-    val eyeY = mascotEyeCenter(mascot, u(118f), 1).y
-    scope.drawMitten(colors, Offset(hx, eyeY + u(3f)), u(52f), angle = -14f, armFrom = p(340f, 150f))
+    val eyeY = figureEyeCenter(mascot, u(118f), 1).y
+    scope.drawHand(colors, Offset(hx, eyeY + u(3f)), u(52f), angle = -14f, armFrom = p(340f, 150f))
     val text = when {
         abs(hx - rEye) < u(6f) -> "遮右眼"
         abs(hx - lEye) < u(6f) -> "遮左眼"
@@ -591,7 +592,7 @@ private val coverScene = GuideScene(
 /** 水平正弦 → 垂直正弦 → 45° 斜向直线往复，与正式追踪任务的顺序一致。 */
 private val followScene = GuideScene(
     cycleMs = 7200,
-    beats = listOf(GuideBeat(0f, "① 水平：只用眼睛跟随小瞳"), GuideBeat(0.36f, "② 垂直：头保持不动"), GuideBeat(0.72f, "③ 斜向：继续跟随")),
+    beats = listOf(GuideBeat(0f, "① 水平：只用眼睛跟随圆点"), GuideBeat(0.36f, "② 垂直：头保持不动"), GuideBeat(0.72f, "③ 斜向：继续跟随")),
     keyframe = 0.2f,
 ) { phase ->
     val twoPi = 2f * PI.toFloat()
@@ -614,12 +615,12 @@ private val followScene = GuideScene(
     }
     scope.drawRoundRect(colors.panelBackground, p(150f, 18f), Size(u(128f), u(150f)), CornerRadius(u(16f)), alpha = 0.7f)
     floorShadow(72f, 186f, 90f)
-    scope.drawMascot(
+    scope.drawFigure(
         colors, p(72f, 130f), u(86f),
         gaze = Offset(((dot.x - 72f) / 140f).coerceIn(-1f, 1f), ((dot.y - 130f) / 90f).coerceIn(-1f, 1f))
     )
     headLock(72f, 126f, 54f)
-    scope.drawMascot(colors, p(dot.x, dot.y), u(9f / 0.65f))
+    scope.drawFixationTarget(colors, p(dot.x, dot.y), u(18f))
     scope.drawRoundRect(colors.panelBackground, p(12f, 12f), Size(u(64f), u(28f)), CornerRadius(u(14f)))
     label(text, 44f, 26f, colors.primary)
 }
@@ -631,14 +632,14 @@ private val acuityScene = GuideScene(
     keyframe = 0.12f,
 ) { phase ->
     floorShadow(66f, 184f, 84f)
-    scope.drawMascot(colors, p(66f, 118f), u(84f), gaze = Offset(1f, -0.2f))
+    scope.drawFigure(colors, p(66f, 118f), u(84f), gaze = Offset(1f, -0.2f))
     val segment = (phase / 0.2f).toInt().coerceIn(0, 4)
     val t = (phase - segment * 0.2f) / 0.2f
     val sizes = listOf(1f, 1f, 0.78f, 1f, 1f)
     val dirs = listOf(0, 3, 2, 1, 0)
     val timeout = segment == 2
     val answerAt = if (timeout) 1f else 0.5f
-    val (tl, screen) = scope.drawCartoonPhone(colors, p(200f, 100f), u(170f))
+    val (tl, screen) = scope.drawPhone(colors, p(200f, 100f), u(170f))
     val eCenter = Offset(tl.x + screen.width / 2, tl.y + screen.height * 0.3f)
     if (t < answerAt) scope.drawTumblingE(colors.ink, eCenter, screen.width * 0.34f * sizes[segment], dirs[segment])
     arrowPad(tl, screen, if (!timeout && t >= 0.45f) dirs[segment] else -1, if (!timeout) clamp01((t - 0.45f) / 0.2f) else 0f)
@@ -662,8 +663,8 @@ private val fvaScene = GuideScene(
     floorShadow(84f, 184f, 100f)
     val open = phase >= 0.68f
     val lid = if (open) 0f else maxOf(tri(phase, 0.2f, 0.03f), tri(phase, 0.45f, 0.03f))
-    scope.drawMascot(colors, p(84f, 112f), u(100f), gaze = Offset(1f, 0f), lid = lid, wide = if (open) 1.22f else 1f)
-    val (tl, screen) = scope.drawCartoonPhone(colors, p(240f, 100f), u(160f))
+    scope.drawFigure(colors, p(84f, 112f), u(100f), gaze = Offset(1f, 0f), lid = lid, wide = if (open) 1.22f else 1f)
+    val (tl, screen) = scope.drawPhone(colors, p(240f, 100f), u(160f))
     val segment = (phase / 0.14f).toInt().coerceIn(0, 7)
     val dir = listOf(0, 3, 2, 1, 0, 1, 3, 2)[segment]
     scope.drawTumblingE(colors.ink, Offset(tl.x + screen.width / 2, tl.y + screen.height * 0.3f), screen.width * 0.32f, dir)
@@ -680,10 +681,10 @@ private val curveScene = GuideScene(
     keyframe = 0.2f,
 ) { phase ->
     floorShadow(62f, 182f, 96f)
-    scope.drawMascot(colors, p(62f, 112f), u(96f), gaze = Offset(1f, 0f))
+    scope.drawFigure(colors, p(62f, 112f), u(96f), gaze = Offset(1f, 0f))
     ruler(120f, 300f, 188f)
     val x = keyframes(phase, 0f to 290f, 0.3f to 290f, 0.38f to 200f, 0.64f to 200f, 0.72f to 165f, 1f to 165f)
-    val (tl, screen) = scope.drawCartoonPhone(colors, p(x, 102f), u(140f))
+    val (tl, screen) = scope.drawPhone(colors, p(x, 102f), u(140f))
     val dir = when {
         phase < 0.34f -> 0
         phase < 0.68f -> 3

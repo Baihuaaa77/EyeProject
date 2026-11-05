@@ -1,9 +1,9 @@
 # feature:home
 
-首页 = 主动眼健康助手：问候与日期（右上角账户头像 + 系统设置齿轮）→ 今日用眼（负荷分圆环、会说话的小瞳、「感知 → 评估 → 归因 → 干预 → 反馈」五段进度）→
+首页 = 主动眼健康助手：问候与日期（右上角账户头像 + 系统设置齿轮）→ 今日用眼（主卡：大号负荷分、渐变圆环、一句话、第一条建议的主按钮，其余收在「更多建议」）→
 AI 主动问诊入口（主色块）→ 今日感受 → 基础数据 → 实时检测 → 护眼操、休息提醒 → 用眼趋势报告、亮度与蓝光 → 开发者工具（模型测试）。
 不分小节标题；首页不放眨眼频率、观看距离等读数（看实时检测即可），也不放专业咨询建议入口（`AdvicePage` 仍在，从其他入口进入）。
-本人档案不在首页单独成卡（仍参与评估，在「我的 → 家庭成员」维护）；原「为你推荐」改为小瞳的气泡提醒。
+本人档案不在首页单独成卡（仍参与评估，在「我的 → 家庭成员」维护）；原「为你推荐」改为主卡里的建议。
 与苹果端 `EyeHome.swift` 同一顺序、排版与文案（苹果端没有开发者工具，也没有系统不提供的数据卡片）。说明文字一律收进标题旁的「?」（`EyeHelpButton`）。
 
 - `HomeScreen` / `HomeContent`：页面入口与无副作用呈现。跳转经 `HomeNavigation`（账户、设置、模型测试、打开某项自测、编辑本人资料、趋势、建议、亮度）由 app 接线，
@@ -11,9 +11,8 @@ AI 主动问诊入口（主色块）→ 今日感受 → 基础数据 → 实时
 - `HomeViewModel` / `HomeUiState`：合并提醒状态、`EyeCareRepository`（账本 + 系统用屏 + 光线 / 亮度）、本人资料（`SubjectRepository`）与本人近期自测（`ScreeningRecordRepository.localRecords`），
   由共用 `EyeCareEngine.report` 得到 `EyeCareReport`，并用 `EyeCareAdvice.request` 预备 AI 综合建议的去标识摘要；`aiAdvice` / `generateAdvice` 走 `core:data` 的 `AdviceRepository`。
   回到前台（`ON_RESUME`）刷新用屏统计。
-- 今日用眼卡：`core:ui` 的 `XiaoTongTalk` 依次弹出报告里的 `tips`（共用 `EyeCareEngine` 生成，不朗读），每句约 5 秒；
-  可执行的气泡带按钮字（去休息 / 开启 / 去调节 / 去自测 / 去开启 / 去检测 / 去完善），点气泡直接去做。点小瞳立刻换下一句。
-  负荷分 30→80 对应嫩芽打蔫 0→1；负荷偏高时小瞳为「疲惫」神情。
+- 今日用眼主卡（`EyeHeroCard`）：报告里的 `tips`（共用 `EyeCareEngine` 生成，不朗读）第一条显示为一句话 + 主按钮
+  （去休息 / 开启 / 去调节 / 去自测 / 去开启 / 去检测 / 去完善），点了直接去做；其余收在「更多建议（n）」里，展开后每条右侧是文字操作。
 - 今日感受卡：标题行右侧「记录」/「修改」，卡上只显示已记下的感受标签（有不适提醒色、没有不适绿色）；选择在 `FeelingDialog` 弹窗里，
   「没有不适」占一整行、其余等宽两列，选了才能「保存」。不加说明小字。与苹果端 `CheckInCard` / `FeelingSheet` 一致。
 - 基础数据卡只在有读数时出现：屏幕时间、最长连续、夜间使用、休息次数（UsageStatsManager，需「使用情况访问」，未授权时卡上为「去开启」）、环境光（光线传感器）与屏幕亮度。
@@ -28,10 +27,10 @@ AI 主动问诊入口（主色块）→ 今日感受 → 基础数据 → 实时
   画面只在本机处理，不保存、不上传。
 - 二级完整页面（`EyeCarePages.kt`）：`EyeTrendScreen`（近 7 天用屏、负荷、眨眼柱状图 + 小结 + 今天的主要原因 + 身体感受）、
   `EyeAdviceScreen`（规则建议、就医建议与建议做的自测）、`EyeBrightnessScreen`（当前亮度与环境光、做法，一键打开系统显示设置）。
-- `RestBreakPage`：「休息一下」20-20-20 全屏引导，小瞳陪伴，可提前结束。
-- `EyeExercisePage` / `EyeExerciseViewModel`：「护眼操」全屏页（主动服务里的入口卡、或小瞳气泡「去做」）。小瞳提示向左 / 右 / 上 / 下看（两遍），
-  前置相机看虹膜在眼裂里的偏移（共用 `EyeExerciseCoach`，先看小瞳 1.5 秒取基线），转到位即整页朝该方向翻页、振动，小瞳飞出画面打滚再回来；
-  最后闭眼休息 5 秒，每过一秒响一声 `eye_count`（教练的 `COUNTDOWN` 事件）。布局：上方箭头 + 动作与小瞳气泡，小瞳在屏幕正中，下方倒计时与提示语。实时检测开着时借用其相机帧，否则自己开相机、做完即关；没有相机权限时按时间带着做。
+- `RestBreakPage`：「休息一下」20-20-20 全屏引导，渐变圆环倒计时、中间大号秒数，可提前结束。
+- `EyeExercisePage` / `EyeExerciseViewModel`：「护眼操」全屏页（首页入口卡、或主卡建议）。提示向左 / 右 / 上 / 下看（两遍），
+  前置相机看虹膜在眼裂里的偏移（共用 `EyeExerciseCoach`，先看中间的圆点 1.5 秒取基线），转到位即整页朝该方向翻页、振动，注视点（准星）滑出画面再回来；
+  最后闭眼休息 5 秒，每过一秒响一声 `eye_count`（教练的 `COUNTDOWN` 事件）。布局：固定深色页，上方箭头 + 动作，注视点在屏幕正中，下方倒计时与提示语。实时检测开着时借用其相机帧，否则自己开相机、做完即关；没有相机权限时按时间带着做。
 - navigation/HomeNavigation：`HomeRoute` / `EyeTrendRoute` / `EyeAdviceRoute` / `EyeBrightnessRoute`，`homeScreen(navigation)`、`eyeCareScreens(onBack, onOpenTest)`。
 
 依赖 core:common、core:domain、core:model、core:camera、core:data、core:notifications（常驻通知渠道）、core:designsystem、core:ui；
@@ -39,7 +38,7 @@ AI 主动问诊入口（主色块）→ 今日感受 → 基础数据 → 实时
 评分阈值为工程默认值（见 `shared/SHARED.md`「主动护眼」），待眼科专家确认。
 
 本地界面检查：`./gradlew.bat :feature:home:testDebugUnitTest`，截图在 `feature/home/build/reports/ui/` 并同步到 `docs/界面截图-2026-10-23/安卓/`。
-- AI 综合建议对话（`EyeChatPage.kt`）：由爱尔眼科数字人「爱科 Eyecho」主持（小瞳仍是首页、测试等其余地方的吉祥物）。
+- AI 综合建议对话（`EyeChatPage.kt`）：由爱尔眼科数字人「爱科 Eyecho」主持（真人形象，入口为玻璃卡 + 头像 + 「聊聊今天的用眼感受」）。
   图片在 `core:designsystem` 的 `drawable-nodpi/eyecho_avatar.png`（256 圆形头像）与 `eyecho_half.png`（半身、底边平切），
   苹果端同名素材 `EyechoAvatar` / `EyechoHalf`；`EyechoAvatar(size)` 用在入口、对话气泡、「正在想」与同意弹窗。
   首页「今日感受」上方的 `ChatEntryCard`（爱科头像 + 一个按钮行）→ `EyeChatScreen`（`EyeChatRoute`）：顶部 `EyechoIntro`（半身像站在卡片底边 + 自我介绍），

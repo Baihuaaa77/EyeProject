@@ -17,17 +17,18 @@
 | `EyeIcon` | 图标（Image + ColorFilter.tint），装饰性图标 `contentDescription = null` |
 | `Button.kt` | 通用基础按钮（形状/背景/边框/内边距可配，默认矩形） |
 | `EyeButton` | 业务按钮，三态 `EyeButtonRole(PRIMARY/SECONDARY/DANGER)`，按下弹簧缩放、角色切换颜色过渡 |
-| `EyeBrand.kt` | 品牌绘制：`EyeBrandMark` / `EyeBrandLockup`、`leafEyePath`、吉祥物 `drawMascot`（`MascotEyes` / `MascotMouth` 表情、腮红、叶子摆动）、`drawSparkle`、桌面图标 `EyeAppIcon`、`drawMitten`、`drawCartoonPhone`、`drawTumblingE` |
+| `EyeBrand.kt` | 品牌与示意图绘制：`EyeBrandMark` / `EyeBrandLockup`、`leafEyePath`、示意人物 `drawFigure`（`figureEyeCenter`，视线 / 闭眼 / 睁大）、`drawHand`、`drawPhone`、注视准星 `drawFixationTarget`、应用图标展示 `EyeAppIcon`（与桌面图标同一张图）、`drawTumblingE` |
 | `EyeGlyph.kt` | 线性小图标（`EyeGlyph`，Canvas 自绘，跟随 tint），列表行与服务入口用 |
 
 ### 容器与卡片
 
 | 组件 | 说明 |
 |---|---|
-| `EyeSectionCard` | 分区卡片：圆角面板 + 细边框 + 可选标题 |
+| `EyeSectionCard` | 分区卡片：玻璃面 + 可选标题 |
+| `EyeSurfaces.kt` | 层次与质感：`EyeHeroCard`（每页一张主卡）、`EyeCard`（平铺玻璃卡）、`Modifier.eyeGlass`（玻璃面）、`Modifier.eyeBackdrop`（页面纯色底）、`EyeMetric` / `EyeMetricRow`（标签在上数值在下、竖线分隔）、`EyeProgressRing` / `drawProgressRing`（渐变圆环，深色带泛光）、`EyeAiMark`（深色光球 / 浅色声波）、`EyeCallout` |
 | `EyeDisclosure` | 默认折叠的次级信息，展开/收起高度+透明度过渡、箭头旋转，带展开状态无障碍语义 |
 | `EyeSelectCard` | 入口卡：可选前置图标 + 标题/副标题 + 箭头，按下轻缩，最小 80dp 高 |
-| `EyeList.kt` | 设置式分组列表：`EyeListGroup`（组标题 + 圆角面板）、`EyeListRow`（图标块 `EyeIconTile` / 标题 / 副标题 / 右侧值 / 箭头，可禁用）、`EyeSwitchRow`（可带「?」说明），色调 `EyeTileTone` |
+| `EyeList.kt` | 卡片分类头 `EyeCategoryHeader`（分类色图标 + 标题 + 右侧操作）；设置式分组列表：`EyeListGroup`（组标题 + 圆角面板）、`EyeListRow`（图标块 `EyeIconTile` / 标题 / 副标题 / 右侧值 / 箭头，可禁用）、`EyeSwitchRow`（可带「?」说明），色调 `EyeTileTone` |
 | `EyeSubPage` | 二级完整页面骨架：返回栏 + 标题 + 滚动内容 + 可选底栏 |
 | `EyeFullScreenPage` | 盖在当前页上的全屏页面（全屏 Dialog），替代底部弹窗，系统返回键关闭 |
 
@@ -43,14 +44,12 @@
 | `EyeHelp.kt` | `EyeHelpButton`：灰色圆形「?」，点开气泡说明（替代括号小字）；`EyeTitleWithHelp` 标题 + 问号。苹果端 `HelpButton` 同一样式 |
 | `EyeCharts.kt` | `EyeBarChart`：近 7 天柱状图（今天高亮、超标换警示色、参考虚线、空值留白） |
 
-### 小瞳与启动
+### 启动与提示音
 
 | 组件 | 说明 |
 |---|---|
-| `XiaoTong` | 会动的吉祥物：待机呼吸、眨眼、张望，每 14 秒自己做一两个小动作（蹦一下、打哈欠…，无声）；`MascotMood`（开心 / 思考 / 担心 / 困倦 / 疲惫，`MascotMood.of(code)` 取共用核心给出的神情）。点一下随机一种反应（蹦跳 / 眨眼 / 咯咯笑 / 惊讶 / 害羞 / 转圈 / 比心；疲惫时被戳会打起精神再蔫下去、打哈欠），长按比心飘爱心，连点五下转晕（螺旋眼 + 绕头星星），各配音效。`wilt` 为头顶嫩芽打蔫程度（茎弯、叶片下垂变小、变黄），默认按心情 |
-| `MascotBubble` / `XiaoTongTalk` | 对话气泡（白底圆角 + 底边尾巴，正文字号，可带按钮字）；会说话的小瞳：上方气泡区每约 9 秒弹出一句、显示约 5 秒，点小瞳换下一句，`mascotFraction` 让小瞳只占右侧、气泡用整行宽 |
-| `MascotSounds` | 小瞳音效（`shared/feedback/res/raw` 的 `eye_boop/hop/giggle/wow/spin/heart/dizzy/yawn/pop/sigh`，SoundPool），跟随系统设置的音效开关与音量 |
-| `EyeSplash` | 冷启动约 1.4 秒的启动动画：小瞳 + 渐变进度条 +「你的主动眼健康助手」，盖在已加载的首页上，不阻塞启动；系统减弱动态效果时缩短 |
+| `EyeSplash` | 冷启动约 1.3 秒的启动画面：标志轻缓放大淡入 + 细进度线 +「你的主动眼健康助手」，盖在已加载的首页上，不阻塞启动；系统减弱动态效果时缩短 |
+| `EyeCueSounds` | 护眼操与休息页的提示音（`EyeCue`：START / PHASE / COUNT / COMPLETE，复用 `shared/feedback/res/raw` 的测试提示音），跟随系统设置的音效开关与音量 |
 
 ### 栏
 

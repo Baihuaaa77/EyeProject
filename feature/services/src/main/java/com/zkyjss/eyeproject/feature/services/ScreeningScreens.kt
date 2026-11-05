@@ -60,7 +60,9 @@ import com.zkyjss.eyeproject.core.designsystem.util.screenHorizontalPaddingLarge
 import com.zkyjss.eyeproject.core.ui.component.EyeButton
 import com.zkyjss.eyeproject.core.ui.component.EyeButtonRole
 import com.zkyjss.eyeproject.core.ui.component.EyeText as BaseEyeText
-import com.zkyjss.eyeproject.core.ui.component.drawMascot
+import com.zkyjss.eyeproject.core.ui.component.drawFigure
+import com.zkyjss.eyeproject.core.ui.component.drawFixationTarget
+import com.zkyjss.eyeproject.core.designsystem.theme.LightEyeColors
 
 @Composable
 fun PresbyopiaScreen(onBack: () -> Unit, onEditSubject: (String?) -> Unit, modifier: Modifier = Modifier, viewModel: ScreeningTestViewModel = hiltViewModel()) {
@@ -121,11 +123,11 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, onEditSubje
         // 换距离的「请移动到 xx 厘米处」由距离提示播报，到位后不再重复
         ScreeningStep.DISTANCE_CURVE -> "停稳后视标会自动出现，请选择开口方向。"
         ScreeningStep.FLIPPER -> if (s.flipperCheck) "先确认两个距离都能看清。停稳后视标会自动出现，请选择开口方向。" else "停稳后视标会自动出现，请选择开口方向。"
-        ScreeningStep.FIXATION -> "请保持三十三厘米，看着上方闪烁的小瞳，头和手机都不要动。"
+        ScreeningStep.FIXATION -> "请保持三十三厘米，看着上方闪烁的圆点，头和手机都不要动。"
         ScreeningStep.FAR_FIXATION -> if (s.farWaiting) FAR_WAIT_PROMPT else "请看六米以外的目标，眼睛不要看手机，头和手机都不要动。"
         ScreeningStep.GAZE_CALIBRATION -> "请只用眼睛依次看着圆点，头和手机都不要动。"
         ScreeningStep.COVER -> coverSpokenPrompt(s)
-        ScreeningStep.PURSUIT -> "请只用双眼跟随移动的小瞳，保持头部稳定。"
+        ScreeningStep.PURSUIT -> "请只用双眼跟随移动的圆点，保持头部稳定。"
         ScreeningStep.RESULT -> "测试完成，请查看结果。"
     }
     val guidance = screeningGuidance(s)
@@ -363,7 +365,7 @@ internal fun FarFixationContent(s: ScreeningState, onStart: () -> Unit) {
             Column(Modifier.fillMaxWidth().height(240.dp + rememberStageExtra()).clip(EyeShapes.medium).background(colors.ink).padding(20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterVertically)) {
                 Canvas(Modifier.size(64.dp)) {
-                    drawMascot(colors, Offset(size.width / 2, size.height * 0.58f), size.minDimension * 0.8f, gaze = Offset(0f, -0.6f))
+                    drawFigure(colors, Offset(size.width / 2, size.height * 0.5f), size.minDimension * 0.86f, gaze = Offset(0f, -0.6f))
                 }
                 if (s.farWaiting) {
                     BaseEyeText("看着 ${StrabismusProtocol.FAR_TARGET_M} 米外的目标", style = typography.title, color = colors.white, textAlign = center)
@@ -391,7 +393,7 @@ private fun StageCaption(text: String) {
 
 /**
  * 原文：动态闪烁、高对比度的卡通注视点，1–2 Hz；直径 1.5–2 cm。
- * 用小瞳脸作为卡通目标，白底呈现；整体透明度交替变化，让小瞳本身闪烁。
+ * 用深蓝准星（同心环 + 十字 + 中心点）作目标，白底呈现、固定用浅色令牌保证对比；整体透明度交替变化让目标闪烁。
  * 目标放在画布顶部、尽量靠近顶部的映光点（专家建议：视标越靠近点光源，角膜映光越准）。
  */
 @Composable
@@ -403,10 +405,10 @@ private fun FixationTarget(diameterMm: Float, bright: Boolean, vm: ScreeningTest
     Canvas(Modifier.fillMaxWidth().height(240.dp + rememberStageExtra()).clip(EyeShapes.medium).background(colors.white)
         .onGloballyPositioned { origin = it.positionInWindow() }) {
         val s = sizePx.coerceAtMost(minOf(size.width, size.height) * 0.6f)
-        // 头顶嫩芽也留在画布内
+        // 目标位置与改版前一致（上报的注视坐标不变）
         val target = Offset(center.x, s * 0.6f + 12.dp.toPx())
         drawContext.canvas.saveLayer(Rect(Offset.Zero, size), Paint().apply { alpha = if (bright) 1f else 0.3f })
-        drawMascot(colors, target, s, lid = 0f)
+        drawFixationTarget(LightEyeColors, target, s)
         drawContext.canvas.restore()
         vm.reportGazeTarget(origin.x + target.x, origin.y + target.y)
     }
@@ -521,8 +523,8 @@ private fun PursuitContent(s: ScreeningState, vm: ScreeningTestViewModel) {
                 val scale = minOf(1f, maxX / StrabismusProtocol.PURSUIT_AMPLITUDE_DEG, maxY / StrabismusProtocol.PURSUIT_AMPLITUDE_DEG)
                 val x = size.width / 2f + degToPx(s.targetX * scale)
                 val y = size.height / 2f - degToPx(s.targetY * scale)
-                // 含头顶嫩芽的整个小瞳放入原目标包络，不改变轨迹或注视位置上报。
-                drawMascot(colors, Offset(x, y), radiusPx / 0.65f, lid = 0f)
+                // 准星外环即原 1 cm 目标包络，不改变轨迹或注视位置上报。
+                drawFixationTarget(LightEyeColors, Offset(x, y), radiusPx * 2f)
                 vm.reportGazeTarget(origin.x + x, origin.y + y)
             }
             StageCaption("剩余 ${s.secondsLeft} 秒")
@@ -565,7 +567,7 @@ internal fun OptotypeSurface(direction: Int, size: androidx.compose.ui.unit.Dp) 
     }
 }
 
-/** 老视开始前的戴镜确认：小瞳 + 按本次戴镜状态的一句话 + 确认按钮，语音同步播报。与苹果端 GlassesCheckView 一致。 */
+/** 老视开始前的戴镜确认：示意人物 + 按本次戴镜状态的一句话 + 确认按钮，语音同步播报。与苹果端 GlassesCheckView 一致。 */
 @Composable
 private fun GlassesCheckContent(check: PresbyopiaIntake.GlassesCheck, onConfirm: () -> Unit) {
     val colors = LocalEyeColors.current
@@ -574,7 +576,7 @@ private fun GlassesCheckContent(check: PresbyopiaIntake.GlassesCheck, onConfirm:
         Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Canvas(Modifier.size(112.dp)) {
                 val s = size.minDimension
-                drawMascot(colors, Offset(s / 2, s * 0.58f), s * 0.8f, gaze = Offset(0f, -0.3f))
+                drawFigure(colors, Offset(s / 2, s * 0.5f), s * 0.86f, gaze = Offset(0f, -0.3f))
             }
             EyeText(check.title, typography.title, colors.textPrimary)
             BaseEyeText(check.prompt, style = typography.body, color = colors.textSecondary, textAlign = androidx.compose.ui.text.style.TextAlign.Center)

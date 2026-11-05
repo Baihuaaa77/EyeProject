@@ -26,6 +26,7 @@ import com.zkyjss.eyeproject.core.designsystem.theme.EyeShapes
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
 import com.zkyjss.eyeproject.core.ui.component.EyeButton
+import com.zkyjss.eyeproject.core.ui.component.eyeGlass
 import com.zkyjss.eyeproject.core.ui.component.EyeButtonRole
 import com.zkyjss.eyeproject.core.ui.component.EyeChoiceList
 import com.zkyjss.eyeproject.core.ui.component.EyeOptionRow
@@ -48,7 +49,7 @@ internal fun SubjectPicker(
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
     Column(
-        Modifier.fillMaxWidth().clip(EyeShapes.panel).background(colors.panelBackground).padding(20.dp),
+        Modifier.fillMaxWidth().eyeGlass(colors, EyeShapes.panel).padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         EyeText(if (kind == "STRABISMUS") "这次给谁测？" else "这次测谁？", style = typography.title, color = colors.textPrimary)
@@ -87,7 +88,7 @@ internal fun PreTestQuestions(kind: String, subjectId: String, initial: Map<Stri
     val requester = remember { BringIntoViewRequester() }
     LaunchedEffect(subjectId) { requester.bringIntoView() }
     Column(
-        Modifier.fillMaxWidth().bringIntoViewRequester(requester).clip(EyeShapes.panel).background(colors.panelBackground).padding(20.dp),
+        Modifier.fillMaxWidth().bringIntoViewRequester(requester).eyeGlass(colors, EyeShapes.panel).padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         EyeText("这次的情况", style = typography.title, color = colors.textPrimary)

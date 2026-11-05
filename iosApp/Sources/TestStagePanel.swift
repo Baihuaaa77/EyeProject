@@ -4,7 +4,7 @@ import SwiftUI
 struct TestStagePanel: ViewModifier {
     @ViewBuilder func body(content: Content) -> some View {
         content.padding(20).frame(maxWidth: .infinity)
-            .background(EyeStyle.panel, in: RoundedRectangle(cornerRadius: 22))
+            .eyeGlass()
             .overlay { RoundedRectangle(cornerRadius: 22).stroke(EyeStyle.primary.opacity(0.16), lineWidth: 1) }
             .shadow(color: EyeStyle.primary.opacity(0.08), radius: 3, x: 0, y: 2)
     }
@@ -48,7 +48,7 @@ struct TestDistanceBanner: View {
                 Text(detail).font(.subheadline).monospacedDigit().lineLimit(1)
             }.frame(maxWidth: .infinity, alignment: .leading)
             if known && tolerance > 0 { DistanceRuler(distance: distance, target: target, tolerance: tolerance) }
-        }.foregroundStyle(known || moving ? EyeStyle.panel : EyeStyle.text).padding(.horizontal, 16).padding(.vertical, 10)
+        }.foregroundStyle(known || moving ? EyeStyle.onStatus : EyeStyle.text).padding(.horizontal, 16).padding(.vertical, 10)
             .background(background, in: RoundedRectangle(cornerRadius: 16))
             .animation(.easeInOut(duration: 0.28), value: background)
             .accessibilityElement(children: .combine)

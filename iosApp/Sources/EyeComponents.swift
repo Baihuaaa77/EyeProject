@@ -230,15 +230,13 @@ enum GlyphPainter {
     }
 }
 
-/// 图标色块的配色：主色 / 琥珀 / 成功绿 / 靛蓝 / 警示 / 中性（与安卓 EyeTileTone 一致）。
+/// 图标色块的配色：primary/accent/success/blue 统一为深海蓝单色，danger 红、neutral 灰（与安卓 EyeTileTone 一致）。
 enum TileTone {
     case primary, accent, success, blue, danger, neutral
     var colors: (Color, Color) {
         switch self {
-        case .primary: return (EyeStyle.primarySoft, EyeStyle.primary)
-        case .accent: return (Cartoon.accentSoft, EyeStyle.warning)
-        case .success: return (EyeStyle.successSoft, EyeStyle.success)
-        case .blue: return (EyeStyle.surfaceVariant, EyeStyle.brandEnd)
+        // 统一深海蓝单色（不再按功能分彩色），只有警示保留红色
+        case .primary, .accent, .success, .blue: return (EyeStyle.primarySoft, EyeStyle.primary)
         case .danger: return (EyeStyle.dangerSoft, EyeStyle.danger)
         case .neutral: return (EyeStyle.surfaceVariant, EyeStyle.secondary)
         }
@@ -253,13 +251,13 @@ struct IconTile: View {
     var body: some View {
         let (background, foreground) = tone.colors
         EyeGlyphView(glyph: glyph, color: foreground).frame(width: size * 0.58, height: size * 0.58)
-            .frame(width: size, height: size).background(background, in: RoundedRectangle(cornerRadius: 12))
+            .frame(width: size, height: size).background(background, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 }
 
 // MARK: - 分组列表
 
-/// 分组列表：可选组标题 + 白色圆角面板。
+/// 分组列表：可选组标题 + 玻璃圆角面板。
 struct ListGroup<Content: View>: View {
     var title: String? = nil
     @ViewBuilder let content: Content
@@ -267,8 +265,7 @@ struct ListGroup<Content: View>: View {
         VStack(alignment: .leading, spacing: 8) {
             if let title { Text(title).font(EyeStyle.chip).foregroundStyle(EyeStyle.secondary).padding(.leading, 4) }
             VStack(spacing: 0) { content }
-                .background(EyeStyle.panel)
-                .clipShape(RoundedRectangle(cornerRadius: 22))
+                .eyeGlass()
         }.frame(maxWidth: .infinity, alignment: .leading)
     }
 }
@@ -368,20 +365,19 @@ struct SubPage<Content: View>: View {
             VStack(alignment: .leading, spacing: 12) { content }
                 .padding(.horizontal, 16).padding(.top, 4).padding(.bottom, 28)
         }
-        .background(EyeStyle.background.ignoresSafeArea())
+        .background(EyeBackdrop())
         .navigationTitle(title).navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(EyeStyle.background, for: .navigationBar)
     }
 }
 
-/// 白色圆角面板（卡片）。
+/// 圆角玻璃面板（平铺卡片，同 EyeCard）。
 struct Panel<Content: View>: View {
     var padding: CGFloat = 18
     @ViewBuilder let content: Content
     var body: some View {
         VStack(alignment: .leading, spacing: 12) { content }
             .padding(padding).frame(maxWidth: .infinity, alignment: .leading)
-            .background(EyeStyle.panel, in: RoundedRectangle(cornerRadius: 22))
+            .eyeGlass()
     }
 }
 
@@ -409,9 +405,9 @@ struct PillButton: View {
     let action: () -> Void
     var body: some View {
         Button { EyeHaptics.tap(); action() } label: {
-            Text(label).font(EyeStyle.chip).foregroundStyle(primary ? EyeStyle.panel : EyeStyle.text)
+            Text(label).font(EyeStyle.chip).foregroundStyle(primary ? EyeStyle.onPrimary : EyeStyle.text)
                 .padding(.horizontal, 14).padding(.vertical, 8)
-                .background(primary ? EyeStyle.primary : EyeStyle.surfaceVariant, in: Capsule())
+                .background { if primary { Capsule().fill(EyeStyle.buttonGradient) } else { Capsule().fill(EyeStyle.surfaceVariant) } }
         }.buttonStyle(PressScale())
     }
 }
@@ -430,9 +426,10 @@ struct StatusChip: View {
     let color: Color
     var filled = false
     var body: some View {
-        Text(text).font(EyeStyle.chip).foregroundStyle(filled ? EyeStyle.onStatus : color)
+        let fill = EyeStyle.statusFill(color)
+        Text(text).font(EyeStyle.chip).foregroundStyle(filled ? fill.1 : color)
             .padding(.horizontal, 12).padding(.vertical, 6)
-            .background(filled ? color : color.opacity(0.12), in: Capsule())
+            .background(filled ? fill.0 : color.opacity(0.12), in: Capsule())
     }
 }
 
@@ -455,22 +452,22 @@ struct SegmentedPicker: View {
     let onSelect: (Int) -> Void
     var body: some View {
         GeometryReader { geometry in
-            let width = (geometry.size.width - 8) / CGFloat(max(options.count, 1))
+            let width = (geometry.size.width - 6) / CGFloat(max(options.count, 1))
             let index = CGFloat(options.firstIndex(where: { $0.0 == selected }) ?? 0)
             ZStack(alignment: .leading) {
-                RoundedRectangle(cornerRadius: 12).fill(EyeStyle.primary).frame(width: width).offset(x: width * index)
+                RoundedRectangle(cornerRadius: 10, style: .continuous).fill(EyeStyle.buttonGradient).frame(width: width).offset(x: width * index)
                     .animation(.spring(response: 0.35, dampingFraction: 0.8), value: selected)
                 HStack(spacing: 0) {
                     ForEach(Array(options.enumerated()), id: \.offset) { _, option in
                         Button { EyeHaptics.tap(); onSelect(option.0) } label: {
-                            Text(option.1).font(EyeStyle.button)
-                                .foregroundStyle(option.0 == selected ? EyeStyle.panel : EyeStyle.text)
+                            Text(option.1).font(option.0 == selected ? EyeStyle.body.weight(.semibold) : EyeStyle.body)
+                                .foregroundStyle(option.0 == selected ? EyeStyle.onPrimary : EyeStyle.text)
                                 .frame(maxWidth: .infinity, maxHeight: .infinity).contentShape(Rectangle())
                         }.buttonStyle(.plain)
                     }
                 }
-            }.padding(4)
-        }.frame(height: 52).background(EyeStyle.surfaceVariant, in: RoundedRectangle(cornerRadius: EyeStyle.radiusMedium))
+            }.padding(3)
+        }.frame(height: 46).background(EyeStyle.surfaceVariant, in: RoundedRectangle(cornerRadius: EyeStyle.radiusMedium, style: .continuous))
     }
 }
 
@@ -485,48 +482,58 @@ struct BarItem: Identifiable {
     var warning = false
 }
 
-/// 简洁柱状图（用眼趋势）：柱顶数值、柱下日期，今天主色、其余浅主色，超出参考线的琥珀色；参考线为虚线。与安卓 EyeBarChart 一致。
+/// 光流柱状图（用眼趋势）：细胶囊柱 + 暗色轨道，柱身主蓝 → 青蓝渐变，今天满亮（深色带泛光）、其余稍暗，超出参考线的柱顶数值为琥珀色，超出参考线的琥珀色；参考线为虚线。与安卓 EyeBarChart 一致。
 struct BarChartView: View {
     let bars: [BarItem]
     var reference: Double? = nil
     var maxValue: Double? = nil
     var height: CGFloat = 140
     @State private var grow: CGFloat = 0
+    @Environment(\.colorScheme) private var scheme
+    private var dark: Bool { scheme == .dark }
 
     var body: some View {
         let top = max(maxValue ?? 0, bars.compactMap { $0.value }.max() ?? 0, (reference ?? 0) * 1.15, 1)
         VStack(spacing: 4) {
             HStack(spacing: 0) {
                 ForEach(bars) { bar in
-                    Text(bar.text ?? " ").font(EyeStyle.chip).foregroundStyle(bar.highlight ? EyeStyle.primary : EyeStyle.secondary)
+                    Text(bar.text ?? " ").font(EyeStyle.chip).foregroundStyle(bar.warning ? EyeStyle.warning : bar.highlight ? EyeStyle.text : EyeStyle.tertiary)
                         .lineLimit(1).frame(maxWidth: .infinity)
                 }
             }
             Canvas { context, size in
                 let slot = size.width / CGFloat(max(bars.count, 1))
-                let barWidth = min(slot * 0.46, 28)
-                var base = Path(); base.move(to: CGPoint(x: 0, y: size.height)); base.addLine(to: CGPoint(x: size.width, y: size.height))
-                context.stroke(base, with: .color(EyeStyle.borderSubtle), lineWidth: 1)
+                let barWidth = min(max(slot * 0.3, 6), 12)
                 for (i, bar) in bars.enumerated() {
                     let x = slot * CGFloat(i) + (slot - barWidth) / 2
-                    guard let v = bar.value else {
-                        var dash = Path(); dash.move(to: CGPoint(x: x, y: size.height - 3)); dash.addLine(to: CGPoint(x: x + barWidth, y: size.height - 3))
-                        context.stroke(dash, with: .color(EyeStyle.borderSubtle), lineWidth: 3)
-                        continue
+                    // 每根柱子背后一条满高的暗色胶囊轨道
+                    context.fill(Path(roundedRect: CGRect(x: x, y: 0, width: barWidth, height: size.height), cornerRadius: barWidth / 2),
+                                 with: .color(EyeStyle.surfaceVariant))
+                    guard let v = bar.value else { continue }
+                    let h = max(CGFloat(v / top) * size.height * grow, v > 0 ? barWidth : 0)
+                    let rect = CGRect(x: x, y: size.height - h, width: barWidth, height: h)
+                    // 光流：底部主蓝 → 顶部青蓝；今天满亮（深色再叠同色泛光），其余稍暗
+                    let flow = GraphicsContext.Shading.linearGradient(Gradient(colors: [EyeStyle.flowEnd, EyeStyle.flowStart]),
+                        startPoint: CGPoint(x: rect.midX, y: rect.minY), endPoint: CGPoint(x: rect.midX, y: size.height))
+                    if bar.highlight && dark {
+                        var halo = context
+                        halo.addFilter(.blur(radius: 6))
+                        halo.opacity = 0.6
+                        halo.fill(Path(roundedRect: rect.insetBy(dx: -3, dy: -3), cornerRadius: barWidth), with: flow)
                     }
-                    let h = max(CGFloat(v / top) * size.height * grow, v > 0 ? 4 : 0)
-                    let color = bar.warning ? EyeStyle.accent : bar.highlight ? EyeStyle.primary : EyeStyle.primary.opacity(0.35)
-                    context.fill(Path(roundedRect: CGRect(x: x, y: size.height - h, width: barWidth, height: h), cornerRadius: barWidth / 2.6), with: .color(color))
+                    var layer = context
+                    layer.opacity = bar.highlight ? 1 : 0.6
+                    layer.fill(Path(roundedRect: rect, cornerRadius: barWidth / 2), with: flow)
                 }
                 if let reference {
                     let y = size.height - CGFloat(reference / top) * size.height
                     var line = Path(); line.move(to: CGPoint(x: 0, y: y)); line.addLine(to: CGPoint(x: size.width, y: y))
-                    context.stroke(line, with: .color(EyeStyle.secondary), style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                    context.stroke(line, with: .color(EyeStyle.tertiary), style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
                 }
             }.frame(height: height)
             HStack(spacing: 0) {
                 ForEach(bars) { bar in
-                    Text(bar.label).font(EyeStyle.chip).foregroundStyle(bar.highlight ? EyeStyle.primary : EyeStyle.secondary)
+                    Text(bar.label).font(EyeStyle.chip).foregroundStyle(bar.highlight ? EyeStyle.text : EyeStyle.tertiary)
                         .lineLimit(1).frame(maxWidth: .infinity)
                 }
             }
@@ -537,17 +544,19 @@ struct BarChartView: View {
 
 // MARK: - 应用图标与启动动画
 
-/// 应用图标（与桌面图标同一构图）。
+/// 应用图标的展示（关于页）：与桌面图标同一张图（爱科头像 + 浅灰蓝圆盘）。
 struct AppIconView: View {
     var body: some View {
-        Canvas { context, size in
-            let side = min(size.width, size.height)
-            Cartoon.appIcon(context, origin: CGPoint(x: (size.width - side) / 2, y: (size.height - side) / 2), side: side)
+        GeometryReader { geometry in
+            let side = min(geometry.size.width, geometry.size.height)
+            Image("EyechoAppIcon").resizable().scaledToFit()
+                .frame(width: side, height: side)
+                .clipShape(RoundedRectangle(cornerRadius: side * 0.2237, style: .continuous))
         }.accessibilityLabel("眼健康助手图标")
     }
 }
 
-/// 启动动画（约 1.3 秒）：小瞳蹦出来打招呼 + 加载进度条 + 「你的主动眼健康助手」，结束后淡出。
+/// 启动画面（约 1.3 秒）：标志轻缓放大淡入 + 细进度线 +「眼健康助手」，结束后淡出。
 /// 只盖在已经创建好的首页上，不推迟首页加载。与安卓 EyeSplash 同一节奏。
 struct SplashView: View {
     let onFinished: () -> Void
@@ -556,16 +565,15 @@ struct SplashView: View {
     @State private var visible = true
     var body: some View {
         ZStack {
-            LinearGradient(colors: [EyeStyle.primarySoft, EyeStyle.background], startPoint: .top, endPoint: .bottom).ignoresSafeArea()
+            EyeStyle.background.ignoresSafeArea()
             VStack(spacing: 0) {
-                MascotStage(mood: .happy, interactive: false, greet: true, headScale: 0.66).frame(width: 168, height: 168)
-                Text("眼健康助手").font(EyeStyle.title).foregroundStyle(EyeStyle.text).padding(.top, 12)
-                Text("你的主动眼健康助手").font(EyeStyle.body).foregroundStyle(EyeStyle.secondary).padding(.top, 6)
+                BrandMark(size: 88).scaleEffect(0.92 + 0.08 * min(1, progress * 2.5)).opacity(Double(min(1, progress * 2.5)))
+                Text("眼健康助手").font(EyeStyle.title).foregroundStyle(EyeStyle.text).padding(.top, 20)
+                Text("你的主动眼健康助手").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary).padding(.top, 6)
                 ZStack(alignment: .leading) {
-                    Capsule().fill(EyeStyle.surfaceVariant)
-                    Capsule().fill(LinearGradient(colors: [EyeStyle.brandStart, EyeStyle.brandEnd], startPoint: .leading, endPoint: .trailing))
-                        .frame(width: 168 * progress)
-                }.frame(width: 168, height: 6).padding(.top, 28)
+                    Capsule().fill(EyeStyle.borderSubtle)
+                    Capsule().fill(EyeStyle.flowGradient).frame(width: 120 * progress)
+                }.frame(width: 120, height: 3).padding(.top, 32)
             }
         }
         .opacity(visible ? 1 : 0)

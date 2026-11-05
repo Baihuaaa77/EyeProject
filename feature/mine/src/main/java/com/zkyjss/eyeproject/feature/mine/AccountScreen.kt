@@ -35,6 +35,7 @@ import com.zkyjss.eyeproject.core.designsystem.theme.EyeShapes
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
 import com.zkyjss.eyeproject.core.ui.component.EyeButton
+import com.zkyjss.eyeproject.core.ui.component.eyeGlass
 import com.zkyjss.eyeproject.core.ui.component.EyeButtonRole
 import com.zkyjss.eyeproject.core.ui.component.EyeGlyph
 import com.zkyjss.eyeproject.core.ui.component.EyeHelpButton
@@ -153,7 +154,7 @@ internal fun SignInForm(busy: Boolean, message: String?, actions: AccountActions
     var password by remember { mutableStateOf("") }
     var agreed by rememberSaveable { mutableStateOf(false) }
     Column(
-        Modifier.fillMaxWidth().clip(EyeShapes.panel).background(colors.panelBackground).padding(20.dp).animateContentSize(),
+        Modifier.fillMaxWidth().eyeGlass(colors, EyeShapes.panel).padding(20.dp).animateContentSize(),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         EyeSegmentedRow(listOf(SegmentedOption(0, "登录"), SegmentedOption(1, "注册")), mode, { mode = it })
@@ -208,7 +209,7 @@ private fun ServerGroup(serverUrl: String, busy: Boolean, onSave: (String) -> Un
     val typography = LocalEyeTypography.current
     val haptics = rememberEyeHaptics()
     var text by rememberSaveable(serverUrl) { mutableStateOf(serverUrl) }
-    Column(Modifier.fillMaxWidth().clip(EyeShapes.panel).background(colors.panelBackground).padding(20.dp),
+    Column(Modifier.fillMaxWidth().eyeGlass(colors, EyeShapes.panel).padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             EyeText("服务器", style = typography.subtitle, color = colors.textPrimary)

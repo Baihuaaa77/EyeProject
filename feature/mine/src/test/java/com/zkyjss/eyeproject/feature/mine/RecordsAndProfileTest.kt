@@ -46,7 +46,7 @@ class RecordsAndProfileTest {
         assertTrue(exportedText); assertTrue(exportedJson)
     }
 
-    @Test fun emptyRecordsShowTheMascot() {
+    @Test fun emptyRecordsShowAnEmptyState() {
         compose.setContent { EyeProjectTheme { RecordsContent(emptyList(), onBack = {}, onExport = {}) } }
         compose.onNodeWithText("还没有测试记录").assertIsDisplayed()
     }

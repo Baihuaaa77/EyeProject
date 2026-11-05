@@ -53,8 +53,7 @@ fun EyeSelectCard(
                 scaleX = scale
                 scaleY = scale
             }
-            .clip(EyeShapes.panel)
-            .background(colors.panelBackground)
+            .eyeGlass(colors, EyeShapes.panel)
             .clickable(interactionSource = interaction, indication = null, role = Role.Button, onClick = onClick)
             .heightIn(min = 80.dp)
             .padding(horizontal = 20.dp, vertical = 16.dp),

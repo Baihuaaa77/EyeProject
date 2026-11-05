@@ -21,9 +21,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.zkyjss.eyeproject.core.data.record.RecordExportFormat
 import com.zkyjss.eyeproject.core.ui.component.AiExplanationCard
+import com.zkyjss.eyeproject.core.ui.component.eyeGlass
 import com.zkyjss.eyeproject.core.ui.component.EyeSubPage
-import com.zkyjss.eyeproject.core.ui.component.MascotMood
-import com.zkyjss.eyeproject.core.ui.component.XiaoTong
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -41,6 +40,9 @@ import com.zkyjss.eyeproject.core.ui.component.EyeButton
 import com.zkyjss.eyeproject.core.ui.component.EyeButtonRole
 import com.zkyjss.eyeproject.core.ui.component.EyeStatusChip
 import com.zkyjss.eyeproject.core.ui.component.EyeText
+import com.zkyjss.eyeproject.core.ui.component.EyeTileTone
+import com.zkyjss.eyeproject.core.ui.component.EyeGlyph
+import com.zkyjss.eyeproject.core.ui.component.EyeIconTile
 import com.zkyjss.eyeproject.core.ui.component.StatusTone
 import com.zkyjss.eyeproject.core.ui.component.rememberEyeHaptics
 import com.zkyjss.eyeproject.feature.services.LocalRecordEntry
@@ -92,9 +94,9 @@ internal fun RecordsContent(records: List<LocalRecordEntry>, onBack: () -> Unit,
     val typography = LocalEyeTypography.current
     EyeSubPage("测试记录", onBack) {
         if (records.isEmpty()) {
-            Column(Modifier.fillMaxWidth().clip(EyeShapes.panel).background(colors.panelBackground).padding(28.dp),
+            Column(Modifier.fillMaxWidth().eyeGlass(colors, EyeShapes.panel).padding(28.dp),
                 horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                XiaoTong(MascotMood.THINKING, Modifier.size(120.dp))
+                EyeIconTile(EyeGlyph.DOCUMENT, EyeTileTone.PRIMARY, 56.dp)
                 EyeText("还没有测试记录", style = typography.subtitle, color = colors.textPrimary)
                 EyeText("在「服务」里做一次自测，结果会保存在这里。", style = typography.body, color = colors.textSecondary)
             }
@@ -110,7 +112,7 @@ private fun RecordRow(record: LocalRecordEntry, onExport: () -> Unit, onExportRe
     var expanded by rememberSaveable(record.fileName) { mutableStateOf(false) }
     val haptics = rememberEyeHaptics()
     Column(
-        Modifier.fillMaxWidth().clip(EyeShapes.large).background(colors.panelBackground)
+        Modifier.fillMaxWidth().eyeGlass(colors, EyeShapes.large)
             .clickable(role = Role.Button) { haptics.tap(); expanded = !expanded }
             .padding(16.dp).animateContentSize(),
         verticalArrangement = Arrangement.spacedBy(8.dp),

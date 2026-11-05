@@ -54,9 +54,7 @@ internal fun EyeTrendContent(report: EyeCareReport?, onBack: () -> Unit) {
     val trend = report?.trend
     EyeSubPage("用眼趋势报告", onBack) {
         // 小结卡：日均用屏、与前一周比较、要点
-        Column(Modifier.fillMaxWidth().clip(EyeShapes.panel)
-            .background(Brush.linearGradient(listOf(colors.primarySoft, colors.panelBackground))).padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        EyeHeroCard {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     EyeText("近 7 天日均用屏", style = typography.body, color = colors.textSecondary)
@@ -73,7 +71,6 @@ internal fun EyeTrendContent(report: EyeCareReport?, onBack: () -> Unit) {
                         EyeStatusChip(label, tone)
                     }
                 }
-                XiaoTong(MascotMood.of(report?.mood), Modifier.size(104.dp))
             }
             // 第一条「日均用屏…」已在上方大字显示
             trend?.summary.orEmpty().drop(if (trend?.averageScreenMinutes != null) 1 else 0).forEach { Bullet(it) }
@@ -110,7 +107,7 @@ internal fun EyeTrendContent(report: EyeCareReport?, onBack: () -> Unit) {
 private fun ChartCard(title: String, unit: String, help: String? = null, content: @Composable ColumnScope.() -> Unit) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
-    Column(Modifier.fillMaxWidth().clip(EyeShapes.panel).background(colors.panelBackground).padding(18.dp),
+    Column(Modifier.fillMaxWidth().eyeGlass(colors, EyeShapes.panel).padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             EyeText(title, style = typography.subtitle, color = colors.textPrimary)
@@ -150,10 +147,8 @@ internal fun EyeAdviceContent(report: EyeCareReport?, onBack: () -> Unit, onOpen
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
     EyeSubPage("健康建议", onBack) {
-        Row(Modifier.fillMaxWidth().clip(EyeShapes.panel).background(colors.panelBackground).padding(start = 8.dp, end = 18.dp, top = 8.dp, bottom = 8.dp),
-            verticalAlignment = Alignment.CenterVertically) {
-            XiaoTong(MascotMood.of(report?.mood), Modifier.size(96.dp))
-            EyeText(report?.headline ?: "正在汇总今天的用眼数据…", Modifier.weight(1f), style = typography.body, color = colors.textPrimary)
+        EyeHeroCard {
+            EyeText(report?.headline ?: "正在汇总今天的用眼数据…", style = typography.subtitle, color = colors.textPrimary)
         }
         EyeText("专业咨询建议", Modifier.padding(start = 4.dp, top = 4.dp), style = typography.title, color = colors.textPrimary)
         report?.consults.orEmpty().forEach { ConsultCard(it) }
@@ -172,7 +167,7 @@ private fun ConsultCard(consult: EyeConsult) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
     val (strong, soft) = if (consult.urgent) colors.danger to colors.dangerSoft else colors.primary to colors.primarySoft
-    Column(Modifier.fillMaxWidth().clip(EyeShapes.panel).background(colors.panelBackground).padding(18.dp),
+    Column(Modifier.fillMaxWidth().eyeGlass(colors, EyeShapes.panel).padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(10.dp).clip(CircleShape).background(strong))
@@ -209,7 +204,7 @@ internal fun EyeBrightnessContent(state: HomeUiState, onBack: () -> Unit, onOpen
     EyeSubPage("亮度与蓝光", onBack, bottomBar = {
         EyeButton("打开系统显示设置", EyeButtonRole.PRIMARY, onOpenDisplay, Modifier.fillMaxWidth())
     }) {
-        Column(Modifier.fillMaxWidth().clip(EyeShapes.panel).background(colors.panelBackground).padding(18.dp),
+        Column(Modifier.fillMaxWidth().eyeGlass(colors, EyeShapes.panel).padding(18.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 SignalCell(signals.firstOrNull { it.key == "brightness" }, Modifier.weight(1f))
@@ -218,7 +213,7 @@ internal fun EyeBrightnessContent(state: HomeUiState, onBack: () -> Unit, onOpen
             EyeText(factor?.let { "${it.title}：${it.detail}" } ?: "屏幕亮度和周围环境比较协调。", style = typography.body,
                 color = if (factor != null) colors.warning else colors.textPrimary)
         }
-        Column(Modifier.fillMaxWidth().clip(EyeShapes.panel).background(colors.panelBackground).padding(18.dp),
+        Column(Modifier.fillMaxWidth().eyeGlass(colors, EyeShapes.panel).padding(18.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 EyeText("这样做更舒服", style = typography.subtitle, color = colors.textPrimary)

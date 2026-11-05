@@ -7,7 +7,7 @@ struct CareReport {
     struct Signal: Identifiable { let id: String; let group: String; let label: String; let value: String; let status: String; let note: String }
     struct Factor: Identifiable { let id: String; let title: String; let detail: String; let points: Int }
     struct Action: Identifiable { let id: String; let title: String; let detail: String; let kind: String; let target: String?; let value: Int? }
-    /// 小瞳的气泡提醒（共用 EyeTip）：一句话；可执行的附带动作类型与按钮文字。
+    /// 首页建议（共用 EyeTip）：一句话；可执行的附带动作类型与按钮文字。
     struct Tip { let text: String; let kind: String?; let target: String?; let value: Int?; let action: String? }
     struct Consult: Identifiable { let id: Int; let title: String; let detail: String; let department: String; let urgent: Bool }
     struct Stage: Identifiable { let id: String; let label: String; let done: Bool; let summary: String }

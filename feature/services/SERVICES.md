@@ -16,7 +16,7 @@
 
 | 类型 | 说明 |
 |---|---|
-| `ServicesScreen` | 服务首页：标题「服务」+ 右上角账户头像与系统设置齿轮（`EyePageHeader`）、小瞳示范舞台、三个 `EyeSelectCard` 入口。示范舞台随机轮流播放干眼（BLINK）/ 眼位（COVER）/ 老视（NEAR）的演示动画（`TestGuide.kt` 的 `GuideFrame`，每种两遍），上方气泡先说是哪项测试、再说「跟着我一起做吧」；点舞台换下一个 |
+| `ServicesScreen` | 服务首页：标题「服务」+ 右上角账户头像与系统设置齿轮（`EyePageHeader`）、示范主卡、四个 `EyeSelectCard` 入口。示范主卡随机轮流播放干眼（BLINK）/ 眼位（COVER）/ 老视（NEAR）的演示动画（`TestGuide.kt` 的 `GuideFrame`，每种两遍），上方是「示范：干眼」与一句做法；点示范区换下一个 |
 | `SystemSettings.kt` | 「系统设置」完整页面（不用底部弹窗）：`SystemSettingsScreen`（路由 `SystemSettingsRoute`，顶层页齿轮进入，分组「反馈 / 语音 / 关于」，关于里是应用图标、版本与免责声明）；测试中的 `TestSettingsPage` 盖在测试页上（不离开测试），同一份 `TestSettingsContent`，底部可停止测试。各项说明收进「?」（`FEEDBACK_HELP` / `VOICE_HELP` / `ANSWER_HELP`）。苹果端 `SystemSettingsPage` 同一排版 |
 | `DryEyeScreen` | 干眼自测页（动画引导、距离门控、两阶段记录、折叠结果曲线）。测试中看不到双眼 1 秒或距离超出 40±5 cm 达 1.5 秒即**暂停**（专家确认的方案二）：计时冻结、收起视标、暂停期间的眨眼不计，弹窗 `PauseDialog` 说明原因，恢复正常后点「继续测试」接着计时与作答；记录写入 `pauses` / `pauseCount` / `pausedSeconds`。容差内视标随实测距离实时缩放、保持视角不变 |
 | `ColorVisionScreen` / `ColorVisionViewModel` | 色觉自测（共用 `ColorVisionEngine`）：选人 → 准备（关护眼 / 夜间模式、屏幕调到最亮、约 40 cm）→ 示例图 → 8 张检测图（选数字或「看不出」）→ 结果页（`ResultReportView`）与导出。检测图由共用代码按视锥单独刺激生成（红色觉图只改 L 视锥、绿色觉图只改 M 视锥，亮度随机起伏），8 张错 0–1 未见异常、2–3 可疑、≥4 提示红绿色觉异常，两类错读相差 ≥2 提示倾向类型；示例图读错本次无效。不用相机、不发 AI 解读 |
@@ -31,7 +31,7 @@
 | `SubjectProfile`（shared） | 三项问卷合并后的被测者资料：`SubjectProfiles.sections` 分组题目（键沿用原问卷，评估按键读取）、各测试必需项与适用年龄、出生年份换算年龄、JSON 编解码 |
 | 戴镜确认 | 老视每次近视力示范前，按本次戴镜状态出现确认页（如「戴好看远的眼镜 / 摘下眼镜」+「整组测试中不要换眼镜」，语音同步播报），确认写入记录 `glassesConfirmed`；两端共用引擎的 `glassesCheckPending` 与 `PresbyopiaIntake.glassesCheck` |
 | `StrabismusGaze` | 斜视任务的九点注视校准与宽容监督：各眼独立以仿射映射（吸收头部轻微倾斜的轴间串扰）到屏幕坐标，留一预测误差剔除离群点（最多 2 点，剩余点须覆盖三行三列），允许单眼有效跟随；实际显示轨迹与眼动比较，避免同步静止或看别处被判为协调正常 |
-| `ReportComponents` | 三病种共用的结果页，渲染共享 `ResultReport`（与 iOS `ResultReportView.swift` 同一份内容）：结论卡（小瞳神情随等级变化 + 等级徽标 + 一句结论 + 一句建议）→ 关键指标 2×2 → 判断依据（每个证据族一行，点开看明细）→ AI 解读卡片（`core:ui` 的 `AiExplanationCard`，状态由两个测试 ViewModel 的 `explanation` 跟随 `savedFile` 给出，见 `AiExplanationUi.kt`）→ 主操作 → 「查看本次数据」（全屏页面 `EyeFullScreenPage`）/ 「导出数据」→ 一行说明 |
+| `ReportComponents` | 三病种共用的结果页，渲染共享 `ResultReport`（与 iOS `ResultReportView.swift` 同一份内容）：结论主卡（等级徽标 + 一句结论 + 风险分段条 + 一句建议）→ 关键指标 2×2（一张卡里细线分隔）→ 判断依据（每个证据族一行，点开看明细）→ AI 解读卡片（`core:ui` 的 `AiExplanationCard`，状态由两个测试 ViewModel 的 `explanation` 跟随 `savedFile` 给出，见 `AiExplanationUi.kt`）→ 主操作 → 「查看本次数据」（全屏页面 `EyeFullScreenPage`）/ 「导出数据」→ 一行说明 |
 | `RecordExport` | 用系统「另存为」导出本次完整记录 JSON（问卷、逐题作答、逐帧数据、特征与判定依据），不需存储权限、不联网 |
 | `ScreeningHistory`（在 ScreeningMetrics.kt） | 读取本机上一次同病种记录，结果页「与上次对比」 |
 | `ScreeningOptotype` / `ScreeningVoice` | 按前摄眼屏距离和系统屏幕像素密度换算视标尺寸及显示门槛；系统中文语音播报 |
@@ -71,7 +71,7 @@
 
 ### 视觉与引导
 
-- `TestGuide`：十三种卡通方法演示（POSTURE/ACUITY/FVA/BLINK/OPEN/NEAR/MOVE/CURVE/SWITCH/FIXATE/FAR/COVER/FOLLOW），演示内容与原文任务一一对应（如遮盖按 右2s→移开2s→左2s→移开2s→右左各1s×2），吉祥物「小瞳」在 320×200 舞台单位的 Canvas 中出镜；每个场景配 2–3 个与动画同步高亮的分镜步骤，可点「暂停演示」，系统移除动画时停在关键帧。`guidePending` 期间不启动正式计时、不计入采样，确认后才进入任务。
+- `TestGuide`：十三种方法演示（POSTURE/ACUITY/FVA/BLINK/OPEN/NEAR/MOVE/CURVE/SWITCH/FIXATE/FAR/COVER/FOLLOW），演示内容与原文任务一一对应（如遮盖按 右2s→移开2s→左2s→移开2s→右左各1s×2），中性示意人物（`drawFigure`）在 320×200 舞台单位的 Canvas 中出镜，注视目标为准星；每个场景配 2–3 个与动画同步高亮的分镜步骤，可点「暂停演示」，系统移除动画时停在关键帧。`guidePending` 期间不启动正式计时、不计入采样，确认后才进入任务。
 - `ScreeningGuidance`：距离和光照映射为简短行动提示；保留原始呈现、作答和医学质量门控。遮盖任务不因单眼不可见提示移开遮盖。
 - 距离、光照和详细结果通过 `EyeDisclosure` 默认收起。
 - 三个测试共用**同一个** TTS 引擎实例（`SharedSpeech`，最后一个测试页离开时才释放），发声人只挑选一次、每句开口前重新确认发声人、语速与音调，音频属性固定为媒体 / 语音；设置里显示当前发声人并可更换（对三项测试同时生效）。此前每页各建引擎、各自挑选，某页设置失败会静默退回系统默认声音，导致干眼、斜视与老视音色不同。按 TTS 引擎保存发声人名称：优先已安装、离线可用、音质最高的声音（键名 `voice_v2_` 起会重新挑选一次）。送给 TTS 的文本由共享 `screeningSpeechText` 口语化（数字读中文、量词前的 2 读「两」、符号转停顿、句末补句号），iOS 同用。距离提醒由共享 `SpokenPrompts` 提供：持续偏离每 6 秒换一种说法，回到合适距离先说「好，就保持这个距离。」，期间主提示有变化再接着播报；换目标距离的「请移动到 xx 厘米处」到位后只响提示音、不重读主提示；iOS 同样播报距离提醒，并优先使用已下载的高品质普通话声音。播报期间及结束后 600 ms 内的回声过滤见上；离线录音不保存、不上传。界面明确显示模型准备和实际收听状态；麦克风权限仍需用户授予。模型来源、哈希和 Apache-2.0 许可证见 `src/main/assets/offline-voice-README.md`。
@@ -107,5 +107,5 @@
 - 斜视流程：选择被测者 → 33±5 cm → 卡通闪烁注视 12 秒（目标紧贴顶栏下方）→ 看远（协助者点「已在看 6 米外的目标，开始」后计时 10 秒）→ 交替遮盖 9 个动作（协助者点按标记真实动作时刻，界面给出保持计时）→ 追踪 22 秒（±10° 按实测距离换算，屏幕不足时缩小并记录）→ 结果
 - 看远（专家 2026-10-29 建议，替代「缩小视标模拟 2 m」）：手机留在眼前约 33 cm、略低于视线，受试者越过手机注视 6 米外的目标 10 秒（前 1.5 秒不计），前置相机同时测双眼映光，HDE/VDE 与看近同一算法和判定线（`StrabismusMeasures.far*`、证据 `far`）；看远头部俯仰门控放宽到 20°；协助者确认受试者已在看远处之前不计时、不采集（`farWaiting`）；舞台用深色避免整屏亮光映出大片反光，最后 3 秒节拍音；看远数据不足只是不评估看远，不使整次测试无效；只在看远时越线提示可能为间歇性斜视。记录 `protocolVersion` 6
 - 斜视版面：去掉顶部映光黑条；注视类舞台紧贴顶栏下方，计时/进度说明与提示位放在舞台下方，距离条放到屏幕底部（`TestSessionLayout(statusAtBottom)`），让注视目标尽量靠近屏幕顶部
-- 四项测试进行中（选人、准备、结果页以外）点返回或系统返回，先弹 `TestExitDialog`（小瞳气泡挽留 +「继续测试 / 确认退出」）；选人页不再播报「这次测谁」
+- 四项测试进行中（选人、准备、结果页以外）点返回或系统返回，先弹 `TestExitDialog`（「继续测试 / 确认退出」）；选人页不再播报「这次测谁」
 - 原文中被批注删除的「远近注视切换」未实现；参数冲突与实现约定见 `docs/三病种流程对齐-2026-10-11.md`

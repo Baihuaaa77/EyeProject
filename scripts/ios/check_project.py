@@ -9,15 +9,19 @@ import wave
 root = Path(__file__).resolve().parents[2]
 errors = []
 colors = (root / 'core/designsystem/src/main/java/com/zkyjss/eyeproject/core/designsystem/theme/Color.kt').read_text(encoding='utf-8')
-light = colors.split('val LightEyeColors = EyeColors(', 1)[1].split('val DarkEyeColors', 1)[0]
-palette = dict(re.findall(r'(\w+)\s*=\s*Color\(0xFF([0-9A-Fa-f]{6})\)', light))
+def palette_of(block):
+    return dict(re.findall(r'(\w+)\s*=\s*Color\(0xFF([0-9A-Fa-f]{6})\)', block))
+light = palette_of(colors.split('val LightEyeColors = EyeColors(', 1)[1].split('val DarkEyeColors', 1)[0])
+dark = palette_of(colors.split('val DarkEyeColors = EyeColors(', 1)[1])
 swift = (root / 'iosApp/Sources/EyeStyle.swift').read_text(encoding='utf-8')
-mapping = {'background':'appBackground','panel':'panelBackground','text':'textPrimary','secondary':'textSecondary',
-    'surfaceVariant':'surfaceVariant','primary':'primary','brandStart':'brandStart','brandEnd':'brandEnd','accent':'accent','warning':'warning','success':'success',
-    'tooClose':'tooClose','tooFar':'tooFar'}
+# iOS 令牌为随深浅色切换的动态颜色 dyn(浅, 深)，两套都要与安卓 Light / Dark 一致
+mapping = {'background':'appBackground','panel':'panelBackground','text':'textPrimary','secondary':'textSecondary','tertiary':'textTertiary',
+    'surfaceVariant':'surfaceVariant','primary':'primary','primarySoft':'primarySoft','brandStart':'brandStart','brandEnd':'brandEnd',
+    'accent':'accent','warning':'warning','success':'success','danger':'danger','tooClose':'tooClose','tooFar':'tooFar',
+    'buttonStart':'buttonStart','buttonEnd':'buttonEnd','flowStart':'flowStart','flowEnd':'flowEnd','onWarning':'onWarning'}
 for key, value in mapping.items():
-    match = re.search(rf'static let {key} = Color\(rgb: 0x([0-9A-Fa-f]{{6}})\)', swift)
-    if match is None or match.group(1).upper() != palette[value].upper():
+    match = re.search(rf'static let {key} = dyn\(0x([0-9A-Fa-f]{{6}}), 0x([0-9A-Fa-f]{{6}})', swift)
+    if match is None or match.group(1).upper() != light[value].upper() or match.group(2).upper() != dark[value].upper():
         errors.append(f'iOS theme token drift: {key}')
 
 model = root / 'core/camera/src/main/assets/face_landmarker.task'
@@ -68,15 +72,17 @@ for name in set(re.findall(r'"(eye_[a-z]+)"', feedback_source.read_text(encoding
             if (sound.getnchannels(), sound.getsampwidth(), sound.getframerate()) != (1, 2, 22050) or sound.getnframes() / 22050 > 0.35:
                 errors.append('Invalid short feedback sound: ' + name)
     except (OSError, wave.Error): errors.append('Missing feedback sound: ' + name)
-# 小瞳互动音：两端引用的音效都要在共用目录，格式同提示音
-mascot_sources = [root / 'core/ui/src/main/java/com/zkyjss/eyeproject/core/ui/component/XiaoTong.kt', root / 'iosApp/Sources/MascotStage.swift']
-for name in sorted({n for f in mascot_sources for n in re.findall(r'"(eye_[a-z]+)"', f.read_text(encoding='utf-8'))}):
+# 护眼操与休息页的提示音：两端引用的音效都要在共用目录，格式同测试提示音
+cue_names = set(re.findall(r'R\.raw\.(eye_[a-z]+)', (root / 'core/ui/src/main/java/com/zkyjss/eyeproject/core/ui/component/EyeCueSounds.kt').read_text(encoding='utf-8')))
+cue_names |= set(re.findall(r'"(eye_[a-z]+)"', (root / 'iosApp/Sources/EyeSurfaces.swift').read_text(encoding='utf-8')))
+if not cue_names: errors.append('No cue sounds found')
+for name in sorted(cue_names):
     path = root / 'shared/feedback/res/raw' / (name + '.wav')
     try:
         with wave.open(str(path)) as sound:
             if (sound.getnchannels(), sound.getsampwidth(), sound.getframerate()) != (1, 2, 22050) or sound.getnframes() / 22050 > 0.35:
-                errors.append('Invalid mascot sound: ' + name)
-    except (OSError, wave.Error): errors.append('Missing mascot sound: ' + name)
+                errors.append('Invalid cue sound: ' + name)
+    except (OSError, wave.Error): errors.append('Missing cue sound: ' + name)
 for module in ('feature/services', 'core/ui'):
     if '../../shared/feedback/res' not in (root / module / 'build.gradle.kts').read_text(encoding='utf-8'):
         errors.append('Android sounds must use the shared asset directory: ' + module)

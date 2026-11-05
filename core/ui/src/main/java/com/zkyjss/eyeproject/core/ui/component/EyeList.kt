@@ -3,6 +3,7 @@ package com.zkyjss.eyeproject.core.ui.component
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -33,17 +34,15 @@ import com.zkyjss.eyeproject.core.designsystem.theme.EyeShapes
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
 
-/** 图标色块的配色：主色 / 琥珀 / 成功绿 / 靛蓝 / 警示 / 中性。全部取自设计令牌。 */
+/** 图标色块的配色：PRIMARY/ACCENT/SUCCESS/BLUE 统一为深海蓝单色，DANGER 红、NEUTRAL 灰。全部取自设计令牌。 */
 enum class EyeTileTone { PRIMARY, ACCENT, SUCCESS, BLUE, DANGER, NEUTRAL }
 
 @Composable
 private fun EyeTileTone.colors(): Pair<Color, Color> {
     val c = LocalEyeColors.current
     return when (this) {
-        EyeTileTone.PRIMARY -> c.primarySoft to c.primary
-        EyeTileTone.ACCENT -> c.accentSoft to c.warning
-        EyeTileTone.SUCCESS -> c.successSoft to c.success
-        EyeTileTone.BLUE -> c.surfaceVariant to c.blue
+        // 统一深海蓝单色（不再按功能分彩色），只有警示保留红色
+        EyeTileTone.PRIMARY, EyeTileTone.ACCENT, EyeTileTone.SUCCESS, EyeTileTone.BLUE -> c.primarySoft to c.primary
         EyeTileTone.DANGER -> c.dangerSoft to c.danger
         EyeTileTone.NEUTRAL -> c.surfaceVariant to c.textSecondary
     }
@@ -66,7 +65,7 @@ fun EyeListGroup(modifier: Modifier = Modifier, title: String? = null, content: 
         if (title != null) {
             EyeText(title, Modifier.padding(start = 4.dp, bottom = 8.dp), style = LocalEyeTypography.current.chip, color = colors.textSecondary)
         }
-        Column(Modifier.fillMaxWidth().clip(EyeShapes.panel).background(colors.panelBackground), content = content)
+        Column(Modifier.fillMaxWidth().eyeGlass(colors, EyeShapes.panel), content = content)
     }
 }
 
@@ -148,5 +147,26 @@ fun EyeSwitchRow(
             EyeSwitch(checked, null, enabled = enabled)
         }
         if (divider) Box(Modifier.padding(start = if (glyph != null) 66.dp else 16.dp).fillMaxWidth().height(1.dp).background(colors.borderSubtle))
+    }
+}
+
+/**
+ * 卡片分类头：主色小图标 + 主色标题，右侧可放操作（胶囊按钮、开关等）。
+ */
+@Composable
+fun EyeCategoryHeader(
+    title: String,
+    glyph: EyeGlyph,
+    tone: EyeTileTone = EyeTileTone.PRIMARY,
+    modifier: Modifier = Modifier,
+    trailing: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {},
+) {
+    val (_, foreground) = tone.colors()
+    Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        EyeGlyphIcon(glyph, Modifier.size(18.dp), foreground)
+        Spacer(Modifier.width(6.dp))
+        EyeText(title, Modifier.weight(1f), style = LocalEyeTypography.current.body, color = foreground,
+            fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+        trailing()
     }
 }

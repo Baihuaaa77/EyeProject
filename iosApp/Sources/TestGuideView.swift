@@ -40,7 +40,7 @@ struct TestGuideView: View {
             content(scene, phase: phase(scene, at: timeline.date))
         }
         .padding(16).frame(maxWidth: .infinity)
-        .background(EyeStyle.panel, in: RoundedRectangle(cornerRadius: 22))
+        .eyeGlass()
         .overlay { RoundedRectangle(cornerRadius: 22).stroke(EyeStyle.borderSubtle, lineWidth: 1) }
         .onChange(of: motion) { _ in start = Date(); frozen = nil; playing = true }
     }
@@ -198,8 +198,11 @@ struct GuidePainter {
         ctx.fill(Path(roundedRect: CGRect(x: tl.x + screen.width * 0.12, y: tl.y + screen.height * 0.67,
             width: screen.width * 0.76, height: screen.height * 0.13), cornerRadius: screen.width * 0.06), with: .color(EyeStyle.borderSubtle))
     }
-    func mascot(_ x: CGFloat, _ y: CGFloat, _ size: CGFloat, gaze: CGPoint = .zero, lid: CGFloat = 0, wide: CGFloat = 1) {
-        Cartoon.mascot(ctx, center: p(x, y), size: u(size), gaze: gaze, lid: lid, wide: wide)
+    func figure(_ x: CGFloat, _ y: CGFloat, _ size: CGFloat, gaze: CGPoint = .zero, lid: CGFloat = 0, wide: CGFloat = 1) {
+        Cartoon.figure(ctx, center: p(x, y), size: u(size), gaze: gaze, lid: lid, wide: wide)
+    }
+    func target(_ x: CGFloat, _ y: CGFloat, _ size: CGFloat) {
+        Cartoon.fixationTarget(ctx, center: p(x, y), size: u(size))
     }
     func phone(_ x: CGFloat, _ y: CGFloat, _ height: CGFloat) -> (CGPoint, CGSize) { Cartoon.phone(ctx, center: p(x, y), height: u(height)) }
     func optotype(_ center: CGPoint, _ edge: CGFloat, _ direction: Int, alpha: Double = 1) {
@@ -260,11 +263,11 @@ struct GuideScene {
         }
     }
 
-    /// 准备姿势：手机在小瞳面前前后微调到合适距离后出现对勾；左上角灯光示意光线均匀。
+    /// 准备姿势：手机在人物面前前后微调到合适距离后出现对勾；左上角灯光示意光线均匀。
     static let posture = GuideScene(cycle: 5.2, beats: [.init(start: 0, label: "① 正对屏幕，露出双眼"),
         .init(start: 0.25, label: "② 前后微调到提示的距离"), .init(start: 0.6, label: "③ 光线均匀，避免逆光")], keyframe: 0.7) { g, phase in
         g.floorShadow(82, 182, 100)
-        g.mascot(82, 112, 100, gaze: CGPoint(x: 0.9, y: 0))
+        g.figure(82, 112, 100, gaze: CGPoint(x: 0.9, y: 0))
         let x = CGFloat(keyframes(phase, [(0, 290), (0.15, 290), (0.3, 215), (0.4, 250), (0.5, 238), (1, 238)]))
         let (tl, screen) = g.phone(x, 104, 128)
         let ok = seg(phase, 0.5, 0.56)
@@ -293,7 +296,7 @@ struct GuideScene {
         .init(start: 0.15, label: "② 像平时一样自然眨眼"), .init(start: 0.55, label: "③ 应用自动记录眨眼")], keyframe: 0.6) { g, phase in
         g.floorShadow(160, 178, 120)
         let lid = GuideScene.blinkTimes.map { tri(phase, $0, 0.035) }.max() ?? 0
-        g.mascot(160, 108, 118, lid: CGFloat(lid))
+        g.figure(160, 108, 118, lid: CGFloat(lid))
         for t in GuideScene.blinkTimes {
             let k = (phase - t) / 0.22
             if (0...1).contains(k) { g.label("+1", 232, 72 - 30 * CGFloat(k), EyeStyle.primary, alpha: 1 - k) }
@@ -308,11 +311,11 @@ struct GuideScene {
         g.floorShadow(130, 178, 120)
         let rest = tri(phase, 0.92, 0.04)
         let wide = 1 + 0.22 * seg(phase, 0.02, 0.15) * (1 - seg(phase, 0.86, 0.9))
-        g.mascot(130, 108, 118, lid: CGFloat(rest), wide: CGFloat(wide))
+        g.figure(130, 108, 118, lid: CGFloat(rest), wide: CGFloat(wide))
         if (0.15...0.86).contains(phase) {
             let twinkle = (sin(phase * 40) + 1) / 2
             for side: CGFloat in [-1, 1] {
-                let eye = Cartoon.mascotEyeCenter(g.p(130, 108), g.u(118), side)
+                let eye = Cartoon.figureEyeCenter(g.p(130, 108), g.u(118), side)
                 let c = CGPoint(x: eye.x + side * g.u(26), y: eye.y - g.u(22))
                 let r = g.u(3 + 3 * CGFloat(twinkle))
                 g.line(CGPoint(x: c.x - r, y: c.y), CGPoint(x: c.x + r, y: c.y), EyeStyle.accent, g.u(2.5))
@@ -333,12 +336,12 @@ struct GuideScene {
         .init(start: 0.2, label: "② 用右眼看 E 的开口方向"), .init(start: 0.28, label: "③ 点选对应方向；之后换眼再做")], keyframe: 0.35) { g, phase in
         g.floorShadow(95, 182, 110)
         let mascot = g.p(95, 110)
-        g.mascot(95, 110, 108, gaze: CGPoint(x: 0.8, y: 0))
-        // 手掌从下方抬起，遮住小瞳的左眼（画面右侧那只）
-        let eye = Cartoon.mascotEyeCenter(mascot, g.u(108), 1)
+        g.figure(95, 110, 108, gaze: CGPoint(x: 0.8, y: 0))
+        // 手掌从下方抬起，遮住人物的左眼（画面右侧那只）
+        let eye = Cartoon.figureEyeCenter(mascot, g.u(108), 1)
         let rise = CGFloat(seg(phase, 0.02, 0.16))
         let hand = CGPoint(x: eye.x + g.u(2), y: eye.y + g.u(90) + (g.u(3) - g.u(90)) * rise)
-        Cartoon.mitten(g.ctx, center: hand, size: g.u(46), angle: -12, armFrom: CGPoint(x: hand.x + g.u(18), y: g.p(0, 210).y))
+        Cartoon.hand(g.ctx, center: hand, size: g.u(46), angle: -12, armFrom: CGPoint(x: hand.x + g.u(18), y: g.p(0, 210).y))
         let (tl, screen) = g.phone(242, 100, 160)
         let segment = min(3, max(0, Int((phase - 0.2) / 0.2)))
         let dir = GuideScene.nearDirections[segment]
@@ -350,7 +353,7 @@ struct GuideScene {
     static let move = GuideScene(cycle: 7.6, beats: [.init(start: 0, label: "① 从 45 cm 外开始，看着 E"),
         .init(start: 0.15, label: "② 慢慢移近（每秒不超过 5 cm）"), .init(start: 0.6, label: "③ E 一开始持续模糊就点按，记录近点")], keyframe: 0.66) { g, phase in
         g.floorShadow(62, 182, 96)
-        g.mascot(62, 112, 96, gaze: CGPoint(x: 1, y: 0))
+        g.figure(62, 112, 96, gaze: CGPoint(x: 1, y: 0))
         g.ruler(120, 300, 188)
         let x = CGFloat(keyframes(phase, [(0, 290), (0.15, 290), (0.68, 150), (0.76, 150), (0.9, 290), (1, 290)]))
         let (tl, screen) = g.phone(x, 104, 118)
@@ -369,7 +372,7 @@ struct GuideScene {
     static let flip = GuideScene(cycle: 6.4, beats: [.init(start: 0, label: "① 远处停稳，点选 E 的开口"),
         .init(start: 0.15, label: "② 移近停稳，再点选一次"), .init(start: 0.55, label: "③ 移远，远近交替进行")], keyframe: 0.45) { g, phase in
         g.floorShadow(62, 182, 96)
-        g.mascot(62, 112, 96, gaze: CGPoint(x: 1, y: 0))
+        g.figure(62, 112, 96, gaze: CGPoint(x: 1, y: 0))
         g.ruler(120, 300, 188)
         let x = CGFloat(keyframes(phase, [(0, 268), (0.15, 268), (0.3, 170), (0.55, 170), (0.7, 268), (1, 268)]))
         let (tl, screen) = g.phone(x, 102, 150)
@@ -382,29 +385,29 @@ struct GuideScene {
         else if (0.55...0.7).contains(phase) { g.label("移远 →", 220, 172, EyeStyle.primary) }
     }
 
-    static let fixate = GuideScene(cycle: 4.0, beats: [.init(start: 0, label: "① 看着屏幕上方闪烁的小瞳"),
+    static let fixate = GuideScene(cycle: 4.0, beats: [.init(start: 0, label: "① 看着屏幕上方闪烁的圆点"),
         .init(start: 0.45, label: "② 头和手机都保持不动")], keyframe: 0.5) { g, phase in
         g.floorShadow(95, 182, 110)
         let mascot = g.p(95, 110)
-        g.mascot(95, 110, 108, gaze: CGPoint(x: 0.9, y: -0.1))
+        g.figure(95, 110, 108, gaze: CGPoint(x: 0.9, y: -0.1))
         if phase >= 0.45 { g.headLock(95, 106, 66) }
         let (tl, screen) = g.phone(242, 100, 160)
         let dot = CGPoint(x: tl.x + screen.width / 2, y: tl.y + screen.height * 0.2)
         let pulse = (sin(phase * 2 * .pi * 2) + 1) / 2
         var flash = g.ctx; flash.opacity = pulse > 0.5 ? 1 : 0.3
-        flash.drawLayer { layer in Cartoon.mascot(layer, center: dot, size: g.u(22)) }
-        let eye = Cartoon.mascotEyeCenter(mascot, g.u(108), 1)
+        flash.drawLayer { layer in Cartoon.fixationTarget(layer, center: dot, size: g.u(26)) }
+        let eye = Cartoon.figureEyeCenter(mascot, g.u(108), 1)
         g.line(CGPoint(x: eye.x + g.u(16), y: eye.y), CGPoint(x: dot.x - g.u(14), y: dot.y), EyeStyle.primary.opacity(0.45), g.u(2),
                dash: [g.u(5), g.u(6)], dashPhase: -CGFloat(phase) * g.u(110))
     }
 
-    /// 看远：手机在小瞳面前、略低于视线；视线越过手机，落到远处的目标上，保持约 10 秒。
+    /// 看远：手机在人物面前、略低于视线；视线越过手机，落到远处的目标上，保持约 10 秒。
     static let far = GuideScene(cycle: 5.2, beats: [.init(start: 0, label: "① 手机留在眼前约 33 cm，略低于视线"),
         .init(start: 0.3, label: "② 眼睛越过手机，看 6 米外的目标"), .init(start: 0.65, label: "③ 看约 10 秒，头和手机都不动")], keyframe: 0.5) { g, phase in
         g.floorShadow(62, 182, 90)
         let mascot = g.p(62, 104)
         let look = seg(phase, 0.3, 0.4)
-        g.mascot(62, 104, 92, gaze: CGPoint(x: 0.9, y: -0.15 * look))
+        g.figure(62, 104, 92, gaze: CGPoint(x: 0.9, y: -0.15 * look))
         if phase >= 0.65 { g.headLock(62, 100, 56) }
         _ = g.phone(142, 128, 78)
         // 远处的目标：一扇门，旁边标注距离
@@ -415,7 +418,7 @@ struct GuideScene {
         g.label("6 米外", 272, 120, EyeStyle.secondary)
         // 视线：从双眼越过手机顶部流向远处
         if look > 0 {
-            let eye = Cartoon.mascotEyeCenter(mascot, g.u(92), 1)
+            let eye = Cartoon.figureEyeCenter(mascot, g.u(92), 1)
             g.line(CGPoint(x: eye.x + g.u(14), y: eye.y), g.p(252, 70), EyeStyle.primary.opacity(0.45), g.u(2), alpha: look,
                    dash: [g.u(5), g.u(6)], dashPhase: -CGFloat(phase) * g.u(160))
         }
@@ -425,17 +428,17 @@ struct GuideScene {
         .init(start: 0.36, label: "② 遮左眼 2 秒 → 移开，双眼注视 2 秒"), .init(start: 0.7, label: "③ 右眼、左眼各遮 1 秒，快速交替两轮")], keyframe: 0.12) { g, phase in
         g.floorShadow(160, 184, 120)
         let mascot = g.p(160, 112)
-        g.mascot(160, 112, 118)
-        // 小瞳面向我们：它的右眼在画面左侧，左眼在画面右侧
-        let rEye = Double(Cartoon.mascotEyeCenter(mascot, g.u(118), -1).x)
-        let lEye = Double(Cartoon.mascotEyeCenter(mascot, g.u(118), 1).x)
+        g.figure(160, 112, 118)
+        // 人物面向我们：它的右眼在画面左侧，左眼在画面右侧
+        let rEye = Double(Cartoon.figureEyeCenter(mascot, g.u(118), -1).x)
+        let lEye = Double(Cartoon.figureEyeCenter(mascot, g.u(118), 1).x)
         let away = lEye + Double(g.u(150))
         let hx = keyframes(phase, [(0, away), (0.05, rEye), (0.2, rEye), (0.25, away), (0.36, away),
             (0.42, lEye), (0.56, lEye), (0.61, away), (0.7, away),
             (0.74, rEye), (0.78, rEye), (0.81, lEye), (0.85, lEye),
             (0.88, rEye), (0.91, rEye), (0.94, lEye), (0.97, lEye), (1, away)])
-        let eyeY = Cartoon.mascotEyeCenter(mascot, g.u(118), 1).y
-        Cartoon.mitten(g.ctx, center: CGPoint(x: hx, y: eyeY + g.u(3)), size: g.u(52), angle: -14, armFrom: g.p(340, 150))
+        let eyeY = Cartoon.figureEyeCenter(mascot, g.u(118), 1).y
+        Cartoon.hand(g.ctx, center: CGPoint(x: hx, y: eyeY + g.u(3)), size: g.u(52), angle: -14, armFrom: g.p(340, 150))
         let near = Double(g.u(6))
         let text = abs(hx - rEye) < near ? "遮右眼" : abs(hx - lEye) < near ? "遮左眼" : hx > lEye + Double(g.u(100)) ? "移开 · 双眼注视" : "换眼"
         g.pill(12, 12, 112, 28, EyeStyle.panel)
@@ -443,7 +446,7 @@ struct GuideScene {
     }
 
     /// 水平正弦 → 垂直正弦 → 45° 斜向直线往复，与正式追踪任务的顺序一致。
-    static let follow = GuideScene(cycle: 7.2, beats: [.init(start: 0, label: "① 水平：只用眼睛跟随小瞳"),
+    static let follow = GuideScene(cycle: 7.2, beats: [.init(start: 0, label: "① 水平：只用眼睛跟随圆点"),
         .init(start: 0.36, label: "② 垂直：头保持不动"), .init(start: 0.72, label: "③ 斜向：继续跟随")], keyframe: 0.2) { g, phase in
         let cx: CGFloat = 214, cy: CGFloat = 92
         let dot: CGPoint
@@ -457,9 +460,9 @@ struct GuideScene {
         let text = phase < 0.36 ? "水平" : phase < 0.72 ? "垂直" : "斜向"
         g.pill(150, 18, 128, 150, EyeStyle.panel, alpha: 0.7)
         g.floorShadow(72, 186, 90)
-        g.mascot(72, 130, 86, gaze: CGPoint(x: min(1, max(-1, (dot.x - 72) / 140)), y: min(1, max(-1, (dot.y - 130) / 90))))
+        g.figure(72, 130, 86, gaze: CGPoint(x: min(1, max(-1, (dot.x - 72) / 140)), y: min(1, max(-1, (dot.y - 130) / 90))))
         g.headLock(72, 126, 54)
-        g.mascot(dot.x, dot.y, 9 / 0.65)
+        g.target(dot.x, dot.y, 18)
         g.pill(12, 12, 64, 28, EyeStyle.panel)
         g.label(text, 44, 26, EyeStyle.primary)
     }
@@ -468,7 +471,7 @@ struct GuideScene {
     static let acuity = GuideScene(cycle: 6.0, beats: [.init(start: 0, label: "① 看 E 的开口方向"),
         .init(start: 0.1, label: "② 2 秒内点选对应方向"), .init(start: 0.4, label: "③ 连对两次变小，答错或超时变大")], keyframe: 0.12) { g, phase in
         g.floorShadow(66, 184, 84)
-        g.mascot(66, 118, 84, gaze: CGPoint(x: 1, y: -0.2))
+        g.figure(66, 118, 84, gaze: CGPoint(x: 1, y: -0.2))
         let segment = min(4, max(0, Int(phase / 0.2)))
         let t = (phase - Double(segment) * 0.2) / 0.2
         let sizes: [CGFloat] = [1, 1, 0.78, 1, 1]
@@ -494,7 +497,7 @@ struct GuideScene {
         g.floorShadow(84, 184, 100)
         let opened = phase >= 0.68
         let lid = opened ? 0 : max(tri(phase, 0.2, 0.03), tri(phase, 0.45, 0.03))
-        g.mascot(84, 112, 100, gaze: CGPoint(x: 1, y: 0), lid: CGFloat(lid), wide: opened ? 1.22 : 1)
+        g.figure(84, 112, 100, gaze: CGPoint(x: 1, y: 0), lid: CGFloat(lid), wide: opened ? 1.22 : 1)
         let (tl, screen) = g.phone(240, 100, 160)
         let segment = min(7, max(0, Int(phase / 0.14)))
         let dir = [0, 3, 2, 1, 0, 1, 3, 2][segment]
@@ -509,7 +512,7 @@ struct GuideScene {
     static let curve = GuideScene(cycle: 6.6, beats: [.init(start: 0, label: "① 移到提示的距离并停稳"),
         .init(start: 0.12, label: "② 点选 E 的开口方向"), .init(start: 0.36, label: "③ 依次换到下一个距离")], keyframe: 0.2) { g, phase in
         g.floorShadow(62, 182, 96)
-        g.mascot(62, 112, 96, gaze: CGPoint(x: 1, y: 0))
+        g.figure(62, 112, 96, gaze: CGPoint(x: 1, y: 0))
         g.ruler(120, 300, 188)
         let x = CGFloat(keyframes(phase, [(0, 290), (0.3, 290), (0.38, 200), (0.64, 200), (0.72, 165), (1, 165)]))
         let (tl, screen) = g.phone(x, 102, 140)

@@ -11,7 +11,7 @@ struct SystemSettingsPage: View {
     private let voices = EyeVoice.chineseVoices
     private let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
 
-    private static let feedbackHelp = "作答、换阶段和测试完成时的提示音与震动；小瞳的互动音效也跟随这里的开关与音量。"
+    private static let feedbackHelp = "作答、换阶段和测试完成时的提示音与震动；护眼操和休息的提示音也跟随这里的开关与音量。"
     private static let voiceHelp = "测试中用语音读出提示。想要更自然的声音：在系统「设置 → 辅助功能 → 朗读内容 → 声音 → 中文（中国大陆）」下载标注「增强」或「优化」的声音，再回到这里更换发声人。"
     private static let answerHelp = "测试中可以直接说「上、下、左、右」或「看不清」作答，不用点屏幕。需要麦克风与语音识别权限。"
 

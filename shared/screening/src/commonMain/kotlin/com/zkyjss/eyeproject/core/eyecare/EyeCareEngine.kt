@@ -57,7 +57,7 @@ data class EyeFactor(val key: String, val title: String, val detail: String, val
 data class EyeAction(val key: String, val title: String, val detail: String, val kind: String, val target: String? = null, val value: Int? = null)
 
 /**
- * 小瞳的气泡提醒（首页随机弹出，不朗读）：一句短话；可执行的附带动作类型与按钮文字（与 [EyeAction.kind] 同一套）。
+ * 首页主卡里的建议（第一条带主按钮，其余收在「更多建议」，不朗读）：一句短话；可执行的附带动作类型与按钮文字（与 [EyeAction.kind] 同一套）。
  */
 @Serializable
 data class EyeTip(val text: String, val kind: String? = null, val target: String? = null, val value: Int? = null, val action: String? = null)
@@ -100,13 +100,13 @@ data class EyeCareReport(
     val score: Int? = null,
     val label: String,
     val headline: String,
-    /** 小瞳神情：HAPPY / THINKING / SLEEPY（深夜）/ TIRED（负荷偏高，嫩芽打蔫）/ CONCERNED（危险信号） */
+    /** 整体神情（旧版吉祥物用，现仅供语气参考）：HAPPY / THINKING / SLEEPY（深夜）/ TIRED（负荷偏高，嫩芽打蔫）/ CONCERNED（危险信号） */
     val mood: String,
     val loop: List<LoopStage>,
     val signals: List<EyeSignal>,
     val factors: List<EyeFactor>,
     val actions: List<EyeAction>,
-    /** 小瞳气泡依次说的话：先是针对今天的提醒，再是日常小贴士。 */
+    /** 首页建议依次列出：先是针对今天的提醒，再是日常小贴士。 */
     val tips: List<EyeTip> = emptyList(),
     val consults: List<EyeConsult>,
     val trend: EyeTrend,
@@ -163,8 +163,8 @@ object EyeCareEngine {
             headline = when {
                 redFlag -> "你今天感到眼痛或突然看不清，请尽快到眼科就医。"
                 level == "UNKNOWN" -> when (context.usageAccess) {
-                    ACCESS_DENIED -> "开启用屏统计或做一次实时检测，小瞳就能评估你今天的用眼状态。"
-                    else -> "做一次实时检测或记录今天的感受，小瞳就能评估你的用眼状态。"
+                    ACCESS_DENIED -> "开启用屏统计或做一次实时检测，就能评估你今天的用眼状态。"
+                    else -> "做一次实时检测或记录今天的感受，就能评估你的用眼状态。"
                 }
                 level == "LOW" -> "今天用眼比较轻松，继续保持好习惯。"
                 level == "MEDIUM" -> "${top ?: "用眼有些多"}，记得让眼睛歇一歇。"
@@ -334,7 +334,7 @@ object EyeCareEngine {
         if (!checkedIn) add(EyeAction("check-in", "记录今天的感受", "眼睛舒服吗？点一下就好", "CHECK_IN"))
     }
 
-    /** 气泡提醒：危险信号最先；再把今天的建议换成小瞳的口吻（可执行的带按钮），最后补几句日常小贴士。 */
+    /** 气泡提醒：危险信号最先；再把今天的建议换成简短提醒（可执行的带按钮），最后补几句日常小贴士。 */
     private fun tips(actions: List<EyeAction>, factors: List<EyeFactor>, level: String, redFlag: Boolean): List<EyeTip> = buildList {
         if (redFlag) add(EyeTip("眼睛疼或突然看不清，要尽快去医院哦"))
         if (level == "HIGH") add(EyeTip("眼睛累坏啦，闭上眼歇一会儿吧", "BREAK", action = "去休息"))

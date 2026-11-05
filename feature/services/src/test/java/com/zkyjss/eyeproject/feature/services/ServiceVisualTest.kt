@@ -354,14 +354,13 @@ class ServiceVisualTest {
         assertTrue(resumed)
     }
 
-    /** 服务页：没有「我是小瞳」的介绍文字，舞台轮流示范三项自测，上方气泡说这是哪项测试。 */
-    @Test fun servicesHeroPlaysTestDemosWithBubbles() {
+    /** 服务页：示范主卡轮流演示三项自测，上方是测试名称与一句做法。 */
+    @Test fun servicesHeroPlaysTestDemos() {
         compose.mainClock.autoAdvance = false
         compose.setContent { EyeProjectTheme { ServicesScreen({}, {}, {}) } }
         compose.mainClock.advanceTimeBy(1_500)
-        compose.onNodeWithText("我是小瞳").assertDoesNotExist()
-        compose.onNodeWithText("自测：", substring = true).assertExists()
-        capture("22-服务-小瞳示范")
+        compose.onAllNodesWithText("自测", substring = true).onFirst().assertExists()
+        capture("22-服务-示范")
     }
 
     @Test fun smallScreenKeepsWarningsAndArrowActionsVisible() {
@@ -561,7 +560,7 @@ class ServiceVisualTest {
         compose.onNodeWithText("7").assertExists()
         // 测试中点返回：先弹确认，「继续测试」不离开，「确认退出」才离开
         compose.onNodeWithContentDescription("返回").performClick()
-        compose.onNodeWithText(EXIT_BUBBLE).assertExists()
+        compose.onNodeWithText(EXIT_TITLE).assertExists()
         compose.onNodeWithText("继续测试").performClick()
         assertEquals(0, exits)
         compose.onNodeWithContentDescription("返回").performClick()
@@ -622,7 +621,7 @@ class ServiceVisualTest {
                         ScreeningResultContent(ScreeningState(kind = ScreeningKind.PRESBYOPIA, step = ScreeningStep.RESULT,
                             riskLevel = ScreeningRiskLevel.MEDIUM, category = "调节功能较同龄人偏低", presbyopiaPath = PresbyopiaPath.A1,
                             findings = listOf("调节功能较同龄人偏低：调节幅度约 2.4 D", "40 cm 双眼近视力未通过 0.5 档。"),
-                            features = mapOf("amplitude_d" to 2.4, "hofstetter_min_d" to 3.75, "near_point_cm" to 42.0,
+                            features = mapOf("amplitude_d" to 2.4, "amplitude_age_years" to 53.67, "age_years" to 45.0, "hofstetter_min_d" to 3.75, "near_point_cm" to 42.0,
                                 "near_both_decimal" to 0.4, "flipper_cycles_per_min" to 5.0),
                             fields = mapOf("年龄" to "45", "日常矫正方式" to "老花镜")), vm)
                     } else {
@@ -637,6 +636,8 @@ class ServiceVisualTest {
         }
         compose.onNodeWithText("调节功能较同龄人偏低").assertExists()
         compose.onNodeWithText("查看本次数据").assertExists()
+        // 标准路径有调节幅度：结论卡显示「你的眼睛年龄」
+        compose.onNodeWithText("约 54 岁", useUnmergedTree = true).assertExists()
         capture("report-presbyopia")
         kind = ScreeningKind.STRABISMUS
         compose.onNodeWithText("高度疑似斜视").assertExists()

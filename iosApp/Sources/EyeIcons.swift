@@ -13,16 +13,12 @@ struct NavIconView: View {
             let ink = GraphicsContext.Shading.foreground
             switch icon {
             case .home:
-                // 小瞳头像线稿：圆角团子头 + 嫩芽 + 一片叶 + 两只豆豆眼
-                context.stroke(Path(roundedRect: CGRect(x: 3.5 * k, y: 8.5 * k, width: 17 * k, height: 13 * k), cornerRadius: 6.5 * k), with: ink, style: line)
-                var stem = Path(); stem.move(to: p(12, 8.5)); stem.addQuadCurve(to: p(12.5, 4.8), control: p(12.2, 6.5))
-                context.stroke(stem, with: ink, style: line)
-                var leaf = Path(); leaf.move(to: p(12.5, 4.8))
-                leaf.addQuadCurve(to: p(17, 4.8), control: p(15.5, 3)); leaf.addQuadCurve(to: p(12.5, 4.8), control: p(14.5, 6.5))
-                context.fill(leaf, with: ink)
-                for x in [8.3, 13.5] as [CGFloat] {
-                    context.fill(Path(ellipseIn: CGRect(x: x * k, y: 13.3 * k, width: 2.2 * k, height: 3 * k)), with: ink)
-                }
+                // 房屋线稿（与安卓 ic_nav_home 一致）
+                var house = Path()
+                house.move(to: p(4, 10.5)); house.addLine(to: p(12, 4)); house.addLine(to: p(20, 10.5)); house.addLine(to: p(20, 20))
+                house.addLine(to: p(14.8, 20)); house.addLine(to: p(14.8, 14.5)); house.addLine(to: p(9.2, 14.5)); house.addLine(to: p(9.2, 20))
+                house.addLine(to: p(4, 20)); house.closeSubpath()
+                context.stroke(house, with: ink, style: line)
             case .services:
                 // 自测清单：圆角板 + 勾 + 两条线
                 context.stroke(Path(roundedRect: CGRect(x: 4 * k, y: 3.5 * k, width: 16 * k, height: 17 * k), cornerRadius: 2 * k), with: ink, style: line)
@@ -78,7 +74,7 @@ struct ServiceGlyphView: View {
                     context.fill(Path(ellipseIn: CGRect(x: c.x - s * 0.07, y: c.y - s * 0.07, width: s * 0.14, height: s * 0.14)), with: primary)
                 }
                 for y in [0.38, 0.62] as [CGFloat] {
-                    context.fill(Path(ellipseIn: CGRect(x: s * 0.42, y: y * s - s * 0.08, width: s * 0.16, height: s * 0.16)), with: .color(EyeStyle.accent))
+                    context.fill(Path(ellipseIn: CGRect(x: s * 0.42, y: y * s - s * 0.08, width: s * 0.16, height: s * 0.16)), with: .color(EyeStyle.primary))
                 }
             case .alignment:
                 for side in [-1.0, 1.0] as [CGFloat] {
@@ -88,7 +84,7 @@ struct ServiceGlyphView: View {
                     context.fill(Path(ellipseIn: CGRect(x: cx - s * 0.06, y: s * 0.44, width: s * 0.12, height: s * 0.12)), with: primary)
                 }
                 var base = Path(); base.move(to: p(0.1, 0.86)); base.addLine(to: p(0.9, 0.86))
-                context.stroke(base, with: .color(EyeStyle.accent), style: StrokeStyle(lineWidth: s * 0.08, lineCap: .round))
+                context.stroke(base, with: .color(EyeStyle.primary), style: StrokeStyle(lineWidth: s * 0.08, lineCap: .round))
             case .presbyopia:
                 let edge = s * 0.62, bar = edge / 5
                 let origin = CGPoint(x: (s - edge) / 2, y: (s - edge) / 2)
@@ -111,35 +107,12 @@ struct ServiceGlyphView: View {
     }
 }
 
-/// 品牌标志：渐变圆角底 + 白色小瞳头像（安卓 drawBrandMark，108 视口中可见区 18…90 映射到画布）。
+/// 品牌标志：主色渐变圆角底 + 白色同心环与中心点（安卓 drawBrandMark，绘制见 Cartoon.brandMark）。
 struct BrandMarkView: View {
     var body: some View {
         Canvas { context, size in
-            let s = min(size.width, size.height), k = s / 72
-            func v(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: (x - 18) * k, y: (y - 18) * k) }
-            func oval(_ cx: CGFloat, _ cy: CGFloat, _ rx: CGFloat, _ ry: CGFloat) -> Path {
-                Path(ellipseIn: CGRect(x: (cx - rx - 18) * k, y: (cy - ry - 18) * k, width: rx * 2 * k, height: ry * 2 * k))
-            }
-            func rotated(_ degrees: Double, around pivot: CGPoint, _ path: Path) -> Path {
-                path.applying(CGAffineTransform(translationX: -pivot.x, y: -pivot.y)
-                    .concatenating(CGAffineTransform(rotationAngle: degrees * .pi / 180))
-                    .concatenating(CGAffineTransform(translationX: pivot.x, y: pivot.y)))
-            }
-            let frame = CGRect(x: 0, y: 0, width: s, height: s)
-            context.fill(Path(roundedRect: frame, cornerRadius: s * 0.3), with: .linearGradient(
-                Gradient(colors: [EyeStyle.brandStart, EyeStyle.brandEnd]), startPoint: .zero, endPoint: CGPoint(x: s, y: s)))
-            var stem = Path(); stem.move(to: v(54, 38)); stem.addQuadCurve(to: v(55, 29), control: v(54.5, 33))
-            context.stroke(stem, with: .color(.white), style: StrokeStyle(lineWidth: 2.2 * k, lineCap: .round))
-            context.fill(rotated(25, around: v(50, 28), oval(50, 28, 4.5, 2.4)), with: .color(.white))
-            context.fill(rotated(-30, around: v(59.5, 26.5), oval(59.5, 26.5, 5, 2.6)), with: .color(.white))
-            context.fill(Path(roundedRect: CGRect(origin: v(29, 38), size: CGSize(width: 50 * k, height: 42 * k)), cornerRadius: 20 * k), with: .color(.white))
-            for x in [44.5, 63.5] as [CGFloat] {
-                context.fill(oval(x, 58, 2.75, 3.75), with: .color(EyeStyle.ink))
-                context.fill(Path(ellipseIn: CGRect(x: (x + 1.1 - 18) * k - 1.25 * k, y: (56.25 - 18) * k - 1.25 * k, width: 2.5 * k, height: 2.5 * k)), with: .color(.white))
-            }
-            for x in [38.5, 69.5] as [CGFloat] { context.fill(oval(x, 64.5, 2.6, 1.6), with: .color(EyeStyle.accent.opacity(0.7))) }
-            var smile = Path(); smile.move(to: v(49, 64.5)); smile.addQuadCurve(to: v(59, 64.5), control: v(54, 68.5))
-            context.stroke(smile, with: .color(EyeStyle.brandStart), style: StrokeStyle(lineWidth: 1.8 * k, lineCap: .round))
+            let s = min(size.width, size.height)
+            Cartoon.brandMark(context, origin: CGPoint(x: (size.width - s) / 2, y: (size.height - s) / 2), side: s)
         }.accessibilityLabel("眼健康助手标志")
     }
 }

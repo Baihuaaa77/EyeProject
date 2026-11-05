@@ -198,7 +198,7 @@ private fun EyeProjectBottomBar(
         modifier = Modifier
             .fillMaxWidth()
             .background(colors.panelBackground)
-            .borderTop(color = colors.borderSubtle)
+            .borderTop(color = colors.cardBorder)
             .navigationBarsPadding()
             .height(68.dp)
             .selectableGroup(),

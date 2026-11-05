@@ -7,7 +7,7 @@ android {
     namespace = "com.zkyjss.eyeproject.core.ui"
 }
 
-// 小瞳互动音与测试提示音同出一处（shared/feedback/res/raw，iOS 打包同一目录）
+// 护眼操、休息的提示音与测试提示音同出一处（shared/feedback/res/raw，iOS 打包同一目录）
 androidComponents {
     onVariants(selector().all()) { variant ->
         variant.sources.res?.addStaticSourceDirectory("../../shared/feedback/res")

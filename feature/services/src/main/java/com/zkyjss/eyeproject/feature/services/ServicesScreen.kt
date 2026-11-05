@@ -1,6 +1,7 @@
 package com.zkyjss.eyeproject.feature.services
 
 import androidx.compose.animation.core.LinearEasing
+import com.zkyjss.eyeproject.core.ui.component.eyeBackdrop
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -31,6 +32,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import com.zkyjss.eyeproject.core.designsystem.theme.EyeMotion
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -50,14 +56,13 @@ import com.zkyjss.eyeproject.core.designsystem.util.screenHorizontalPaddingLarge
 import com.zkyjss.eyeproject.core.ui.component.EyePageHeader
 import com.zkyjss.eyeproject.core.ui.component.EyeSelectCard
 import com.zkyjss.eyeproject.core.ui.component.EyeText
-import com.zkyjss.eyeproject.core.ui.component.BubbleTail
-import com.zkyjss.eyeproject.core.ui.component.MascotBubble
-import com.zkyjss.eyeproject.core.ui.component.rememberMascotSounds
+import com.zkyjss.eyeproject.core.ui.component.EyeHeroCard
+import com.zkyjss.eyeproject.core.ui.component.rememberEyeHaptics
 import com.zkyjss.eyeproject.core.ui.component.drawTumblingE
 import com.zkyjss.eyeproject.core.ui.component.leafEyePath
 import kotlin.math.abs
 
-/** 服务页：小瞳示范舞台 + 四个自测入口。 */
+/** 服务页：示范主卡 + 四个自测入口。 */
 @Composable
 fun ServicesScreen(
     onDryEyeClick: () -> Unit,
@@ -76,6 +81,7 @@ fun ServicesScreen(
             .fillMaxSize()
             .background(colors.appBackground)
             .verticalScroll(rememberScrollState())
+            .eyeBackdrop(colors)
             .padding(top = getTopStatusBarPadding())
             .screenHorizontalPaddingLarge(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -118,62 +124,49 @@ fun ServicesScreen(
     }
 }
 
-/** 服务页轮播的三种示范：场景、气泡里依次说的两句话。 */
-private class DemoClip(val motion: GuideMotion, val name: String, val lines: List<String>)
+/** 服务页轮播的三种示范：场景、名称与一句做法。 */
+private class DemoClip(val motion: GuideMotion, val name: String, val line: String)
 
 private val DEMO_CLIPS = listOf(
-    DemoClip(GuideMotion.BLINK, "干眼自测", listOf("干眼自测：像平时一样眨眨眼", "跟着我一起做吧")),
-    DemoClip(GuideMotion.COVER, "眼位自测", listOf("眼位自测：遮住一只眼，再移开", "找家人帮忙一起做哦")),
-    DemoClip(GuideMotion.NEAR, "老视自测", listOf("老视自测：看清 E 的开口朝哪边", "跟着我一起做吧")),
+    DemoClip(GuideMotion.BLINK, "干眼自测", "像平时一样自然眨眼"),
+    DemoClip(GuideMotion.COVER, "眼位自测", "遮住一只眼，再移开 · 需一位协助者"),
+    DemoClip(GuideMotion.NEAR, "老视自测", "看清 E 的开口朝哪边"),
 )
 
 /** 每种示范连播的遍数。 */
 private const val DEMO_REPEATS = 2
 
 /**
- * 示范舞台：小瞳随机轮流演示三项自测的做法（每种连播两遍），上方气泡先说这是哪项测试、再说「跟着我一起做吧」。
- * 点舞台换下一个示范。与苹果端 DemoHeroCard 同一排版与文案；系统「移除动画」时停在关键帧、气泡常显。
+ * 示范主卡：随机轮流演示三项自测的做法（每种连播两遍），上方是测试名称与一句做法（随示范淡入淡出）。
+ * 点示范区换下一个。与苹果端 DemoHeroCard 同一排版与文案；系统「移除动画」时停在关键帧。
  */
 @Composable
 private fun DemoHero() {
     val colors = LocalEyeColors.current
-    val reduced = rememberReducedMotion()
-    val sounds = rememberMascotSounds()
+    val typography = LocalEyeTypography.current
+    val haptics = rememberEyeHaptics()
     val order = remember { DEMO_CLIPS.shuffled() }
     val lengths = remember(order) { order.map { guideCycleMs(it.motion) * DEMO_REPEATS } }
     val total = lengths.sum()
     val clock = rememberInfiniteTransition(label = "服务页示范").animateFloat(
         0f, total.toFloat(), infiniteRepeatable(tween(total, easing = LinearEasing)), label = "示范进度")
     var skip by remember { mutableIntStateOf(0) }
-    // 当前在第几段、该段已播多久（毫秒）：段号变化或进入 / 离开气泡时段才重组
     val segment by remember { derivedStateOf { segmentAt(clock.value, lengths).first } }
-    val line by remember {
-        derivedStateOf {
-            val (index, elapsed) = segmentAt(clock.value, lengths)
-            val k = elapsed / lengths[index]
-            when { k in 0.03f..0.42f -> 0; k in 0.52f..0.92f -> 1; else -> -1 }
-        }
-    }
     val clip = order[(segment + skip) % order.size]
-    val shownLine = if (reduced) 0 else line
-    val pop by animateFloatAsState(if (shownLine >= 0) 1f else 0f,
-        if (shownLine >= 0 && !reduced) spring(dampingRatio = 0.5f, stiffness = Spring.StiffnessMediumLow) else tween(180), label = "示范气泡")
-    // 收起动画期间继续显示刚才那句（普通数组，不触发重组）
-    val lastLine = remember { IntArray(1) }
-    if (shownLine >= 0) lastLine[0] = shownLine
-    Column(Modifier.fillMaxWidth().clip(EyeShapes.panel).background(colors.primarySoft).padding(12.dp)) {
-        Box(Modifier.fillMaxWidth().height(60.dp).padding(start = 4.dp), contentAlignment = Alignment.BottomStart) {
-            if (pop > 0.01f) MascotBubble(clip.lines[lastLine[0]], Modifier.graphicsLayer {
-                scaleX = 0.6f + 0.4f * pop; scaleY = 0.6f + 0.4f * pop; alpha = pop.coerceIn(0f, 1f)
-                transformOrigin = TransformOrigin(0.15f, 1f)
-            }, tail = BubbleTail.START)
+    EyeHeroCard(contentPadding = 16.dp, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        AnimatedContent(clip, transitionSpec = { fadeIn(tween(EyeMotion.MEDIUM)) togetherWith fadeOut(tween(EyeMotion.SHORT)) },
+            label = "示范标题") { c ->
+            Column(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                EyeText("示范：${c.name.removeSuffix("自测")}", style = typography.subtitle, color = colors.textPrimary)
+                EyeText(c.line, style = typography.bodySecondary, color = colors.textSecondary)
+            }
         }
         GuideFrame(clip.motion, {
             val (index, elapsed) = segmentAt(clock.value, lengths)
             val cycle = guideCycleMs(clip.motion).toFloat()
             if (index >= 0) (elapsed % cycle) / cycle else 0f
-        }, "小瞳正在示范${clip.name}，点一下换下一个示范", Modifier.fillMaxWidth().height(190.dp)
-            .clickable(role = Role.Button, onClickLabel = "换下一个示范") { skip++; sounds.play("eye_pop") })
+        }, "正在示范${clip.name}，点一下换下一个示范", Modifier.fillMaxWidth().height(190.dp).clip(EyeShapes.large)
+            .clickable(role = Role.Button, onClickLabel = "换下一个示范") { skip++; haptics.tap() })
     }
 }
 
@@ -215,7 +208,7 @@ private fun ServiceGlyph(kind: ServiceKind) {
                     drawPath(leafEyePath(cx - s * 0.2f, cx + s * 0.2f, s * 0.5f, s * 0.13f), colors.primary, style = Stroke(s * 0.08f))
                     drawCircle(colors.primary, s * 0.06f, Offset(cx, s * 0.5f))
                 }
-                drawLine(colors.accent, Offset(s * 0.1f, s * 0.86f), Offset(s * 0.9f, s * 0.86f), s * 0.08f, StrokeCap.Round)
+                drawLine(colors.primary, Offset(s * 0.1f, s * 0.86f), Offset(s * 0.9f, s * 0.86f), s * 0.08f, StrokeCap.Round)
             }
             ServiceKind.PRESBYOPIA -> drawTumblingE(colors.primary, Offset(s / 2, s / 2), s * 0.62f, 0)
             ServiceKind.COLOR -> {
@@ -225,8 +218,8 @@ private fun ServiceGlyph(kind: ServiceKind) {
                     val a = Math.toRadians(i * 60.0 + 30.0)
                     drawCircle(colors.primary, s * 0.07f, Offset(s / 2 + (s * 0.24f * kotlin.math.cos(a)).toFloat(), s / 2 + (s * 0.24f * kotlin.math.sin(a)).toFloat()))
                 }
-                drawCircle(colors.accent, s * 0.08f, Offset(s / 2, s * 0.38f))
-                drawCircle(colors.accent, s * 0.08f, Offset(s / 2, s * 0.62f))
+                drawCircle(colors.primary, s * 0.08f, Offset(s / 2, s * 0.38f))
+                drawCircle(colors.primary, s * 0.08f, Offset(s / 2, s * 0.62f))
             }
         }
     }

@@ -19,7 +19,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
 /**
- * 实时检测的前台服务（类型 camera）：让相机在退到后台后继续分析，通知栏常驻「小瞳正在检测用眼」与「停止」按钮。
+ * 实时检测的前台服务（类型 camera）：让相机在退到后台后继续分析，通知栏常驻「正在检测用眼」与「停止」按钮。
  * 只在应用位于前台、用户打开实时检测时启动（Android 14 起相机类前台服务只能从前台启动）；
  * 被系统杀掉后不自动重启。用户从最近任务划掉应用（[onTaskRemoved]）即视为主动退出，停止检测。
  * 相机绑定与统计都在 [LiveEyeTracker]，这里只提供后台生命周期、通知与熄屏 / 亮屏事件。
@@ -77,7 +77,7 @@ class LiveEyeService : LifecycleService() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         return NotificationCompat.Builder(this, NotificationChannels.LIVE_EYE_CHANNEL_ID)
             .setSmallIcon(NotificationsR.drawable.ic_stat_eye)
-            .setContentTitle("小瞳正在检测用眼")
+            .setContentTitle("正在检测用眼")
             .setContentText("记录眨眼、观看距离和姿势，画面不保存")
             .setOngoing(true)
             .setSilent(true)

@@ -26,7 +26,7 @@ class EyeExerciseCoachTest {
             val end = t + ms
             while (t < end) { coach.onFace(face(dx, dy), t); coach.tick(t)?.let(::add); t += 33 }
         }
-        assertTrue(EyeExerciseCoach.Event.NEXT in run(1_600, 0f, 0f), "看着小瞳 1.5 秒后进入第一步")
+        assertTrue(EyeExerciseCoach.Event.NEXT in run(1_600, 0f, 0f), "看着中间的圆点 1.5 秒后进入第一步")
         assertEquals(EyeExerciseCoach.Move.LEFT, coach.state(t).move)
         // 受测者向左看：虹膜在图像里往 +x 偏 12 px（眼裂宽的 12%）
         assertTrue(EyeExerciseCoach.Event.DETECTED in run(600, 12f, 0f))

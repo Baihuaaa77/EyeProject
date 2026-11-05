@@ -3,18 +3,15 @@ import EyeScreening
 
 // 首页与它的二级页面（用眼趋势报告、健康建议、亮度与蓝光、休息一下）。与安卓 feature:home 同一顺序、排版与文案。
 
-private let loopHelp = "小瞳按「感知 → 评估 → 归因 → 干预 → 反馈」帮你管理用眼：汇总眨眼、距离、屏幕亮度和你的档案，评估今天的用眼负荷（0–100，越高越累），找出主要原因，给出马上能做的建议，再根据你每天的感受调整。结果仅供参考，不是诊断。"
+private let loopHelp = "按「感知 → 评估 → 归因 → 干预 → 反馈」帮你管理用眼：汇总眨眼、距离、屏幕亮度和你的档案，评估今天的用眼负荷（0–100，越高越累），找出主要原因，给出马上能做的建议，再根据你每天的感受调整。结果仅供参考，不是诊断。"
 private let noDiscomfort = "没有不适"
 
-/// 等级配色：轻松绿、留意琥珀、偏累红、待感知灰；圆环用更明亮的一组。
+/// 等级配色：轻松绿、留意琥珀、偏累红、待感知灰。
 private func levelColor(_ level: String) -> Color {
     switch level { case "LOW": return EyeStyle.success; case "MEDIUM": return EyeStyle.warning; case "HIGH": return EyeStyle.danger; default: return EyeStyle.secondary }
 }
-private func ringColor(_ level: String) -> Color {
-    switch level { case "LOW": return EyeStyle.success; case "MEDIUM": return EyeStyle.accent; case "HIGH": return EyeStyle.danger; default: return EyeStyle.borderSubtle }
-}
 
-/// 首页：问候与日期（右上角账户、系统设置）→ 今日用眼 → AI 主动问诊（爱科）→ 今日感受 → 基础数据 → 实时检测 →
+/// 首页：问候与日期（右上角账户、系统设置）→ 今日用眼（主卡）→ AI 主动问诊（爱科）→ 今日感受 → 基础数据 → 实时检测 →
 /// 护眼操、休息提醒 → 用眼趋势报告、亮度与蓝光。不分小节标题。与安卓 HomeContent 一致。
 struct HomePage: View {
     let navigate: (AppRoute) -> Void
@@ -63,7 +60,7 @@ struct HomePage: View {
                 ChatEntryCard { navigate(.chat) }
                 CheckInCard(report: report) { feelingEditing = true }
                 if report.signals("BASIC").contains(where: { $0.id != "brightness" }) { BasicCard(report: report) }
-                Panel(padding: 0) { LiveEyeSection(startRequests: liveRequests).padding(.horizontal, 18).padding(.vertical, 8) }.id("live")
+                Panel { LiveEyeSection(startRequests: liveRequests) }.id("live")
                 ExerciseCard { exerciseOpen = true }
                 ReminderCard(reminder: reminder, suggested: report.loaded ? report.suggestedReminderMinutes : nil)
                 ServiceTiles(report: report, navigate: navigate)
@@ -88,89 +85,55 @@ struct HomePage: View {
 
 // MARK: - 今日用眼
 
-/// 今日用眼：负荷分圆环 + 会说话的小瞳（随机弹出今天的提醒，可执行的点气泡直接去做；负荷越高嫩芽越蔫）+ 一句话 + 闭环五步进度。
+/// 今日用眼（主卡）：大号负荷分 + 等级徽标 + 渐变圆环 → 一句话 → 第一条建议的操作按钮；其余建议收在「更多建议」里。与安卓 EyeCareHero 一致。
 private struct HeroCard: View {
     let report: CareReport
     let onTip: (CareReport.Tip) -> Void
+    @State private var moreOpen = false
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        EyeHeroCard {
             HStack(spacing: 0) {
                 Text("今日用眼").font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text)
                 HelpButton(title: "主动护眼", text: loopHelp)
-                Spacer()
-                StatusChip(text: report.label, color: levelColor(report.level), filled: true)
             }
-            ZStack(alignment: .bottomLeading) {
-                MascotTalk(mood: MascotMood(code: report.mood), lines: report.tips.map { MascotLine(text: $0.text, action: $0.action) },
-                           headScale: 0.8, wilt: report.score.map { CGFloat(min(1, max(0, Double($0 - 30) / 50))) },
-                           bubbleHeight: 84, tail: .end, mascotFraction: 0.5) { index in
-                    if report.tips.indices.contains(index) { onTip(report.tips[index]) }
-                }
-                ScoreRing(score: report.score, color: ringColor(report.level)).frame(width: 124, height: 124).padding(.bottom, 6)
-            }.frame(height: 220)
+            HStack(alignment: .center) {
+                VStack(alignment: .leading, spacing: 8) {
+                    (Text(report.score.map { "\($0)" } ?? "—").font(EyeStyle.display).foregroundColor(EyeStyle.text)
+                     + Text(" /100").font(EyeStyle.title).foregroundColor(EyeStyle.tertiary))
+                        .monospacedDigit().lineLimit(1)
+                    HStack(spacing: 8) {
+                        Text("用眼负荷").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
+                        let chip = EyeStyle.statusFill(levelColor(report.level))
+                        Text(report.label).font(EyeStyle.chip).foregroundStyle(chip.1)
+                            .padding(.horizontal, 10).padding(.vertical, 3).background(chip.0, in: Capsule())
+                    }
+                }.frame(maxWidth: .infinity, alignment: .leading)
+                ProgressRing(fraction: report.score.map { Double($0) / 100 }).frame(width: 108, height: 108)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(report.score.map { "今日用眼负荷 \($0) 分，\(report.label)" } ?? "今日用眼负荷暂无数据")
             Text(report.headline).font(EyeStyle.body).foregroundStyle(EyeStyle.text).fixedSize(horizontal: false, vertical: true)
-            LoopStrip(stages: report.loop)
-        }
-        .padding(.horizontal, 20).padding(.vertical, 18)
-        .background(LinearGradient(colors: [EyeStyle.primarySoft, EyeStyle.panel, levelColor(report.level).opacity(0.12)],
-                                   startPoint: .topLeading, endPoint: .bottomTrailing), in: RoundedRectangle(cornerRadius: 22))
-    }
-}
-
-/// 负荷分圆环：灰色底环 + 等级色进度弧（出现时转动到位），中间大号分数。
-private struct ScoreRing: View {
-    let score: Int?
-    let color: Color
-    @State private var shown: CGFloat = 0
-    var body: some View {
-        let fraction = CGFloat(score ?? 0) / 100
-        ZStack {
-            Circle().stroke(EyeStyle.surfaceVariant, lineWidth: 12)
-            if score != nil {
-                Circle().trim(from: 0, to: max(0.02, min(1, shown)))
-                    .stroke(color, style: StrokeStyle(lineWidth: 12, lineCap: .round)).rotationEffect(.degrees(-90))
-            }
-            VStack(spacing: 0) {
-                Text(score.map { "\($0)" } ?? "—").font(EyeStyle.headline).foregroundStyle(EyeStyle.text).monospacedDigit()
-                Text("用眼负荷").font(EyeStyle.chip).foregroundStyle(EyeStyle.secondary)
-            }
-        }
-        .padding(6)
-        .onAppear { withAnimation(.easeOut(duration: 0.7)) { shown = fraction } }
-        .onChange(of: score) { _ in withAnimation(.easeOut(duration: 0.7)) { shown = fraction } }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(score.map { "今日用眼负荷 \($0) 分" } ?? "今日用眼负荷暂无数据")
-    }
-}
-
-/// 闭环五步：完成的一步实心主色带勾，未完成空心；之间连线。
-private struct LoopStrip: View {
-    let stages: [CareReport.Stage]
-    var body: some View {
-        let items = stages.isEmpty ? ["感知", "评估", "归因", "干预", "反馈"].map { CareReport.Stage(id: $0, label: $0, done: false, summary: "") } : stages
-        HStack(alignment: .top, spacing: 0) {
-            ForEach(Array(items.enumerated()), id: \.offset) { i, stage in
-                VStack(spacing: 4) {
-                    ZStack {
-                        Circle().fill(stage.done ? EyeStyle.primary : EyeStyle.panel)
-                        Circle().stroke(stage.done ? EyeStyle.primary : EyeStyle.borderSubtle, lineWidth: 1.5)
-                        if stage.done {
-                            Image(systemName: "checkmark").font(.system(size: 11, weight: .bold)).foregroundStyle(EyeStyle.panel)
-                        } else {
-                            Circle().fill(EyeStyle.borderSubtle).frame(width: 6, height: 6)
-                        }
-                    }.frame(width: 26, height: 26)
-                    Text(stage.label).font(EyeStyle.chip).foregroundStyle(stage.done ? EyeStyle.primary : EyeStyle.secondary)
-                }
-                .frame(width: 44)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("\(stage.label)：\(stage.done ? "已完成" : "待完成")，\(stage.summary)")
-                if i < items.count - 1 {
-                    Capsule().fill(stage.done && items[i + 1].done ? EyeStyle.primary : EyeStyle.borderSubtle)
-                        .frame(height: 2).frame(maxWidth: .infinity).padding(.top, 12)
+            if let first = report.tips.first {
+                if let action = first.action {
+                    Button(action) { EyeHaptics.tap(); onTip(first) }.buttonStyle(EyeButtonStyle()).fixedSize()
                 }
             }
-        }.padding(.top, 4)
+            if report.tips.count > 1 {
+                Button(moreOpen ? "收起" : "更多建议（\(report.tips.count - 1)）") { withAnimation(.easeOut(duration: 0.25)) { moreOpen.toggle() } }
+                    .font(EyeStyle.bodySecondary.weight(.semibold)).foregroundStyle(EyeStyle.primary).buttonStyle(.plain)
+                if moreOpen {
+                    ForEach(Array(report.tips.dropFirst().enumerated()), id: \.offset) { _, tip in
+                        HStack(spacing: 12) {
+                            Text(tip.text).font(EyeStyle.body).foregroundStyle(EyeStyle.text).frame(maxWidth: .infinity, alignment: .leading)
+                            if let action = tip.action {
+                                Button(action) { EyeHaptics.tap(); onTip(tip) }.font(EyeStyle.bodySecondary.weight(.semibold))
+                                    .foregroundStyle(EyeStyle.primary).buttonStyle(.plain)
+                            }
+                        }.padding(.vertical, 4)
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -211,9 +174,7 @@ private struct CheckInCard: View {
         Panel {
             let checked = report.checkedInToday
             let symptoms = report.todaySymptoms
-            HStack(spacing: 10) {
-                IconTile(glyph: .heart, tone: checked && !symptoms.isEmpty ? .accent : .success, size: 32)
-                Text("今日感受").font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text).frame(maxWidth: .infinity, alignment: .leading)
+            CategoryHeader(title: "今日感受", glyph: .heart, tone: .primary) {
                 PillButton(label: checked ? "修改" : "记录", primary: !checked, action: edit)
             }
             if checked {
@@ -221,9 +182,9 @@ private struct CheckInCard: View {
                     ForEach(symptoms.isEmpty ? [noDiscomfort] : symptoms, id: \.self) { label in
                         let attention = !symptoms.isEmpty
                         Text(label).font(EyeStyle.body.weight(.semibold))
-                            .foregroundStyle(attention ? EyeStyle.warning : EyeStyle.success)
+                            .foregroundStyle(EyeStyle.primary)
                             .padding(.horizontal, 12).padding(.vertical, 6)
-                            .background(attention ? EyeStyle.warningSoft : EyeStyle.successSoft, in: Capsule())
+                            .background(EyeStyle.primarySoft, in: Capsule())
                     }
                 }
             }
@@ -299,31 +260,33 @@ func glyphFor(_ kind: String) -> (EyeGlyph, TileTone) {
 
 // MARK: - 基础数据
 
-/// 一格读数：名称、数值（需要留意时琥珀色并带小圆点）。
+/// 一格读数：名称在上、数值在下（需要留意时名称后带琥珀小圆点）。
 struct SignalCell: View {
     let signal: CareReport.Signal?
     var body: some View {
         let attention = signal?.status == "ATTENTION"
         let unavailable = signal == nil || signal?.status == "UNAVAILABLE"
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 4) {
-                Text(signal?.label ?? "").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary).lineLimit(1)
-                if attention { Circle().fill(EyeStyle.accent).frame(width: 6, height: 6) }
-            }
-            Text(signal?.value ?? "—").font(EyeStyle.subtitle).lineLimit(1).minimumScaleFactor(0.7)
-                .foregroundStyle(unavailable ? EyeStyle.secondary : attention ? EyeStyle.warning : EyeStyle.text)
-        }
-        .padding(.horizontal, 12).padding(.vertical, 10).frame(maxWidth: .infinity, alignment: .leading)
-        .background(EyeStyle.background, in: RoundedRectangle(cornerRadius: EyeStyle.radiusMedium))
+        MetricView(label: signal?.label ?? "", value: signal?.value ?? "—",
+                   valueColor: unavailable ? EyeStyle.tertiary : EyeStyle.text, attention: attention)
     }
 }
 
+/// 读数网格：每行 [columns] 项，同行竖线分隔、行间横线分隔。
 struct SignalGrid: View {
     let signals: [CareReport.Signal]
     let columns: Int
     var body: some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: columns), spacing: 8) {
-            ForEach(signals) { SignalCell(signal: $0) }
+        let rows = stride(from: 0, to: signals.count, by: columns).map { Array(signals[$0..<min($0 + columns, signals.count)]) }
+        VStack(spacing: 0) {
+            ForEach(Array(rows.enumerated()), id: \.offset) { i, row in
+                if i > 0 { Rectangle().fill(EyeStyle.borderSubtle).frame(height: 1).padding(.vertical, 12) }
+                HStack(spacing: 0) {
+                    ForEach(0..<columns, id: \.self) { k in
+                        if k > 0 { VDivider() }
+                        if k < row.count { SignalCell(signal: row[k]) } else { Color.clear.frame(maxWidth: .infinity) }
+                    }
+                }.fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 }
@@ -332,14 +295,7 @@ private struct CardHeader: View {
     let title: String
     let glyph: EyeGlyph
     let tone: TileTone
-    var trailing: String? = nil
-    var body: some View {
-        HStack(spacing: 10) {
-            IconTile(glyph: glyph, tone: tone, size: 32)
-            Text(title).font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text).frame(maxWidth: .infinity, alignment: .leading)
-            if let trailing { Text(trailing).font(EyeStyle.chip).foregroundStyle(EyeStyle.secondary) }
-        }
-    }
+    var body: some View { CategoryHeader(title: title, glyph: glyph, tone: tone) }
 }
 
 /// 基础数据（本机系统提供的项）。
@@ -355,21 +311,15 @@ private struct BasicCard: View {
 
 // MARK: - 护眼操、提醒与服务入口
 
-/// 护眼操入口：跟小瞳转转眼球（向左、右、上、下看），约 1 分钟。
+/// 护眼操入口：转转眼球（向左、右、上、下看），约 1 分钟。
 private struct ExerciseCard: View {
     let start: () -> Void
     var body: some View {
         Button { EyeHaptics.tap(); start() } label: {
-            HStack(spacing: 10) {
-                MascotStage(mood: .happy, interactive: false, headScale: 0.78).frame(width: 56, height: 56)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("护眼操").font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text)
-                    Text("跟小瞳转转眼球 · 约 1 分钟").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
-                }.frame(maxWidth: .infinity, alignment: .leading)
-                PillButton(label: "开始", action: start)
+            EyeCard {
+                CategoryHeader(title: "护眼操", glyph: .eye, tone: .success) { PillButton(label: "开始", action: start) }
+                Text("跟着示意转转眼球，约 1 分钟").font(EyeStyle.body).foregroundStyle(EyeStyle.text)
             }
-            .padding(.horizontal, 18).padding(.vertical, 14)
-            .background(EyeStyle.panel, in: RoundedRectangle(cornerRadius: 22))
         }.buttonStyle(.plain)
     }
 }
@@ -381,11 +331,10 @@ private struct ReminderCard: View {
     var body: some View {
         Panel {
             HStack(spacing: 10) {
-                IconTile(glyph: .bell, tone: .accent, size: 32)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("休息提醒").font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text)
+                VStack(alignment: .leading, spacing: 6) {
+                    CategoryHeader(title: "休息提醒", glyph: .bell, tone: .accent)
                     Text(reminder.enabled ? "每 \(reminder.intervalMinutes) 分钟提醒一次" : "按间隔提醒你远眺放松")
-                        .font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
+                        .font(EyeStyle.body).foregroundStyle(EyeStyle.text)
                 }.frame(maxWidth: .infinity, alignment: .leading)
                 Toggle("", isOn: Binding(get: { reminder.enabled }, set: { EyeHaptics.toggle(); reminder.setEnabled($0) }))
                     .labelsHidden().tint(EyeStyle.primary)
@@ -393,7 +342,7 @@ private struct ReminderCard: View {
             SegmentedPicker(options: [(20, "20分钟"), (30, "30分钟"), (60, "60分钟")], selected: reminder.intervalMinutes) { reminder.setInterval($0) }
             if let suggested, suggested != reminder.intervalMinutes {
                 HStack {
-                    Text("小瞳建议每 \(suggested) 分钟休息一次").font(EyeStyle.body).foregroundStyle(EyeStyle.secondary)
+                    Text("建议每 \(suggested) 分钟休息一次").font(EyeStyle.body).foregroundStyle(EyeStyle.secondary)
                     Spacer()
                     PillButton(label: "采用") { reminder.setInterval(suggested); reminder.setEnabled(true) }
                 }
@@ -416,15 +365,15 @@ private struct ServiceTiles: View {
     private func tile(_ title: String, _ subtitle: String, _ glyph: EyeGlyph, _ tone: TileTone, _ action: @escaping () -> Void) -> some View {
         Button { EyeHaptics.tap(); action() } label: {
             VStack(alignment: .leading, spacing: 10) {
-                IconTile(glyph: glyph, tone: tone, size: 40)
+                IconTile(glyph: glyph, tone: tone, size: 36)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title).font(EyeStyle.button).foregroundStyle(EyeStyle.text)
                     Text(subtitle).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary).lineLimit(2).multilineTextAlignment(.leading)
                 }
                 Spacer(minLength: 0)
             }
-            .padding(16).frame(maxWidth: .infinity, minHeight: 120, alignment: .topLeading)
-            .background(EyeStyle.panel, in: RoundedRectangle(cornerRadius: 22))
+            .padding(16).frame(maxWidth: .infinity, minHeight: 112, alignment: .topLeading)
+            .eyeGlass()
             .contentShape(RoundedRectangle(cornerRadius: 22))
         }.buttonStyle(PressScale(scale: 0.97))
     }
@@ -439,19 +388,13 @@ struct TrendPage: View {
         let report = store.report
         let scores = report.days.compactMap { $0.score }
         SubPage(title: "用眼趋势报告") {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("近 7 天平均用眼负荷").font(EyeStyle.body).foregroundStyle(EyeStyle.secondary)
-                        Text(scores.isEmpty ? "—" : "\(scores.reduce(0, +) / scores.count) 分").font(EyeStyle.headline).foregroundStyle(EyeStyle.text)
-                    }.frame(maxWidth: .infinity, alignment: .leading)
-                    MascotStage(mood: MascotMood(code: report.mood)).frame(width: 104, height: 104)
+            EyeHeroCard {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("近 7 天平均用眼负荷").font(EyeStyle.body).foregroundStyle(EyeStyle.secondary)
+                    Text(scores.isEmpty ? "—" : "\(scores.reduce(0, +) / scores.count) 分").font(EyeStyle.headline).foregroundStyle(EyeStyle.text)
                 }
                 ForEach(Array(report.summary.enumerated()), id: \.offset) { _, line in Bullet(text: line) }
             }
-            .padding(20).frame(maxWidth: .infinity, alignment: .leading)
-            .background(LinearGradient(colors: [EyeStyle.primarySoft, EyeStyle.panel], startPoint: .topLeading, endPoint: .bottomTrailing),
-                        in: RoundedRectangle(cornerRadius: 22))
             chart("用眼负荷", unit: "分", help: nil) {
                 BarChartView(bars: report.days.enumerated().map { i, d in
                     BarItem(id: i, label: d.label, value: d.score.map { Double($0) }, text: d.score.map { "\($0)" }, highlight: d.label == "今天",
@@ -487,7 +430,7 @@ struct TrendPage: View {
                 Text(title).font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text)
                 if let help { HelpButton(title: title, text: help) }
                 Spacer()
-                Text(unit).font(EyeStyle.chip).foregroundStyle(EyeStyle.secondary)
+                Text(unit).font(EyeStyle.chip).foregroundStyle(EyeStyle.tertiary)
             }
             content()
         }
@@ -504,11 +447,9 @@ struct AdvicePage: View {
         let report = store.report
         let tests = report.actions.filter { $0.kind == "TEST" }
         SubPage(title: "健康建议") {
-            HStack(spacing: 8) {
-                MascotStage(mood: MascotMood(code: report.mood)).frame(width: 96, height: 96)
-                Text(report.headline).font(EyeStyle.body).foregroundStyle(EyeStyle.text).frame(maxWidth: .infinity, alignment: .leading)
-            }.padding(.leading, 8).padding(.trailing, 18).padding(.vertical, 8)
-                .background(EyeStyle.panel, in: RoundedRectangle(cornerRadius: 22))
+            EyeHeroCard {
+                Text(report.headline).font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text).fixedSize(horizontal: false, vertical: true)
+            }
             Text("专业咨询建议").font(EyeStyle.title).foregroundStyle(EyeStyle.text).padding(.leading, 4).padding(.top, 4)
             ForEach(report.consults) { ConsultCard(consult: $0) }
             if !tests.isEmpty {
@@ -587,7 +528,7 @@ struct BrightnessPage: View {
 
 // MARK: - 休息一下
 
-/// 「现在休息 20 秒」：小瞳陪你看远处，圆环倒计时，结束时小瞳蹦一下并有提示音与轻触觉。与安卓 RestBreakPage 同一流程。
+/// 「现在休息 20 秒」：看远处，圆环倒计时（中间大号秒数），结束时有提示音与轻触觉。与安卓 RestBreakPage 同一流程。
 struct RestBreakView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var started = Date()
@@ -600,13 +541,10 @@ struct RestBreakView: View {
                 VStack(spacing: 0) {
                     Spacer()
                     ZStack {
-                        Circle().stroke(EyeStyle.surfaceVariant, lineWidth: 10)
-                        Circle().trim(from: 0, to: CGFloat(elapsed / seconds))
-                            .stroke(EyeStyle.primary, style: StrokeStyle(lineWidth: 10, lineCap: .round)).rotationEffect(.degrees(-90))
-                        MascotStage(mood: done ? .happy : .sleepy, interactive: false, greet: done, headScale: 0.62).frame(width: 170, height: 170)
+                        ProgressRing(fraction: elapsed / seconds, lineWidth: 10)
+                        Text(done ? "完成" : "\(Int(ceil(seconds - elapsed)))").font(EyeStyle.display).foregroundStyle(EyeStyle.text).monospacedDigit()
                     }.frame(width: 240, height: 240)
-                    Text(done ? "做得好！" : "\(Int(ceil(seconds - elapsed))) 秒").font(EyeStyle.headline).foregroundStyle(EyeStyle.text)
-                        .monospacedDigit().padding(.top, 20)
+                    Text(done ? "做得好！" : "秒").font(EyeStyle.title).foregroundStyle(EyeStyle.text).padding(.top, 24)
                     Text(done ? "眼睛放松一下就舒服多了，继续保持。" : "看向 6 米外的远处，慢慢眨几下眼，放松肩膀。")
                         .font(EyeStyle.body).foregroundStyle(EyeStyle.secondary).multilineTextAlignment(.center).padding(.horizontal, 32).padding(.top, 8)
                     Spacer()
@@ -614,10 +552,10 @@ struct RestBreakView: View {
                         .buttonStyle(EyeButtonStyle(role: done ? .primary : .secondary)).padding(16)
                 }
                 .onChange(of: elapsed >= seconds) { finished in
-                    if finished && !done { done = true; MascotSound.shared.play("eye_hop"); EyeHaptics.success() }
+                    if finished && !done { done = true; EyeCueSound.shared.play(.complete); EyeHaptics.success() }
                 }
             }
-            .background(EyeStyle.background.ignoresSafeArea())
+            .background(EyeBackdrop())
             .navigationTitle("休息一下").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("关闭") { dismiss() } } }
         }
@@ -627,8 +565,8 @@ struct RestBreakView: View {
 
 // MARK: - 护眼操
 
-/// 「护眼操」完整页面（与安卓 EyeExercisePage 同一流程与文案）：深色底，顶部进度条；上方大箭头 +「向左看」和小瞳的气泡，
-/// 小瞳在屏幕正中，下方倒计时。眼睛转到位时提示朝那个方向翻过去、手机振动，小瞳顺着飞出画面打个滚再回来；最后闭眼休息 5 秒，每秒轻响一下。
+/// 「护眼操」完整页面（与安卓 EyeExercisePage 同一流程与文案）：深色底，顶部进度条；上方大箭头 +「向左看」，
+/// 注视点（准星）在屏幕正中，下方倒计时。眼睛转到位时提示朝那个方向翻过去、手机振动，注视点顺着滑出画面再回来；最后闭眼休息 5 秒，每秒轻响一下。
 /// 判断与计时在共用 EyeExerciseCoach；没有相机权限时按时间带着做。
 struct EyeExerciseView: View {
     @Environment(\.dismiss) private var dismiss
@@ -637,35 +575,35 @@ struct EyeExerciseView: View {
     @State private var flipMove: EyeExerciseCoach.Move?
     @State private var flyMove: EyeExerciseCoach.Move?
     @State private var fly: CGFloat = 0
-    @State private var spin: Double = 0
     private let ticker = Timer.publish(every: 0.05, on: .main, in: .common).autoconnect()
 
     var body: some View {
         GeometryReader { geo in
             ZStack {
-                EyeStyle.ink.ignoresSafeArea()
+                EyeStyle.background.ignoresSafeArea()
                 VStack(spacing: 0) {
                     HStack(spacing: 8) {
                         Button("结束") { dismiss() }.font(EyeStyle.body).foregroundStyle(.white).frame(minWidth: 44, minHeight: 44)
                         ZStack(alignment: .leading) {
                             Capsule().fill(Color.white.opacity(0.25))
-                            Capsule().fill(EyeStyle.success).frame(width: max(0, (geo.size.width - 100) * CGFloat(state?.progress ?? 0)))
+                            Capsule().fill(EyeStyle.flowGradient).frame(width: max(0, (geo.size.width - 100) * CGFloat(state?.progress ?? 0)))
                         }.frame(height: 6)
                     }
-                    // 上半区：动作提示 + 小瞳的气泡（贴着小瞳）；中间：小瞳；下半区：倒计时与提示语。上下等高，小瞳正好在屏幕中央
+                    // 上半区：动作提示；中间：注视点；下半区：倒计时与提示语。上下等高，注视点正好在屏幕中央
                     VStack(spacing: 20) {
                         Spacer(minLength: 0)
                         instruction.id(pageKey).transition(flipTransition).animation(.easeInOut(duration: 0.38), value: pageKey)
-                        if !isStage(.done) { MascotBubble(line: MascotLine(text: bubbleText)) }
                     }.frame(maxHeight: .infinity)
                     if !isStage(.done) {
-                        MascotStage(mood: isStage(.rest) ? .sleepy : .happy, interactive: false)
-                            .frame(width: 150, height: 150)
-                            .rotationEffect(.degrees(spin * (flyMove.map { $0.dx < 0 || $0.dy < 0 ? -1.0 : 1.0 } ?? 1.0)))
-                            .offset(x: CGFloat(flyMove?.dx ?? 0) * fly * geo.size.width * 0.8,
-                                    y: CGFloat(flyMove?.dy ?? 0) * fly * geo.size.height * 0.45)
+                        Canvas { ctx, size in
+                            Cartoon.fixationTarget(ctx, center: CGPoint(x: size.width / 2, y: size.height / 2), size: min(size.width, size.height) * 0.62)
+                        }
+                        .frame(width: 150, height: 150)
+                        .opacity(isStage(.rest) ? 0.35 : 1)
+                        .offset(x: CGFloat(flyMove?.dx ?? 0) * fly * geo.size.width * 0.8,
+                                y: CGFloat(flyMove?.dy ?? 0) * fly * geo.size.height * 0.45)
                     } else {
-                        MascotStage(mood: .happy, interactive: false, greet: true).frame(width: 170, height: 170)
+                        ProgressRing(fraction: 1, lineWidth: 8).frame(width: 170, height: 170)
                     }
                     VStack(spacing: 0) {
                         if !isStage(.done) {
@@ -675,7 +613,7 @@ struct EyeExerciseView: View {
                             Text(state?.faceVisible == true || coach.usedCamera ? "头保持不动，只转眼睛" : "跟着提示转动眼睛就好")
                                 .font(EyeStyle.bodySecondary).foregroundStyle(Color.white.opacity(0.7))
                         } else {
-                            Text(coach.usedCamera ? "共 \(state?.stepCount ?? 0) 步，小瞳看到你做到了 \(state?.detectedCount ?? 0) 步" : "共 \(state?.stepCount ?? 0) 步，做完啦")
+                            Text(coach.usedCamera ? "共 \(state?.stepCount ?? 0) 步，检测到你做到了 \(state?.detectedCount ?? 0) 步" : "共 \(state?.stepCount ?? 0) 步，做完啦")
                                 .font(EyeStyle.body).foregroundStyle(.white).multilineTextAlignment(.center).padding(.top, 16)
                             Spacer(minLength: 0)
                             Button("完成") { dismiss() }.buttonStyle(EyeButtonStyle())
@@ -691,6 +629,8 @@ struct EyeExerciseView: View {
             EyeLiveModel.shared.startExercise { face, time in model.onFace(face: face, timeMs: time) }
         }
         .onDisappear { EyeLiveModel.shared.stopExercise() }
+        // 护眼操固定深色页：令牌按深色取值
+        .environment(\.colorScheme, .dark)
     }
 
     private var now: Int64 { Int64(ProcessInfo.processInfo.systemUptime * 1000) }
@@ -706,23 +646,22 @@ struct EyeExerciseView: View {
     private func handle(_ event: EyeExerciseCoach.Event, move: EyeExerciseCoach.Move?) {
         if event == .detected {
             flipMove = move; flyMove = move
-            EyeHaptics.success(); MascotSound.shared.play("eye_spin")
-            // 小瞳顺着方向飞出去、边飞边打滚，再从另一边飞回来
-            spin = 0
-            withAnimation(.easeIn(duration: 0.45)) { fly = 1; spin = 360 }
+            EyeHaptics.success(); EyeCueSound.shared.play(.phase)
+            // 注视点顺着方向滑出去，再从另一边滑回来
+            withAnimation(.easeIn(duration: 0.45)) { fly = 1 }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
                 fly = -1
-                withAnimation(.easeOut(duration: 0.45)) { fly = 0; spin = 720 }
+                withAnimation(.easeOut(duration: 0.45)) { fly = 0 }
             }
         } else if event == .missed {
             flipMove = nil; EyeHaptics.tap()
         } else if event == .rest {
-            flipMove = nil; MascotSound.shared.play("eye_yawn")
+            flipMove = nil; EyeHaptics.tap(); EyeCueSound.shared.play(.phase)
         } else if event == .countdown {
             // 闭着眼看不到数字：每过一秒轻响一下
-            MascotSound.shared.play("eye_count")
+            EyeCueSound.shared.play(.count)
         } else if event == .done {
-            EyeHaptics.success(); MascotSound.shared.play("eye_heart")
+            EyeHaptics.success(); EyeCueSound.shared.play(.complete)
         } else {
             flipMove = nil
         }
@@ -739,7 +678,7 @@ struct EyeExerciseView: View {
     @ViewBuilder private var instruction: some View {
         VStack(spacing: 14) {
             if isStage(.calibrate) || state == nil {
-                Text("看着小瞳").font(EyeStyle.headline).foregroundStyle(.white)
+                Text("看着中间的圆点").font(EyeStyle.headline).foregroundStyle(.white)
                 Text("准备开始").font(EyeStyle.body).foregroundStyle(Color.white.opacity(0.7))
             } else if isStage(.move), let move = state?.move {
                 Image(systemName: arrowName(move)).font(.system(size: 56, weight: .bold)).foregroundStyle(Color.white.opacity(0.6))
@@ -757,15 +696,5 @@ struct EyeExerciseView: View {
 
     private func arrowName(_ move: EyeExerciseCoach.Move) -> String {
         move.dx < 0 ? "arrow.left" : move.dx > 0 ? "arrow.right" : move.dy < 0 ? "arrow.up" : "arrow.down"
-    }
-
-    /// 小瞳气泡：跟着阶段说一句（与安卓同一文案）。
-    private var bubbleText: String {
-        if isStage(.move), let move = state?.move {
-            return move.dx < 0 ? "眼睛往左边看，看我飞过去！" : move.dx > 0 ? "再往右边看～" : move.dy < 0 ? "抬眼看看上面" : "低眼看看下面"
-        }
-        if isStage(.back) { return "真棒，看回我这里" }
-        if isStage(.rest) { return "闭上眼睛，歇一会儿" }
-        return "跟我一起转转眼球吧"
     }
 }

@@ -4,7 +4,7 @@
 
 界面原则（2026-10-23）：入口页不堆开关与按钮；说明文字收进标题旁的「?」（`EyeHelpButton`），不写括号小字。操作有轻触觉（`core:ui` 的 `EyeHaptics`，苹果端 `EyeHaptics.swift` 同一分级）。
 
-- `MineScreen` / `MineContent` / `MineViewModel`（`MineUiState`）：标题行（右上角账户头像 + 系统设置齿轮，`EyePageHeader`）、个人卡（会动的小瞳 + 本人称呼、年龄与档案完善度 + 账号一行）、
+- `MineScreen` / `MineContent` / `MineViewModel`（`MineUiState`）：标题行（右上角账户头像 + 系统设置齿轮，`EyePageHeader`）、个人卡（主卡：称呼首字渐变头像 + 本人称呼、年龄与档案完善度 + 账号一行）、
   三格概览（测试记录 / 家庭成员 / 已上传），分组入口：健康档案（测试记录、家庭成员与资料、用眼趋势报告）、数据与隐私（云端同步、权限与通知）、通用（系统设置）。
   跳转经 `MineNavigation` 由 app 接线（趋势页与系统设置属于其他 feature，不直接依赖）。
 - `AccountScreen` / `AccountViewModel`：右上角人像按钮进入的账户页：账号概况、登录 / 注册（注册前「?」里是隐私要点 `DATA_HANDLING`）、退出登录、注销账号（二次确认）、服务器地址（仅未登录时可改，换地址会退出登录）。
@@ -12,7 +12,7 @@
 - `CloudSyncScreen` / `CloudSyncViewModel`（`CloudSyncUiState`）：同步状态与立即同步、分项同意（云端保存、监护人、研究用途、AI 解读、AI 综合建议、**AI 对话**，每项旁「?」为 `ConsentHelp` 文案，两端一致）、导出云端数据、数据如何处理。
   AI 综合建议的同意文案逐项列出发送的数据（年龄段、职业、戴镜方式、既往眼病、近 7 天用屏与休息概况、眨眼与距离、环境光与亮度、各测试等级、今日负荷与原因、记录的感受），不发送姓名、账号、具体日期、照片或视频。
 - `RecordsScreen` / `RecordsViewModel`：测试记录卡片列表，数据来自 `ScreeningRecordRepository.localRecords`（共享 `LocalRecordCatalog` 解析，苹果端同一份）；每张卡测试名、「时间 · 成员」、结论徽标，
-  点开显示当时建议与要点、AI 解读卡片、按组展开的关键指标 / 判断依据 / 数据可靠性 / 测试时资料 / 设备信息，底部「导出报告」（UTF-8 TXT）与「导出原始数据」（JSON 原样）。空状态为思考中的小瞳。
+  点开显示当时建议与要点、AI 解读卡片、按组展开的关键指标 / 判断依据 / 数据可靠性 / 测试时资料 / 设备信息，底部「导出报告」（UTF-8 TXT）与「导出原始数据」（JSON 原样）。空状态为文档图标 +「还没有测试记录」。
   新记录展示保存时的报告快照和规则版本，旧记录只读已保存数值，均不重新评估历史风险。
 - `SubjectsScreen`：家庭成员列表（头像字、称呼、关系 · 年龄，未填资料时加「资料待完善」），点开进入 `SubjectEditScreen`；末行「添加家庭成员」。
 - `SubjectEditScreen` / `SubjectEditViewModel`：路由 `SubjectEditRoute(id)`（id 为空即新建）；称呼、关系 + 共享 `SubjectProfiles.sections` 分组题目（`EyeChoiceList`），追问随答案出现；

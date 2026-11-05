@@ -1,13 +1,15 @@
 """生成双端应用图标：爱尔眼科数字人「爱科 Eyecho」头像（取代 generate_app_icon.py 的小瞳图标）。
 
-输入：scripts/assets/eyecho_icon_source.png（定稿全身图抠透明底后裁出的头到上身，原生分辨率）。
-构图仿豆包图标：白底，中间一个浅薄荷绿圆盘（比 primarySoft 深一档），头肩放在圆里，
+输入：scripts/assets/eyecho_icon_source.png（真人数字人照片 docs/素材/Aike.png 抠绿幕后裁出的头到胸口，
+见 generate_eyecho_portrait.py；下沿在胸前「EYE」标志之上）。
+构图仿豆包图标：白底，中间一个浅灰蓝圆盘（#C5D0E2，低饱和），头肩放在圆里，
 肩膀被圆的下沿裁掉，头顶稍稍探出圆外，显得立体。
 输出：
   - 安卓自适应图标前景位图 mipmap-*/ic_launcher_foreground.png（108dp 画布，圆盘直径 58 居中，探出的头顶仍在可见区内）；
     背景 drawable/ic_launcher_background.xml 为白色；
     旧版回退位图 mipmap-*/ic_launcher(_round).webp（minSdk 26 实际用不到，保持一致）。
   - iOS 1024 px 不透明图标（同一构图）。
+  - 应用内展示用的同款 512 px 图标（安卓 drawable-nodpi/eyecho_app_icon.png、iOS EyechoAppIcon）。
 用法：
   python scripts/generate_eyecho_icon.py              写入工程
   python scripts/generate_eyecho_icon.py --preview 目录  只输出预览（圆形 / 圆角方形遮罩），不改动工程文件
@@ -20,9 +22,12 @@ from PIL import Image, ImageDraw
 ROOT = Path(__file__).resolve().parents[1]
 RES = ROOT / 'app/src/main/res'
 IOS_ICON = ROOT / 'iosApp/Sources/Assets.xcassets/AppIcon.appiconset/AppIcon.png'
+# 应用内「关于」处展示的同款图标（安卓 EyeAppIcon / iOS AppIconView），512 px
+IN_APP_ANDROID = ROOT / 'core/designsystem/src/main/res/drawable-nodpi/eyecho_app_icon.png'
+IN_APP_IOS = ROOT / 'iosApp/Sources/Assets.xcassets/EyechoAppIcon.imageset/eyecho_app_icon.png'
 SOURCE = ROOT / 'scripts/assets/eyecho_icon_source.png'
 BACKGROUND = (0xFF, 0xFF, 0xFF, 255)
-DISC = (0xCF, 0xEC, 0xE8, 255)  # 比 primarySoft 深一档，白底上看得出圆盘
+DISC = (0xC5, 0xD0, 0xE2, 255)  # 浅灰蓝（低饱和），白大褂与圆盘仍看得出边界
 DENSITIES = {'mdpi': 1, 'hdpi': 1.5, 'xhdpi': 2, 'xxhdpi': 3, 'xxxhdpi': 4}
 
 # 头像相对圆盘直径 D：宽 AV_SCALE·D，底边比圆盘下沿再低 AV_DROP·D（肩膀被裁），于是头顶探出圆外约 (AV_SCALE−1−AV_DROP)·D
@@ -96,6 +101,10 @@ def main() -> None:
         legacy.save(d / 'ic_launcher.webp', lossless=True)
         masked(legacy, 0.5).save(d / 'ic_launcher_round.webp', lossless=True)
     ios(src).save(IOS_ICON, optimize=True)
+    in_app = ios(src).resize((512, 512), Image.LANCZOS)
+    in_app.save(IN_APP_ANDROID, optimize=True)
+    IN_APP_IOS.parent.mkdir(parents=True, exist_ok=True)
+    in_app.save(IN_APP_IOS, optimize=True)
 
 
 if __name__ == '__main__':

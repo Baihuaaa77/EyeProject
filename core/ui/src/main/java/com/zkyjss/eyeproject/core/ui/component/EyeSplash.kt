@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -21,7 +20,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -32,7 +30,7 @@ import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
 import com.zkyjss.eyeproject.core.designsystem.theme.rememberReducedMotion
 
 /**
- * 启动动画（约 1.3 秒）：小瞳蹦出来打招呼 + 加载进度条 + 「你的主动眼健康助手」，结束后淡出。
+ * 启动画面（约 1.3 秒）：标志轻缓放大淡入 + 细进度线 +「眼健康助手」，结束后淡出。
  * 只盖在已经开始加载的首页上面，不推迟首页的创建；期间拦截点按。与苹果端 SplashView 同一节奏。
  */
 @Composable
@@ -49,22 +47,26 @@ fun EyeSplash(onFinished: () -> Unit, modifier: Modifier = Modifier) {
     }
     Box(
         modifier.fillMaxSize().graphicsLayer { this.alpha = alpha.value }
-            .background(Brush.verticalGradient(listOf(colors.primarySoft, colors.appBackground)))
+            .background(colors.appBackground)
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {}
             .semantics { contentDescription = "正在启动眼健康助手" },
         contentAlignment = Alignment.Center,
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-            XiaoTong(MascotMood.HAPPY, Modifier.size(168.dp), interactive = false, greet = true, headScale = 0.66f)
-            Spacer(Modifier.height(12.dp))
+            val appear = (progress.value * 2.5f).coerceAtMost(1f)
+            EyeBrandMark(Modifier.graphicsLayer {
+                val k = 0.92f + 0.08f * appear
+                scaleX = k; scaleY = k; this.alpha = appear
+            }, size = 88.dp)
+            Spacer(Modifier.height(20.dp))
             EyeText("眼健康助手", style = typography.title, color = colors.textPrimary)
             Spacer(Modifier.height(6.dp))
-            EyeText("你的主动眼健康助手", style = typography.body, color = colors.textSecondary)
-            Spacer(Modifier.height(28.dp))
-            Canvas(Modifier.width(168.dp).height(6.dp)) {
+            EyeText("你的主动眼健康助手", style = typography.bodySecondary, color = colors.textSecondary)
+            Spacer(Modifier.height(32.dp))
+            Canvas(Modifier.width(120.dp).height(3.dp)) {
                 val radius = CornerRadius(size.height / 2)
-                drawRoundRect(colors.surfaceVariant, cornerRadius = radius)
-                drawRoundRect(Brush.horizontalGradient(colors.brandColors), size = Size(size.width * progress.value, size.height), cornerRadius = radius)
+                drawRoundRect(colors.borderSubtle, cornerRadius = radius)
+                drawRoundRect(colors.flowBrush, size = Size(size.width * progress.value, size.height), cornerRadius = radius)
             }
         }
     }

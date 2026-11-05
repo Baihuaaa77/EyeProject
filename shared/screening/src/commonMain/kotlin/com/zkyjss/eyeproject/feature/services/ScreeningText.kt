@@ -7,11 +7,11 @@ fun stepTitle(step: ScreeningStep) = when (step) {
     ScreeningStep.PUSH_UP -> "单眼调节幅度（移近法）"
     ScreeningStep.DISTANCE_CURVE -> "多距离视力"
     ScreeningStep.FLIPPER -> "远近切换（可选）"
-    ScreeningStep.FIXATION -> "注视小瞳"
+    ScreeningStep.FIXATION -> "注视圆点"
     ScreeningStep.FAR_FIXATION -> "看远处"
     ScreeningStep.GAZE_CALIBRATION -> "注视校准"
     ScreeningStep.COVER -> "交替遮盖"
-    ScreeningStep.PURSUIT -> "跟随小瞳"
+    ScreeningStep.PURSUIT -> "跟随圆点"
     ScreeningStep.RESULT -> "测试结果"
 }
 
@@ -27,10 +27,10 @@ fun guideCue(step: ScreeningStep) = when (step) {
     ScreeningStep.PUSH_UP -> "遮住一只眼，从 45 cm 外看着 E，每秒移近一两厘米；E 模糊后停一下，仍看不清就点按。每只眼做 3 次"
     ScreeningStep.DISTANCE_CURVE -> "依次在 67、50、33 cm 停稳，看 E 选方向，记录不同距离下的视力"
     ScreeningStep.FLIPPER -> "可选，约 1 分钟：先在 50 cm 和 25 cm 各看清一次 E，再来回移动手机，停稳后点选开口方向"
-    ScreeningStep.FIXATION -> "先依次看着九个圆点完成约 18 秒注视校准，再看屏幕上方闪烁的小瞳 12 秒，头和手机保持不动"
+    ScreeningStep.FIXATION -> "先依次看着九个圆点完成约 18 秒注视校准，再看屏幕上方闪烁的圆点 12 秒，头和手机保持不动"
     ScreeningStep.FAR_FIXATION -> "在 6 米外找一个目标（门、窗或墙上的画）。手机留在眼前约 33 cm、略低于视线，" +
         "眼睛越过手机看着目标约 10 秒，头和手机不动；协助者确认一直看着远处"
     ScreeningStep.COVER -> "协助者按提示遮右眼、移开、遮左眼、移开，再左右交替；不压眼球、不挡摄像头，每次动作同时点按"
-    ScreeningStep.PURSUIT -> "只用眼睛跟随移动的小瞳：水平、垂直、斜向各一段，头保持不动"
+    ScreeningStep.PURSUIT -> "只用眼睛跟随移动的圆点：水平、垂直、斜向各一段，头保持不动"
     else -> "正对屏幕，保持光线均匀"
 }

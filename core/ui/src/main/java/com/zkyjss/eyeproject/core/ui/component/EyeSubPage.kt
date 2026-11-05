@@ -33,8 +33,8 @@ fun EyeSubPage(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val colors = LocalEyeColors.current
-    Column(modifier.fillMaxSize().background(colors.appBackground)) {
-        TopBackBar(title = title, noText = true, onBackClick = onBack)
+    Column(modifier.fillMaxSize().eyeBackdrop(colors)) {
+        TopBackBar(title = title, noText = true, containerColor = androidx.compose.ui.graphics.Color.Transparent, onBackClick = onBack)
         Column(
             Modifier.weight(1f).fillMaxWidth().verticalScroll(scroll).screenHorizontalPaddingLarge().padding(top = 4.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),

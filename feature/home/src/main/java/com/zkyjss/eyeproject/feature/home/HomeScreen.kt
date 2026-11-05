@@ -40,7 +40,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -91,12 +95,12 @@ internal data class HomeActions(
     val openUsageAccess: () -> Unit = {},
 )
 
-internal const val LOOP_HELP = "小瞳按「感知 → 评估 → 归因 → 干预 → 反馈」帮你管理用眼：汇总用屏、眨眼、距离、环境光和你的档案，" +
+internal const val LOOP_HELP = "按「感知 → 评估 → 归因 → 干预 → 反馈」帮你管理用眼：汇总用屏、眨眼、距离、环境光和你的档案，" +
     "评估今天的用眼负荷（0–100，越高越累），找出主要原因，给出马上能做的建议，再根据你每天的感受调整。结果仅供参考，不是诊断。"
-internal const val USAGE_HELP_ANDROID = "需要在系统设置里允许「使用情况访问」，小瞳才能统计每天用屏多久、连续用了多久和夜间使用；统计只在本机进行。"
+internal const val USAGE_HELP_ANDROID = "需要在系统设置里允许「使用情况访问」，才能统计每天用屏多久、连续用了多久和夜间使用；统计只在本机进行。"
 
 /**
- * 首页：问候与日期（右上角账户、系统设置）→ 今日用眼（负荷分、小瞳、闭环进度）→ AI 主动问诊（爱科）→ 今日感受 →
+ * 首页：问候与日期（右上角账户、系统设置）→ 今日用眼（主卡：负荷分、圆环、建议）→ AI 主动问诊（爱科）→ 今日感受 →
  * 基础数据 → 实时检测 → 护眼操、休息提醒 → 用眼趋势报告、亮度与蓝光。不分小节标题。
  * 与苹果端 HomePage 同一顺序、排版与文案（苹果端没有开发者工具）。
  */
@@ -143,7 +147,7 @@ internal fun HomeContent(
     var scrollTarget by remember { mutableStateOf<BringIntoViewRequester?>(null) }
     LaunchedEffect(scrollTarget) { scrollTarget?.bringIntoView(); scrollTarget = null }
     Column(
-        modifier.fillMaxSize().background(colors.appBackground).verticalScroll(rememberScrollState())
+        modifier.fillMaxSize().background(colors.appBackground).verticalScroll(rememberScrollState()).eyeBackdrop(colors)
             .padding(top = getTopStatusBarPadding()).screenHorizontalPaddingLarge(),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
@@ -203,84 +207,64 @@ internal fun EyeColors.ringTone(level: String?): Color = when (level) {
 }
 
 /**
- * 今日用眼：负荷分圆环 + 会说话的小瞳（随机弹出今天的提醒，可执行的点气泡直接去做；负荷越高嫩芽越蔫）+ 一句话 + 闭环五步进度。
+ * 今日用眼（主卡）：大号负荷分 + 等级徽标 + 渐变圆环 → 一句话 → 第一条建议的操作按钮；其余建议收在「更多建议」里。
  */
 @Composable
 private fun EyeCareHero(report: EyeCareReport?, onTip: (EyeTip) -> Unit) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
-    val (strong, soft) = colors.levelTone(report?.level)
-    Column(
-        Modifier.fillMaxWidth().clip(EyeShapes.panel)
-            .background(Brush.linearGradient(listOf(colors.primarySoft, colors.panelBackground, soft)))
-            .padding(horizontal = 20.dp, vertical = 18.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
+    val (strong, _) = colors.levelTone(report?.level)
+    EyeHeroCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
             EyeText("今日用眼", style = typography.subtitle, color = colors.textPrimary)
             EyeHelpButton("主动护眼", LOOP_HELP)
-            Spacer(Modifier.weight(1f))
-            EyeText(report?.label ?: "读取中", style = typography.chip, color = colors.onStatus, fontWeight = FontWeight.Bold,
-                modifier = Modifier.clip(EyeShapes.chip).background(strong).padding(horizontal = 12.dp, vertical = 6.dp))
         }
-        val tips = remember(report?.tips) { report?.tips.orEmpty().map { MascotTip(it.text, it.action, it) } }
-        Box(Modifier.fillMaxWidth().height(220.dp)) {
-            XiaoTongTalk(MascotMood.of(report?.mood), tips, Modifier.fillMaxSize(), headScale = 0.8f,
-                wilt = report?.score?.let { ((it - 30) / 50f).coerceIn(0f, 1f) }, bubbleHeight = 84.dp, tail = BubbleTail.END,
-                mascotFraction = 0.5f) { tip -> (tip.payload as? EyeTip)?.let(onTip) }
-            ScoreRing(report?.score, colors.ringTone(report?.level), Modifier.align(Alignment.BottomStart).padding(bottom = 6.dp).size(124.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                EyeText(buildAnnotatedString {
+                    append(report?.score?.toString() ?: "—")
+                    withStyle(SpanStyle(fontSize = typography.title.fontSize, fontWeight = FontWeight.SemiBold, color = colors.textTertiary,
+                        letterSpacing = 0.sp)) { append(" /100") }
+                }, style = typography.display, color = colors.textPrimary, maxLines = 1)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    EyeText("用眼负荷", style = typography.bodySecondary, color = colors.textSecondary)
+                    val (fill, ink) = colors.statusFill(strong)
+                    EyeText(report?.label ?: "读取中", style = typography.chip, color = ink,
+                        modifier = Modifier.clip(EyeShapes.chip).background(fill).padding(horizontal = 10.dp, vertical = 3.dp))
+                }
+            }
+            EyeProgressRing(report?.score?.let { it / 100f }, Modifier.size(108.dp),
+                description = report?.score?.let { "今日用眼负荷 $it 分" } ?: "今日用眼负荷暂无数据")
         }
         EyeText(report?.headline ?: "正在汇总今天的用眼数据…", style = typography.body, color = colors.textPrimary)
-        LoopStrip(report?.loop.orEmpty())
+        val tips = report?.tips.orEmpty()
+        val first = tips.firstOrNull()
+        if (first != null) {
+            first.action?.let { action -> EyeButton(action, EyeButtonRole.PRIMARY, { onTip(first) }) }
+        }
+        if (tips.size > 1) MoreTips(tips.drop(1), onTip)
     }
 }
 
-/** 负荷分圆环：灰色底环 + 等级色进度弧（出现时转动到位），中间大号分数。 */
+/** 其余建议：默认收起，展开后每条一行（可执行的右侧是主色文字操作）。 */
 @Composable
-private fun ScoreRing(score: Int?, color: Color, modifier: Modifier) {
+private fun MoreTips(tips: List<EyeTip>, onTip: (EyeTip) -> Unit) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
-    val fraction by animateFloatAsState((score ?: 0) / 100f, tween(EyeMotion.LONG, easing = EyeMotion.Standard), label = "负荷分")
-    Box(modifier.semantics { contentDescription = score?.let { "今日用眼负荷 $it 分" } ?: "今日用眼负荷暂无数据" }, contentAlignment = Alignment.Center) {
-        Canvas(Modifier.fillMaxSize()) {
-            val stroke = 12.dp.toPx()
-            val inset = stroke / 2
-            val arcSize = Size(size.width - stroke, size.height - stroke)
-            drawArc(colors.surfaceVariant, 0f, 360f, false, Offset(inset, inset), arcSize, style = Stroke(stroke))
-            if (score != null) drawArc(color, -90f, 360f * fraction.coerceIn(0.02f, 1f), false, Offset(inset, inset), arcSize,
-                style = Stroke(stroke, cap = StrokeCap.Round))
-        }
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            EyeText(score?.toString() ?: "—", style = typography.headline, color = colors.textPrimary)
-            EyeText("用眼负荷", style = typography.chip, color = colors.textSecondary)
-        }
-    }
-}
-
-/** 闭环五步：完成的一步实心主色带勾，未完成空心；之间连线。 */
-@Composable
-private fun LoopStrip(stages: List<LoopStage>) {
-    val colors = LocalEyeColors.current
-    val typography = LocalEyeTypography.current
-    val items = stages.ifEmpty { listOf("感知", "评估", "归因", "干预", "反馈").map { LoopStage(it, it, false, "") } }
-    Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.Top) {
-        items.forEachIndexed { i, stage ->
-            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(44.dp)
-                .semantics(mergeDescendants = true) { contentDescription = "${stage.label}：${if (stage.done) "已完成" else "待完成"}，${stage.summary}" }) {
-                Box(Modifier.size(26.dp).clip(CircleShape).background(if (stage.done) colors.primary else colors.panelBackground)
-                    .border(1.5.dp, if (stage.done) colors.primary else colors.borderSubtle, CircleShape), contentAlignment = Alignment.Center) {
-                    if (stage.done) Canvas(Modifier.size(12.dp)) {
-                        drawPath(Path().apply {
-                            moveTo(size.width * 0.1f, size.height * 0.55f); lineTo(size.width * 0.4f, size.height * 0.82f)
-                            lineTo(size.width * 0.92f, size.height * 0.2f)
-                        }, colors.onPrimary, style = Stroke(size.width * 0.2f, cap = StrokeCap.Round))
-                    } else Box(Modifier.size(6.dp).clip(CircleShape).background(colors.borderSubtle))
+    var open by rememberSaveable { mutableStateOf(false) }
+    Column(Modifier.fillMaxWidth().animateContentSize()) {
+        EyeText(if (open) "收起" else "更多建议（${tips.size}）", Modifier.clip(EyeShapes.chip)
+            .clickable(role = Role.Button) { open = !open }.padding(vertical = 6.dp),
+            style = typography.bodySecondary, color = colors.primary, fontWeight = FontWeight.SemiBold)
+        if (open) tips.forEach { tip ->
+            Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                EyeText(tip.text, Modifier.weight(1f), style = typography.body, color = colors.textPrimary)
+                tip.action?.let { action ->
+                    Spacer(Modifier.width(12.dp))
+                    EyeText(action, Modifier.clip(EyeShapes.chip).clickable(role = Role.Button) { onTip(tip) }.padding(vertical = 4.dp),
+                        style = typography.bodySecondary, color = colors.primary, fontWeight = FontWeight.SemiBold)
                 }
-                Spacer(Modifier.height(4.dp))
-                EyeText(stage.label, style = typography.chip, color = if (stage.done) colors.primary else colors.textSecondary)
             }
-            if (i < items.lastIndex) Box(Modifier.weight(1f).padding(top = 12.dp).height(2.dp).clip(CircleShape)
-                .background(if (stage.done && items[i + 1].done) colors.primary else colors.borderSubtle))
         }
     }
 }
@@ -299,9 +283,8 @@ private fun CheckInCard(report: EyeCareReport?, onCheckIn: (List<String>) -> Uni
     val checked = report?.checkedInToday == true
     val symptoms = report?.todaySymptoms.orEmpty()
     var editing by rememberSaveable { mutableStateOf(false) }
-    Column(Modifier.fillMaxWidth().clip(EyeShapes.panel).background(colors.panelBackground).animateContentSize().padding(18.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        CardHeader("今日感受", EyeGlyph.HEART, if (checked && symptoms.isNotEmpty()) EyeTileTone.ACCENT else EyeTileTone.SUCCESS) {
+    EyeCard(Modifier.animateContentSize()) {
+        CardHeader("今日感受", EyeGlyph.HEART, EyeTileTone.PRIMARY) {
             PillButton(if (checked) "修改" else "记录", primary = !checked) { editing = true }
         }
         if (checked) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -315,13 +298,13 @@ private fun CheckInCard(report: EyeCareReport?, onCheckIn: (List<String>) -> Uni
     )
 }
 
-/** 已记下的一项感受：有不适用提醒色，「没有不适」用安心的绿色。 */
+/** 已记下的一项感受：主色浅底胶囊。 */
 @Composable
 private fun FeelingTag(label: String, attention: Boolean) {
     val colors = LocalEyeColors.current
-    EyeText(label, Modifier.clip(EyeShapes.chip).background(if (attention) colors.warningSoft else colors.successSoft)
+    EyeText(label, Modifier.clip(EyeShapes.chip).background(colors.primarySoft)
         .padding(horizontal = 12.dp, vertical = 6.dp),
-        style = LocalEyeTypography.current.body, color = if (attention) colors.warning else colors.success, fontWeight = FontWeight.SemiBold)
+        style = LocalEyeTypography.current.body, color = colors.primary, fontWeight = FontWeight.SemiBold)
 }
 
 /** 选择今天的感受：「没有不适」占一整行，其余等宽两列；选了才能保存。与苹果端 FeelingSheet 一致。 */
@@ -420,7 +403,7 @@ internal fun PillButton(label: String, primary: Boolean = true, onClick: () -> U
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(if (pressed) 0.94f else 1f, EyeMotion.pressSpring(), label = "胶囊按压")
     EyeText(label, Modifier.graphicsLayer { scaleX = scale; scaleY = scale }.clip(EyeShapes.chip)
-        .background(if (primary) colors.primary else colors.surfaceVariant)
+        .then(if (primary) Modifier.background(colors.buttonBrush) else Modifier.background(colors.surfaceVariant))
         .clickable(interactionSource = interaction, indication = null, role = Role.Button) { haptics.tap(); onClick() }
         .padding(horizontal = 14.dp, vertical = 8.dp),
         style = LocalEyeTypography.current.chip, color = if (primary) colors.onPrimary else colors.textPrimary, fontWeight = FontWeight.Bold)
@@ -430,31 +413,18 @@ internal fun PillButton(label: String, primary: Boolean = true, onClick: () -> U
 
 // region 基础数据与实时检测
 
-/** 一格读数：名称、数值（需要留意时琥珀色并带小圆点）、可选的来源说明。 */
+/** 一格读数：名称在上、数值在下（需要留意时名称后带琥珀小圆点）。 */
 @Composable
 internal fun SignalCell(signal: EyeSignal?, modifier: Modifier = Modifier, label: String = signal?.label.orEmpty()) {
     val colors = LocalEyeColors.current
-    val typography = LocalEyeTypography.current
     val attention = signal?.status == "ATTENTION"
-    Column(modifier.clip(EyeShapes.medium).background(colors.appBackground).padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            EyeText(label, style = typography.bodySecondary, color = colors.textSecondary, maxLines = 1)
-            if (attention) { Spacer(Modifier.width(4.dp)); Box(Modifier.size(6.dp).clip(CircleShape).background(colors.accent)) }
-        }
-        EyeText(signal?.value ?: "—", style = typography.subtitle, maxLines = 1,
-            color = when { signal == null || signal.status == "UNAVAILABLE" -> colors.textSecondary; attention -> colors.warning; else -> colors.textPrimary })
-    }
+    EyeMetric(label, signal?.value ?: "—", modifier, attention = attention,
+        valueColor = if (signal == null || signal.status == "UNAVAILABLE") colors.textTertiary else colors.textPrimary)
 }
 
 @Composable
 private fun CardHeader(title: String, glyph: EyeGlyph, tone: EyeTileTone, trailing: @Composable RowScope.() -> Unit = {}) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        EyeIconTile(glyph, tone, 32.dp)
-        Spacer(Modifier.width(10.dp))
-        EyeText(title, Modifier.weight(1f), style = LocalEyeTypography.current.subtitle, color = LocalEyeColors.current.textPrimary)
-        trailing()
-    }
+    EyeCategoryHeader(title, glyph, tone, trailing = trailing)
 }
 
 /** 基础数据：今日用屏、最长连续、休息次数、夜间使用、环境光、屏幕亮度（只显示本机系统提供的项）；未授权用屏统计时可去开启。 */
@@ -464,8 +434,7 @@ private fun BasicDataCard(state: HomeUiState, actions: HomeActions, modifier: Mo
     val typography = LocalEyeTypography.current
     val signals = state.report?.signals.orEmpty().filter { it.group == "BASIC" }
     if (signals.isEmpty()) return
-    Column(modifier.fillMaxWidth().clip(EyeShapes.panel).background(colors.panelBackground).animateContentSize().padding(18.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    EyeCard(modifier.animateContentSize()) {
         CardHeader("基础数据", EyeGlyph.HOURGLASS, EyeTileTone.BLUE)
         SignalGrid(signals, columns = 3)
         if (state.usageAccess == EyeCareEngine.ACCESS_DENIED) Row(verticalAlignment = Alignment.CenterVertically) {
@@ -476,14 +445,16 @@ private fun BasicDataCard(state: HomeUiState, actions: HomeActions, modifier: Mo
     }
 }
 
+/** 读数网格：每行 [columns] 项，同行竖线分隔、行间横线分隔。 */
 @Composable
 internal fun SignalGrid(signals: List<EyeSignal>, columns: Int) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        signals.chunked(columns).forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                row.forEach { SignalCell(it, Modifier.weight(1f)) }
-                repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
-            }
+    val colors = LocalEyeColors.current
+    Column {
+        signals.chunked(columns).forEachIndexed { i, row ->
+            if (i > 0) Box(Modifier.fillMaxWidth().padding(vertical = 12.dp).height(1.dp).background(colors.borderSubtle))
+            val cells: List<@Composable (Modifier) -> Unit> = row.map { signal -> @Composable { m: Modifier -> SignalCell(signal, m) } } +
+                List(columns - row.size) { @Composable { m: Modifier -> Spacer(m) } }
+            EyeMetricRow(items = cells)
         }
     }
 }
@@ -491,29 +462,21 @@ internal fun SignalGrid(signals: List<EyeSignal>, columns: Int) {
 /** 实时检测（默认关闭，打开后看到画面与眨眼、距离结果）。 */
 @Composable
 private fun LiveCard(modifier: Modifier, live: @Composable () -> Unit) {
-    Column(modifier.fillMaxWidth().clip(EyeShapes.panel).background(LocalEyeColors.current.panelBackground).animateContentSize()
-        .padding(horizontal = 18.dp, vertical = 8.dp)) { live() }
+    EyeCard(modifier.animateContentSize(), verticalArrangement = Arrangement.Top) { live() }
 }
 
 // endregion
 
 // region 护眼操、提醒与服务入口
 
-/** 护眼操入口：跟小瞳转转眼球（向左、右、上、下看），约 1 分钟。 */
+/** 护眼操入口：转转眼球（向左、右、上、下看），约 1 分钟。 */
 @Composable
 private fun ExerciseCard(onStart: () -> Unit) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
-    Row(Modifier.fillMaxWidth().clip(EyeShapes.panel).background(colors.panelBackground)
-        .clickable(role = Role.Button, onClick = onStart).padding(horizontal = 18.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically) {
-        XiaoTong(MascotMood.HAPPY, Modifier.size(56.dp), interactive = false, headScale = 0.78f)
-        Spacer(Modifier.width(10.dp))
-        Column(Modifier.weight(1f)) {
-            EyeText("护眼操", style = typography.subtitle, color = colors.textPrimary)
-            EyeText("跟小瞳转转眼球 · 约 1 分钟", style = typography.bodySecondary, color = colors.textSecondary)
-        }
-        PillButton("开始", onClick = onStart)
+    EyeCard(Modifier.clickable(role = Role.Button, onClick = onStart)) {
+        CardHeader("护眼操", EyeGlyph.EYE, EyeTileTone.SUCCESS) { PillButton("开始", onClick = onStart) }
+        EyeText("跟着示意转转眼球，约 1 分钟", style = typography.body, color = colors.textPrimary)
     }
 }
 
@@ -523,24 +486,21 @@ private fun ReminderCard(state: HomeUiState, actions: HomeActions) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
     val suggested = state.report?.suggestedReminderMinutes
-    Column(Modifier.fillMaxWidth().clip(EyeShapes.panel).background(colors.panelBackground).padding(18.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    EyeCard {
         // 整行可点（48dp 触控区），开关本身只做展示，避免出现两个点击目标
         Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).toggleable(state.reminderEnabled, role = Role.Switch) { actions.toggleReminder() },
             verticalAlignment = Alignment.CenterVertically) {
-            EyeIconTile(EyeGlyph.BELL, EyeTileTone.ACCENT, 32.dp)
-            Spacer(Modifier.width(10.dp))
-            Column(Modifier.weight(1f)) {
-                EyeText("休息提醒", style = typography.subtitle, color = colors.textPrimary)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                CardHeader("休息提醒", EyeGlyph.BELL, EyeTileTone.ACCENT)
                 EyeText(if (state.reminderEnabled && state.reminderNextTimeText.isNotEmpty()) "每 ${state.reminderIntervalMinutes} 分钟，下次约 ${state.reminderNextTimeText}"
-                    else "按间隔提醒你远眺放松", style = typography.bodySecondary, color = colors.textSecondary)
+                    else "按间隔提醒你远眺放松", style = typography.body, color = colors.textPrimary)
             }
             EyeSwitch(checked = state.reminderEnabled, onCheckedChange = null)
         }
         EyeSegmentedRow(listOf(SegmentedOption(20, "20分钟"), SegmentedOption(30, "30分钟"), SegmentedOption(60, "60分钟")),
             state.reminderIntervalMinutes, actions.selectReminderInterval)
         if (suggested != null && suggested != state.reminderIntervalMinutes) Row(verticalAlignment = Alignment.CenterVertically) {
-            EyeText("小瞳建议每 $suggested 分钟休息一次", Modifier.weight(1f), style = typography.body, color = colors.textSecondary)
+            EyeText("建议每 $suggested 分钟休息一次", Modifier.weight(1f), style = typography.body, color = colors.textSecondary)
             PillButton("采用") { actions.enableReminder(suggested) }
         }
         state.notice?.let { EyeText(it, style = typography.bodySecondary, color = colors.warning) }
@@ -566,10 +526,10 @@ private fun ServiceTile(title: String, subtitle: String, glyph: EyeGlyph, tone: 
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(if (pressed) 0.97f else 1f, EyeMotion.pressSpring(), label = "服务入口按压")
-    Column(modifier.graphicsLayer { scaleX = scale; scaleY = scale }.clip(EyeShapes.panel).background(colors.panelBackground)
+    EyeCard(modifier.graphicsLayer { scaleX = scale; scaleY = scale }
         .clickable(interactionSource = interaction, indication = null, role = Role.Button) { haptics.tap(); onClick() }
-        .heightIn(min = 120.dp).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        EyeIconTile(glyph, tone, 40.dp)
+        .heightIn(min = 112.dp), contentPadding = 16.dp, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        EyeIconTile(glyph, tone, 36.dp)
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             EyeText(title, style = typography.body, color = colors.textPrimary, fontWeight = FontWeight.SemiBold)
             EyeText(subtitle, style = typography.bodySecondary, color = colors.textSecondary, maxLines = 2)

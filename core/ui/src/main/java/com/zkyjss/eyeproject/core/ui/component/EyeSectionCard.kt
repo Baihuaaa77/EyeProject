@@ -1,6 +1,7 @@
 package com.zkyjss.eyeproject.core.ui.component
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Spacer
@@ -15,7 +16,7 @@ import com.zkyjss.eyeproject.core.designsystem.theme.EyeShapes
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
 
-/** 自定义分区卡片：圆角面板 + 细边框 + 可选标题。 */
+/** 自定义分区卡片（平铺卡）：圆角面板 + 极淡描边 + 可选标题。主卡用 [EyeHeroCard]。 */
 @Composable
 fun EyeSectionCard(
     modifier: Modifier = Modifier,
@@ -27,8 +28,7 @@ fun EyeSectionCard(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .clip(EyeShapes.panel)
-            .background(colors.panelBackground)
+            .eyeGlass(colors, EyeShapes.panel)
             .padding(20.dp)
     ) {
         if (title != null) {

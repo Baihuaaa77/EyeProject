@@ -73,16 +73,16 @@ import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
 import com.zkyjss.eyeproject.core.domain.EyeExerciseCoach
 import com.zkyjss.eyeproject.core.model.FaceLandmarkFrame
-import com.zkyjss.eyeproject.core.ui.component.BubbleTail
 import com.zkyjss.eyeproject.core.ui.component.EyeButton
 import com.zkyjss.eyeproject.core.ui.component.EyeButtonRole
 import com.zkyjss.eyeproject.core.ui.component.EyeFullScreenPage
 import com.zkyjss.eyeproject.core.ui.component.EyeText
-import com.zkyjss.eyeproject.core.ui.component.MascotBubble
-import com.zkyjss.eyeproject.core.ui.component.MascotMood
-import com.zkyjss.eyeproject.core.ui.component.XiaoTong
 import com.zkyjss.eyeproject.core.ui.component.rememberEyeHaptics
-import com.zkyjss.eyeproject.core.ui.component.rememberMascotSounds
+import com.zkyjss.eyeproject.core.ui.component.EyeCue
+import com.zkyjss.eyeproject.core.ui.component.rememberEyeCueSounds
+import com.zkyjss.eyeproject.core.ui.component.drawFixationTarget
+import com.zkyjss.eyeproject.core.ui.component.drawProgressRing
+import com.zkyjss.eyeproject.core.designsystem.theme.DarkEyeColors
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.Job
@@ -145,8 +145,8 @@ class EyeExerciseViewModel @Inject constructor(private val camera: CameraControl
 }
 
 /**
- * 「护眼操」完整页面（盖在首页上）：深色底，顶部进度条；上方大箭头 +「向左看」和小瞳的气泡，小瞳在屏幕正中，下方倒计时。
- * 眼睛转到位时提示朝那个方向翻过去、手机振动，小瞳顺着飞出画面打个滚再回来；最后闭眼休息 5 秒，每秒轻响一下。
+ * 「护眼操」完整页面（盖在首页上）：深色底，顶部进度条；上方大箭头 +「向左看」，注视点（准星）在屏幕正中，下方倒计时。
+ * 眼睛转到位时提示朝那个方向翻过去、手机振动，注视点顺着滑出画面再回来；最后闭眼休息 5 秒，每秒轻响一下。
  * 没有相机权限时按时间带着做。与苹果端 EyeExerciseView 同一流程与文案。
  */
 @Composable
@@ -156,7 +156,7 @@ internal fun EyeExercisePage(onClose: () -> Unit, viewModel: EyeExerciseViewMode
     val context = LocalContext.current
     val owner = LocalLifecycleOwner.current
     val haptics = rememberEyeHaptics()
-    val sounds = rememberMascotSounds()
+    val sounds = rememberEyeCueSounds()
     val scope = rememberCoroutineScope()
     val state by viewModel.state.collectAsStateWithLifecycle()
     // 最近一次「看到了」的方向：决定翻页方向（看不到时淡入淡出）
@@ -177,9 +177,9 @@ internal fun EyeExercisePage(onClose: () -> Unit, viewModel: EyeExerciseViewMode
             when (event) {
                 EyeExerciseCoach.Event.DETECTED -> {
                     flipMove = state.move
-                    haptics.success(); sounds.play("eye_spin")
+                    haptics.success(); sounds.play(EyeCue.PHASE)
                     flyMove = state.move
-                    // 小瞳顺着方向飞出去、边飞边打滚，再从另一边飞回来
+                    // 注视点顺着方向滑出去，再从另一边滑回来
                     scope.launch {
                         spin.snapTo(0f)
                         launch { spin.animateTo(720f, tween(900)) }
@@ -187,16 +187,16 @@ internal fun EyeExercisePage(onClose: () -> Unit, viewModel: EyeExerciseViewMode
                     }
                 }
                 EyeExerciseCoach.Event.MISSED -> { flipMove = null; haptics.tap() }
-                EyeExerciseCoach.Event.REST -> { flipMove = null; haptics.tap(); sounds.play("eye_yawn") }
+                EyeExerciseCoach.Event.REST -> { flipMove = null; haptics.tap(); sounds.play(EyeCue.PHASE) }
                 // 闭着眼看不到数字：每过一秒轻响一下
-                EyeExerciseCoach.Event.COUNTDOWN -> sounds.play("eye_count")
-                EyeExerciseCoach.Event.DONE -> { haptics.success(); sounds.play("eye_heart") }
+                EyeExerciseCoach.Event.COUNTDOWN -> sounds.play(EyeCue.COUNT)
+                EyeExerciseCoach.Event.DONE -> { haptics.success(); sounds.play(EyeCue.COMPLETE) }
                 else -> flipMove = null
             }
         }
     }
     EyeFullScreenPage(onClose) {
-        BoxWithConstraints(Modifier.fillMaxSize().background(colors.ink).statusBarsPadding().navigationBarsPadding()) {
+        BoxWithConstraints(Modifier.fillMaxSize().background(DarkEyeColors.appBackground).statusBarsPadding().navigationBarsPadding()) {
             val widthPx = with(LocalDensity.current) { maxWidth.toPx() }
             val heightPx = with(LocalDensity.current) { maxHeight.toPx() }
             Column(Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -205,10 +205,10 @@ internal fun EyeExercisePage(onClose: () -> Unit, viewModel: EyeExerciseViewMode
                         style = typography.body, color = colors.white)
                     Spacer(Modifier.size(8.dp))
                     Box(Modifier.weight(1f).height(6.dp).clip(CircleShape).background(colors.white.copy(alpha = 0.25f))) {
-                        Box(Modifier.fillMaxWidth(state.progress).height(6.dp).clip(CircleShape).background(colors.success))
+                        Box(Modifier.fillMaxWidth(state.progress).height(6.dp).clip(CircleShape).background(DarkEyeColors.flowBrush))
                     }
                 }
-                // 上半区：动作提示 + 小瞳的气泡（贴着小瞳）；中间：小瞳；下半区：倒计时与提示语。上下等高，小瞳正好在屏幕中央
+                // 上半区：动作提示；中间：注视点；下半区：倒计时与提示语。上下等高，注视点正好在屏幕中央
                 Column(Modifier.weight(1f).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Bottom) {
                     AnimatedContent(
@@ -217,19 +217,18 @@ internal fun EyeExercisePage(onClose: () -> Unit, viewModel: EyeExerciseViewMode
                         label = "护眼操翻页",
                     ) { (stage, _) -> ExerciseInstruction(stage, state) }
                     Spacer(Modifier.height(20.dp))
-                    if (state.stage != EyeExerciseCoach.Stage.DONE) MascotBubble(bubbleText(state), tail = BubbleTail.CENTER)
                 }
                 if (state.stage != EyeExerciseCoach.Stage.DONE) {
                     val f = fly.value
-                    XiaoTong(if (state.stage == EyeExerciseCoach.Stage.REST) MascotMood.SLEEPY else MascotMood.HAPPY,
-                        Modifier.size(150.dp).graphicsLayer {
-                            val m = flyMove
-                            translationX = (m?.dx ?: 0) * f * widthPx * 0.8f
-                            translationY = (m?.dy ?: 0) * f * heightPx * 0.45f
-                            rotationZ = if (m == null) 0f else spin.value * (if (m.dx < 0 || m.dy < 0) -1 else 1)
-                        }, interactive = false)
+                    val resting = state.stage == EyeExerciseCoach.Stage.REST
+                    Canvas(Modifier.size(150.dp).graphicsLayer {
+                        val m = flyMove
+                        translationX = (m?.dx ?: 0) * f * widthPx * 0.8f
+                        translationY = (m?.dy ?: 0) * f * heightPx * 0.45f
+                        alpha = if (resting) 0.35f else 1f
+                    }) { drawFixationTarget(DarkEyeColors, center, size.minDimension * 0.62f) }
                 } else {
-                    XiaoTong(MascotMood.HAPPY, Modifier.size(170.dp), greet = true)
+                    Canvas(Modifier.size(170.dp)) { drawProgressRing(DarkEyeColors, 1f, 8.dp.toPx()) }
                 }
                 Column(Modifier.weight(1f).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                     if (state.stage != EyeExerciseCoach.Stage.DONE) {
@@ -242,7 +241,7 @@ internal fun EyeExercisePage(onClose: () -> Unit, viewModel: EyeExerciseViewMode
                     } else {
                         val (total, seen) = viewModel.summary
                         Spacer(Modifier.height(16.dp))
-                        EyeText(if (viewModel.usedCamera) "共 $total 步，小瞳看到你做到了 $seen 步" else "共 $total 步，做完啦",
+                        EyeText(if (viewModel.usedCamera) "共 $total 步，检测到你做到了 $seen 步" else "共 $total 步，做完啦",
                             style = typography.body, color = colors.white, textAlign = TextAlign.Center)
                         Spacer(Modifier.weight(1f))
                         EyeButton("完成", EyeButtonRole.PRIMARY, onClose, Modifier.fillMaxWidth().heightIn(min = 52.dp))
@@ -254,7 +253,7 @@ internal fun EyeExercisePage(onClose: () -> Unit, viewModel: EyeExerciseViewMode
     }
 }
 
-/** 上方的动作提示：大箭头 + 动作；开头「看着小瞳」、结尾「闭上眼睛」与「完成啦」。倒计时在小瞳下方。 */
+/** 上方的动作提示：大箭头 + 动作；开头「看着中间的圆点」、结尾「闭上眼睛」与「完成啦」。倒计时在注视点下方。 */
 @Composable
 private fun ExerciseInstruction(stage: EyeExerciseCoach.Stage, state: EyeExerciseCoach.State) {
     val colors = LocalEyeColors.current
@@ -262,7 +261,7 @@ private fun ExerciseInstruction(stage: EyeExerciseCoach.Stage, state: EyeExercis
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
         when (stage) {
             EyeExerciseCoach.Stage.CALIBRATE -> {
-                EyeText("看着小瞳", style = typography.headline, color = colors.white)
+                EyeText("看着中间的圆点", style = typography.headline, color = colors.white)
                 EyeText("准备开始", style = typography.body, color = colors.white.copy(alpha = 0.7f))
             }
             EyeExerciseCoach.Stage.MOVE, EyeExerciseCoach.Stage.BACK -> {
@@ -297,21 +296,6 @@ private fun Arrow(move: EyeExerciseCoach.Move) {
         drawPath(Path().apply { moveTo(s * 0.55f, s * 0.22f); lineTo(s * 0.85f, s * 0.5f); lineTo(s * 0.55f, s * 0.78f) },
             colors.white.copy(alpha = 0.6f), style = stroke)
     }
-}
-
-/** 小瞳气泡：跟着阶段说一句。 */
-private fun bubbleText(state: EyeExerciseCoach.State): String = when (state.stage) {
-    EyeExerciseCoach.Stage.CALIBRATE -> "跟我一起转转眼球吧"
-    EyeExerciseCoach.Stage.MOVE -> when (state.move) {
-        EyeExerciseCoach.Move.LEFT -> "眼睛往左边看，看我飞过去！"
-        EyeExerciseCoach.Move.RIGHT -> "再往右边看～"
-        EyeExerciseCoach.Move.UP -> "抬眼看看上面"
-        EyeExerciseCoach.Move.DOWN -> "低眼看看下面"
-        null -> "跟着箭头看"
-    }
-    EyeExerciseCoach.Stage.BACK -> "真棒，看回我这里"
-    EyeExerciseCoach.Stage.REST -> "闭上眼睛，歇一会儿"
-    EyeExerciseCoach.Stage.DONE -> "做得真好！"
 }
 
 /** 翻页动画：看到了就整页朝那个方向翻走、新的一页从另一边进来；其余淡入淡出。 */

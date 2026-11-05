@@ -148,7 +148,7 @@ struct EyeTestView: View {
             // 与安卓准备页一致：干眼先提示最佳矫正，再示范姿势
             if runtime.kind == "DRY_EYE" {
                 Text("建议佩戴最佳矫正视力眼镜进行测试").font(EyeStyle.body).frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(14).background(Cartoon.accentSoft, in: RoundedRectangle(cornerRadius: EyeStyle.radiusMedium))
+                    .padding(14).background(EyeStyle.accentSoft, in: RoundedRectangle(cornerRadius: EyeStyle.radiusMedium))
             }
             TestGuideView(motion: .posture, title: runtime.kind == "DRY_EYE" ? "调整姿势 · 约 40 cm" : "调整姿势",
                 cue: runtime.kind == "DRY_EYE" ? "正对屏幕，手机距离眼睛约 40 厘米，光线均匀"
@@ -173,7 +173,7 @@ struct EyeTestView: View {
             let seconds = max(1, Int(runtime.number("naturalSeconds")))
             if runtime.bool("afterRest") {
                 Text("休息结束，下面进行复测，流程与首次相同").font(EyeStyle.body).frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(14).background(Cartoon.accentSoft, in: RoundedRectangle(cornerRadius: EyeStyle.radiusMedium))
+                    .padding(14).background(EyeStyle.accentSoft, in: RoundedRectangle(cornerRadius: EyeStyle.radiusMedium))
             }
             TestGuideView(motion: .fva, title: "正式测试 · \(seconds) 秒 + 20 秒",
                 cue: "全程看 E 选方向。前 \(seconds) 秒自然眨眼，随后不停顿，直接尽量保持睁眼 20 秒", readyTitle: "开始正式测试") {
@@ -242,6 +242,7 @@ struct EyeTestView: View {
                 if phase == "PUSH_UP" {
                     Text("缓慢移近，每秒一两厘米")
                     TumblingEView(runtime: runtime).stageHeight(max(180, ringDiameter(CGFloat(runtime.number("optotypePx")) / UIScreen.main.scale) + 24))
+                        .background(Color.white, in: RoundedRectangle(cornerRadius: EyeStyle.radiusLarge, style: .continuous))
                     Button("开始持续模糊了") { runtime.act("blur") }.buttonStyle(EyeButtonStyle())
                 } else {
                     OptotypeAnswerPad(runtime: runtime)
@@ -275,7 +276,8 @@ private struct OptotypeAnswerPad: View {
         VStack(spacing: 14) {
             TumblingEView(runtime: runtime)
                 .stageHeight(max(152, ringDiameter(CGFloat(runtime.number("optotypePx")) / UIScreen.main.scale) + 24))
-                .background(EyeStyle.panel, in: RoundedRectangle(cornerRadius: EyeStyle.radiusLarge))
+                // 视标恒为白底黑字（与安卓一致，深色模式下不变）
+                .background(Color.white, in: RoundedRectangle(cornerRadius: EyeStyle.radiusLarge, style: .continuous))
                 .overlay { RoundedRectangle(cornerRadius: EyeStyle.radiusLarge).stroke(EyeStyle.borderSubtle, lineWidth: 1) }
             VStack(spacing: AnswerKey.gap) {
                 arrow("向上", 3)
@@ -406,7 +408,7 @@ private struct FarFixationPanel: View {
     var body: some View {
         VStack(spacing: 10) {
             Canvas { ctx, size in
-                Cartoon.mascot(ctx, center: CGPoint(x: size.width / 2, y: size.height * 0.58), size: min(size.width, size.height) * 0.8,
+                Cartoon.figure(ctx, center: CGPoint(x: size.width / 2, y: size.height * 0.5), size: min(size.width, size.height) * 0.86,
                     gaze: CGPoint(x: 0, y: -0.6))
             }.frame(width: 64, height: 64)
             if waiting {
@@ -434,7 +436,7 @@ private struct StageCaption: View {
     }
 }
 
-/// 测试中点返回：屏幕中间弹出确认框，小瞳在上方冒气泡挽留。「继续测试」关闭，「确认退出」才离开。与安卓 TestExitDialog 同一文案。
+/// 测试中点返回：屏幕中间弹出确认框。「继续测试」关闭，「确认退出」才离开。与安卓 TestExitDialog 同一文案。
 private struct TestExitConfirm: View {
     let stay: () -> Void
     let exit: () -> Void
@@ -442,8 +444,6 @@ private struct TestExitConfirm: View {
         ZStack {
             EyeStyle.ink.opacity(0.55).ignoresSafeArea().contentShape(Rectangle()).onTapGesture { stay() }
             VStack(spacing: 0) {
-                MascotBubble(line: MascotLine(text: "很快就要测完了哦，再坚持一下～"))
-                MascotStage(mood: .concerned, interactive: false).frame(width: 96, height: 96)
                 VStack(spacing: 12) {
                     Text("确定要退出测试吗？").font(EyeStyle.title).foregroundStyle(EyeStyle.text)
                     Text("退出后这次测试不会保存，下次要从头开始。").font(EyeStyle.body).foregroundStyle(EyeStyle.secondary)
@@ -469,16 +469,19 @@ private struct GazeTargetView: View {
             let point = target(in: size)
             let phase = runtime.string("phase")
             ZStack(alignment: .topLeading) {
-                EyeStyle.panel
+                // 测试画布恒为白底（与安卓一致，深色模式下也保持高对比）
+                Color.white
                 if phase == "GAZE_CALIBRATION" {
                     // 补测轮重看同一点时编号变化，外圈动效重播。
                     CalibrationDot(index: Int(runtime.number("gazeCalibrationIndex") + runtime.number("gazeCalibrationRound") * 100))
                         // 暂停时圆点变淡：位置不变，提示受试者校准在等待
                         .opacity(runtime.bool("calibrationPaused") ? 0.35 : 1).position(point)
                 } else {
-                    let width = phase == "PURSUIT" ? CGFloat(5 * pixelsPerMm / 0.65) / UIScreen.main.scale : CGFloat(runtime.number("targetDiameterMm") * Double(pixelsPerMm)) / UIScreen.main.scale
-                    // 与安卓一致：头宽 = 目标半径 / 0.65，头部中心即上报的目标位置。
-                    MascotView(scale: 1 / 1.3, centerY: 0.5).frame(width: width, height: width)
+                    let width = phase == "PURSUIT" ? CGFloat(10 * pixelsPerMm) / UIScreen.main.scale : CGFloat(runtime.number("targetDiameterMm") * Double(pixelsPerMm)) / UIScreen.main.scale
+                    // 与安卓一致：准星外环即目标包络（跟随为原 1 cm），中心即上报的目标位置；固定深蓝保证白底对比。
+                    Canvas { ctx, size in
+                        Cartoon.fixationTarget(ctx, center: CGPoint(x: size.width / 2, y: size.height / 2), size: min(size.width, size.height), color: EyeStyle.fixedPrimary)
+                    }.frame(width: width, height: width)
                         .opacity(phase == "FIXATION" && runtime.number("targetX") <= 0 ? 0.3 : 1).position(point)
                 }
             }.clipShape(RoundedRectangle(cornerRadius: EyeStyle.radius))
@@ -530,9 +533,10 @@ private struct CalibrationDot: View {
     @State private var halo: CGFloat = 1
     var body: some View {
         ZStack {
-            Circle().fill(EyeStyle.primary.opacity(0.18)).frame(width: 32, height: 32).scaleEffect(halo)
-            Circle().fill(EyeStyle.primary).frame(width: 16, height: 16)
-            Circle().fill(EyeStyle.panel).frame(width: 5, height: 5)
+            // 白底测试画布：固定深蓝，深色模式下也保持高对比
+            Circle().fill(EyeStyle.fixedPrimary.opacity(0.18)).frame(width: 32, height: 32).scaleEffect(halo)
+            Circle().fill(EyeStyle.fixedPrimary).frame(width: 16, height: 16)
+            Circle().fill(Color.white).frame(width: 5, height: 5)
         }.frame(width: 80, height: 80)
             .onAppear { pop() }
             .onChange(of: index) { _ in pop() }
@@ -545,7 +549,7 @@ private struct CalibrationDot: View {
     }
 }
 
-/// 老视开始前的戴镜确认：小瞳 + 按本次戴镜状态的一句话 + 确认按钮，语音同步播报。与安卓 GlassesCheckContent 一致（文案在共用 PresbyopiaIntake）。
+/// 老视开始前的戴镜确认：示意人物 + 按本次戴镜状态的一句话 + 确认按钮，语音同步播报。与安卓 GlassesCheckContent 一致（文案在共用 PresbyopiaIntake）。
 private struct GlassesCheckView: View {
     let title: String
     let prompt: String
@@ -553,13 +557,16 @@ private struct GlassesCheckView: View {
     let confirm: () -> Void
     var body: some View {
         VStack(spacing: 16) {
-            MascotView(scale: 0.8, centerY: 0.58).frame(width: 112, height: 112)
+            Canvas { ctx, size in
+                let s = min(size.width, size.height)
+                Cartoon.figure(ctx, center: CGPoint(x: size.width / 2, y: size.height / 2), size: s * 0.86, gaze: CGPoint(x: 0, y: -0.3))
+            }.frame(width: 112, height: 112)
             Text(title).font(EyeStyle.title)
             Text(prompt)
                 .font(EyeStyle.body).foregroundStyle(EyeStyle.secondary).multilineTextAlignment(.center)
             Button(button, action: confirm).buttonStyle(EyeButtonStyle())
         }.padding(20).frame(maxWidth: .infinity)
-            .background(EyeStyle.panel, in: RoundedRectangle(cornerRadius: EyeStyle.radius))
+            .eyeGlass()
     }
 }
 
@@ -582,7 +589,7 @@ struct DryEyePauseView: View {
                 Button("结束测试") { EyeHaptics.tap(); stop() }.buttonStyle(EyeButtonStyle(role: .secondary))
             }
             .padding(24).frame(maxWidth: .infinity, alignment: .leading)
-            .background(EyeStyle.panel, in: RoundedRectangle(cornerRadius: 22))
+            .eyeGlass()
             .padding(24)
         }
         .accessibilityAddTraits(.isModal)
@@ -606,11 +613,7 @@ struct ColorVisionContent: View {
 
     private var setup: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("开始前").font(EyeStyle.title).foregroundStyle(EyeStyle.text)
-                Spacer()
-                MascotStage(mood: .happy).frame(width: 96, height: 96)
-            }
+            Text("开始前").font(EyeStyle.title).foregroundStyle(EyeStyle.text)
             ForEach(Array(["关掉手机的护眼模式、夜间模式（会改变屏幕颜色）", "在明亮的室内，屏幕亮度已自动调到最高",
                            "手机离眼睛约 40 cm，平时戴眼镜就戴着"].enumerated()), id: \.offset) { i, text in
                 Text("\(i + 1). \(text)").font(EyeStyle.body).foregroundStyle(EyeStyle.text)
@@ -620,7 +623,7 @@ struct ColorVisionContent: View {
             Button("准备好了") { EyeHaptics.tap(); runtime.act("colorStart") }.buttonStyle(EyeButtonStyle())
         }
         .padding(16).frame(maxWidth: .infinity, alignment: .leading)
-        .background(EyeStyle.panel, in: RoundedRectangle(cornerRadius: 22))
+        .eyeGlass()
     }
 
     private var plate: some View {
@@ -665,7 +668,7 @@ struct ColorPlateCanvas: View {
             }
         }
         .padding(8)
-        .background(EyeStyle.panel, in: RoundedRectangle(cornerRadius: 22))
+        .eyeGlass()
         .accessibilityLabel("色觉检测图")
     }
 }

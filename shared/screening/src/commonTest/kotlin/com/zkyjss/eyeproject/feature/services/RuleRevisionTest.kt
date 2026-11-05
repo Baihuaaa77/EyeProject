@@ -361,5 +361,22 @@ class RuleRevisionTest {
         assertTrue(json["sections"]!!.jsonArray.isNotEmpty())
     }
 
+    @Test fun presbyopiaEyeAgeFromAmplitude() {
+        // 调节幅度 3.5 D → (18.5 − 3.5) / 0.3 = 50 岁；实际 44 岁 → 大 6 岁
+        val age = assertNotNull(ResultReports.eyeAge(mapOf("amplitude_d" to 3.5, "amplitude_age_years" to 50.0, "age_years" to 44.0)))
+        assertEquals("你的眼睛年龄", age.label)
+        assertEquals("约 50 岁", age.value)
+        assertTrue(age.note.startsWith("比实际年龄大 6 岁"))
+        assertTrue(ResultReports.eyeAge(mapOf("amplitude_d" to 3.5, "amplitude_age_years" to 50.0, "age_years" to 49.0))!!.note.startsWith("与实际年龄相当"))
+        // 近点比可测下限还近：只能给出上限
+        val limit = PresbyopiaProtocol.MAX_AMPLITUDE_D
+        val young = assertNotNull(ResultReports.eyeAge(mapOf("amplitude_d" to limit,
+            "amplitude_age_years" to PresbyopiaProtocol.amplitudeAge(limit), "age_years" to 25.0)))
+        assertTrue(young.value.startsWith("不超过"))
+        assertTrue(!young.note.contains("实际年龄"))
+        // 没做移近法（B / C 路径）就没有这一项
+        assertEquals(null, ResultReports.eyeAge(mapOf("amplitude_d" to null, "amplitude_age_years" to null)))
+    }
+
     // endregion
 }

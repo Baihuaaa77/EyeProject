@@ -4,13 +4,14 @@ import SwiftUI
 import UserNotifications
 import EyeScreening
 
-/// 「我的」入口页：个人卡（会动的小瞳 + 本人称呼与档案完善度 + 账号一行），三格概览，
+/// 「我的」入口页：个人卡（称呼首字头像 + 本人称呼与档案完善度 + 账号一行），三格概览，
 /// 分组入口（健康档案 / 数据与隐私 / 通用）点进二级完整页面；不在本页堆放开关与按钮。与安卓 MineScreen 同一排版与文案。
 struct MinePage: View {
     let navigate: (AppRoute) -> Void
     @ObservedObject private var store = SubjectStore.shared
     @ObservedObject private var cloud = CloudModel.shared
     @State private var recordCount = 0
+    @Environment(\.colorScheme) private var scheme
 
     private var me: SubjectProfileItem? { store.subjects.first { $0.relation == "SELF" } }
     private var signedIn: Bool { cloud.bool("signedIn") }
@@ -47,15 +48,16 @@ struct MinePage: View {
         let age = me.flatMap { SubjectProfiles.shared.age(fields: $0.fields, nowMs: Int64(Date().timeIntervalSince1970 * 1000))?.intValue }
         return VStack(spacing: 0) {
             Button { EyeHaptics.tap(); navigate(.subjectEdit(me?.id)) } label: {
-                HStack(spacing: 4) {
-                    MascotStage(mood: .happy, headScale: 0.7).frame(width: 104, height: 104)
+                HStack(spacing: 14) {
+                    Text(String((me?.displayName ?? "我").prefix(1))).font(EyeStyle.title).foregroundStyle(EyeStyle.onPrimary)
+                        .frame(width: 56, height: 56).background(EyeStyle.buttonGradient, in: Circle())
                     VStack(alignment: .leading, spacing: 4) {
                         Text(me?.displayName ?? "我").font(EyeStyle.title).foregroundStyle(EyeStyle.text)
                         Text(([age.map { "\($0) 岁" }, complete >= 5 ? "档案已完善" : "档案完善 \(complete)/5"] as [String?]).compactMap { $0 }.joined(separator: " · "))
                             .font(EyeStyle.body).foregroundStyle(EyeStyle.secondary)
                     }.frame(maxWidth: .infinity, alignment: .leading)
                     Image(systemName: "chevron.right").font(.system(size: 14, weight: .semibold)).foregroundStyle(EyeStyle.secondary)
-                }.padding(.leading, 8).padding(.trailing, 16).padding(.top, 8).padding(.bottom, 4).contentShape(Rectangle())
+                }.padding(.leading, 18).padding(.trailing, 16).padding(.top, 18).padding(.bottom, 14).contentShape(Rectangle())
             }.buttonStyle(RowPressStyle())
             Rectangle().fill(EyeStyle.borderSubtle).frame(height: 1).padding(.horizontal, 16)
             Button { EyeHaptics.tap(); navigate(.account) } label: {
@@ -67,8 +69,9 @@ struct MinePage: View {
                 }.padding(.horizontal, 20).padding(.vertical, 14).contentShape(Rectangle())
             }.buttonStyle(RowPressStyle())
         }
-        .background(LinearGradient(colors: [EyeStyle.primarySoft, EyeStyle.panel], startPoint: .topLeading, endPoint: .bottomTrailing))
-        .clipShape(RoundedRectangle(cornerRadius: 22))
+        .eyeGlass(cornerRadius: EyeStyle.radiusHero, fill: AnyShapeStyle(scheme == .dark ? AnyShapeStyle(EyeStyle.heroGradient) : AnyShapeStyle(Color.white)),
+                  edgeTop: EyeStyle.heroBorder, shadow: false)
+        .shadow(color: scheme == .dark ? EyeStyle.glow.opacity(0.22) : EyeStyle.shadow, radius: scheme == .dark ? 24 : 16, y: 8)
     }
 
     private func stat(_ label: String, _ value: String, _ unit: String, _ action: @escaping () -> Void) -> some View {
@@ -80,7 +83,7 @@ struct MinePage: View {
                 }
                 Text(label).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
             }.padding(.horizontal, 14).padding(.vertical, 12).frame(maxWidth: .infinity, alignment: .leading)
-                .background(EyeStyle.panel, in: RoundedRectangle(cornerRadius: EyeStyle.radiusLarge))
+                .eyeGlass(cornerRadius: EyeStyle.radiusLarge)
         }.buttonStyle(PressScale(scale: 0.97))
     }
 

@@ -558,7 +558,7 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
         gaze = null; gazeCalibration.clear(); renderedTargets.clear()
         stepStartMs = platform.nowMs()
         _state.update { it.copy(step = ScreeningStep.FIXATION, guidePending = true, gazeCalibrated = false,
-            gazeWarning = null, secondsLeft = StrabismusProtocol.FIXATION_SECONDS, instruction = "看着屏幕上方闪烁的小瞳，头和手机保持不动。", warning = null) }
+            gazeWarning = null, secondsLeft = StrabismusProtocol.FIXATION_SECONDS, instruction = "看着屏幕上方闪烁的圆点，头和手机保持不动。", warning = null) }
 
     }
 
@@ -625,7 +625,7 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
         resetGazeWindow()
         stepStartMs = platform.nowMs()
         _state.update { it.copy(step = ScreeningStep.PURSUIT, guidePending = true, secondsLeft = StrabismusProtocol.PURSUIT_SECONDS,
-            instruction = "只用眼睛跟随移动的小瞳：水平 8 秒、垂直 8 秒、斜向 6 秒。", warning = null) }
+            instruction = "只用眼睛跟随移动的圆点：水平 8 秒、垂直 8 秒、斜向 6 秒。", warning = null) }
 
     }
 
@@ -698,7 +698,7 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
             } else {
                 stepStartMs = platform.nowMs(); resetGazeWindow(); faceCenterBaseline = null
                 _state.update { it.copy(step = ScreeningStep.FIXATION, gazeCalibrated = true,
-                    instruction = "看着屏幕上方闪烁的小瞳，头和手机保持不动。", targetX = 1f, targetY = 0f) }
+                    instruction = "看着屏幕上方闪烁的圆点，头和手机保持不动。", targetX = 1f, targetY = 0f) }
                 runTimedStep(StrabismusProtocol.FIXATION_SECONDS) { startFarFixation() }
             }
         }
@@ -1129,7 +1129,7 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
                     gazeOnTarget == null && step != ScreeningStep.COVER &&
                         gazeBadSinceMs?.let { time - it >= 3_000L } == true -> "暂时无法确认注视，请保持头部稳定并看着屏幕目标"
                     gazeOnTarget != null && gazeBadSinceMs?.let { time - it >= 2_500L } == true ->
-                        if (step == ScreeningStep.PURSUIT) "未检测到有效跟随，请只用眼睛跟随移动的小瞳" else "注视明显偏离，请看着屏幕上的小瞳"
+                        if (step == ScreeningStep.PURSUIT) "未检测到有效跟随，请只用眼睛跟随移动的圆点" else "注视明显偏离，请看着屏幕上的圆点"
                     else -> null
                 }
                 _state.update { it.copy(gazeWarning = gazeWarning) }

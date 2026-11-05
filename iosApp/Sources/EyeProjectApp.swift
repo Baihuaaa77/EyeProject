@@ -5,7 +5,7 @@ import UniformTypeIdentifiers
 @main
 struct EyeProjectApp: App {
     var body: some Scene {
-        WindowGroup { EyeRootView().preferredColorScheme(.light).tint(EyeStyle.primary) }
+        WindowGroup { EyeRootView().tint(EyeStyle.primary) }
     }
 }
 
@@ -24,10 +24,10 @@ struct RecordsPage: View {
         SubPage(title: "测试记录") {
             if records.isEmpty {
                 VStack(spacing: 10) {
-                    MascotStage(mood: .thinking).frame(width: 120, height: 120)
+                    IconTile(glyph: .document, tone: .primary, size: 56)
                     Text("还没有测试记录").font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text)
                     Text("在「服务」里做一次自测，结果会保存在这里。").font(EyeStyle.body).foregroundStyle(EyeStyle.secondary)
-                }.padding(28).frame(maxWidth: .infinity).background(EyeStyle.panel, in: RoundedRectangle(cornerRadius: 22))
+                }.padding(28).frame(maxWidth: .infinity).eyeGlass()
             }
             ForEach(records) { RecordRow(entry: $0) }
         }
@@ -95,7 +95,7 @@ private struct RecordRow: View {
             if expanded { details }
         }
         .padding(16).frame(maxWidth: .infinity, alignment: .leading)
-        .background(EyeStyle.panel, in: RoundedRectangle(cornerRadius: EyeStyle.radiusLarge))
+        .eyeGlass(cornerRadius: EyeStyle.radiusLarge)
         .fileExporter(isPresented: $exportingReport, document: RecordReportDocument(text: entry.reportText), contentType: .plainText,
                       defaultFilename: entry.url.deletingPathExtension().lastPathComponent + "_报告.txt") { result in
             if case .failure = result { exportError = "导出失败，请换个位置再试"; EyeHaptics.failure() } else { exportError = nil; EyeHaptics.success() }

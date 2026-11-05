@@ -1,6 +1,8 @@
 package com.zkyjss.eyeproject.feature.mine
 
 import androidx.compose.foundation.background
+import com.zkyjss.eyeproject.core.ui.component.eyeBackdrop
+import com.zkyjss.eyeproject.core.ui.component.eyeGlass
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,6 +21,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.res.painterResource
@@ -38,8 +43,6 @@ import com.zkyjss.eyeproject.core.ui.component.EyeListRow
 import com.zkyjss.eyeproject.core.ui.component.EyePageHeader
 import com.zkyjss.eyeproject.core.ui.component.EyeText
 import com.zkyjss.eyeproject.core.ui.component.EyeTileTone
-import com.zkyjss.eyeproject.core.ui.component.MascotMood
-import com.zkyjss.eyeproject.core.ui.component.XiaoTong
 import com.zkyjss.eyeproject.core.ui.component.rememberEyeHaptics
 import com.zkyjss.eyeproject.feature.services.SubjectProfiles
 
@@ -56,7 +59,7 @@ data class MineNavigation(
 )
 
 /**
- * 「我的」入口页：顶部个人卡（会动的小瞳 + 本人称呼与档案完善度 + 账号一行），三格概览，
+ * 「我的」入口页：顶部个人卡（称呼首字头像 + 本人称呼与档案完善度 + 账号一行），三格概览，
  * 下面是分组入口（健康档案 / 数据与隐私 / 通用），点进二级完整页面。不在本页堆放开关与按钮。与苹果端 MinePage 同一排版与文案。
  */
 @Composable
@@ -71,7 +74,7 @@ internal fun MineContent(state: MineUiState, navigation: MineNavigation, modifie
     val colors = LocalEyeColors.current
     val ready = state as? MineUiState.Ready
     Column(
-        modifier.fillMaxSize().background(colors.appBackground).verticalScroll(rememberScrollState())
+        modifier.fillMaxSize().background(colors.appBackground).verticalScroll(rememberScrollState()).eyeBackdrop(colors)
             .padding(top = getTopStatusBarPadding()).screenHorizontalPaddingLarge(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -97,7 +100,7 @@ internal fun MineContent(state: MineUiState, navigation: MineNavigation, modifie
     }
 }
 
-/** 个人卡：小瞳（可点互动）+ 本人称呼、年龄与档案完善度；下方一行账号状态，点开账户页。 */
+/** 个人卡：称呼首字头像 + 本人称呼、年龄与档案完善度；下方一行账号状态，点开账户页。 */
 @Composable
 private fun ProfileCard(state: MineUiState.Ready?, navigation: MineNavigation) {
     val colors = LocalEyeColors.current
@@ -106,15 +109,19 @@ private fun ProfileCard(state: MineUiState.Ready?, navigation: MineNavigation) {
     val self = state?.self
     val complete = profileCompleteness(self)
     Column(
-        Modifier.fillMaxWidth().clip(EyeShapes.panel)
-            .background(Brush.linearGradient(listOf(colors.primarySoft, colors.panelBackground)))
+        Modifier.fillMaxWidth().shadow(if (colors.isDark) 24.dp else 16.dp, EyeShapes.hero, clip = false,
+            ambientColor = if (colors.hasGlow) colors.glow else colors.shadow, spotColor = colors.shadow)
+            .eyeGlass(colors, EyeShapes.hero, if (colors.isDark) colors.heroBrush else SolidColor(colors.heroStart), elevation = 0.dp)
     ) {
         Row(
             Modifier.fillMaxWidth().clickable(role = Role.Button) { haptics.tap(); navigation.onEditSubject(self?.id) }
-                .padding(start = 8.dp, end = 16.dp, top = 8.dp, bottom = 4.dp),
+                .padding(start = 18.dp, end = 16.dp, top = 18.dp, bottom = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            XiaoTong(MascotMood.HAPPY, Modifier.size(104.dp), headScale = 0.7f)
+            Box(Modifier.size(56.dp).clip(CircleShape).background(colors.buttonBrush), contentAlignment = Alignment.Center) {
+                EyeText((self?.nickname?.ifBlank { null } ?: "我").take(1), style = typography.title, color = colors.onPrimary)
+            }
+            Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 EyeText(self?.nickname?.ifBlank { null } ?: "我", style = typography.title, color = colors.textPrimary)
                 val age = self?.let { SubjectProfiles.age(it.fields, System.currentTimeMillis()) }
@@ -153,7 +160,7 @@ private fun StatTile(label: String, value: String, unit: String, modifier: Modif
     val typography = LocalEyeTypography.current
     val haptics = rememberEyeHaptics()
     Column(
-        modifier.clip(EyeShapes.large).background(colors.panelBackground).clickable(role = Role.Button) { haptics.tap(); onClick() }
+        modifier.eyeGlass(colors, EyeShapes.large).clickable(role = Role.Button) { haptics.tap(); onClick() }
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {

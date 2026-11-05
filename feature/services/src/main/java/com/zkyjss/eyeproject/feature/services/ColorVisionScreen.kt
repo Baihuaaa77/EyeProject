@@ -47,8 +47,6 @@ import com.zkyjss.eyeproject.core.ui.component.EyeButton
 import com.zkyjss.eyeproject.core.ui.component.EyeButtonRole
 import com.zkyjss.eyeproject.core.ui.component.EyeSectionCard
 import com.zkyjss.eyeproject.core.ui.component.EyeText
-import com.zkyjss.eyeproject.core.ui.component.MascotMood
-import com.zkyjss.eyeproject.core.ui.component.XiaoTong
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -137,17 +135,14 @@ fun ColorVisionScreen(
         speechAvailable = voice.available, onStop = if (running) { { viewModel.restart() } } else null) {}
 }
 
-/** 准备：小瞳 + 三条要求（关护眼 / 夜间模式、明亮处、约 40 cm）。 */
+/** 准备：三条要求（关护眼 / 夜间模式、明亮处、约 40 cm）。 */
 @Composable
 private fun ColorSetup(onStart: () -> Unit) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
     EyeSectionCard {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                EyeText("开始前", Modifier.weight(1f), style = typography.title, color = colors.textPrimary)
-                XiaoTong(MascotMood.HAPPY, Modifier.widthIn(max = 96.dp).aspectRatio(1f), headScale = 0.7f)
-            }
+            EyeText("开始前", style = typography.title, color = colors.textPrimary)
             listOf("关掉手机的护眼模式、夜间模式（会改变屏幕颜色）", "在明亮的室内，屏幕亮度已自动调到最高", "手机离眼睛约 40 cm，平时戴眼镜就戴着")
                 .forEachIndexed { i, text -> EyeText("${i + 1}. $text", style = typography.body, color = colors.textPrimary) }
             EyeText("先看一张示例图，再看 8 张检测图，选出看到的数字；看不出就选「看不出」，不要猜。",
