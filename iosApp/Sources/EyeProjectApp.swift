@@ -4,8 +4,13 @@ import UniformTypeIdentifiers
 
 @main
 struct EyeProjectApp: App {
+    /// 白天 / 夜晚：默认跟随系统；点过右上角太阳 / 月亮后固定为所选（与安卓 ThemeRepository 同一取值）
+    @AppStorage("eye.themeMode") private var themeMode = "system"
     var body: some Scene {
-        WindowGroup { EyeRootView().tint(EyeStyle.primary) }
+        WindowGroup {
+            EyeRootView().tint(EyeStyle.primary)
+                .preferredColorScheme(themeMode == "light" ? .light : themeMode == "dark" ? .dark : nil)
+        }
     }
 }
 

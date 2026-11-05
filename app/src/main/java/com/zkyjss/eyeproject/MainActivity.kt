@@ -18,10 +18,18 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.lifecycleScope
 import com.zkyjss.eyeproject.core.data.account.AccountRepository
 import com.zkyjss.eyeproject.core.data.eyecare.EyeCareRepository
+import com.zkyjss.eyeproject.core.data.theme.ThemeMode
+import com.zkyjss.eyeproject.core.data.theme.ThemeRepository
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeProjectTheme
 import com.zkyjss.eyeproject.core.ui.component.EyeAccountBadge
 import com.zkyjss.eyeproject.core.ui.component.EyeSplash
 import com.zkyjss.eyeproject.core.ui.component.LocalEyeAccountBadge
+import com.zkyjss.eyeproject.core.ui.component.EyeThemeToggle
+import com.zkyjss.eyeproject.core.ui.component.LocalEyeThemeToggle
+import android.graphics.Color
+import androidx.activity.SystemBarStyle
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.DisposableEffect
 import com.zkyjss.eyeproject.feature.mine.WelcomeScreen
 import com.zkyjss.eyeproject.ui.EyeProjectNavHost
 import dagger.hilt.android.AndroidEntryPoint
@@ -33,6 +41,7 @@ import kotlinx.coroutines.launch
 class MainActivity : ComponentActivity() {
     @Inject lateinit var accounts: AccountRepository
     @Inject lateinit var eyeCare: EyeCareRepository
+    @Inject lateinit var themes: ThemeRepository
     private var foregroundSince = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -44,7 +53,25 @@ class MainActivity : ComponentActivity() {
         val coldStart = savedInstanceState == null
 
         setContent {
-            EyeProjectTheme {
+            // 白天 / 夜晚：默认跟随系统；点过右上角太阳 / 月亮后固定为所选
+            val mode by themes.themeMode.collectAsState()
+            val darkTheme = when (mode) {
+                ThemeMode.SYSTEM -> isSystemInDarkTheme()
+                ThemeMode.LIGHT -> false
+                ThemeMode.DARK -> true
+            }
+            // 状态栏、导航栏图标的深浅跟随应用主题（而不是系统主题）
+            DisposableEffect(darkTheme) {
+                enableEdgeToEdge(
+                    statusBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT) { darkTheme },
+                    navigationBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT) { darkTheme },
+                )
+                onDispose {}
+            }
+            val themeToggle = EyeThemeToggle(darkTheme) {
+                lifecycleScope.launch { themes.setThemeMode(if (darkTheme) ThemeMode.LIGHT else ThemeMode.DARK) }
+            }
+            EyeProjectTheme(darkTheme = darkTheme) {
                 // 右上角账户按钮：登录后显示邮箱首字母
                 val badge by remember {
                     accounts.accountState.map { EyeAccountBadge(it.email != null, it.email.orEmpty().take(1)) }
@@ -53,7 +80,7 @@ class MainActivity : ComponentActivity() {
                 // 连着云端服务却没登录：冷启动的启动动画之后先提示登录 / 注册（可跳过；主动清空服务器地址、只在本机用的不打扰）
                 val account by remember { accounts.accountState }.collectAsState(null)
                 var welcome by rememberSaveable { mutableStateOf(false) }
-                CompositionLocalProvider(LocalEyeAccountBadge provides badge) {
+                CompositionLocalProvider(LocalEyeAccountBadge provides badge, LocalEyeThemeToggle provides themeToggle) {
                     Box(Modifier.fillMaxSize()) {
                         // 首页与启动动画同时创建：动画只盖在上面，不推迟首页加载
                         EyeProjectNavHost(modifier = Modifier.fillMaxSize())

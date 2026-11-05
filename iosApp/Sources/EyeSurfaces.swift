@@ -64,7 +64,7 @@ struct EyeHeroCard<Content: View>: View {
         VStack(alignment: .leading, spacing: spacing) { content }
             .padding(padding).frame(maxWidth: .infinity, alignment: .leading)
             .eyeGlass(cornerRadius: EyeStyle.radiusHero,
-                      fill: scheme == .dark ? AnyShapeStyle(EyeStyle.heroGradient) : AnyShapeStyle(Color.white),
+                      fill: AnyShapeStyle(EyeStyle.heroGradient),
                       edgeTop: EyeStyle.heroBorder, shadow: false)
             .shadow(color: scheme == .dark ? EyeStyle.glow.opacity(0.22) : EyeStyle.shadow, radius: scheme == .dark ? 26 : 18, y: 10)
     }
@@ -140,7 +140,7 @@ struct ProgressRing: View {
     @Environment(\.colorScheme) private var scheme
     @State private var shown: Double = 0
     var body: some View {
-        let glow = scheme == .dark
+        let glow = true  // 深色电光蓝泛光，浅色为半透明青蓝柔光（令牌 glow 已按主题取值）
         let f = max(0.02, min(1, shown))
         // 光流：从 12 点钟的主蓝沿弧线流向末端的青蓝（角度渐变随视图一起旋转）
         // 起点的圆头会往回伸进 360° 之前的一小段：那一段也接回起始色，否则起点会冒出一块末端色的半圆

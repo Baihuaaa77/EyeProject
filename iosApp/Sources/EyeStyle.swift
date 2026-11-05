@@ -4,28 +4,28 @@ import UIKit
 /// 对齐 core/designsystem 的令牌（2026-11 视觉改版，以「深海蓝」为标准）：每个颜色都随系统深浅色切换，
 /// 浅色取 LightEyeColors、深色取 DarkEyeColors。iOS 绘制器只消费令牌，不定义另一套主题。
 enum EyeStyle {
-    static let background = dyn(0xF3F4F7, 0x050912)
-    static let panel = dyn(0xFFFFFF, 0x0C1220)
-    static let surfaceVariant = dyn(0xECEEF4, 0x121B2E)
-    static let borderSubtle = dyn(0xDFE2EA, 0x1E2840)
-    static let text = dyn(0x141A33, 0xF2F5FF)
+    static let background = dyn(0xEDF0F5, 0x050912)
+    static let panel = dyn(0xF4F6FA, 0x0C1220)
+    static let surfaceVariant = dyn(0xE4E8EF, 0x121B2E)
+    static let borderSubtle = dyn(0xDDE2EA, 0x1E2840)
+    static let text = dyn(0x1E2433, 0xF2F5FF)
     /// 示意图墨色：深浅主题都保持深色（视标、示意人物五官）。
-    static let ink = dyn(0x141A33, 0x0B1020)
-    static let secondary = dyn(0x464C66, 0xB4BCD2)
-    static let tertiary = dyn(0x7D8298, 0x7A84A0)
-    static let primary = dyn(0x23367A, 0x4A7DFF)
-    static let primaryDark = dyn(0x1A2860, 0x7AA4FF)
-    static let primarySoft = dyn(0xE6EAF5, 0x13214A)
+    static let ink = dyn(0x1E2433, 0x0B1020)
+    static let secondary = dyn(0x4A5266, 0xB4BCD2)
+    static let tertiary = dyn(0x7E8699, 0x7A84A0)
+    static let primary = dyn(0x2B6FF2, 0x4A7DFF)
+    static let primaryDark = dyn(0x1D57CC, 0x7AA4FF)
+    static let primarySoft = dyn(0xE2EBFD, 0x13214A)
     static let onPrimary = Color.white
-    static let neutralSoft = dyn(0xECEEF4, 0x141C2E)
-    static let brandStart = dyn(0xA9B8EE, 0xB4D0FF)
-    static let brandEnd = dyn(0x23367A, 0x2E6BFF)
+    static let neutralSoft = dyn(0xE4E8EF, 0x141C2E)
+    static let brandStart = dyn(0x8EC2FF, 0xB4D0FF)
+    static let brandEnd = dyn(0x2B6FF2, 0x2E6BFF)
     /// 标志渐变起点（浅色用天蓝提亮，深色用按钮亮端）。
-    static let brandMarkStart = dyn(0x2F5FD0, 0x5B95FF)
+    static let brandMarkStart = dyn(0x1FB2F0, 0x5B95FF)
     static let accent = dyn(0xF5D90A, 0xFFE45C)
     static let accentSoft = dyn(0xFFF7CC, 0x2B2710)
-    static let gray = dyn(0x7D8298, 0x6C7590)
-    static let blue = dyn(0x23367A, 0x6E9BFF)
+    static let gray = dyn(0x7E8699, 0x6C7590)
+    static let blue = dyn(0x2B6FF2, 0x6E9BFF)
     static let warning = dyn(0x857400, 0xFFE45C)
     static let success = dyn(0x17804D, 0x5EE3A1)
     static let successSoft = dyn(0xE3F3EA, 0x0F2A22)
@@ -36,24 +36,24 @@ enum EyeStyle {
     static let danger = dyn(0xC9363F, 0xFF7A86)
     static let dangerSoft = dyn(0xFBE9EA, 0x2D1219)
     static let tooClose = dyn(0xD23A3A, 0xFF7A6E)
-    static let tooFar = dyn(0x2F5FD0, 0x7AA4FF)
+    static let tooFar = dyn(0x2B6FF2, 0x7AA4FF)
     /// 主卡渐变（浅色为白，深色为深蓝渐变）与描边。
-    static let heroStart = dyn(0xFFFFFF, 0x18284F)
-    static let heroEnd = dyn(0xFFFFFF, 0x0C1428)
-    static let heroBorder = dyn(0xFFFFFF, 0x82A5FF, lightAlpha: 0.95, darkAlpha: 0.2)
+    static let heroStart = dyn(0xF6F8FC, 0x18284F)
+    static let heroEnd = dyn(0xF1F4F9, 0x0C1428)
+    static let heroBorder = dyn(0xFFFFFF, 0x82A5FF, lightAlpha: 0.9, darkAlpha: 0.2)
     /// 主按钮渐变（浅色起止同色）。
-    static let buttonStart = dyn(0x23367A, 0x2556F5)
-    static let buttonEnd = dyn(0x2F4795, 0x5B95FF)
+    static let buttonStart = dyn(0x2F7BF6, 0x2556F5)
+    static let buttonEnd = dyn(0x1FB2F0, 0x5B95FF)
     /// 光流渐变（进度圆环、柱状图、进度条）：主蓝 → 青蓝，只用于数据图形。
-    static let flowStart = dyn(0x23367A, 0x2E6BFF)
-    static let flowEnd = dyn(0x4A9BE0, 0x3DDCE8)
+    static let flowStart = dyn(0x2F72F6, 0x2E6BFF)
+    static let flowEnd = dyn(0x18D6E6, 0x3DDCE8)
     /// 光晕（只有深色发光，浅色透明）与投影色。
-    static let glow = dyn(0x3C78FF, 0x3C78FF, lightAlpha: 0, darkAlpha: 1)
-    static let shadow = dyn(0x19235A, 0x000000, lightAlpha: 0.2, darkAlpha: 0.6)
+    static let glow = dyn(0x34C6EE, 0x3C78FF, lightAlpha: 0.5, darkAlpha: 1)
+    static let shadow = dyn(0xA4B0C4, 0x000000, lightAlpha: 0.35, darkAlpha: 0.6)
     /// 玻璃面：半透明填充 + 上亮下淡描边（与安卓 glassFill / glassEdgeTop / glassEdgeBottom 一致）。
-    static let glassFill = dyn(0xFFFFFF, 0x0C1220, lightAlpha: 0.9, darkAlpha: 0.65)
-    static let glassEdgeTop = dyn(0xFFFFFF, 0xFFFFFF, lightAlpha: 0.95, darkAlpha: 0.25)
-    static let glassEdgeBottom = dyn(0x141E50, 0xFFFFFF, lightAlpha: 0.16, darkAlpha: 0.08)
+    static let glassFill = dyn(0xF4F6FA, 0x0C1220, lightAlpha: 0.95, darkAlpha: 0.65)
+    static let glassEdgeTop = dyn(0xFFFFFF, 0xFFFFFF, lightAlpha: 1, darkAlpha: 0.25)
+    static let glassEdgeBottom = dyn(0x8A96AD, 0xFFFFFF, lightAlpha: 0.1, darkAlpha: 0.08)
 
     /// 固定浅色主色：白底测试画布上的注视目标（深色模式下也保持高对比）。
     static let fixedPrimary = Color(rgb: 0x23367A)
@@ -128,7 +128,7 @@ struct EyeButtonStyle: ButtonStyle {
             .background {
                 switch role {
                 case .primary: shape.fill(EyeStyle.buttonGradient)
-                    .shadow(color: scheme == .dark ? EyeStyle.glow.opacity(0.45) : EyeStyle.primary.opacity(0.3), radius: scheme == .dark ? 12 : 10, y: 5)
+                    .shadow(color: scheme == .dark ? EyeStyle.glow.opacity(0.45) : EyeStyle.buttonEnd.opacity(0.35), radius: 12, y: 5)
                 case .secondary: shape.fill(EyeStyle.panel)
                     .overlay { shape.strokeBorder(EyeStyle.glassEdgeBottom, lineWidth: 1) }
                     .shadow(color: EyeStyle.shadow.opacity(0.6), radius: 3, y: 1)

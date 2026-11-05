@@ -38,6 +38,30 @@ data class EyeAccountBadge(val signedIn: Boolean = false, val initial: String = 
 
 val LocalEyeAccountBadge = compositionLocalOf { EyeAccountBadge() }
 
+/** 右上角白天 / 夜晚切换：当前是否夜晚 + 点击切换（为 null 时不显示按钮）。由 app 按主题偏好提供。 */
+@Immutable
+data class EyeThemeToggle(val isDark: Boolean = false, val onToggle: (() -> Unit)? = null)
+
+val LocalEyeThemeToggle = compositionLocalOf { EyeThemeToggle() }
+
+/** 白天 / 夜晚切换按钮（系统设置齿轮左侧）：白天显示月亮（点了进夜晚），夜晚显示太阳（点了回白天）。与苹果端 ThemeToggleButton 一致。 */
+@Composable
+fun EyeThemeButton(modifier: Modifier = Modifier) {
+    val toggle = LocalEyeThemeToggle.current
+    val onToggle = toggle.onToggle ?: return
+    val colors = LocalEyeColors.current
+    val haptics = rememberEyeHaptics()
+    Box(
+        modifier.size(44.dp).clip(CircleShape).background(colors.panelBackground)
+            .border(1.dp, colors.borderSubtle, CircleShape)
+            .clickable(role = Role.Button) { haptics.tap(); onToggle() }
+            .semantics { contentDescription = if (toggle.isDark) "切换到白天模式" else "切换到夜晚模式" },
+        contentAlignment = Alignment.Center,
+    ) {
+        EyeGlyphIcon(if (toggle.isDark) EyeGlyph.SUN else EyeGlyph.MOON, Modifier.size(22.dp), colors.primary)
+    }
+}
+
 /** 顶层页右上角常驻的「系统设置」齿轮（与测试页顶栏同一图标）；与苹果端 SettingsGear 一致。 */
 @Composable
 fun EyeSettingsGear(onClick: () -> Unit, modifier: Modifier = Modifier) {
@@ -94,11 +118,12 @@ fun PersonGlyph(modifier: Modifier = Modifier) {
     }
 }
 
-/** 顶层页右上角的一组按钮：账户 + 系统设置。 */
+/** 顶层页右上角的一组按钮：账户 + 白天 / 夜晚切换 + 系统设置。 */
 @Composable
 fun EyeHeaderActions(onOpenAccount: (() -> Unit)?, onOpenSettings: () -> Unit) {
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
         if (onOpenAccount != null) EyeAccountButton(onOpenAccount)
+        EyeThemeButton()
         EyeSettingsGear(onOpenSettings)
     }
 }

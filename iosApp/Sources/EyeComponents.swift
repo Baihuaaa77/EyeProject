@@ -55,6 +55,21 @@ struct SettingsGear: View {
     }
 }
 
+/// 白天 / 夜晚切换（齿轮左侧）：白天显示月亮（点了进夜晚），夜晚显示太阳（点了回白天）。
+/// 选择存在 UserDefaults「eye.themeMode」（system / light / dark，默认跟随系统），根视图据此设置 preferredColorScheme。与安卓 EyeThemeButton 一致。
+struct ThemeToggleButton: View {
+    @AppStorage("eye.themeMode") private var themeMode = "system"
+    @Environment(\.colorScheme) private var scheme
+    var body: some View {
+        let dark = scheme == .dark
+        Button { EyeHaptics.tap(); themeMode = dark ? "light" : "dark" } label: {
+            Image(systemName: dark ? "sun.max.fill" : "moon.fill").font(.system(size: 20)).foregroundStyle(EyeStyle.primary)
+                .frame(width: 44, height: 44).background(EyeStyle.panel, in: Circle())
+                .overlay { Circle().stroke(EyeStyle.borderSubtle, lineWidth: 1) }
+        }.buttonStyle(.plain).accessibilityLabel(dark ? "切换到白天模式" : "切换到夜晚模式")
+    }
+}
+
 /// 账户按钮：未登录画人像轮廓，登录后显示邮箱首字母与在线小绿点；点开完整的账户页。与安卓 EyeAccountButton 一致。
 struct AccountButton: View {
     @ObservedObject private var cloud = CloudModel.shared
@@ -94,6 +109,7 @@ struct PageHeader: View {
                 if let subtitle { Text(subtitle).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary) }
             }.frame(maxWidth: .infinity, alignment: .leading)
             AccountButton(action: openAccount)
+            ThemeToggleButton()
             SettingsGear(action: openSettings)
         }.padding(.vertical, 16)
     }
@@ -515,7 +531,7 @@ struct BarChartView: View {
                     // 光流：底部主蓝 → 顶部青蓝；今天满亮（深色再叠同色泛光），其余稍暗
                     let flow = GraphicsContext.Shading.linearGradient(Gradient(colors: [EyeStyle.flowEnd, EyeStyle.flowStart]),
                         startPoint: CGPoint(x: rect.midX, y: rect.minY), endPoint: CGPoint(x: rect.midX, y: size.height))
-                    if bar.highlight && dark {
+                    if bar.highlight {
                         var halo = context
                         halo.addFilter(.blur(radius: 6))
                         halo.opacity = 0.6

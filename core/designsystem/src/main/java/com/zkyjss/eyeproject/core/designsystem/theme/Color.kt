@@ -9,7 +9,7 @@ import androidx.compose.ui.graphics.Color
  * 色彩体系以「深海蓝」为标准（2026-11 视觉改版），深浅两套同一蓝色主调，不使用 Material 默认配色。
  *
  * - 深色「深海蓝」：近黑蓝底，主卡深蓝渐变 + 淡蓝描边浮起；发光只用在圆环、主按钮和图表的当前项上
- * - 浅色「瓷白深蓝」：冷白底、白卡，主色藏青 #23367A，卡片带描边与柔和投影；不发光
+ * - 浅色「雾白天蓝」：浅灰蓝底、略亮的卡片带柔和拟物投影与白色上沿，主色天蓝 #2B6FF2；圆环与当前柱带柔和青色光晕
  * - 两套主色同为蓝系，跟随系统深浅色切换，是同一个产品的白天与夜里
  * - 卡片是「玻璃」：半透明面 + 上沿高光描边（[glassFill] / [glassEdgeTop]），透出背后的渐变光
  * - 页面为纯色底，不加渐变
@@ -58,7 +58,7 @@ data class EyeColors(
     /** 主按钮底（深色为渐变，浅色起止同色）。 */
     val buttonStart: Color,
     val buttonEnd: Color,
-    /** 光晕色：深色主题下圆环、主按钮与图表当前项的泛光；浅色为透明（不发光）。 */
+    /** 光晕色：圆环、主按钮与图表当前项的泛光（深色电光蓝，浅色半透明青蓝柔光）。 */
     val glow: Color,
     /** 光流渐变（进度圆环、柱状图、进度条）：从主蓝流向青蓝，只用于数据图形，不作底色或文字色。 */
     val flowStart: Color,
@@ -98,56 +98,56 @@ data class EyeColors(
     val hasGlow: Boolean get() = glow.alpha > 0f
 }
 
-/** 浅色「瓷白深蓝」：深海蓝的白天版，主色藏青 #23367A，白卡 + 极淡藏青渐变光，不发光。 */
+/** 浅色「雾白天蓝」：浅灰蓝底 + 略亮的卡片柔和浮起（拟物投影 + 白色上沿），主色天蓝，数据图形蓝 → 青光流并带柔光。 */
 val LightEyeColors = EyeColors(
     isDark = false,
-    appBackground = Color(0xFFF3F4F7),
-    panelBackground = Color(0xFFFFFFFF),
-    surfaceVariant = Color(0xFFECEEF4),
+    appBackground = Color(0xFFEDF0F5),
+    panelBackground = Color(0xFFF4F6FA),
+    surfaceVariant = Color(0xFFE4E8EF),
     cameraSurface = Color(0xFF05070C),
-    primary = Color(0xFF23367A),
-    primaryDark = Color(0xFF1A2860),
-    primarySoft = Color(0xFFE6EAF5),
+    primary = Color(0xFF2B6FF2),
+    primaryDark = Color(0xFF1D57CC),
+    primarySoft = Color(0xFFE2EBFD),
     onPrimary = Color(0xFFFFFFFF),
-    brandStart = Color(0xFFA9B8EE),
-    brandEnd = Color(0xFF23367A),
+    brandStart = Color(0xFF8EC2FF),
+    brandEnd = Color(0xFF2B6FF2),
     accent = Color(0xFFF5D90A),
     accentSoft = Color(0xFFFFF7CC),
-    ink = Color(0xFF141A33),
-    textPrimary = Color(0xFF141A33),
-    textSecondary = Color(0xFF464C66),
-    textTertiary = Color(0xFF7D8298),
+    ink = Color(0xFF1E2433),
+    textPrimary = Color(0xFF1E2433),
+    textSecondary = Color(0xFF4A5266),
+    textTertiary = Color(0xFF7E8699),
     textInverse = Color(0xFFFFFFFF),
-    borderSubtle = Color(0xFFDFE2EA),
-    cardBorder = Color(0x24141E50),
-    heroStart = Color(0xFFFFFFFF),
-    heroEnd = Color(0xFFFFFFFF),
-    heroBorder = Color(0x1A141E50),
-    shadow = Color(0x3319235A),
-    buttonStart = Color(0xFF23367A),
-    buttonEnd = Color(0xFF2F4795),
-    glow = Color.Transparent,
-    flowStart = Color(0xFF23367A),
-    flowEnd = Color(0xFF4A9BE0),
-    glassFill = Color(0xE6FFFFFF),
-    glassEdgeTop = Color(0xF2FFFFFF),
-    glassEdgeBottom = Color(0x29141E50),
+    borderSubtle = Color(0xFFDDE2EA),
+    cardBorder = Color(0xB3FFFFFF),
+    heroStart = Color(0xFFF6F8FC),
+    heroEnd = Color(0xFFF1F4F9),
+    heroBorder = Color(0xE6FFFFFF),
+    shadow = Color(0x59A4B0C4),
+    buttonStart = Color(0xFF2F7BF6),
+    buttonEnd = Color(0xFF1FB2F0),
+    glow = Color(0x8034C6EE),
+    flowStart = Color(0xFF2F72F6),
+    flowEnd = Color(0xFF18D6E6),
+    glassFill = Color(0xF2F4F6FA),
+    glassEdgeTop = Color(0xFFFFFFFF),
+    glassEdgeBottom = Color(0x1A8A96AD),
     success = Color(0xFF17804D),
     successSoft = Color(0xFFE3F3EA),
     warning = Color(0xFF857400),
     warningSoft = Color(0xFFFFF7CC),
     danger = Color(0xFFC9363F),
     dangerSoft = Color(0xFFFBE9EA),
-    neutralSoft = Color(0xFFECEEF4),
+    neutralSoft = Color(0xFFE4E8EF),
     overlayScrim = Color(0x660A0F1F),
     tooClose = Color(0xFFD23A3A),
-    tooFar = Color(0xFF2F5FD0),
+    tooFar = Color(0xFF2B6FF2),
     onStatus = Color(0xFFFFFFFF),
     onWarning = Color(0xFF2A2400),
     white = Color.White,
     black = Color.Black,
-    gray = Color(0xFF7D8298),
-    blue = Color(0xFF23367A)
+    gray = Color(0xFF7E8699),
+    blue = Color(0xFF2B6FF2)
 )
 
 /** 深色「深海蓝」：主色提亮为电光蓝，主卡深蓝渐变，光晕只给圆环、主按钮与当前项。 */

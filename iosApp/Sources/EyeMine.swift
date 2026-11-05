@@ -69,7 +69,7 @@ struct MinePage: View {
                 }.padding(.horizontal, 20).padding(.vertical, 14).contentShape(Rectangle())
             }.buttonStyle(RowPressStyle())
         }
-        .eyeGlass(cornerRadius: EyeStyle.radiusHero, fill: AnyShapeStyle(scheme == .dark ? AnyShapeStyle(EyeStyle.heroGradient) : AnyShapeStyle(Color.white)),
+        .eyeGlass(cornerRadius: EyeStyle.radiusHero, fill: AnyShapeStyle(EyeStyle.heroGradient),
                   edgeTop: EyeStyle.heroBorder, shadow: false)
         .shadow(color: scheme == .dark ? EyeStyle.glow.opacity(0.22) : EyeStyle.shadow, radius: scheme == .dark ? 24 : 16, y: 8)
     }

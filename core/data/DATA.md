@@ -20,6 +20,7 @@
 | `advice/AdviceRepository` | 接口 + `DefaultAdviceRepository`：`advice(requestJson): Flow<AiAdviceState>`、`generate(requestJson, agreeFirst)`；需「AI 综合建议」同意，按输入缓存在 `ai_advice.json`（最多 30 条） |
 | `subject/SubjectRepository` | 接口 + `OfflineFirstSubjectRepository`：本人与家庭成员及其资料（原测试问卷），本机 `subjects.json` 为事实源，首次使用自动建立空白「本人」；`subjects: Flow`、`remoteIds: Flow`（本机 → 云端成员编号）；满足上传条件时 `sync()` 双向同步：「本人」绑定账号默认成员、成员用本机 UUID 在云端新建、资料版本旧于云端时以云端为准、孩子资料未获监护人同意时保持待传；换账号时全部重新待传 |
 | `sync/SyncWorker` | WorkManager 一次性任务（需联网、指数退避、同名任务串接）；通过 Hilt EntryPoint 取仓库 |
+| `theme/ThemeRepository` | 接口 + `DefaultThemeRepository`：界面明暗 `themeMode: StateFlow<ThemeMode>`（SYSTEM 跟随系统 / LIGHT / DARK，SharedPreferences `eye_theme`，冷启动第一帧即有值）、`setThemeMode`；app 据此设置 `EyeProjectTheme(darkTheme)` 与系统栏图标深浅，右上角太阳 / 月亮切换。与苹果端 UserDefaults「eye.themeMode」同一取值 |
 | `di/DataModule` | Hilt 绑定（仓库与 `SyncScheduler`） |
 
 ## 上传条件

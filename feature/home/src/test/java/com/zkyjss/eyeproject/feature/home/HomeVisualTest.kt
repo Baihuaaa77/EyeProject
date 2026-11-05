@@ -118,7 +118,18 @@ class HomeVisualTest {
     @Test @Config(qualifiers = "zh-rCN-w390dp-h2600dp-mdpi")
     fun fullHomePage() {
         compose.mainClock.autoAdvance = false
-        compose.setContent { EyeProjectTheme { HomeContent(demoState(), HomeNavigation(), HomeActions()) } }
+        var toggled = false
+        compose.setContent {
+            EyeProjectTheme {
+                androidx.compose.runtime.CompositionLocalProvider(com.zkyjss.eyeproject.core.ui.component.LocalEyeThemeToggle provides
+                    com.zkyjss.eyeproject.core.ui.component.EyeThemeToggle(isDark = false) { toggled = true }) {
+                    HomeContent(demoState(), HomeNavigation(), HomeActions())
+                }
+            }
+        }
+        // 右上角有白天 / 夜晚切换：白天显示月亮，点了切到夜晚
+        compose.onNodeWithContentDescription("切换到夜晚模式").performClick()
+        assertTrue(toggled)
         compose.mainClock.advanceTimeBy(1_500)
         capture("02-首页-整页", advance = false)
     }

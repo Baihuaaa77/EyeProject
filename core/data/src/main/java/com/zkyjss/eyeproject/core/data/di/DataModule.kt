@@ -16,6 +16,8 @@ import com.zkyjss.eyeproject.core.data.subject.OfflineFirstSubjectRepository
 import com.zkyjss.eyeproject.core.data.subject.SubjectRepository
 import com.zkyjss.eyeproject.core.data.sync.SyncScheduler
 import com.zkyjss.eyeproject.core.data.sync.WorkManagerSyncScheduler
+import com.zkyjss.eyeproject.core.data.theme.DefaultThemeRepository
+import com.zkyjss.eyeproject.core.data.theme.ThemeRepository
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -48,4 +50,7 @@ internal abstract class DataModule {
 
     @Binds
     abstract fun bindSyncScheduler(impl: WorkManagerSyncScheduler): SyncScheduler
+
+    @Binds
+    abstract fun bindThemeRepository(impl: DefaultThemeRepository): ThemeRepository
 }

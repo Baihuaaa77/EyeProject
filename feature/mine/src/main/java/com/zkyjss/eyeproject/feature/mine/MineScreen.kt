@@ -110,8 +110,8 @@ private fun ProfileCard(state: MineUiState.Ready?, navigation: MineNavigation) {
     val complete = profileCompleteness(self)
     Column(
         Modifier.fillMaxWidth().shadow(if (colors.isDark) 24.dp else 16.dp, EyeShapes.hero, clip = false,
-            ambientColor = if (colors.hasGlow) colors.glow else colors.shadow, spotColor = colors.shadow)
-            .eyeGlass(colors, EyeShapes.hero, if (colors.isDark) colors.heroBrush else SolidColor(colors.heroStart), elevation = 0.dp)
+            ambientColor = if (colors.isDark) colors.glow else colors.shadow, spotColor = colors.shadow)
+            .eyeGlass(colors, EyeShapes.hero, colors.heroBrush, elevation = 0.dp)
     ) {
         Row(
             Modifier.fillMaxWidth().clickable(role = Role.Button) { haptics.tap(); navigation.onEditSubject(self?.id) }

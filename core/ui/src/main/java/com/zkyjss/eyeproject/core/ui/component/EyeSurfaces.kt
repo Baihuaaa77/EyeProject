@@ -77,8 +77,8 @@ fun EyeHeroCard(
     Column(
         modifier.fillMaxWidth()
             .shadow(if (colors.isDark) 28.dp else 20.dp, EyeShapes.hero, clip = false,
-                ambientColor = if (colors.hasGlow) colors.glow else colors.shadow, spotColor = colors.shadow)
-            .eyeGlass(colors, EyeShapes.hero, if (colors.isDark) colors.heroBrush else SolidColor(colors.heroStart),
+                ambientColor = if (colors.isDark) colors.glow else colors.shadow, spotColor = colors.shadow)
+            .eyeGlass(colors, EyeShapes.hero, colors.heroBrush,
                 edgeTop = if (colors.isDark) colors.heroBorder else colors.glassEdgeTop, elevation = 0.dp)
             .padding(contentPadding),
         verticalArrangement = verticalArrangement,
