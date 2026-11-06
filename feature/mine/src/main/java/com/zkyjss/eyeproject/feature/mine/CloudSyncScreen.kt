@@ -2,7 +2,8 @@ package com.zkyjss.eyeproject.feature.mine
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
+import androidx.compose.animation.animateContentSize
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,17 +19,14 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.zkyjss.eyeproject.core.data.record.RecordSyncStatus
-import com.zkyjss.eyeproject.core.designsystem.theme.EyeShapes
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
 import com.zkyjss.eyeproject.core.sync.ConsentType
 import com.zkyjss.eyeproject.core.ui.component.EyeButton
-import com.zkyjss.eyeproject.core.ui.component.eyeGlass
 import com.zkyjss.eyeproject.core.ui.component.EyeButtonRole
 import com.zkyjss.eyeproject.core.ui.component.EyeGlyph
 import com.zkyjss.eyeproject.core.ui.component.EyeIconTile
@@ -49,7 +47,7 @@ internal data class CloudSyncActions(
     val export: () -> Unit = {},
 )
 
-/** 各项同意的说明（问号小窗；两端同一文案）。 */
+/** 各项同意的说明（收在每组最后一行的可展开说明里；两端同一文案）。 */
 internal object ConsentHelp {
     const val SYNC = "把测试记录与家庭成员资料加密保存到云端，换手机或多台设备时可以找回。关闭后不再上传，已上传的数据可在下方导出或注销账号删除。"
     const val GUARDIAN = "未满 14 岁孩子的测试记录，需要监护人同意后才会上传。"
@@ -59,11 +57,15 @@ internal object ConsentHelp {
     const val CHAT = "和爱科聊天时，把你输入的文字、最近几轮对话，以及综合建议用到的去标识用眼概况发给第三方大模型（DeepSeek）回答；" +
         "服务器不保存对话内容，记录只在这台手机上；不发送姓名、账号、照片或视频。"
     const val AI = "生成 AI 解读时，把这次结果的等级、指标、判断依据、年龄段和几项相关资料选项发给第三方大模型（DeepSeek），不发送姓名、账号、照片或视频；风险等级仍由测试规则决定。"
+
+    val consentItems = listOf("云端保存记录与资料" to SYNC, "监护人同意" to GUARDIAN, "用于研究" to RESEARCH)
+    val aiItems = listOf("AI 解读" to AI, "AI 综合建议" to ADVICE, "AI 对话" to CHAT)
 }
 
 /**
- * 「我的 → 云端同步」完整页面：同步状态与立即同步、分项同意（每项旁边问号说明）、导出云端数据、数据如何处理。
- * 登录、退出与注销在右上角的账户页。与苹果端 CloudSyncPage 同一排版与文案。
+ * 「我的 → 云端同步」完整页面，分四个区域：同步概览（已上传条数、状态与立即同步；未登录时为去登录）→ 授权管理（云端保存、监护人、研究）→
+ * AI 数据处理（AI 解读、综合建议、对话）→ 数据管理（导出云端数据、数据如何处理）。开关行只写名称，各项会发送 / 保存什么
+ * 收在每组最后一行的可展开说明里，不再逐项弹问号小窗。登录、退出与注销在右上角的账户页。与苹果端 CloudSyncPage 同一排版与文案。
  */
 @Composable
 fun CloudSyncScreen(onBack: () -> Unit, onOpenAccount: () -> Unit, viewModel: CloudSyncViewModel = hiltViewModel()) {
@@ -85,82 +87,113 @@ internal fun CloudSyncContent(state: CloudSyncUiState, actions: CloudSyncActions
             CloudSyncUiState.Loading -> Unit
             is CloudSyncUiState.NotConfigured -> SignInPrompt("还没有连接服务器", "数据目前只保存在本机。在账户页填写服务器地址并登录后，即可开启云端同步。", onOpenAccount)
             is CloudSyncUiState.SignedOut -> SignInPrompt("登录后开启云端同步", "测试记录和家人资料可以在多台设备之间同步，本机记录始终保留。", onOpenAccount)
-            is CloudSyncUiState.SignedIn -> SignedInPanel(state, actions)
+            is CloudSyncUiState.SignedIn -> SignedInSections(state, actions)
         }
-        DataHandlingGroup()
+        DataGroup(export = (state as? CloudSyncUiState.SignedIn)?.let { signedIn -> actions.export.takeUnless { signedIn.busy } })
     }
 }
 
+/** 未连接服务器或未登录时的「同步概览」。 */
 @Composable
 private fun SignInPrompt(title: String, text: String, onOpenAccount: () -> Unit) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
-    Column(Modifier.fillMaxWidth().eyeGlass(colors, EyeShapes.panel).padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        EyeIconTile(EyeGlyph.CLOUD, EyeTileTone.BLUE, 48.dp)
-        EyeText(title, style = typography.subtitle, color = colors.textPrimary)
-        EyeText(text, style = typography.body, color = colors.textSecondary)
-        EyeButton("去登录", EyeButtonRole.PRIMARY, onOpenAccount, Modifier.fillMaxWidth())
+    EyeListGroup(title = SECTION_OVERVIEW) {
+        Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            EyeIconTile(EyeGlyph.CLOUD, EyeTileTone.BLUE, 48.dp)
+            EyeText(title, style = typography.subtitle, color = colors.textPrimary)
+            EyeText(text, style = typography.body, color = colors.textSecondary)
+            EyeButton("去登录", EyeButtonRole.PRIMARY, onOpenAccount, Modifier.fillMaxWidth())
+        }
     }
 }
 
 @Composable
-private fun SignedInPanel(state: CloudSyncUiState.SignedIn, actions: CloudSyncActions) {
+private fun SignedInSections(state: CloudSyncUiState.SignedIn, actions: CloudSyncActions) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
     val haptics = rememberEyeHaptics()
-    Column(Modifier.fillMaxWidth().eyeGlass(colors, EyeShapes.panel).padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                EyeText("已上传", style = typography.body, color = colors.textSecondary)
-                Row(verticalAlignment = Alignment.Bottom) {
-                    EyeText("${state.status.synced}", style = typography.headline, color = colors.textPrimary)
-                    EyeText(" 条记录", Modifier.padding(bottom = 6.dp), style = typography.body, color = colors.textSecondary)
+    EyeListGroup(title = SECTION_OVERVIEW) {
+        Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    EyeText("已上传", style = typography.body, color = colors.textSecondary)
+                    Row(verticalAlignment = Alignment.Bottom) {
+                        EyeText("${state.status.synced}", style = typography.headline, color = colors.textPrimary)
+                        EyeText(" 条记录", Modifier.padding(bottom = 6.dp), style = typography.body, color = colors.textSecondary)
+                    }
                 }
+                val (label, tone) = if (state.healthDataSync) "已开启" to StatusTone.SUCCESS else "未开启" to StatusTone.NEUTRAL
+                EyeStatusChip(label, tone, live = state.busy)
             }
-            val (label, tone) = if (state.healthDataSync) "已开启" to StatusTone.SUCCESS else "未开启" to StatusTone.NEUTRAL
-            EyeStatusChip(label, tone, live = state.busy)
+            statusLine(state.status, state.busy)?.let { EyeText(it, style = typography.body, color = colors.textSecondary) }
+            state.message?.let { EyeText(it, style = typography.body, color = colors.textSecondary) }
+            EyeButton(if (state.busy) "正在同步…" else "立即同步", EyeButtonRole.PRIMARY, { haptics.tap(); actions.syncNow() }, Modifier.fillMaxWidth(),
+                enabled = !state.busy && state.healthDataSync)
         }
-        statusLine(state.status, state.busy)?.let { EyeText(it, style = typography.body, color = colors.textSecondary) }
-        state.message?.let { EyeText(it, style = typography.body, color = colors.textSecondary) }
-        EyeButton(if (state.busy) "正在同步…" else "立即同步", EyeButtonRole.PRIMARY, { haptics.tap(); actions.syncNow() }, Modifier.fillMaxWidth(),
-            enabled = !state.busy && state.healthDataSync)
     }
-    EyeListGroup(title = "授权") {
+    EyeListGroup(Modifier.animateContentSize(), title = SECTION_CONSENT) {
         EyeSwitchRow("云端保存记录与资料", state.healthDataSync, { actions.setConsent(ConsentType.HEALTH_DATA_SYNC, it) },
-            glyph = EyeGlyph.CLOUD, tone = EyeTileTone.BLUE, enabled = !state.busy, help = "云端保存" to ConsentHelp.SYNC)
+            glyph = EyeGlyph.CLOUD, tone = EyeTileTone.BLUE, enabled = !state.busy)
         EyeSwitchRow("监护人同意", state.guardian, { actions.setConsent(ConsentType.GUARDIAN, it) },
-            glyph = EyeGlyph.FAMILY, enabled = !state.busy, help = "监护人同意" to ConsentHelp.GUARDIAN)
+            glyph = EyeGlyph.FAMILY, enabled = !state.busy)
         EyeSwitchRow("用于研究", state.researchUse, { actions.setConsent(ConsentType.RESEARCH_USE, it) },
-            glyph = EyeGlyph.CHART, tone = EyeTileTone.SUCCESS, enabled = !state.busy, help = "用于研究" to ConsentHelp.RESEARCH)
-        EyeSwitchRow("AI 解读", state.aiExplanation, { actions.setConsent(ConsentType.AI_EXPLANATION, it) },
-            glyph = EyeGlyph.BULB, tone = EyeTileTone.ACCENT, enabled = !state.busy, help = "AI 解读" to ConsentHelp.AI)
-        EyeSwitchRow("AI 综合建议", state.aiAdvice, { actions.setConsent(ConsentType.AI_ADVICE, it) },
-            glyph = EyeGlyph.CHAT, tone = EyeTileTone.BLUE, enabled = !state.busy, help = "AI 综合建议" to ConsentHelp.ADVICE)
-        EyeSwitchRow("AI 对话", state.aiChat, { actions.setConsent(ConsentType.AI_CHAT, it) },
-            glyph = EyeGlyph.CHAT, tone = EyeTileTone.PRIMARY, enabled = !state.busy, help = "AI 对话" to ConsentHelp.CHAT, divider = false)
+            glyph = EyeGlyph.CHART, tone = EyeTileTone.SUCCESS, enabled = !state.busy)
+        ExplainRow(EXPLAIN_CONSENT, ConsentHelp.consentItems)
     }
-    EyeListGroup(title = "数据") {
-        EyeListRow("导出云端数据", onClick = actions.export, glyph = EyeGlyph.EXPORT, tone = EyeTileTone.NEUTRAL, enabled = !state.busy, divider = false)
+    EyeListGroup(Modifier.animateContentSize(), title = SECTION_AI) {
+        EyeSwitchRow("AI 解读", state.aiExplanation, { actions.setConsent(ConsentType.AI_EXPLANATION, it) },
+            glyph = EyeGlyph.BULB, tone = EyeTileTone.ACCENT, enabled = !state.busy)
+        EyeSwitchRow("AI 综合建议", state.aiAdvice, { actions.setConsent(ConsentType.AI_ADVICE, it) },
+            glyph = EyeGlyph.CHAT, tone = EyeTileTone.BLUE, enabled = !state.busy)
+        EyeSwitchRow("AI 对话", state.aiChat, { actions.setConsent(ConsentType.AI_CHAT, it) },
+            glyph = EyeGlyph.CHAT, tone = EyeTileTone.PRIMARY, enabled = !state.busy)
+        ExplainRow(EXPLAIN_AI, ConsentHelp.aiItems)
     }
 }
 
-/** 「数据如何处理」：点开展开五条要点（两端同一文案）。 */
+/** 「数据管理」：登录后可导出云端数据（[export] 为空时不显示）；「数据如何处理」点开展开五条要点。 */
 @Composable
-private fun DataHandlingGroup() {
+private fun DataGroup(export: (() -> Unit)?) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
     var open by rememberSaveable { mutableStateOf(false) }
-    EyeListGroup {
+    EyeListGroup(Modifier.animateContentSize(), title = SECTION_DATA) {
+        if (export != null) EyeListRow("导出云端数据", onClick = export, glyph = EyeGlyph.EXPORT, tone = EyeTileTone.NEUTRAL)
         EyeListRow("数据如何处理", onClick = { open = !open }, glyph = EyeGlyph.SHIELD, tone = EyeTileTone.SUCCESS,
-            value = if (open) "收起" else null, divider = open)
+            value = if (open) "收起" else "展开", divider = open)
         if (open) Column(Modifier.padding(start = 66.dp, end = 16.dp, top = 4.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            DATA_HANDLING.forEach { EyeText("· $it", style = typography.body, color = colors.textSecondary) }
+            DATA_HANDLING.forEach { EyeText("· $it", style = typography.bodySecondary, color = colors.textSecondary) }
         }
     }
     Spacer(Modifier.height(0.dp))
 }
+
+/** 组内最后一行的可展开说明：点开后逐项列出「名称 + 会发送 / 保存什么」。 */
+@Composable
+private fun ExplainRow(title: String, items: List<Pair<String, String>>) {
+    val colors = LocalEyeColors.current
+    val typography = LocalEyeTypography.current
+    var open by rememberSaveable(title) { mutableStateOf(false) }
+    EyeListRow(title, onClick = { open = !open }, glyph = EyeGlyph.INFO, tone = EyeTileTone.NEUTRAL,
+        value = if (open) "收起" else "展开", divider = open)
+    if (open) Column(Modifier.padding(start = 66.dp, end = 16.dp, top = 4.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        items.forEach { (name, text) ->
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                EyeText(name, style = typography.body, color = colors.textPrimary, fontWeight = FontWeight.SemiBold)
+                EyeText(text, style = typography.bodySecondary, color = colors.textSecondary)
+            }
+        }
+    }
+}
+
+/** 四个区域标题与两条可展开说明的名称（两端一致）。 */
+internal const val SECTION_OVERVIEW = "同步概览"
+internal const val SECTION_CONSENT = "授权管理"
+internal const val SECTION_AI = "AI 数据处理"
+internal const val SECTION_DATA = "数据管理"
+internal const val EXPLAIN_CONSENT = "各项授权说明"
+internal const val EXPLAIN_AI = "AI 会发送哪些数据"
 
 private fun statusLine(status: RecordSyncStatus, busy: Boolean): String? = buildList {
     if (status.pending > 0) add("待上传 ${status.pending} 条")

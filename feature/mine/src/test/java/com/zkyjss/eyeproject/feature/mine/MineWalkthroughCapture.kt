@@ -83,7 +83,8 @@ class MineWalkthroughCapture {
         assertTrue(signedIn == null)
     }
 
-    @Test fun cloudSyncShowsConsentsWithHelp() {
+    @Test @Config(qualifiers = "zh-rCN-w390dp-h1700dp-mdpi")
+    fun cloudSyncGroupsConsentsAndFoldsDetails() {
         compose.setContent {
             EyeProjectTheme {
                 CloudSyncContent(CloudSyncUiState.SignedIn("demo@example.com", true, true, false,
@@ -91,11 +92,16 @@ class MineWalkthroughCapture {
                     CloudSyncActions(), {}, {})
             }
         }
+        // 四个区域，开关行不再带问号；详细说明默认收起
+        listOf(SECTION_OVERVIEW, SECTION_CONSENT, SECTION_AI, SECTION_DATA).forEach { compose.onNodeWithText(it).assertExists() }
         compose.onNodeWithText("AI 解读").assertExists()
-        compose.onNodeWithText("AI 解读（去标识结果发给大模型）").assertDoesNotExist()
-        compose.onNodeWithContentDescription("AI 解读 说明").performScrollTo().performClick()
+        compose.onNodeWithContentDescription("AI 解读 说明").assertDoesNotExist()
+        compose.onNodeWithText(ConsentHelp.AI).assertDoesNotExist()
+        capture("15-云端同步-四个区域")
+        compose.onNodeWithText(EXPLAIN_AI).performScrollTo().performClick()
         compose.waitForIdle()
-        capture("15-云端同步-问号说明", modal = true)
+        compose.onNodeWithText(ConsentHelp.AI).assertExists()
+        capture("15b-云端同步-展开AI说明")
     }
 
     @Test fun recordsSubjectsAndPermissionsArePages() {

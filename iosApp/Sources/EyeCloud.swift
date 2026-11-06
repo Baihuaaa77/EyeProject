@@ -306,15 +306,19 @@ private struct ServerCard: View {
 
 // MARK: - 云端同步页
 
-/// 「我的 → 云端同步」完整页面：同步状态与立即同步、分项同意（每项旁边问号说明）、导出云端数据、数据如何处理。
-/// 登录、退出与注销在右上角的账户页。与安卓 CloudSyncScreen 同一排版与文案。
+/// 「我的 → 云端同步」完整页面，分四个区域：同步概览（已上传条数、状态与立即同步；未登录时为去登录）→ 授权管理（云端保存、监护人、研究）→
+/// AI 数据处理（AI 解读、综合建议、对话）→ 数据管理（导出云端数据、数据如何处理）。开关行只写名称，各项会发送 / 保存什么
+/// 收在每组最后一行的可展开说明里，不再逐项弹问号小窗。登录、退出与注销在右上角的账户页。与安卓 CloudSyncScreen 同一排版与文案。
 struct CloudSyncPage: View {
     @ObservedObject private var cloud = CloudModel.shared
     let openAccount: () -> Void
     @State private var exportText: String?
     @State private var exporting = false
     @State private var handlingOpen = false
+    @State private var consentOpen = false
+    @State private var aiOpen = false
     private var busy: Bool { cloud.bool("busy") }
+    private var signedIn: Bool { cloud.bool("configured") && cloud.bool("signedIn") }
 
     var body: some View {
         SubPage(title: "云端同步") {
@@ -323,31 +327,38 @@ struct CloudSyncPage: View {
             } else if !cloud.bool("signedIn") {
                 prompt("登录后开启云端同步", "测试记录和家人资料可以在多台设备之间同步，本机记录始终保留。")
             } else {
-                status
-                ListGroup(title: "授权") {
-                    consent("云端保存记录与资料", "HEALTH_DATA_SYNC", "healthDataSync", .cloud, .blue, CloudTexts.sync)
-                    consent("监护人同意", "GUARDIAN", "guardian", .family, .primary, CloudTexts.guardian)
-                    consent("用于研究", "RESEARCH_USE", "researchUse", .chart, .success, CloudTexts.research)
-                    consent("AI 解读", "AI_EXPLANATION", "aiExplanation", .bulb, .accent, CloudTexts.ai)
-                    consent("AI 综合建议", "AI_ADVICE", "aiAdvice", .chat, .blue, CloudTexts.advice)
-                    consent("AI 对话", "AI_CHAT", "aiChat", .chat, .primary, CloudTexts.chat, divider: false)
+                ListGroup(title: "同步概览") { status }
+                ListGroup(title: "授权管理") {
+                    consent("云端保存记录与资料", "HEALTH_DATA_SYNC", "healthDataSync", .cloud, .blue)
+                    consent("监护人同意", "GUARDIAN", "guardian", .family, .primary)
+                    consent("用于研究", "RESEARCH_USE", "researchUse", .chart, .success)
+                    explain("各项授权说明", open: $consentOpen, items: [
+                        ("云端保存记录与资料", CloudTexts.sync), ("监护人同意", CloudTexts.guardian), ("用于研究", CloudTexts.research)])
                 }
-                ListGroup(title: "数据") {
-                    ListRow(title: "导出云端数据", glyph: .export, tone: .neutral, divider: false, enabled: !busy) {
+                ListGroup(title: "AI 数据处理") {
+                    consent("AI 解读", "AI_EXPLANATION", "aiExplanation", .bulb, .accent)
+                    consent("AI 综合建议", "AI_ADVICE", "aiAdvice", .chat, .blue)
+                    consent("AI 对话", "AI_CHAT", "aiChat", .chat, .primary)
+                    explain("AI 会发送哪些数据", open: $aiOpen, items: [
+                        ("AI 解读", CloudTexts.ai), ("AI 综合建议", CloudTexts.advice), ("AI 对话", CloudTexts.chat)])
+                }
+            }
+            ListGroup(title: "数据管理") {
+                if signedIn {
+                    ListRow(title: "导出云端数据", glyph: .export, tone: .neutral, enabled: !busy) {
                         cloud.client.exportCloudData { text in
                             DispatchQueue.main.async { if let text { exportText = text; exporting = true } }
                         }
                     }
                 }
-            }
-            ListGroup {
-                ListRow(title: "数据如何处理", glyph: .shield, tone: .success, value: handlingOpen ? "收起" : nil, divider: handlingOpen) {
+                ListRow(title: "数据如何处理", glyph: .shield, tone: .success, value: handlingOpen ? "收起" : "展开", divider: handlingOpen) {
                     withAnimation(.easeOut(duration: 0.2)) { handlingOpen.toggle() }
                 }
                 if handlingOpen {
                     VStack(alignment: .leading, spacing: 8) {
-                        ForEach(CloudTexts.dataHandling, id: \.self) { Text("· " + $0).font(EyeStyle.body).foregroundStyle(EyeStyle.secondary) }
-                    }.padding(.leading, 66).padding(.trailing, 16).padding(.top, 4).padding(.bottom, 16)
+                        ForEach(CloudTexts.dataHandling, id: \.self) { Text("· " + $0).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary) }
+                    }.frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.leading, 66).padding(.trailing, 16).padding(.top, 4).padding(.bottom, 16)
                 }
             }
         }
@@ -356,12 +367,33 @@ struct CloudSyncPage: View {
                       defaultFilename: "eyeproject-cloud-export.json") { _ in exportText = nil }
     }
 
+    /// 组内最后一行的可展开说明：点开后逐项列出「名称 + 会发送 / 保存什么」。与安卓 ExplainRow 一致。
+    @ViewBuilder private func explain(_ title: String, open: Binding<Bool>, items: [(String, String)]) -> some View {
+        ListRow(title: title, glyph: .info, tone: .neutral, value: open.wrappedValue ? "收起" : "展开", divider: open.wrappedValue) {
+            withAnimation(.easeOut(duration: 0.2)) { open.wrappedValue.toggle() }
+        }
+        if open.wrappedValue {
+            VStack(alignment: .leading, spacing: 12) {
+                ForEach(items, id: \.0) { item in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(item.0).font(EyeStyle.body.weight(.semibold)).foregroundStyle(EyeStyle.text)
+                        Text(item.1).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary).fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }.frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.leading, 66).padding(.trailing, 16).padding(.top, 4).padding(.bottom, 16)
+        }
+    }
+
+    /// 未连接服务器或未登录时的「同步概览」。
     private func prompt(_ title: String, _ text: String) -> some View {
-        Panel(padding: 20) {
-            IconTile(glyph: .cloud, tone: .blue, size: 48)
-            Text(title).font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text)
-            Text(text).font(EyeStyle.body).foregroundStyle(EyeStyle.secondary)
-            Button("去登录") { EyeHaptics.tap(); openAccount() }.buttonStyle(EyeButtonStyle())
+        ListGroup(title: "同步概览") {
+            VStack(alignment: .leading, spacing: 12) {
+                IconTile(glyph: .cloud, tone: .blue, size: 48)
+                Text(title).font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text)
+                Text(text).font(EyeStyle.body).foregroundStyle(EyeStyle.secondary)
+                Button("去登录") { EyeHaptics.tap(); openAccount() }.buttonStyle(EyeButtonStyle())
+            }.padding(20).frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
@@ -372,7 +404,7 @@ struct CloudSyncPage: View {
         if cloud.int("failed") > 0 { parts.append("\(cloud.int("failed")) 条未能上传") }
         if busy { parts.append("正在同步…") }
         let on = cloud.bool("healthDataSync")
-        return Panel(padding: 20) {
+        return VStack(alignment: .leading, spacing: EyeSpacing.itemGap) {
             HStack(alignment: .center) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("已上传").font(EyeStyle.body).foregroundStyle(EyeStyle.secondary)
@@ -388,13 +420,12 @@ struct CloudSyncPage: View {
             if !cloud.string("message").isEmpty { Text(cloud.string("message")).font(EyeStyle.body).foregroundStyle(EyeStyle.secondary) }
             Button(busy ? "正在同步…" : "立即同步") { EyeHaptics.tap(); cloud.client.syncNow(userInitiated: true) }
                 .buttonStyle(EyeButtonStyle()).disabled(busy || !on)
-        }
+        }.padding(20).frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func consent(_ title: String, _ type: String, _ key: String, _ glyph: EyeGlyph, _ tone: TileTone, _ help: String,
-                         divider: Bool = true) -> some View {
+    private func consent(_ title: String, _ type: String, _ key: String, _ glyph: EyeGlyph, _ tone: TileTone) -> some View {
         SwitchRow(title: title, isOn: Binding(get: { cloud.bool(key) }, set: { cloud.client.setConsent(type: type, granted: $0) }),
-                  glyph: glyph, tone: tone, help: help, divider: divider, enabled: !busy)
+                  glyph: glyph, tone: tone, enabled: !busy)
     }
 }
 
