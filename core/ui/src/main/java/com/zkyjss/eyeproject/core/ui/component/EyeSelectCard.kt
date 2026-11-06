@@ -70,7 +70,8 @@ fun EyeSelectCard(
             Spacer(Modifier.width(14.dp))
         }
         Column(Modifier.weight(1f)) {
-            EyeText(text = content, style = typography.subtitle, color = colors.textPrimary)
+            // 没有说明小字时标题用大一号字（服务页四个自测入口）
+            EyeText(text = content, style = if (subtitle == null) typography.title else typography.subtitle, color = colors.textPrimary)
             if (subtitle != null) {
                 EyeText(text = subtitle, style = typography.bodySecondary, color = colors.textSecondary)
             }

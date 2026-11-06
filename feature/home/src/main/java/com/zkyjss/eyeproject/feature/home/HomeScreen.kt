@@ -58,6 +58,8 @@ import com.zkyjss.eyeproject.core.designsystem.theme.EyeShapes
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeSpacing
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
+import com.zkyjss.eyeproject.core.designsystem.theme.VividTone
+import com.zkyjss.eyeproject.core.designsystem.theme.vivid
 import com.zkyjss.eyeproject.core.designsystem.util.getTopStatusBarPadding
 import com.zkyjss.eyeproject.core.designsystem.util.screenHorizontalPaddingLarge
 import com.zkyjss.eyeproject.core.eyecare.EyeTip
@@ -98,8 +100,8 @@ internal data class HomeActions(
 internal const val USAGE_HELP_ANDROID = "需要在系统设置里允许「使用情况访问」，才能统计每天用屏多久、连续用了多久和夜间使用；统计只在本机进行。"
 
 /**
- * 首页：「今日」与日期（右上角账户、白天 / 夜晚、系统设置）→ 带刻度的大号仪表圈包住负荷分（不加卡片框）→ 基础数据 → AI 主动问诊（爱科）→ 今日感受 →
- * 基础数据 → 实时检测 → 护眼操、休息提醒 → 用眼趋势报告、亮度与蓝光。不分小节标题。
+ * 首页：「今日」与日期（右上角账户、白天 / 夜晚、系统设置）→ 大号仪表圈包住眼健康指数（不加卡片框）→ 基础数据 →
+ * 功能卡（护眼操、用眼趋势、亮度与蓝光三个彩色方块 + 整行 AI 主动问诊）→ 今日感受 → 休息提醒 → 实时检测（始终展开）。不分小节标题。
  * 与苹果端 HomePage 同一顺序、排版与文案（苹果端没有开发者工具）。
  */
 @Composable
@@ -152,12 +154,10 @@ internal fun HomeContent(
             subtitle = remember { LocalDate.now().format(DateTimeFormatter.ofPattern("M月d日 EEEE", Locale.CHINA)) })
         EyeCareHero(report)
         BasicDataCard(state, actions, Modifier.bringIntoViewRequester(basic))
-        ChatEntryCard(navigation.onOpenChat)
+        FeatureCard(state, navigation) { exerciseOpen = true }
         CheckInCard(report, actions.checkIn)
-        LiveCard(Modifier.bringIntoViewRequester(live)) { liveEye(liveRequests) }
-        ExerciseCard { exerciseOpen = true }
         ReminderCard(state, actions)
-        ServiceTiles(state, navigation)
+        LiveCard(Modifier.bringIntoViewRequester(live)) { liveEye(liveRequests) }
         EyeDisclosure("开发者工具") {
             EyeButton(text = "模型测试", role = EyeButtonRole.SECONDARY, onClick = navigation.onNavigateToTestModel, modifier = Modifier.fillMaxWidth())
         }
@@ -405,7 +405,7 @@ internal fun SignalGrid(signals: List<EyeSignal>, columns: Int) {
     }
 }
 
-/** 实时检测（默认关闭，打开后看到画面与眨眼、距离结果）。 */
+/** 实时检测（始终展开：正方形取景框 + 开始 / 停止按钮，检测中显示画面与眨眼、距离结果）。 */
 @Composable
 private fun LiveCard(modifier: Modifier, live: @Composable () -> Unit) {
     EyeCard(modifier.animateContentSize(), verticalArrangement = Arrangement.Top) { live() }
@@ -414,17 +414,6 @@ private fun LiveCard(modifier: Modifier, live: @Composable () -> Unit) {
 // endregion
 
 // region 护眼操、提醒与服务入口
-
-/** 护眼操入口：转转眼球（向左、右、上、下看），约 1 分钟。 */
-@Composable
-private fun ExerciseCard(onStart: () -> Unit) {
-    val colors = LocalEyeColors.current
-    val typography = LocalEyeTypography.current
-    EyeCard(Modifier.clickable(role = Role.Button, onClick = onStart)) {
-        CardHeader("护眼操", EyeGlyph.EYE, EyeTileTone.SUCCESS) { PillButton("开始", onClick = onStart) }
-        EyeText("跟着示意转转眼球，约 1 分钟", style = typography.body, color = colors.textPrimary)
-    }
-}
 
 /** 休息提醒：开关（下次提醒时间）+ 间隔；建议间隔与当前不同时给出一键采用。 */
 @Composable
@@ -453,32 +442,45 @@ private fun ReminderCard(state: HomeUiState, actions: HomeActions) {
     }
 }
 
-/** 服务入口：用眼趋势报告、亮度与蓝光并排。 */
+/**
+ * 功能卡：一张卡里上排三个彩色方块（护眼操绿、用眼趋势蓝、亮度与蓝光珊瑚红），下面整行紫色的 AI 主动问诊。
+ * 色块上文字与图标一律白色，靠整块颜色做视觉区分。与苹果端 FeatureCard 一致。
+ */
 @Composable
-private fun ServiceTiles(state: HomeUiState, navigation: HomeNavigation) {
+private fun FeatureCard(state: HomeUiState, navigation: HomeNavigation, onOpenExercise: () -> Unit) {
+    val vivid = LocalEyeColors.current.vivid
     val trend = state.report?.trend?.averageScreenMinutes?.let { "日均用屏 ${EyeCareEngine.duration(it)}" } ?: "近 7 天变化"
-    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        ServiceTile("用眼趋势报告", trend, EyeGlyph.CHART, EyeTileTone.BLUE, Modifier.weight(1f), navigation.onOpenTrend)
-        ServiceTile("亮度与蓝光", state.screenBrightness?.let { "屏幕亮度 ${(it * 100).toInt()}%" } ?: "夜间模式与护眼",
-            EyeGlyph.SUN, EyeTileTone.ACCENT, Modifier.weight(1f), navigation.onOpenBrightness)
+    val brightness = state.screenBrightness?.let { "屏幕亮度 ${(it * 100).toInt()}%" } ?: "夜间模式与护眼"
+    EyeCard(contentPadding = 12.dp, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            VividTile("护眼操", "约 1 分钟", EyeGlyph.EYE, vivid.green, Modifier.weight(1f).fillMaxHeight(), onOpenExercise)
+            VividTile("用眼趋势", trend, EyeGlyph.CHART, vivid.blue, Modifier.weight(1f).fillMaxHeight(), navigation.onOpenTrend)
+            VividTile("亮度与蓝光", brightness, EyeGlyph.SUN, vivid.red, Modifier.weight(1f).fillMaxHeight(), navigation.onOpenBrightness)
+        }
+        ChatEntryCard(navigation.onOpenChat)
     }
 }
 
+/** 功能色块：渐变底 + 左上白色图标块 + 白色标题与一行说明，右下角放大的半透明图标做装饰；按下轻微缩小。 */
 @Composable
-private fun ServiceTile(title: String, subtitle: String, glyph: EyeGlyph, tone: EyeTileTone, modifier: Modifier, onClick: () -> Unit) {
-    val colors = LocalEyeColors.current
+private fun VividTile(title: String, subtitle: String, glyph: EyeGlyph, tone: VividTone, modifier: Modifier, onClick: () -> Unit) {
     val typography = LocalEyeTypography.current
+    val on = LocalEyeColors.current.vivid.onVivid
     val haptics = rememberEyeHaptics()
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
-    val scale by animateFloatAsState(if (pressed) 0.97f else 1f, EyeMotion.pressSpring(), label = "服务入口按压")
-    EyeCard(modifier.graphicsLayer { scaleX = scale; scaleY = scale }
-        .clickable(interactionSource = interaction, indication = null, role = Role.Button) { haptics.tap(); onClick() }
-        .heightIn(min = 112.dp), contentPadding = 16.dp, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        EyeIconTile(glyph, tone, 36.dp)
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            EyeText(title, style = typography.body, color = colors.textPrimary, fontWeight = FontWeight.SemiBold)
-            EyeText(subtitle, style = typography.bodySecondary, color = colors.textSecondary, maxLines = 2)
+    val scale by animateFloatAsState(if (pressed) 0.96f else 1f, EyeMotion.pressSpring(), label = "功能色块按压")
+    Box(modifier.heightIn(min = 140.dp).graphicsLayer { scaleX = scale; scaleY = scale }.clip(EyeShapes.large).background(tone.brush)
+        .clickable(interactionSource = interaction, indication = null, role = Role.Button) { haptics.tap(); onClick() }) {
+        EyeGlyphIcon(glyph, Modifier.align(Alignment.BottomEnd).offset(x = 16.dp, y = 16.dp).size(76.dp), on.copy(alpha = 0.16f))
+        Column(Modifier.padding(12.dp)) {
+            Box(Modifier.size(42.dp).clip(EyeShapes.medium).background(on.copy(alpha = 0.22f)), contentAlignment = Alignment.Center) {
+                EyeGlyphIcon(glyph, Modifier.size(28.dp), on)
+            }
+            Spacer(Modifier.height(14.dp))
+            EyeText(title, style = typography.body, color = on, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(2.dp))
+            EyeText(subtitle, style = typography.chip, color = on.copy(alpha = 0.86f), maxLines = 2)
         }
     }
 }

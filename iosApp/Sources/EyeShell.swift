@@ -90,7 +90,7 @@ struct EyeRootView: View {
 
 private struct TestSelection: Identifiable { let id: String; init(_ id: String) { self.id = id } }
 
-/// 毛玻璃底栏（iOS 26 起为系统 Liquid Glass）+ 细上边框；选中项图标后方的浅主色胶囊以弹簧展开，图标与文字同步变色并轻微放大。
+/// 毛玻璃底栏（iOS 26 起为系统 Liquid Glass）+ 细上边框；只显示图标，选中项图标后方的浅主色胶囊以弹簧展开，图标同步变色并轻微放大。
 private struct EyeBottomBar: View {
     @Binding var selected: TopLevelTab
     var body: some View {
@@ -98,15 +98,15 @@ private struct EyeBottomBar: View {
             ForEach(TopLevelTab.allCases, id: \.self) { tab in
                 let active = tab == selected
                 Button { if !active { EyeHaptics.tap() }; selected = tab } label: {
-                    VStack(spacing: 4) {
-                        ZStack {
-                            Capsule().fill(EyeStyle.primarySoft).frame(width: active ? 56 : 0, height: 30)
-                            NavIconView(icon: tab.icon).frame(width: 22, height: 22).scaleEffect(active ? 1.08 : 1)
-                        }.frame(width: 56, height: 30)
-                        Text(tab.label).font(EyeStyle.chip)
-                    }.foregroundStyle(active ? EyeStyle.primary : EyeStyle.secondary)
+                    // 只显示图标（名称作为无障碍标签）
+                    ZStack {
+                        Capsule().fill(EyeStyle.primarySoft).frame(width: active ? 64 : 0, height: 40)
+                        NavIconView(icon: tab.icon).frame(width: 30, height: 30).scaleEffect(active ? 1.08 : 1)
+                    }.frame(width: 64, height: 40)
+                        .foregroundStyle(active ? EyeStyle.primary : EyeStyle.secondary)
                         .frame(maxWidth: .infinity, minHeight: 68).contentShape(Rectangle())
                 }.buttonStyle(.plain)
+                    .accessibilityLabel(tab.label)
                     .accessibilityAddTraits(active ? [.isSelected] : [])
                     .animation(.spring(response: 0.35, dampingFraction: 0.8), value: active)
             }
@@ -151,7 +151,8 @@ private struct SelectCard<Leading: View>: View {
             HStack(spacing: 14) {
                 leading.frame(width: 48, height: 48).background(tone.colors.0, in: RoundedRectangle(cornerRadius: EyeStyle.radiusMedium))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(title).font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text)
+                    // 没有说明小字时标题用大一号字（服务页四个自测入口），与安卓 EyeSelectCard 一致
+                    Text(title).font(subtitle == nil ? EyeStyle.title : EyeStyle.subtitle).foregroundStyle(EyeStyle.text)
                     if let subtitle { Text(subtitle).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary) }
                 }.frame(maxWidth: .infinity, alignment: .leading)
                 Image(systemName: "arrow.right").font(.system(size: 15, weight: .medium)).foregroundStyle(EyeStyle.secondary)
@@ -214,16 +215,16 @@ private struct ServicesPage: View {
             PageHeader(title: "服务", openAccount: { navigate(.account) }, openSettings: { navigate(.settings) })
             DemoHeroCard()
             Text("选择一项自测").font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text).padding(.top, 4)
-            SelectCard(title: "干眼自测", subtitle: "约 2 分钟 · 自然眨眼与睁眼观察", tone: .blue) {
+            SelectCard(title: "干眼自测", tone: .blue) {
                 ServiceGlyphView(glyph: .dryEye, color: TileTone.blue.colors.1).frame(width: 28, height: 28)
             } action: { open("DRY_EYE") }
-            SelectCard(title: "眼位自测", subtitle: "注视、遮眼、跟随 · 需一位协助者", tone: .violet) {
+            SelectCard(title: "眼位自测", tone: .violet) {
                 ServiceGlyphView(glyph: .alignment, color: TileTone.violet.colors.1).frame(width: 28, height: 28)
             } action: { open("STRABISMUS") }
-            SelectCard(title: "老视自测", subtitle: "近视力与调节 · 看 E 选方向", tone: .primary) {
+            SelectCard(title: "老视自测", tone: .primary) {
                 ServiceGlyphView(glyph: .presbyopia, color: TileTone.primary.colors.1).frame(width: 28, height: 28)
             } action: { open("PRESBYOPIA") }
-            SelectCard(title: "色觉自测", subtitle: "约 1 分钟 · 看色点图认数字", tone: .accent) {
+            SelectCard(title: "色觉自测", tone: .accent) {
                 ServiceGlyphView(glyph: .color, color: TileTone.accent.colors.1).frame(width: 28, height: 28)
             } action: { open("COLOR_VISION") }
             Text("自测结果仅供参考，不能替代医院检查。").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary).padding(.top, 4)

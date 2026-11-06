@@ -95,28 +95,24 @@ fun ServicesScreen(
 
         EyeSelectCard(
             content = "干眼自测",
-            subtitle = "约 2 分钟 · 自然眨眼与睁眼观察",
             leading = { ServiceGlyph(ServiceKind.DRY_EYE, EyeTileTone.BLUE) },
             leadingTone = EyeTileTone.BLUE,
             onClick = onDryEyeClick
         )
         EyeSelectCard(
             content = "眼位自测",
-            subtitle = "注视、遮眼、跟随 · 需一位协助者",
             leading = { ServiceGlyph(ServiceKind.ALIGNMENT, EyeTileTone.VIOLET) },
             leadingTone = EyeTileTone.VIOLET,
             onClick = onStrabismusClick,
         )
         EyeSelectCard(
             content = "老视自测",
-            subtitle = "近视力与调节 · 看 E 选方向",
             leading = { ServiceGlyph(ServiceKind.PRESBYOPIA, EyeTileTone.PRIMARY) },
             leadingTone = EyeTileTone.PRIMARY,
             onClick = onPresbyopiaClick,
         )
         EyeSelectCard(
             content = "色觉自测",
-            subtitle = "约 1 分钟 · 看色点图认数字",
             leading = { ServiceGlyph(ServiceKind.COLOR, EyeTileTone.ACCENT) },
             leadingTone = EyeTileTone.ACCENT,
             onClick = onColorVisionClick,

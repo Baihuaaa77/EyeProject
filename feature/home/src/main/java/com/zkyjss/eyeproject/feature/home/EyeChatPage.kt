@@ -6,6 +6,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -13,6 +16,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -25,12 +29,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -46,8 +52,10 @@ import com.zkyjss.eyeproject.core.data.chat.ChatRepository
 import com.zkyjss.eyeproject.core.data.chat.ChatState
 import com.zkyjss.eyeproject.core.designsystem.R
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeShapes
+import com.zkyjss.eyeproject.core.designsystem.theme.EyeMotion
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
+import com.zkyjss.eyeproject.core.designsystem.theme.vivid
 import com.zkyjss.eyeproject.core.sync.AdviceRequest
 import com.zkyjss.eyeproject.core.sync.ChatEntry
 import com.zkyjss.eyeproject.core.sync.Chats
@@ -55,6 +63,8 @@ import com.zkyjss.eyeproject.core.ui.component.AiCardText
 import com.zkyjss.eyeproject.core.ui.component.AiExplanationCard
 import com.zkyjss.eyeproject.core.ui.component.EyeButton
 import com.zkyjss.eyeproject.core.ui.component.EyeButtonRole
+import com.zkyjss.eyeproject.core.ui.component.EyeGlyph
+import com.zkyjss.eyeproject.core.ui.component.EyeGlyphIcon
 import com.zkyjss.eyeproject.core.ui.component.EyeOptionRow
 import com.zkyjss.eyeproject.core.ui.component.EyeSubPage
 import com.zkyjss.eyeproject.core.ui.component.EyeText
@@ -77,19 +87,25 @@ class ChatViewModel @Inject constructor(private val chat: ChatRepository) : View
     fun clear() { viewModelScope.launch { chat.clear() } }
 }
 
-/** 首页「AI 主动问诊」入口（放在「今日感受」上方）：玻璃卡上爱科头像 + 标题，点了进入对话页。与苹果端 ChatEntryCard 一致。 */
+/** 首页「AI 主动问诊」入口（功能卡下排整行）：紫色渐变色块上爱科头像 + 白色标题，点了进入对话页。与苹果端 ChatEntryCard 一致。 */
 @Composable
 internal fun ChatEntryCard(onOpen: () -> Unit) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
+    val on = colors.vivid.onVivid
     val haptics = rememberEyeHaptics()
-    Row(Modifier.fillMaxWidth().eyeGlass(colors, EyeShapes.panel)
-        .clickable(role = Role.Button) { haptics.tap(); onOpen() }.padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically) {
-        EyechoAvatar(44.dp)
-        Spacer(Modifier.width(12.dp))
-        EyeText(CHAT_TITLE, Modifier.weight(1f), style = typography.subtitle, color = colors.textPrimary)
-        EyeText("›", style = typography.title, color = colors.textTertiary)
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (pressed) 0.97f else 1f, EyeMotion.pressSpring(), label = "问诊入口按压")
+    Box(Modifier.fillMaxWidth().graphicsLayer { scaleX = scale; scaleY = scale }.clip(EyeShapes.large).background(colors.vivid.violet.brush)
+        .clickable(interactionSource = interaction, indication = null, role = Role.Button) { haptics.tap(); onOpen() }) {
+        EyeGlyphIcon(EyeGlyph.CHAT, Modifier.align(Alignment.CenterEnd).offset(x = 14.dp).size(88.dp), on.copy(alpha = 0.14f))
+        Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(52.dp).clip(CircleShape).background(on.copy(alpha = 0.3f)), contentAlignment = Alignment.Center) { EyechoAvatar(46.dp) }
+            Spacer(Modifier.width(12.dp))
+            EyeText(CHAT_TITLE, Modifier.weight(1f), style = typography.subtitle, color = on)
+            EyeText("›", style = typography.title, color = on)
+        }
     }
 }
 

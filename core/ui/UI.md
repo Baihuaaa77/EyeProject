@@ -27,7 +27,7 @@
 | `EyeSectionCard` | 分区卡片：玻璃面 + 可选标题 |
 | `EyeSurfaces.kt` | 层次与质感：`EyeHeroCard`（每页一张主卡）、`EyeCard`（平铺玻璃卡）、`Modifier.eyeGlass`（玻璃面）、`Modifier.eyeBackdrop`（页面纯色底）、`EyeMetric` / `EyeMetricRow`（标签在上数值在下、竖线分隔）、`EyeProgressRing` / `drawProgressRing`（渐变圆环，深色带泛光）、`EyeAiMark`（深色光球 / 浅色声波）、`EyeCallout` |
 | `EyeDisclosure` | 默认折叠的次级信息，展开/收起高度+透明度过渡、箭头旋转，带展开状态无障碍语义 |
-| `EyeSelectCard` | 入口卡：可选前置图标 + 标题/副标题 + 箭头，按下轻缩，最小 80dp 高 |
+| `EyeSelectCard` | 入口卡：可选前置图标 + 标题/副标题 + 箭头，按下轻缩，最小 80dp 高；不传副标题时标题用大一号的 `title` 字号 |
 | `EyeList.kt` | 卡片分类头 `EyeCategoryHeader`（分类色图标 + 标题 + 右侧操作）；设置式分组列表：`EyeListGroup`（组标题 + 圆角面板）、`EyeListRow`（图标块 `EyeIconTile` / 标题 / 副标题 / 右侧值 / 箭头，可禁用）、`EyeSwitchRow`（可带「?」说明），色调 `EyeTileTone` |
 | `EyeSubPage` | 二级完整页面骨架：返回栏 + 标题 + 滚动内容 + 可选底栏 |
 | `EyeFullScreenPage` | 盖在当前页上的全屏页面（全屏 Dialog），替代底部弹窗，系统返回键关闭 |

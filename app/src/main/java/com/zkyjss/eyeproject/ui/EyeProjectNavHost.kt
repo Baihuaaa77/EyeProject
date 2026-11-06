@@ -9,8 +9,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -20,13 +18,11 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.painterResource
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeMotion
 import com.zkyjss.eyeproject.core.ui.component.EyeIcon
-import com.zkyjss.eyeproject.core.ui.component.EyeText
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.draw.clip
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeShapes
-import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
@@ -42,6 +38,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hierarchy
@@ -217,7 +215,7 @@ private fun EyeProjectBottomBar(
     }
 }
 
-/** 选中项：图标后方的浅主色胶囊以弹簧展开，图标/文字同步变色并轻微放大。 */
+/** 选中项：图标后方的浅主色胶囊以弹簧展开，图标同步变色并轻微放大；只显示图标，名称作为无障碍描述。 */
 @Composable
 private fun BottomBarItem(
     destination: TopLevelDestination,
@@ -226,11 +224,10 @@ private fun BottomBarItem(
     modifier: Modifier = Modifier,
 ) {
     val colors = LocalEyeColors.current
-    val typography = LocalEyeTypography.current
-    val pillWidth by animateDpAsState(if (selected) 56.dp else 0.dp, EyeMotion.dpSpring, label = "导航胶囊")
+    val pillWidth by animateDpAsState(if (selected) 64.dp else 0.dp, EyeMotion.dpSpring, label = "导航胶囊")
     val tint by animateColorAsState(if (selected) colors.primary else colors.textSecondary, tween(EyeMotion.MEDIUM), label = "导航色")
     val iconScale by animateFloatAsState(if (selected) 1.08f else 1f, EyeMotion.settleSpring(), label = "导航图标")
-    Column(
+    Box(
         modifier = modifier
             .fillMaxHeight()
             .selectable(
@@ -239,21 +236,17 @@ private fun BottomBarItem(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
                 onClick = onClick,
-            ),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Box(Modifier.height(30.dp).width(56.dp), contentAlignment = Alignment.Center) {
-            Box(Modifier.height(30.dp).width(pillWidth).clip(EyeShapes.chip).background(colors.primarySoft))
-            EyeIcon(
-                painter = painterResource(destination.iconRes),
-                contentDescription = null,
-                tint = tint,
-                modifier = Modifier.size(22.dp).graphicsLayer { scaleX = iconScale; scaleY = iconScale },
             )
-        }
-        Spacer(Modifier.height(4.dp))
-        EyeText(destination.label, style = typography.chip, color = tint)
+            .semantics { contentDescription = destination.label },
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(Modifier.height(40.dp).width(pillWidth).clip(EyeShapes.chip).background(colors.primarySoft))
+        EyeIcon(
+            painter = painterResource(destination.iconRes),
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier.size(30.dp).graphicsLayer { scaleX = iconScale; scaleY = iconScale },
+        )
     }
 }
 

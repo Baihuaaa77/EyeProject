@@ -101,7 +101,11 @@ class HomeVisualTest {
         compose.mainClock.autoAdvance = true
         compose.onNodeWithText("休息提醒").performScrollTo().performClick()
         assertTrue(reminder)
-        compose.onNodeWithText("用眼趋势报告").performScrollTo().performClick()
+        // 护眼操与用眼趋势、亮度与蓝光并排成彩色方块，护眼操不再有「开始」按钮
+        compose.onNodeWithText("用眼趋势报告").assertDoesNotExist()
+        compose.onNodeWithText("开始").assertDoesNotExist()
+        compose.onNodeWithText("约 1 分钟").assertExists()
+        compose.onNodeWithText("用眼趋势").performScrollTo().performClick()
         assertTrue(trend)
         compose.onNodeWithText("开发者工具").performScrollTo().performClick()
         compose.onNodeWithText("模型测试").performScrollTo().performClick()
@@ -170,7 +174,8 @@ class HomeVisualTest {
         compose.onNodeWithText("今天眼睛感觉怎么样？").assertDoesNotExist()
     }
 
-    @Test fun liveDetectionIsOffByDefaultAndLandmarksAreOptional() {
+    @Test @Config(qualifiers = "zh-rCN-w390dp-h1100dp-mdpi")
+    fun liveDetectionStartsWithTheButtonAndLandmarksAreOptional() {
         val monitor = LiveEyeMonitor()
         var t = 0L
         repeat(40) { monitor.update(face(0.3f), 720, 1280, t, 900f); t += 33 }
@@ -191,10 +196,12 @@ class HomeVisualTest {
             }
         }
         compose.onNodeWithText("打开前置摄像头，看看眨眼和观看距离").assertDoesNotExist()
-        compose.onNodeWithText("实时检测").performClick()
+        // 始终展开：未检测时取景框是人头虚线占位，只有一个「开始检测」按钮
+        capture("05a-首页-实时检测-未开始")
+        compose.onNodeWithText("开始检测").performClick()
         compose.onNodeWithText("运行正常").assertExists()
         compose.onNodeWithText("睁眼").assertExists()
-        compose.onNodeWithText("距离 33 厘米").assertExists()
+        compose.onNodeWithText("33 厘米", useUnmergedTree = true).assertExists()
         // 关键点叠加默认关闭，点一下才画出来；检测读数不受影响
         assertFalse(showLandmarks)
         capture("05-首页-实时检测-开启")
@@ -202,7 +209,7 @@ class HomeVisualTest {
         assertTrue(showLandmarks)
         compose.onNodeWithText("睁眼").assertExists()
         capture("05b-首页-实时检测-显示关键点")
-        compose.onNodeWithText("实时检测").performClick()
+        compose.onNodeWithText("停止检测").performClick()
         assertTrue(paused)
     }
 

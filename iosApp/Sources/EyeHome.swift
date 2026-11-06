@@ -10,8 +10,8 @@ private func levelColor(_ level: String) -> Color {
     switch level { case "LOW": return EyeStyle.success; case "MEDIUM": return EyeStyle.warning; case "HIGH": return EyeStyle.danger; default: return EyeStyle.secondary }
 }
 
-/// 首页：问候与日期（右上角账户、系统设置）→ 今日用眼（主卡）→ AI 主动问诊（爱科）→ 今日感受 → 基础数据 → 实时检测 →
-/// 护眼操、休息提醒 → 用眼趋势报告、亮度与蓝光。不分小节标题。与安卓 HomeContent 一致。
+/// 首页：「今日」与日期（右上角账户、系统设置）→ 眼健康指数仪表圈 → 基础数据 → 功能卡（护眼操、用眼趋势、亮度与蓝光三个彩色方块
+/// + 整行 AI 主动问诊）→ 今日感受 → 休息提醒 → 实时检测（始终展开）。不分小节标题。与安卓 HomeContent 一致。
 struct HomePage: View {
     let navigate: (AppRoute) -> Void
     let openTest: (String) -> Void
@@ -35,12 +35,10 @@ struct HomePage: View {
                 PageHeader(title: "今日", subtitle: today, openAccount: { navigate(.account) }, openSettings: { navigate(.settings) })
                 HeroCard(report: report)
                 if report.signals("BASIC").contains(where: { $0.id != "brightness" }) { BasicCard(report: report) }
-                ChatEntryCard { navigate(.chat) }
+                FeatureCard(report: report, navigate: navigate) { exerciseOpen = true }
                 CheckInCard(report: report) { feelingEditing = true }
-                Panel { LiveEyeSection(startRequests: liveRequests) }.id("live")
-                ExerciseCard { exerciseOpen = true }
                 ReminderCard(reminder: reminder, suggested: report.loaded ? report.suggestedReminderMinutes : nil)
-                ServiceTiles(report: report, navigate: navigate)
+                Panel { LiveEyeSection(startRequests: liveRequests) }.id("live")
             }
         }
         .onAppear { store.refresh() }
@@ -259,20 +257,7 @@ private struct BasicCard: View {
     }
 }
 
-// MARK: - 护眼操、提醒与服务入口
-
-/// 护眼操入口：转转眼球（向左、右、上、下看），约 1 分钟。
-private struct ExerciseCard: View {
-    let start: () -> Void
-    var body: some View {
-        Button { EyeHaptics.tap(); start() } label: {
-            EyeCard {
-                CategoryHeader(title: "护眼操", glyph: .eye, tone: .success) { PillButton(label: "开始", action: start) }
-                Text("跟着示意转转眼球，约 1 分钟").font(EyeStyle.body).foregroundStyle(EyeStyle.text)
-            }
-        }.buttonStyle(.plain)
-    }
-}
+// MARK: - 功能卡与休息提醒
 
 /// 休息提醒：开关（间隔）+ 间隔选择；建议间隔与当前不同时给出一键采用。
 private struct ReminderCard: View {
@@ -302,30 +287,54 @@ private struct ReminderCard: View {
     }
 }
 
-/// 服务入口：用眼趋势报告、亮度与蓝光并排。与安卓 ServiceTiles 一致。
-private struct ServiceTiles: View {
+/// 功能卡：一张卡里上排三个彩色方块（护眼操绿、用眼趋势蓝、亮度与蓝光珊瑚红），下面整行紫色的 AI 主动问诊。
+/// 色块上文字与图标一律白色，靠整块颜色做视觉区分。与安卓 FeatureCard 一致。
+private struct FeatureCard: View {
     let report: CareReport
     let navigate: (AppRoute) -> Void
+    let openExercise: () -> Void
     var body: some View {
-        HStack(spacing: 10) {
-            tile("用眼趋势报告", "近 7 天变化", .chart, .blue) { navigate(.trend) }
-            tile("亮度与蓝光", report.signal("brightness").map { "屏幕亮度 \($0.value)" } ?? "夜间模式与护眼", .sun, .accent) { navigate(.brightness) }
+        VStack(spacing: 10) {
+            HStack(spacing: 10) {
+                VividTile(title: "护眼操", subtitle: "约 1 分钟", glyph: .eye, fill: EyeStyle.Vivid.green, action: openExercise)
+                VividTile(title: "用眼趋势", subtitle: "近 7 天变化", glyph: .chart, fill: EyeStyle.Vivid.blue) { navigate(.trend) }
+                VividTile(title: "亮度与蓝光", subtitle: report.signal("brightness").map { "屏幕亮度 \($0.value)" } ?? "夜间模式与护眼",
+                          glyph: .sun, fill: EyeStyle.Vivid.red) { navigate(.brightness) }
+            }.fixedSize(horizontal: false, vertical: true)
+            ChatEntryCard { navigate(.chat) }
         }
+        .padding(12).frame(maxWidth: .infinity)
+        .eyeGlass()
     }
-    private func tile(_ title: String, _ subtitle: String, _ glyph: EyeGlyph, _ tone: TileTone, _ action: @escaping () -> Void) -> some View {
+}
+
+/// 功能色块：渐变底 + 左上白色图标块 + 白色标题与一行说明，右下角放大的半透明图标做装饰；按下轻微缩小。与安卓 VividTile 一致。
+private struct VividTile: View {
+    let title: String
+    let subtitle: String
+    let glyph: EyeGlyph
+    let fill: LinearGradient
+    let action: () -> Void
+    var body: some View {
         Button { EyeHaptics.tap(); action() } label: {
-            VStack(alignment: .leading, spacing: 10) {
-                IconTile(glyph: glyph, tone: tone, size: 36)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title).font(EyeStyle.button).foregroundStyle(EyeStyle.text)
-                    Text(subtitle).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary).lineLimit(2).multilineTextAlignment(.leading)
-                }
-                Spacer(minLength: 0)
+            VStack(alignment: .leading, spacing: 0) {
+                EyeGlyphView(glyph: glyph, color: EyeStyle.Vivid.on).frame(width: 28, height: 28)
+                    .frame(width: 42, height: 42)
+                    .background(EyeStyle.Vivid.on.opacity(0.22), in: RoundedRectangle(cornerRadius: EyeStyle.radiusMedium, style: .continuous))
+                Spacer(minLength: 14)
+                Text(title).font(EyeStyle.button).foregroundStyle(EyeStyle.Vivid.on)
+                Text(subtitle).font(EyeStyle.chip).foregroundStyle(EyeStyle.Vivid.on.opacity(0.86))
+                    .lineLimit(2).multilineTextAlignment(.leading).padding(.top, 2)
             }
-            .padding(16).frame(maxWidth: .infinity, minHeight: 112, alignment: .topLeading)
-            .eyeGlass()
-            .contentShape(RoundedRectangle(cornerRadius: 22))
-        }.buttonStyle(PressScale(scale: 0.97))
+            .padding(12).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .frame(minHeight: 140)
+            .background(alignment: .bottomTrailing) {
+                EyeGlyphView(glyph: glyph, color: EyeStyle.Vivid.on.opacity(0.16)).frame(width: 76, height: 76).offset(x: 16, y: 16)
+            }
+            .background(fill)
+            .clipShape(RoundedRectangle(cornerRadius: EyeStyle.radiusLarge, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: EyeStyle.radiusLarge))
+        }.buttonStyle(PressScale(scale: 0.96))
     }
 }
 

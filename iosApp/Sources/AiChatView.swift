@@ -3,20 +3,24 @@ import SwiftUI
 /// 入口与对话页标题（与安卓 CHAT_TITLE 一致）。
 let chatTitle = "AI 主动问诊"
 
-/// 首页「AI 主动问诊」入口（放在「今日感受」上方）：玻璃卡上爱科头像 + 标题，点了进入对话页。与安卓 ChatEntryCard 一致。
+/// 首页「AI 主动问诊」入口（功能卡下排整行）：紫色渐变色块上爱科头像 + 白色标题，点了进入对话页。与安卓 ChatEntryCard 一致。
 struct ChatEntryCard: View {
     let open: () -> Void
     var body: some View {
         Button { EyeHaptics.tap(); open() } label: {
             HStack(spacing: 12) {
-                EyechoAvatar(size: 44)
-                Text(chatTitle).font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text).frame(maxWidth: .infinity, alignment: .leading)
-                Image(systemName: "chevron.right").font(.system(size: 15, weight: .semibold)).foregroundStyle(EyeStyle.tertiary)
+                EyechoAvatar(size: 46).padding(3).background(EyeStyle.Vivid.on.opacity(0.3), in: Circle())
+                Text(chatTitle).font(EyeStyle.subtitle).foregroundStyle(EyeStyle.Vivid.on).frame(maxWidth: .infinity, alignment: .leading)
+                Image(systemName: "chevron.right").font(.system(size: 15, weight: .semibold)).foregroundStyle(EyeStyle.Vivid.on)
             }
-            .padding(.horizontal, 16).padding(.vertical, 14)
-            .eyeGlass()
-            .contentShape(RoundedRectangle(cornerRadius: 22))
-        }.buttonStyle(PressScale(scale: 0.98))
+            .padding(14)
+            .background(alignment: .trailing) {
+                EyeGlyphView(glyph: .chat, color: EyeStyle.Vivid.on.opacity(0.14)).frame(width: 88, height: 88).offset(x: 14)
+            }
+            .background(EyeStyle.Vivid.violet)
+            .clipShape(RoundedRectangle(cornerRadius: EyeStyle.radiusLarge, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: EyeStyle.radiusLarge))
+        }.buttonStyle(PressScale(scale: 0.97))
     }
 }
 

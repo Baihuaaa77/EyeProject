@@ -20,6 +20,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
@@ -36,15 +37,17 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeShapes
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
+import com.zkyjss.eyeproject.core.designsystem.theme.vivid
 import com.zkyjss.eyeproject.core.domain.LiveEyeMonitor
 import com.zkyjss.eyeproject.core.model.Point2f
 import com.zkyjss.eyeproject.core.ui.component.*
 
 /**
- * 首页「视觉行为」卡里的实时检测：默认关闭，打开后显示镜像预览，旁边是眨眼次数、
- * 观看距离与当前状态；预览下方「显示眼部关键点」开关（默认关闭、持久保存）决定是否叠加双眼关键点（眼睑 6 点 + 虹膜圈），
- * 只影响画面，检测照常进行。下方是最近 8 秒 EAR 曲线，每次眨眼画一条绿线。离开首页、退到后台后摘下预览、在后台继续检测
- * （通知栏常驻），直到关掉开关、点通知里的「停止」或从最近任务划掉应用；统计按段记入主动护眼账本。
+ * 首页最后一张卡「实时检测」：始终展开，整宽正方形取景框 + 「开始检测 / 停止检测」按钮。未检测时取景框是浅主色底 +
+ * 人头形虚线框占位；检测中显示镜像预览（裁成正方形），下方是眨眼次数、近 1 分钟眨眼、观看距离与睁闭眼状态，
+ * 「显示眼部关键点」开关（默认关闭、持久保存）决定是否叠加双眼关键点（眼睑 6 点 + 虹膜圈），只影响画面；
+ * 再下方是最近 8 秒 EAR 曲线，每次眨眼画一条绿线。离开首页、退到后台后摘下预览、在后台继续检测
+ * （通知栏常驻），直到点「停止检测」、点通知里的「停止」或从最近任务划掉应用；统计按段记入主动护眼账本。
  * 与苹果端 LiveEyeSection 同一排版（苹果端退到后台即停止）。[startRequests] 每增加一次（气泡里点了「去检测」）就打开一次。
  */
 @Composable
@@ -111,38 +114,32 @@ internal fun LiveEyeContent(
     val haptics = rememberEyeHaptics()
     val s = state.snapshot
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(Modifier.fillMaxWidth().heightIn(min = 48.dp)
-            .toggleable(state.running, role = Role.Switch) { on -> haptics.toggle(on); if (on) onStart() else onPause() },
-            verticalAlignment = Alignment.CenterVertically) {
-            Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-                EyeText("实时检测", style = typography.body, color = colors.textPrimary, fontWeight = FontWeight.SemiBold)
-                EyeHelpButton("实时检测", LIVE_HELP)
-            }
+        // 标题行：图标 + 标题 + 问号紧挨着，状态标签靠右
+        Row(Modifier.fillMaxWidth().heightIn(min = 40.dp), verticalAlignment = Alignment.CenterVertically) {
+            EyeGlyphIcon(EyeGlyph.CAMERA, Modifier.size(20.dp), EyeTileTone.PRIMARY.colors().second)
+            Spacer(Modifier.width(8.dp))
+            EyeText("实时检测", style = typography.subtitle, color = colors.textPrimary)
+            EyeHelpButton("实时检测", LIVE_HELP)
+            Spacer(Modifier.weight(1f))
             if (state.running) {
                 val (label, tone) = status(state)
                 EyeStatusChip(label, tone, live = tone == StatusTone.SUCCESS)
-                Spacer(Modifier.width(8.dp))
             }
-            EyeSwitch(checked = state.running, onCheckedChange = null)
+        }
+        Viewfinder(state.running, Modifier.fillMaxWidth().aspectRatio(1f)) {
+            preview()
+            if (state.showLandmarks) LandmarkOverlay(s, Modifier.matchParentSize())
         }
         if (state.running) {
-            Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                val aspect = if (s != null && s.imageWidth > 0 && s.imageHeight > 0) s.imageWidth.toFloat() / s.imageHeight else 3f / 4f
-                Box(Modifier.width(120.dp).aspectRatio(aspect).clip(EyeShapes.medium).background(colors.ink)) {
-                    preview()
-                    if (state.showLandmarks) LandmarkOverlay(s, Modifier.matchParentSize())
-                }
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        EyeText("${s?.blinkCount ?: 0}", style = typography.headline, color = colors.textPrimary)
-                        EyeText("次眨眼", Modifier.padding(bottom = 6.dp), style = typography.body, color = colors.textSecondary)
-                    }
-                    EyeText("近 1 分钟 ${s?.blinksLastMinute ?: 0} 次", style = typography.body, color = colors.textSecondary)
-                    EyeStateChip(s)
-                    EyeText("距离 ${s?.distanceCm?.let { "%.0f 厘米".format(it) } ?: "—"}", style = typography.body, color = colors.textSecondary)
-                    EyeText("EAR ${s?.ear?.let { "%.2f".format(it) } ?: "—"} · ${"%.0f".format(s?.fps ?: 0f)} 帧/秒",
-                        style = typography.bodySecondary, color = colors.textSecondary)
-                }
+            EyeMetricRow(items = listOf(
+                { m -> EyeMetric("眨眼", "${s?.blinkCount ?: 0}", m, unit = "次") },
+                { m -> EyeMetric("近 1 分钟", "${s?.blinksLastMinute ?: 0}", m, unit = "次") },
+                { m -> EyeMetric("距离", s?.distanceCm?.let { "%.0f".format(it) } ?: "—", m, unit = "厘米") },
+            ))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                EyeStateChip(s)
+                EyeText("EAR ${s?.ear?.let { "%.2f".format(it) } ?: "—"} · ${"%.0f".format(s?.fps ?: 0f)} 帧/秒",
+                    style = typography.bodySecondary, color = colors.textSecondary)
             }
             Row(Modifier.fillMaxWidth().heightIn(min = 40.dp)
                 .toggleable(state.showLandmarks, role = Role.Switch) { on -> haptics.toggle(on); onShowLandmarksChange(on) },
@@ -152,7 +149,46 @@ internal fun LiveEyeContent(
             }
             EarTraceChart(s, Modifier.fillMaxWidth().height(116.dp))
         }
+        EyeButton(if (state.running) "停止检测" else "开始检测", if (state.running) EyeButtonRole.SECONDARY else EyeButtonRole.PRIMARY,
+            { haptics.toggle(!state.running); if (state.running) onPause() else onStart() }, Modifier.fillMaxWidth())
         note?.let { EyeText(it, style = typography.bodySecondary, color = colors.warning) }
+    }
+}
+
+/**
+ * 正方形取景框：四角白色 / 主色取景角标。检测中铺满相机画面（[live]），未检测时浅主色底 + 人头肩形虚线框占位。
+ */
+@Composable
+private fun Viewfinder(running: Boolean, modifier: Modifier, live: @Composable BoxScope.() -> Unit) {
+    val colors = LocalEyeColors.current
+    Box(modifier.clip(EyeShapes.hero).background(if (running) colors.ink else colors.primarySoft)) {
+        if (running) live() else Canvas(Modifier.matchParentSize()) {
+            val w = size.width
+            val h = size.height
+            val dash = Stroke(2.5.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(10.dp.toPx(), 7.dp.toPx())))
+            val ink = colors.primary.copy(alpha = 0.55f)
+            // 头：竖椭圆
+            drawOval(ink, Offset(w * 0.32f, h * 0.2f), Size(w * 0.36f, h * 0.44f), style = dash)
+            // 肩：从左右两侧圆滑升到脖子
+            drawPath(Path().apply {
+                moveTo(w * 0.12f, h)
+                cubicTo(w * 0.12f, h * 0.8f, w * 0.3f, h * 0.72f, w * 0.42f, h * 0.7f)
+                moveTo(w * 0.58f, h * 0.7f)
+                cubicTo(w * 0.7f, h * 0.72f, w * 0.88f, h * 0.8f, w * 0.88f, h)
+            }, ink, style = dash)
+        }
+        Canvas(Modifier.matchParentSize()) {
+            val inset = 18.dp.toPx()
+            val arm = 26.dp.toPx()
+            val stroke = 3.dp.toPx()
+            val corner = if (running) colors.vivid.onVivid.copy(alpha = 0.9f) else colors.primary
+            listOf(Offset(inset, inset) to Offset(1f, 1f), Offset(size.width - inset, inset) to Offset(-1f, 1f),
+                Offset(inset, size.height - inset) to Offset(1f, -1f), Offset(size.width - inset, size.height - inset) to Offset(-1f, -1f),
+            ).forEach { (o, d) ->
+                drawLine(corner, o, Offset(o.x + d.x * arm, o.y), stroke, StrokeCap.Round)
+                drawLine(corner, o, Offset(o.x, o.y + d.y * arm), stroke, StrokeCap.Round)
+            }
+        }
     }
 }
 
@@ -160,7 +196,7 @@ internal const val SHOW_LANDMARKS = "显示眼部关键点"
 
 internal const val LIVE_HELP = "用前置摄像头实时检测双眼关键点：数眨眼次数、估计眼睛到屏幕的距离和头部姿态，结果计入「视觉行为」。" +
     "「显示眼部关键点」只决定预览上是否画出眼睑轮廓和虹膜圈，不影响检测。" +
-    "打开后离开首页或退到后台也会继续检测，通知栏会一直显示；关掉开关、点通知里的「停止」或从最近任务划掉应用即停止，熄屏时自动暂停。" +
+    "开始后离开首页或退到后台也会继续检测，通知栏会一直显示；点「停止检测」、点通知里的「停止」或从最近任务划掉应用即停止，熄屏时自动暂停。" +
     "画面只在本机实时处理，不保存、不上传。"
 
 private fun status(state: LiveEyeUiState): Pair<String, StatusTone> {
@@ -186,13 +222,16 @@ private fun EyeStateChip(s: LiveEyeMonitor.Snapshot?) {
     EyeStatusChip(label, tone)
 }
 
-/** 预览上叠加双眼关键点：眼睑 6 点连线 + 虹膜圈；闭眼时变红。预览与原图同宽高比，只需水平镜像。 */
+/** 预览上叠加双眼关键点：眼睑 6 点连线 + 虹膜圈；闭眼时变红。预览按 FILL_CENTER 把原图裁进正方形，坐标同样居中放大后水平镜像。 */
 @Composable
 private fun LandmarkOverlay(s: LiveEyeMonitor.Snapshot?, modifier: Modifier) {
     val colors = LocalEyeColors.current
     Canvas(modifier) {
         if (s == null || s.stale || s.imageWidth <= 0 || s.imageHeight <= 0) return@Canvas
-        fun toView(p: Point2f) = Offset((1 - p.x / s.imageWidth) * size.width, p.y / s.imageHeight * size.height)
+        val scale = maxOf(size.width / s.imageWidth, size.height / s.imageHeight)
+        val shown = Size(s.imageWidth * scale, s.imageHeight * scale)
+        val origin = Offset((size.width - shown.width) / 2, (size.height - shown.height) / 2)
+        fun toView(p: Point2f) = Offset(origin.x + (1 - p.x / s.imageWidth) * shown.width, origin.y + p.y / s.imageHeight * shown.height)
         val color = if (s.closed) colors.danger else colors.brandStart
         listOfNotNull(s.leftEye, s.rightEye).forEach { eye ->
             val points = eye.earPoints.map(::toView)
@@ -205,7 +244,7 @@ private fun LandmarkOverlay(s: LiveEyeMonitor.Snapshot?, modifier: Modifier) {
             }
             points.forEach { drawCircle(color, 1.8.dp.toPx(), it) }
             eye.irisPoints.firstOrNull()?.let { center ->
-                drawCircle(colors.accent, eye.irisDiameterPx / 2 / s.imageWidth * size.width, toView(center), style = Stroke(1.2.dp.toPx()))
+                drawCircle(colors.accent, eye.irisDiameterPx / 2 * scale, toView(center), style = Stroke(1.2.dp.toPx()))
             }
         }
     }

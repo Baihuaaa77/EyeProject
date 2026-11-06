@@ -3,8 +3,9 @@ import SwiftUI
 import UIKit
 import EyeScreening
 
-/// 首页「视觉行为」卡里的实时检测：默认关闭，打开后显示镜像预览，旁边是眨眼次数、观看距离与当前状态，
-/// 下方「显示眼部关键点」开关（默认关闭、持久保存）决定是否叠加双眼关键点（眼睑 6 点 + 虹膜圈），只影响画面；
+/// 首页最后一张卡「实时检测」：始终展开，整宽正方形取景框 + 「开始检测 / 停止检测」按钮。未检测时取景框是浅主色底 +
+/// 人头形虚线框占位；检测中显示镜像预览（裁成正方形），下方是眨眼次数、近 1 分钟眨眼、观看距离与睁闭眼状态，
+/// 「显示眼部关键点」开关（默认关闭、持久保存）决定是否叠加双眼关键点（眼睑 6 点 + 虹膜圈），只影响画面；
 /// 再下方是最近 8 秒的 EAR 曲线，每次眨眼画一条绿线。
 /// 离开首页、退到后台即关闭相机；关闭时本次的眨眼频率与观看距离记入主动护眼账本。与安卓 LiveEyeSection 同一排版。
 /// [startRequests] 每增加一次（「为你推荐」里点了「去检测」）就打开一次。
@@ -14,23 +15,31 @@ struct LiveEyeSection: View {
     var startRequests = 0
 
     static let showLandmarks = "显示眼部关键点"
-    static let help = "用前置摄像头实时检测双眼关键点：数眨眼次数、估计眼睛到屏幕的距离和头部姿态，结果计入「视觉行为」。「显示眼部关键点」只决定预览上是否画出眼睑轮廓和虹膜圈，不影响检测。画面只在本机实时处理，不保存、不上传；关闭开关或离开首页即停止相机。"
+    static let help = "用前置摄像头实时检测双眼关键点：数眨眼次数、估计眼睛到屏幕的距离和头部姿态，结果计入「视觉行为」。「显示眼部关键点」只决定预览上是否画出眼睑轮廓和虹膜圈，不影响检测。画面只在本机实时处理，不保存、不上传；点「停止检测」或离开首页即停止相机。"
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 8) {
-                HStack(spacing: 0) {
-                    Text("实时检测").font(EyeStyle.button).foregroundStyle(EyeStyle.text)
-                    HelpButton(title: "实时检测", text: Self.help)
-                }.frame(maxWidth: .infinity, alignment: .leading)
+            // 标题行：图标 + 标题 + 问号紧挨着，状态标签靠右
+            HStack(spacing: 0) {
+                EyeGlyphView(glyph: .camera, color: TileTone.primary.colors.1).frame(width: 20, height: 20).padding(.trailing, 8)
+                Text("实时检测").font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text)
+                HelpButton(title: "实时检测", text: Self.help)
+                Spacer(minLength: 8)
                 if model.running { statusChip }
-                Toggle("", isOn: Binding(get: { model.running }, set: { on in
-                    EyeHaptics.toggle()
-                    model.wanted = on
-                    if on { model.start() } else { model.stop() }
-                })).labelsHidden().tint(EyeStyle.primary)
-            }.frame(minHeight: 48)
+            }.frame(minHeight: 40)
+            Viewfinder(running: model.running) {
+                ZStack {
+                    LivePreview(view: model.previewView)
+                    if model.showLandmarks { EyeLandmarkOverlay(snapshot: model.snapshot) }
+                }
+            }
             if model.running { live }
+            Button(model.running ? "停止检测" : "开始检测") {
+                EyeHaptics.toggle()
+                let on = !model.running
+                model.wanted = on
+                if on { model.start() } else { model.stop() }
+            }.buttonStyle(EyeButtonStyle(role: model.running ? .secondary : .primary))
             if let message = model.error ?? model.cameraNote {
                 Text(message).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.warning)
             }
@@ -45,26 +54,18 @@ struct LiveEyeSection: View {
 
     private var live: some View {
         let s = model.snapshot
-        let aspect: CGFloat = s.map { $0.imageWidth > 0 && $0.imageHeight > 0 ? CGFloat($0.imageWidth) / CGFloat($0.imageHeight) : 9.0 / 16 } ?? 9.0 / 16
         return VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 14) {
-                ZStack {
-                    LivePreview(view: model.previewView)
-                    if model.showLandmarks { EyeLandmarkOverlay(snapshot: s) }
-                }.aspectRatio(aspect, contentMode: .fit).frame(width: 120)
-                    .clipShape(RoundedRectangle(cornerRadius: EyeStyle.radiusMedium))
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(alignment: .firstTextBaseline, spacing: 4) {
-                        Text("\(s?.blinkCount ?? 0)").font(EyeStyle.headline).foregroundStyle(EyeStyle.text).monospacedDigit()
-                        Text("次眨眼").font(EyeStyle.body).foregroundStyle(EyeStyle.secondary)
-                    }
-                    Text("近 1 分钟 \(s?.blinksLastMinute ?? 0) 次").font(EyeStyle.body).foregroundStyle(EyeStyle.secondary)
-                    eyeState(s)
-                    Text("距离 \(s?.distanceCm.map { String(format: "%.0f 厘米", $0.floatValue) } ?? "—")")
-                        .font(EyeStyle.body).foregroundStyle(EyeStyle.secondary).monospacedDigit()
-                    Text(String(format: "EAR %@ · %.0f 帧/秒", s?.ear.map { String(format: "%.2f", $0.floatValue) } ?? "—", s?.fps ?? 0))
-                        .font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary).monospacedDigit()
-                }.frame(maxWidth: .infinity, alignment: .leading)
+            HStack(spacing: 0) {
+                MetricView(label: "眨眼", value: "\(s?.blinkCount ?? 0)", unit: "次")
+                VDivider()
+                MetricView(label: "近 1 分钟", value: "\(s?.blinksLastMinute ?? 0)", unit: "次")
+                VDivider()
+                MetricView(label: "距离", value: s?.distanceCm.map { String(format: "%.0f", $0.floatValue) } ?? "—", unit: "厘米")
+            }.fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 8) {
+                eyeState(s)
+                Text(String(format: "EAR %@ · %.0f 帧/秒", s?.ear.map { String(format: "%.2f", $0.floatValue) } ?? "—", s?.fps ?? 0))
+                    .font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary).monospacedDigit()
             }
             Toggle(isOn: Binding(get: { model.showLandmarks }, set: { on in
                 EyeHaptics.toggle()
@@ -105,6 +106,51 @@ struct LiveEyeSection: View {
     }
 }
 
+/// 正方形取景框：四角取景角标（检测中白色、未检测主色）。检测中铺满相机画面，未检测时浅主色底 + 人头肩形虚线框占位。与安卓 Viewfinder 一致。
+private struct Viewfinder<Live: View>: View {
+    let running: Bool
+    @ViewBuilder let live: Live
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: EyeStyle.radiusHero, style: .continuous)
+        Color.clear.aspectRatio(1, contentMode: .fit).frame(maxWidth: .infinity)
+            .overlay {
+                if running { live } else {
+                    Canvas { context, size in
+                        let w = size.width, h = size.height
+                        let dash = StrokeStyle(lineWidth: 2.5, dash: [10, 7])
+                        let ink = EyeStyle.primary.opacity(0.55)
+                        context.stroke(Path(ellipseIn: CGRect(x: w * 0.32, y: h * 0.2, width: w * 0.36, height: h * 0.44)), with: .color(ink), style: dash)
+                        var shoulders = Path()
+                        shoulders.move(to: CGPoint(x: w * 0.12, y: h))
+                        shoulders.addCurve(to: CGPoint(x: w * 0.42, y: h * 0.7), control1: CGPoint(x: w * 0.12, y: h * 0.8), control2: CGPoint(x: w * 0.3, y: h * 0.72))
+                        shoulders.move(to: CGPoint(x: w * 0.58, y: h * 0.7))
+                        shoulders.addCurve(to: CGPoint(x: w * 0.88, y: h), control1: CGPoint(x: w * 0.7, y: h * 0.72), control2: CGPoint(x: w * 0.88, y: h * 0.8))
+                        context.stroke(shoulders, with: .color(ink), style: dash)
+                    }.accessibilityHidden(true)
+                }
+            }
+            .overlay {
+                Canvas { context, size in
+                    let inset: CGFloat = 18, arm: CGFloat = 26
+                    let color = running ? EyeStyle.Vivid.on.opacity(0.9) : EyeStyle.primary
+                    let corners: [(CGPoint, CGPoint)] = [
+                        (CGPoint(x: inset, y: inset), CGPoint(x: 1, y: 1)),
+                        (CGPoint(x: size.width - inset, y: inset), CGPoint(x: -1, y: 1)),
+                        (CGPoint(x: inset, y: size.height - inset), CGPoint(x: 1, y: -1)),
+                        (CGPoint(x: size.width - inset, y: size.height - inset), CGPoint(x: -1, y: -1)),
+                    ]
+                    for (o, d) in corners {
+                        var corner = Path()
+                        corner.move(to: CGPoint(x: o.x + d.x * arm, y: o.y)); corner.addLine(to: o); corner.addLine(to: CGPoint(x: o.x, y: o.y + d.y * arm))
+                        context.stroke(corner, with: .color(color), style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
+                    }
+                }.allowsHitTesting(false).accessibilityHidden(true)
+            }
+            .background(running ? EyeStyle.ink : EyeStyle.primarySoft)
+            .clipShape(shape)
+    }
+}
+
 /// 前置相机预览：把常驻的预览视图（EyeLiveModel.previewView）放进容器。离开界面时只把它从容器里摘下，
 /// 不析构预览层、不碰会话——主线程析构预览层要等相机队列上的 stopRunning，是退出检测偶发卡死的原因。
 private struct LivePreview: UIViewRepresentable {
@@ -131,15 +177,18 @@ private struct LivePreview: UIViewRepresentable {
     }
 }
 
-/// 预览上叠加双眼关键点：眼睑 6 点连线 + 虹膜圈；闭眼时变红。预览与原图同宽高比，只需水平镜像。
+/// 预览上叠加双眼关键点：眼睑 6 点连线 + 虹膜圈；闭眼时变红。预览按 aspectFill 把原图裁进正方形，坐标同样居中放大后水平镜像。
 private struct EyeLandmarkOverlay: View {
     let snapshot: LiveEyeMonitor.Snapshot?
     var body: some View {
         Canvas { context, size in
             guard let s = snapshot, !s.stale, s.imageWidth > 0, s.imageHeight > 0 else { return }
             let width = CGFloat(s.imageWidth), height = CGFloat(s.imageHeight)
+            let scale = max(size.width / width, size.height / height)
+            let shown = CGSize(width: width * scale, height: height * scale)
+            let origin = CGPoint(x: (size.width - shown.width) / 2, y: (size.height - shown.height) / 2)
             func toView(_ p: Point2f) -> CGPoint {
-                CGPoint(x: (1 - CGFloat(p.x) / width) * size.width, y: CGFloat(p.y) / height * size.height)
+                CGPoint(x: origin.x + (1 - CGFloat(p.x) / width) * shown.width, y: origin.y + CGFloat(p.y) / height * shown.height)
             }
             let color = s.closed ? EyeStyle.danger : EyeStyle.brandStart
             for eye in [s.leftEye, s.rightEye].compactMap({ $0 }) {
@@ -155,7 +204,7 @@ private struct EyeLandmarkOverlay: View {
                 for p in points { context.fill(Path(ellipseIn: CGRect(x: p.x - 1.8, y: p.y - 1.8, width: 3.6, height: 3.6)), with: .color(color)) }
                 if let center = eye.irisPoints.first {
                     let c = toView(center)
-                    let r = CGFloat(eye.irisDiameterPx) / 2 / width * size.width
+                    let r = CGFloat(eye.irisDiameterPx) / 2 * scale
                     context.stroke(Path(ellipseIn: CGRect(x: c.x - r, y: c.y - r, width: r * 2, height: r * 2)),
                                    with: .color(EyeStyle.accent), lineWidth: 1.2)
                 }
