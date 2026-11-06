@@ -31,12 +31,13 @@ import androidx.compose.ui.unit.dp
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeColors
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
+import com.zkyjss.eyeproject.core.designsystem.theme.illustration
 
 /*
  * 品牌与示意图绘制（2026-11 视觉改版，去卡通化；苹果端 EyeCartoon.swift 逐项对应）：
  * - 标志：主色渐变圆角底 + 白色同心「虹膜」环与中心点，克制、几何，不再用吉祥物
- * - 方法示意里的人物用中性的线面头像（只画两只眼，随视线、闭眼变化；无表情、无腮红）
- * - 手、手机用扁平面，不描卡通粗轮廓；斜视注视目标用准星（同心环 + 十字 + 中心点）
+ * - 方法演示里的人物是平面上半身短发男孩（2026-11-06 起，取代原吉祥物与中性线面头像；动画沿用原吉祥物的场景）
+ * - 手为肤色手掌带浅描边，手机用扁平面；斜视注视目标用准星（同心环 + 十字 + 中心点）
  * 启动图标（app/src/main/res/mipmap-* 与 iOS AppIcon）为爱科真人头像 + 浅灰蓝圆盘，由 scripts/generate_eyecho_icon.py 生成。
  */
 
@@ -106,11 +107,13 @@ fun figureEyeCenter(center: Offset, size: Float, side: Int): Offset =
     Offset(center.x + side * size * 0.19f, center.y - size * 0.02f)
 
 /**
- * 示意人物（方法演示用，中性线面）：圆顶肩膀 + 竖椭圆头形 + 两只杏仁眼（白底、深色虹膜随视线移动）。
- * @param size 头宽
- * @param gaze 看向（-1..1，x/y）：虹膜平移
+ * 示意人物（方法演示用）：平面上半身短发男孩——圆脸、侧分短发、豆豆眼（带一点高光）、眉毛、腮红、小微笑，
+ * 蓝色圆领上衣。纯色平涂，不做渐变与立体阴影。眼睛位置与尺寸沿用原吉祥物，演示里遮眼、视线、眨眼的坐标不用改。
+ * @param size 头宽（脸宽约 0.8 倍，耳朵到耳朵约 0.96 倍）
+ * @param gaze 看向（-1..1，x/y）：豆豆眼整体平移
  * @param lid 闭眼程度 0 睁开 .. 1 闭合（< 0.2 睁开度时画成闭眼弧线）
- * @param wide 睁大程度（>1 眼睛更大），用于「保持睁眼」
+ * @param wide 睁大程度（>1 眼睛更大、眉毛上扬），用于「保持睁眼」
+ * @param bottom 上衣下沿的 y；缺省为头部中心下方 0.8 倍头宽（演示舞台传舞台底边，让上身一直画到画框底）
  */
 fun DrawScope.drawFigure(
     colors: EyeColors,
@@ -119,62 +122,113 @@ fun DrawScope.drawFigure(
     gaze: Offset = Offset.Zero,
     lid: Float = 0f,
     wide: Float = 1f,
+    bottom: Float = center.y + size * 0.8f,
 ) {
     val s = size
-    val top = center.y - s * 0.46f
-    // 肩膀：头后方一段圆顶半身，读成「一个人」（类似系统人像图标）
+    val ill = colors.illustration
+    fun p(x: Float, y: Float) = Offset(center.x + x * s, center.y + y * s)
+    // 上衣：圆肩，一直画到 bottom
+    val y0 = center.y + s * 0.5f
+    val hem = maxOf(bottom, y0 + s * 0.3f)
     drawPath(Path().apply {
-        moveTo(center.x - s * 0.5f, center.y + s * 0.58f)
-        cubicTo(center.x - s * 0.5f, center.y + s * 0.36f, center.x - s * 0.28f, center.y + s * 0.28f, center.x, center.y + s * 0.28f)
-        cubicTo(center.x + s * 0.28f, center.y + s * 0.28f, center.x + s * 0.5f, center.y + s * 0.36f, center.x + s * 0.5f, center.y + s * 0.58f)
+        moveTo(center.x - s * 0.62f, hem)
+        lineTo(center.x - s * 0.62f, y0 + s * 0.3f)
+        quadraticBezierTo(center.x - s * 0.62f, y0, center.x - s * 0.32f, y0)
+        lineTo(center.x + s * 0.32f, y0)
+        quadraticBezierTo(center.x + s * 0.62f, y0, center.x + s * 0.62f, y0 + s * 0.3f)
+        lineTo(center.x + s * 0.62f, hem)
         close()
-    }, colors.brandStart.copy(alpha = 0.4f))
-    // 头：竖椭圆，浅主色面 + 细描边
-    val head = Size(s * 0.78f, s * 0.84f)
-    val headTl = Offset(center.x - head.width / 2, top)
-    drawOval(colors.primarySoft, headTl, head)
-    drawOval(colors.primary.copy(alpha = 0.35f), headTl, head, style = Stroke(s * 0.016f))
+    }, ill.shirt)
+    // 脖子 + 圆领（领口里露出的一点脖子 + 浅色滚边）
+    drawRect(ill.skinShade, p(-0.1f, 0.28f), Size(s * 0.2f, s * 0.26f))
+    val collar = Path().apply {
+        moveTo(center.x - s * 0.16f, y0)
+        quadraticBezierTo(center.x, y0 + s * 0.15f, center.x + s * 0.16f, y0)
+    }
+    drawPath(collar, ill.skinShade)
+    drawPath(collar, ill.shirtLight, style = Stroke(s * 0.04f, cap = StrokeCap.Round))
+    // 耳朵（在脸后面）
+    for (side in listOf(-1, 1)) {
+        drawCircle(ill.skin, s * 0.08f, p(side * 0.4f, 0.04f))
+        drawCircle(ill.skinShade, s * 0.035f, p(side * 0.405f, 0.04f))
+    }
+    // 脸
+    drawOval(ill.skin, p(-0.4f, -0.43f), Size(s * 0.8f, s * 0.86f))
+    // 侧分短发：盖住头顶，刘海从左向右扫开，露出额头
+    drawPath(Path().apply {
+        val a = p(-0.43f, 0.04f); moveTo(a.x, a.y)
+        cubic(p(-0.47f, -0.36f), p(-0.22f, -0.56f), p(0.04f, -0.54f))
+        cubic(p(0.32f, -0.53f), p(0.5f, -0.36f), p(0.43f, 0.04f))
+        cubic(p(0.4f, -0.1f), p(0.34f, -0.2f), p(0.24f, -0.25f))
+        cubic(p(0.1f, -0.17f), p(-0.12f, -0.15f), p(-0.3f, -0.23f))
+        cubic(p(-0.37f, -0.15f), p(-0.4f, -0.06f), p(-0.43f, 0.04f))
+        close()
+    }, ill.hair)
+    // 眉毛 + 豆豆眼
     val open = (1f - lid).coerceIn(0f, 1f)
     for (side in listOf(-1, 1)) {
         val base = figureEyeCenter(center, s, side)
-        val half = s * 0.085f * wide
+        val browY = base.y - s * 0.13f - (wide - 1f) * s * 0.08f
+        drawPath(Path().apply {
+            moveTo(base.x - s * 0.055f, browY + s * 0.01f)
+            quadraticBezierTo(base.x, browY - s * 0.025f, base.x + s * 0.055f, browY + s * 0.01f)
+        }, ill.hair, style = Stroke(s * 0.024f, cap = StrokeCap.Round))
         if (open < 0.2f) {
             drawPath(
                 Path().apply {
-                    moveTo(base.x - half, base.y)
-                    quadraticBezierTo(base.x, base.y + s * 0.04f, base.x + half, base.y)
+                    moveTo(base.x - s * 0.055f, base.y)
+                    quadraticBezierTo(base.x, base.y + s * 0.045f, base.x + s * 0.055f, base.y)
                 },
-                colors.ink, style = Stroke(width = s * 0.02f, cap = StrokeCap.Round)
+                colors.ink, style = Stroke(width = s * 0.026f, cap = StrokeCap.Round)
             )
             continue
         }
-        val eye = leafEyePath(base.x - half, base.x + half, base.y, s * 0.048f * wide * open)
-        drawPath(eye, colors.white)
-        clipPath(eye) {
-            val c = Offset(base.x + gaze.x * s * 0.04f, base.y + gaze.y * s * 0.025f)
-            drawCircle(colors.ink, s * 0.042f * wide, c)
-            drawCircle(colors.white, s * 0.012f * wide, Offset(c.x + s * 0.014f, c.y - s * 0.014f))
-        }
-        drawPath(eye, colors.ink, style = Stroke(s * 0.012f))
+        val c = Offset(base.x + gaze.x * s * 0.035f, base.y + gaze.y * s * 0.03f)
+        val rx = s * 0.052f * wide
+        val ry = s * 0.072f * wide * open
+        drawOval(colors.ink, Offset(c.x - rx, c.y - ry), Size(rx * 2, ry * 2))
+        if (open > 0.5f) drawCircle(colors.white, s * 0.02f * wide, Offset(c.x + rx * 0.4f, c.y - ry * 0.45f))
     }
+    // 鼻子、腮红、微笑
+    drawPath(Path().apply {
+        val a = p(-0.022f, 0.075f); val b = p(0f, 0.095f); val e = p(0.022f, 0.075f)
+        moveTo(a.x, a.y); quadraticBezierTo(b.x, b.y, e.x, e.y)
+    }, ill.skinLine, style = Stroke(s * 0.018f, cap = StrokeCap.Round))
+    for (side in listOf(-1, 1)) {
+        drawOval(ill.blush.copy(alpha = 0.6f), p(side * 0.26f - 0.055f, 0.14f - 0.032f), Size(s * 0.11f, s * 0.064f))
+    }
+    drawPath(Path().apply {
+        val a = p(-0.06f, 0.19f); val b = p(0f, 0.245f); val e = p(0.06f, 0.19f)
+        moveTo(a.x, a.y); quadraticBezierTo(b.x, b.y, e.x, e.y)
+    }, ill.mouth, style = Stroke(s * 0.024f, cap = StrokeCap.Round))
 }
 
+private fun Path.cubic(c1: Offset, c2: Offset, end: Offset) = cubicTo(c1.x, c1.y, c2.x, c2.y, end.x, end.y)
+
 /**
- * 示意手（扁平手掌 + 手臂）：用于遮眼、点按。
+ * 示意手（肤色手掌 + 拇指 + 指缝 + 蓝色袖子）：用于遮眼、点按。手掌带一圈浅描边，遮在脸上也分得清。
  * @param angle 手掌整体旋转角度
  * @param armFrom 手臂起点（通常在画面边缘）；为 null 时只画手掌
  */
 fun DrawScope.drawHand(colors: EyeColors, center: Offset, size: Float, angle: Float = 0f, armFrom: Offset? = null) {
-    val fill = colors.brandStart.copy(alpha = if (colors.isDark) 0.6f else 0.55f)
-    val edge = colors.primary.copy(alpha = 0.4f)
-    if (armFrom != null) drawLine(fill, armFrom, center, size * 0.46f, StrokeCap.Round)
+    val ill = colors.illustration
+    val outline = size * 0.05f
+    if (armFrom != null) drawLine(ill.shirt, armFrom, Offset(center.x, center.y + size * 0.3f), size * 0.56f, StrokeCap.Round)
     rotate(angle, center) {
-        val palm = Size(size * 0.78f, size)
+        val palm = Size(size * 0.8f, size)
         val tl = Offset(center.x - palm.width / 2, center.y - palm.height / 2)
-        val thumb = Offset(center.x - palm.width * 0.5f, center.y + size * 0.08f)
-        drawOval(fill, Offset(thumb.x - size * 0.14f, thumb.y - size * 0.22f), Size(size * 0.28f, size * 0.44f))
-        drawRoundRect(fill, tl, palm, CornerRadius(size * 0.36f))
-        drawRoundRect(edge, tl, palm, CornerRadius(size * 0.36f), style = Stroke(size * 0.03f))
+        // 拇指（在手掌后面）
+        val thumbTl = Offset(center.x - palm.width * 0.5f - size * 0.16f, center.y + size * 0.08f - size * 0.24f)
+        val thumb = Size(size * 0.32f, size * 0.48f)
+        drawOval(ill.skin, thumbTl, thumb)
+        drawOval(ill.skinLine, thumbTl, thumb, style = Stroke(outline))
+        drawRoundRect(ill.skin, tl, palm, CornerRadius(size * 0.4f))
+        drawRoundRect(ill.skinLine, tl, palm, CornerRadius(size * 0.4f), style = Stroke(outline))
+        // 指缝：三道短线，让轮廓一眼读成「手」
+        for (i in 1..3) {
+            val x = tl.x + palm.width * i / 4f
+            drawLine(ill.skinLine, Offset(x, tl.y + size * 0.08f), Offset(x, tl.y + size * 0.36f), size * 0.04f, StrokeCap.Round)
+        }
     }
 }
 

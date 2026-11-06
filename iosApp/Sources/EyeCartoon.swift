@@ -2,7 +2,7 @@ import SwiftUI
 
 /// 示意图绘制原语：逐项移植安卓 core:ui EyeBrand.kt（drawFigure / drawHand / drawPhone / drawFixationTarget /
 /// drawBrandMark / drawTumblingE），测试演示、注视目标与标志共用，保证两端一致。
-/// 2026-11 视觉改版：去掉吉祥物，人物为中性线面头像（只画两只眼），手与手机为扁平面，注视目标为准星。
+/// 2026-11-06 起：演示人物为平面上半身短发男孩（沿用原吉祥物的演示动画），手为肤色手掌，手机为扁平面，注视目标为准星。
 enum Cartoon {
     /// 在 [pivot] 处旋转后绘制。
     static func rotated(_ ctx: GraphicsContext, _ degrees: Double, around pivot: CGPoint, _ draw: (GraphicsContext) -> Void) {
@@ -31,45 +31,77 @@ enum Cartoon {
         CGPoint(x: center.x + side * size * 0.19, y: center.y - size * 0.02)
     }
 
-    /// 示意人物（圆顶肩膀 + 头 + 两只眼）：[size] 为参考宽度；[gaze] −1…1 虹膜平移；[lid] 0 睁开…1 闭合（<0.2 睁开度画闭眼弧线）；[wide] >1 睁大。
+    /// 示意人物：平面上半身短发男孩（安卓 drawFigure）。[size] 为头宽；[gaze] −1…1 豆豆眼平移；
+    /// [lid] 0 睁开…1 闭合（<0.2 睁开度画闭眼弧线）；[wide] >1 睁大、眉毛上扬；[bottom] 上衣下沿 y（缺省头中心下 0.8 倍头宽）。
     static func figure(_ ctx: GraphicsContext, center c: CGPoint, size s: CGFloat, gaze: CGPoint = .zero,
-                       lid: CGFloat = 0, wide: CGFloat = 1) {
-        let top = c.y - s * 0.46
-        // 肩膀：头后方一段圆顶半身（类似系统人像图标）
-        var shoulders = Path()
-        shoulders.move(to: CGPoint(x: c.x - s * 0.5, y: c.y + s * 0.58))
-        shoulders.addCurve(to: CGPoint(x: c.x, y: c.y + s * 0.28), control1: CGPoint(x: c.x - s * 0.5, y: c.y + s * 0.36),
-                           control2: CGPoint(x: c.x - s * 0.28, y: c.y + s * 0.28))
-        shoulders.addCurve(to: CGPoint(x: c.x + s * 0.5, y: c.y + s * 0.58), control1: CGPoint(x: c.x + s * 0.28, y: c.y + s * 0.28),
-                           control2: CGPoint(x: c.x + s * 0.5, y: c.y + s * 0.36))
-        shoulders.closeSubpath()
-        ctx.fill(shoulders, with: .color(EyeStyle.brandStart.opacity(0.4)))
-        // 头：竖椭圆，浅主色面 + 细描边
-        let head = CGRect(x: c.x - s * 0.39, y: top, width: s * 0.78, height: s * 0.84)
-        let headPath = Path(ellipseIn: head)
-        ctx.fill(headPath, with: .color(EyeStyle.primarySoft))
-        ctx.stroke(headPath, with: .color(EyeStyle.primary.opacity(0.35)), lineWidth: s * 0.016)
+                       lid: CGFloat = 0, wide: CGFloat = 1, bottom: CGFloat? = nil) {
+        typealias I = EyeStyle.Illustration
+        func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: c.x + x * s, y: c.y + y * s) }
+        func dot(_ center: CGPoint, _ r: CGFloat) -> Path { Path(ellipseIn: CGRect(x: center.x - r, y: center.y - r, width: r * 2, height: r * 2)) }
+        // 上衣：圆肩，一直画到 bottom
+        let y0 = c.y + s * 0.5
+        let hem = max(bottom ?? c.y + s * 0.8, y0 + s * 0.3)
+        var shirt = Path()
+        shirt.move(to: CGPoint(x: c.x - s * 0.62, y: hem))
+        shirt.addLine(to: CGPoint(x: c.x - s * 0.62, y: y0 + s * 0.3))
+        shirt.addQuadCurve(to: CGPoint(x: c.x - s * 0.32, y: y0), control: CGPoint(x: c.x - s * 0.62, y: y0))
+        shirt.addLine(to: CGPoint(x: c.x + s * 0.32, y: y0))
+        shirt.addQuadCurve(to: CGPoint(x: c.x + s * 0.62, y: y0 + s * 0.3), control: CGPoint(x: c.x + s * 0.62, y: y0))
+        shirt.addLine(to: CGPoint(x: c.x + s * 0.62, y: hem))
+        shirt.closeSubpath()
+        ctx.fill(shirt, with: .color(I.shirt))
+        // 脖子 + 圆领
+        ctx.fill(Path(CGRect(origin: p(-0.1, 0.28), size: CGSize(width: s * 0.2, height: s * 0.26))), with: .color(I.skinShade))
+        var collar = Path()
+        collar.move(to: CGPoint(x: c.x - s * 0.16, y: y0))
+        collar.addQuadCurve(to: CGPoint(x: c.x + s * 0.16, y: y0), control: CGPoint(x: c.x, y: y0 + s * 0.15))
+        ctx.fill(collar, with: .color(I.skinShade))
+        ctx.stroke(collar, with: .color(I.shirtLight), style: StrokeStyle(lineWidth: s * 0.04, lineCap: .round))
+        // 耳朵（在脸后面）
+        for side: CGFloat in [-1, 1] {
+            ctx.fill(dot(p(side * 0.4, 0.04), s * 0.08), with: .color(I.skin))
+            ctx.fill(dot(p(side * 0.405, 0.04), s * 0.035), with: .color(I.skinShade))
+        }
+        // 脸
+        ctx.fill(oval(p(-0.4, -0.43), CGSize(width: s * 0.8, height: s * 0.86)), with: .color(I.skin))
+        // 侧分短发：盖住头顶，刘海从左向右扫开，露出额头
+        var hair = Path()
+        hair.move(to: p(-0.43, 0.04))
+        hair.addCurve(to: p(0.04, -0.54), control1: p(-0.47, -0.36), control2: p(-0.22, -0.56))
+        hair.addCurve(to: p(0.43, 0.04), control1: p(0.32, -0.53), control2: p(0.5, -0.36))
+        hair.addCurve(to: p(0.24, -0.25), control1: p(0.4, -0.1), control2: p(0.34, -0.2))
+        hair.addCurve(to: p(-0.3, -0.23), control1: p(0.1, -0.17), control2: p(-0.12, -0.15))
+        hair.addCurve(to: p(-0.43, 0.04), control1: p(-0.37, -0.15), control2: p(-0.4, -0.06))
+        hair.closeSubpath()
+        ctx.fill(hair, with: .color(I.hair))
+        // 眉毛 + 豆豆眼
         let open = min(1, max(0, 1 - lid))
         for side: CGFloat in [-1, 1] {
             let base = figureEyeCenter(c, s, side)
-            let half = s * 0.085 * wide
+            let browY = base.y - s * 0.13 - (wide - 1) * s * 0.08
+            var brow = Path()
+            brow.move(to: CGPoint(x: base.x - s * 0.055, y: browY + s * 0.01))
+            brow.addQuadCurve(to: CGPoint(x: base.x + s * 0.055, y: browY + s * 0.01), control: CGPoint(x: base.x, y: browY - s * 0.025))
+            ctx.stroke(brow, with: .color(I.hair), style: StrokeStyle(lineWidth: s * 0.024, lineCap: .round))
             if open < 0.2 {
-                var closed = Path(); closed.move(to: CGPoint(x: base.x - half, y: base.y))
-                closed.addQuadCurve(to: CGPoint(x: base.x + half, y: base.y), control: CGPoint(x: base.x, y: base.y + s * 0.04))
-                ctx.stroke(closed, with: .color(EyeStyle.ink), style: StrokeStyle(lineWidth: s * 0.02, lineCap: .round))
+                var closed = Path(); closed.move(to: CGPoint(x: base.x - s * 0.055, y: base.y))
+                closed.addQuadCurve(to: CGPoint(x: base.x + s * 0.055, y: base.y), control: CGPoint(x: base.x, y: base.y + s * 0.045))
+                ctx.stroke(closed, with: .color(EyeStyle.ink), style: StrokeStyle(lineWidth: s * 0.026, lineCap: .round))
                 continue
             }
-            let eye = leafEye(left: base.x - half, right: base.x + half, centerY: base.y, halfHeight: s * 0.048 * wide * open)
-            ctx.fill(eye, with: .color(.white))
-            var iris = ctx
-            iris.clip(to: eye)
-            let e = CGPoint(x: base.x + gaze.x * s * 0.04, y: base.y + gaze.y * s * 0.025)
-            let r = s * 0.042 * wide
-            iris.fill(oval(CGPoint(x: e.x - r, y: e.y - r), CGSize(width: r * 2, height: r * 2)), with: .color(EyeStyle.ink))
-            let g = s * 0.012 * wide
-            iris.fill(oval(CGPoint(x: e.x + s * 0.014 - g, y: e.y - s * 0.014 - g), CGSize(width: g * 2, height: g * 2)), with: .color(.white))
-            ctx.stroke(eye, with: .color(EyeStyle.ink), lineWidth: s * 0.012)
+            let e = CGPoint(x: base.x + gaze.x * s * 0.035, y: base.y + gaze.y * s * 0.03)
+            let rx = s * 0.052 * wide, ry = s * 0.072 * wide * open
+            ctx.fill(oval(CGPoint(x: e.x - rx, y: e.y - ry), CGSize(width: rx * 2, height: ry * 2)), with: .color(EyeStyle.ink))
+            if open > 0.5 { ctx.fill(dot(CGPoint(x: e.x + rx * 0.4, y: e.y - ry * 0.45), s * 0.02 * wide), with: .color(.white)) }
         }
+        // 鼻子、腮红、微笑
+        var nose = Path(); nose.move(to: p(-0.022, 0.075)); nose.addQuadCurve(to: p(0.022, 0.075), control: p(0, 0.095))
+        ctx.stroke(nose, with: .color(I.skinLine), style: StrokeStyle(lineWidth: s * 0.018, lineCap: .round))
+        for side: CGFloat in [-1, 1] {
+            ctx.fill(oval(p(side * 0.26 - 0.055, 0.14 - 0.032), CGSize(width: s * 0.11, height: s * 0.064)), with: .color(I.blush.opacity(0.6)))
+        }
+        var mouth = Path(); mouth.move(to: p(-0.06, 0.19)); mouth.addQuadCurve(to: p(0.06, 0.19), control: p(0, 0.245))
+        ctx.stroke(mouth, with: .color(I.mouth), style: StrokeStyle(lineWidth: s * 0.024, lineCap: .round))
     }
 
     /// 品牌标志：主色渐变圆角底 + 白色同心环与中心点（安卓 drawBrandMark）。
@@ -101,21 +133,29 @@ enum Cartoon {
         ctx.fill(ring(r * 0.14), with: .color(color))
     }
 
-    /// 示意手（扁平手掌 + 手臂）：[angle] 手掌旋转角度，[armFrom] 手臂起点。
+    /// 示意手（肤色手掌 + 拇指 + 指缝 + 蓝色袖子，安卓 drawHand）：[angle] 手掌旋转角度，[armFrom] 手臂起点。
     static func hand(_ ctx: GraphicsContext, center c: CGPoint, size: CGFloat, angle: Double = 0, armFrom: CGPoint? = nil) {
-        let fill = EyeStyle.brandStart.opacity(0.55)
+        typealias I = EyeStyle.Illustration
+        let outline = size * 0.05
         if let from = armFrom {
-            var arm = Path(); arm.move(to: from); arm.addLine(to: c)
-            ctx.stroke(arm, with: .color(fill), style: StrokeStyle(lineWidth: size * 0.46, lineCap: .round))
+            var arm = Path(); arm.move(to: from); arm.addLine(to: CGPoint(x: c.x, y: c.y + size * 0.3))
+            ctx.stroke(arm, with: .color(I.shirt), style: StrokeStyle(lineWidth: size * 0.56, lineCap: .round))
         }
         rotated(ctx, angle, around: c) { layer in
-            let palm = CGSize(width: size * 0.78, height: size)
+            let palm = CGSize(width: size * 0.8, height: size)
             let tl = CGPoint(x: c.x - palm.width / 2, y: c.y - palm.height / 2)
-            let thumb = CGPoint(x: c.x - palm.width * 0.5, y: c.y + size * 0.08)
-            layer.fill(oval(CGPoint(x: thumb.x - size * 0.14, y: thumb.y - size * 0.22), CGSize(width: size * 0.28, height: size * 0.44)), with: .color(fill))
-            let palmPath = Path(roundedRect: CGRect(origin: tl, size: palm), cornerRadius: size * 0.36)
-            layer.fill(palmPath, with: .color(fill))
-            layer.stroke(palmPath, with: .color(EyeStyle.primary.opacity(0.4)), lineWidth: size * 0.03)
+            let thumb = oval(CGPoint(x: c.x - palm.width * 0.5 - size * 0.16, y: c.y + size * 0.08 - size * 0.24), CGSize(width: size * 0.32, height: size * 0.48))
+            layer.fill(thumb, with: .color(I.skin))
+            layer.stroke(thumb, with: .color(I.skinLine), lineWidth: outline)
+            let palmPath = Path(roundedRect: CGRect(origin: tl, size: palm), cornerRadius: size * 0.4)
+            layer.fill(palmPath, with: .color(I.skin))
+            layer.stroke(palmPath, with: .color(I.skinLine), lineWidth: outline)
+            // 指缝：三道短线
+            for i in 1...3 {
+                let x = tl.x + palm.width * CGFloat(i) / 4
+                var gap = Path(); gap.move(to: CGPoint(x: x, y: tl.y + size * 0.08)); gap.addLine(to: CGPoint(x: x, y: tl.y + size * 0.36))
+                layer.stroke(gap, with: .color(I.skinLine), style: StrokeStyle(lineWidth: size * 0.04, lineCap: .round))
+            }
         }
     }
 

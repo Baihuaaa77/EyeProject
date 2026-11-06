@@ -17,7 +17,7 @@
 | `EyeIcon` | 图标（Image + ColorFilter.tint），装饰性图标 `contentDescription = null` |
 | `Button.kt` | 通用基础按钮（形状/背景/边框/内边距可配，默认矩形） |
 | `EyeButton` | 业务按钮，三态 `EyeButtonRole(PRIMARY/SECONDARY/DANGER)`，按下弹簧缩放、角色切换颜色过渡 |
-| `EyeBrand.kt` | 品牌与示意图绘制：`EyeBrandMark` / `EyeBrandLockup`、`leafEyePath`、示意人物 `drawFigure`（`figureEyeCenter`，视线 / 闭眼 / 睁大）、`drawHand`、`drawPhone`、注视准星 `drawFixationTarget`、应用图标展示 `EyeAppIcon`（与桌面图标同一张图）、`drawTumblingE` |
+| `EyeBrand.kt` | 品牌与示意图绘制：`EyeBrandMark` / `EyeBrandLockup`、`leafEyePath`、示意人物 `drawFigure`（平面上半身短发男孩，`figureEyeCenter`，视线 / 闭眼 / 睁大，`bottom` 控制上衣下沿）、`drawHand`（肤色手掌 + 袖子）、`drawPhone`、注视准星 `drawFixationTarget`、应用图标展示 `EyeAppIcon`（与桌面图标同一张图）、`drawTumblingE` |
 | `EyeGlyph.kt` | 线性小图标（`EyeGlyph`，Canvas 自绘，跟随 tint），列表行与服务入口用 |
 
 ### 容器与卡片

@@ -273,9 +273,9 @@ private fun sceneFor(motion: GuideMotion): GuideScene = when (motion) {
     GuideMotion.FOLLOW -> followScene
 }
 
-private fun SceneScope.floorShadow(x: Float, y: Float, w: Float) {
-    scope.drawOval(colors.primary.copy(alpha = 0.12f), p(x - w / 2, y - 6f), Size(u(w), u(12f)))
-}
+/** 演示人物（短发男孩）：上身一直画到舞台底边，像坐在画框前。 */
+private fun SceneScope.person(center: Offset, size: Float, gaze: Offset = Offset.Zero, lid: Float = 0f, wide: Float = 1f) =
+    scope.drawFigure(colors, center, size, gaze, lid, wide, bottom = p(0f, 200f).y)
 
 /** 头部固定的四角取景框：表达「头保持不动」。 */
 private fun SceneScope.headLock(cx: Float, cy: Float, half: Float) {
@@ -294,8 +294,7 @@ private val postureScene = GuideScene(
     beats = listOf(GuideBeat(0f, "① 正对屏幕，露出双眼"), GuideBeat(0.25f, "② 前后微调到提示的距离"), GuideBeat(0.6f, "③ 光线均匀，避免逆光")),
     keyframe = 0.7f,
 ) { phase ->
-    floorShadow(82f, 182f, 100f)
-    scope.drawFigure(colors, p(82f, 112f), u(100f), gaze = Offset(0.9f, 0f))
+    person(p(82f, 112f), u(100f), gaze = Offset(0.9f, 0f))
     val x = keyframes(phase, 0f to 290f, 0.15f to 290f, 0.3f to 215f, 0.4f to 250f, 0.5f to 238f, 1f to 238f)
     val (tl, screen) = scope.drawPhone(colors, p(x, 104f), u(128f))
     // 屏幕里的取景框：到位后变成对勾
@@ -332,9 +331,8 @@ private val blinkScene = GuideScene(
     beats = listOf(GuideBeat(0f, "① 正对屏幕，保持放松"), GuideBeat(0.15f, "② 像平时一样自然眨眼"), GuideBeat(0.55f, "③ 应用自动记录眨眼")),
     keyframe = 0.6f,
 ) { phase ->
-    floorShadow(160f, 178f, 120f)
     val lid = blinkTimes.maxOf { tri(phase, it, 0.035f) }
-    scope.drawFigure(colors, p(160f, 108f), u(118f), lid = lid)
+    person(p(160f, 108f), u(118f), lid = lid)
     // 每次眨眼后飘起「+1」
     blinkTimes.forEach { t ->
         val k = (phase - t) / 0.22f
@@ -350,10 +348,9 @@ private val openScene = GuideScene(
     beats = listOf(GuideBeat(0f, "① 轻松睁开双眼"), GuideBeat(0.15f, "② 尽量保持睁眼，看着屏幕"), GuideBeat(0.86f, "③ 不舒服就眨眼，随时可停止")),
     keyframe = 0.5f,
 ) { phase ->
-    floorShadow(130f, 178f, 120f)
     val rest = tri(phase, 0.92f, 0.04f)
     val wide = 1f + 0.22f * seg(phase, 0.02f, 0.15f) * (1f - seg(phase, 0.86f, 0.9f))
-    scope.drawFigure(colors, p(130f, 108f), u(118f), lid = rest, wide = wide)
+    person(p(130f, 108f), u(118f), lid = rest, wide = wide)
     // 眼旁闪光，表达「睁开」
     if (phase in 0.15f..0.86f) {
         val twinkle = (sin(phase * 40f) + 1f) / 2f
@@ -405,11 +402,10 @@ private val nearScene = GuideScene(
     beats = listOf(GuideBeat(0f, "① 用手掌遮住左眼（不压眼球）"), GuideBeat(0.2f, "② 用右眼看 E 的开口方向"), GuideBeat(0.28f, "③ 点选对应方向；之后换眼再做")),
     keyframe = 0.35f,
 ) { phase ->
-    floorShadow(95f, 182f, 110f)
-    val mascot = p(95f, 110f)
-    scope.drawFigure(colors, mascot, u(108f), gaze = Offset(0.8f, 0f))
+    val head = p(95f, 110f)
+    person(head, u(108f), gaze = Offset(0.8f, 0f))
     // 手掌从下方抬起，遮住人物的左眼（画面右侧那只）
-    val eye = figureEyeCenter(mascot, u(108f), 1)
+    val eye = figureEyeCenter(head, u(108f), 1)
     val rise = seg(phase, 0.02f, 0.16f)
     val hand = Offset(eye.x + u(2f), lerp(eye.y + u(90f), eye.y + u(3f), rise))
     scope.drawHand(colors, hand, u(46f), angle = -12f, armFrom = Offset(hand.x + u(18f), p(0f, 210f).y))
@@ -448,8 +444,7 @@ private val moveScene = GuideScene(
     beats = listOf(GuideBeat(0f, "① 从 45 cm 外开始，看着 E"), GuideBeat(0.15f, "② 慢慢移近（每秒不超过 5 cm）"), GuideBeat(0.6f, "③ E 一开始持续模糊就点按，记录近点")),
     keyframe = 0.66f,
 ) { phase ->
-    floorShadow(62f, 182f, 96f)
-    scope.drawFigure(colors, p(62f, 112f), u(96f), gaze = Offset(1f, 0f))
+    person(p(62f, 112f), u(96f), gaze = Offset(1f, 0f))
     ruler(120f, 300f, 188f)
     // 连续、匀速地由远向近，记录近点后再移回远处
     val x = keyframes(phase, 0f to 290f, 0.15f to 290f, 0.68f to 150f, 0.76f to 150f, 0.9f to 290f, 1f to 290f)
@@ -475,8 +470,7 @@ private val switchScene = GuideScene(
     beats = listOf(GuideBeat(0f, "① 远处停稳，点选 E 的开口"), GuideBeat(0.15f, "② 移近停稳，再点选一次"), GuideBeat(0.55f, "③ 移远，远近交替进行")),
     keyframe = 0.45f,
 ) { phase ->
-    floorShadow(62f, 182f, 96f)
-    scope.drawFigure(colors, p(62f, 112f), u(96f), gaze = Offset(1f, 0f))
+    person(p(62f, 112f), u(96f), gaze = Offset(1f, 0f))
     ruler(120f, 300f, 188f)
     val x = keyframes(phase, 0f to 268f, 0.15f to 268f, 0.3f to 170f, 0.55f to 170f, 0.7f to 268f, 1f to 268f)
     val (tl, screen) = scope.drawPhone(colors, p(x, 102f), u(150f))
@@ -503,9 +497,8 @@ private val fixateScene = GuideScene(
     beats = listOf(GuideBeat(0f, "① 看着屏幕上方闪烁的圆点"), GuideBeat(0.45f, "② 头和手机都保持不动")),
     keyframe = 0.5f,
 ) { phase ->
-    floorShadow(95f, 182f, 110f)
-    val mascot = p(95f, 110f)
-    scope.drawFigure(colors, mascot, u(108f), gaze = Offset(0.9f, -0.1f))
+    val head = p(95f, 110f)
+    person(head, u(108f), gaze = Offset(0.9f, -0.1f))
     if (phase >= 0.45f) headLock(95f, 106f, 66f)
     val (tl, screen) = scope.drawPhone(colors, p(242f, 100f), u(160f))
     val dot = Offset(tl.x + screen.width / 2, tl.y + screen.height * 0.2f)
@@ -515,7 +508,7 @@ private val fixateScene = GuideScene(
     scope.drawFixationTarget(colors, dot, u(26f))
     scope.drawContext.canvas.restore()
     // 视线：从双眼流向屏幕注视点的虚线
-    val eye = figureEyeCenter(mascot, u(108f), 1)
+    val eye = figureEyeCenter(head, u(108f), 1)
     scope.drawLine(
         colors.primary.copy(alpha = 0.45f), Offset(eye.x + u(16f), eye.y), Offset(dot.x - u(14f), dot.y), u(2f),
         cap = StrokeCap.Round, pathEffect = PathEffect.dashPathEffect(floatArrayOf(u(5f), u(6f)), phase = -phase * u(110f))
@@ -532,10 +525,9 @@ private val farScene = GuideScene(
     ),
     keyframe = 0.5f,
 ) { phase ->
-    floorShadow(62f, 182f, 90f)
-    val mascot = p(62f, 104f)
+    val head = p(62f, 104f)
     val look = seg(phase, 0.3f, 0.4f)
-    scope.drawFigure(colors, mascot, u(92f), gaze = Offset(0.9f, -0.15f * look))
+    person(head, u(92f), gaze = Offset(0.9f, -0.15f * look))
     if (phase >= 0.65f) headLock(62f, 100f, 56f)
     scope.drawPhone(colors, p(142f, 128f), u(78f))
     // 远处的目标：一扇门，旁边标注距离
@@ -546,7 +538,7 @@ private val farScene = GuideScene(
     label("${StrabismusProtocol.FAR_TARGET_M} 米外", 272f, 120f, colors.textSecondary)
     // 视线：从双眼越过手机顶部流向远处
     if (look > 0f) {
-        val eye = figureEyeCenter(mascot, u(92f), 1)
+        val eye = figureEyeCenter(head, u(92f), 1)
         scope.drawLine(
             colors.primary.copy(alpha = 0.45f * look), Offset(eye.x + u(14f), eye.y), Offset(door.x - u(20f), door.y), u(2f),
             cap = StrokeCap.Round, pathEffect = PathEffect.dashPathEffect(floatArrayOf(u(5f), u(6f)), phase = -phase * u(160f))
@@ -563,12 +555,11 @@ private val coverScene = GuideScene(
     ),
     keyframe = 0.12f,
 ) { phase ->
-    floorShadow(160f, 184f, 120f)
-    val mascot = p(160f, 112f)
-    scope.drawFigure(colors, mascot, u(118f))
+    val head = p(160f, 112f)
+    person(head, u(118f))
     // 人物面向我们：它的右眼在画面左侧（side=-1），左眼在画面右侧（side=+1）
-    val rEye = figureEyeCenter(mascot, u(118f), -1).x
-    val lEye = figureEyeCenter(mascot, u(118f), 1).x
+    val rEye = figureEyeCenter(head, u(118f), -1).x
+    val lEye = figureEyeCenter(head, u(118f), 1).x
     val away = lEye + u(150f)
     val hx = keyframes(
         phase,
@@ -577,8 +568,8 @@ private val coverScene = GuideScene(
         0.74f to rEye, 0.78f to rEye, 0.81f to lEye, 0.85f to lEye,
         0.88f to rEye, 0.91f to rEye, 0.94f to lEye, 0.97f to lEye, 1f to away,
     )
-    val eyeY = figureEyeCenter(mascot, u(118f), 1).y
-    scope.drawHand(colors, Offset(hx, eyeY + u(3f)), u(52f), angle = -14f, armFrom = p(340f, 150f))
+    val eyeY = figureEyeCenter(head, u(118f), 1).y
+    scope.drawHand(colors, Offset(hx, eyeY + u(3f)), u(52f), angle = -14f, armFrom = Offset(hx + u(20f), p(0f, 215f).y))
     val text = when {
         abs(hx - rEye) < u(6f) -> "遮右眼"
         abs(hx - lEye) < u(6f) -> "遮左眼"
@@ -614,9 +605,8 @@ private val followScene = GuideScene(
         else -> "斜向"
     }
     scope.drawRoundRect(colors.panelBackground, p(150f, 18f), Size(u(128f), u(150f)), CornerRadius(u(16f)), alpha = 0.7f)
-    floorShadow(72f, 186f, 90f)
-    scope.drawFigure(
-        colors, p(72f, 130f), u(86f),
+    person(
+        p(72f, 130f), u(86f),
         gaze = Offset(((dot.x - 72f) / 140f).coerceIn(-1f, 1f), ((dot.y - 130f) / 90f).coerceIn(-1f, 1f))
     )
     headLock(72f, 126f, 54f)
@@ -631,8 +621,7 @@ private val acuityScene = GuideScene(
     beats = listOf(GuideBeat(0f, "① 看 E 的开口方向"), GuideBeat(0.1f, "② 2 秒内点选对应方向"), GuideBeat(0.4f, "③ 连对两次变小，答错或超时变大")),
     keyframe = 0.12f,
 ) { phase ->
-    floorShadow(66f, 184f, 84f)
-    scope.drawFigure(colors, p(66f, 118f), u(84f), gaze = Offset(1f, -0.2f))
+    person(p(66f, 118f), u(84f), gaze = Offset(1f, -0.2f))
     val segment = (phase / 0.2f).toInt().coerceIn(0, 4)
     val t = (phase - segment * 0.2f) / 0.2f
     val sizes = listOf(1f, 1f, 0.78f, 1f, 1f)
@@ -660,10 +649,9 @@ private val fvaScene = GuideScene(
     beats = listOf(GuideBeat(0f, "① 全程看 E，点选开口方向"), GuideBeat(0.12f, "② 前一段像平时一样自然眨眼"), GuideBeat(0.68f, "③ 不停顿，转入尽量保持睁眼")),
     keyframe = 0.3f,
 ) { phase ->
-    floorShadow(84f, 184f, 100f)
     val open = phase >= 0.68f
     val lid = if (open) 0f else maxOf(tri(phase, 0.2f, 0.03f), tri(phase, 0.45f, 0.03f))
-    scope.drawFigure(colors, p(84f, 112f), u(100f), gaze = Offset(1f, 0f), lid = lid, wide = if (open) 1.22f else 1f)
+    person(p(84f, 112f), u(100f), gaze = Offset(1f, 0f), lid = lid, wide = if (open) 1.22f else 1f)
     val (tl, screen) = scope.drawPhone(colors, p(240f, 100f), u(160f))
     val segment = (phase / 0.14f).toInt().coerceIn(0, 7)
     val dir = listOf(0, 3, 2, 1, 0, 1, 3, 2)[segment]
@@ -680,8 +668,7 @@ private val curveScene = GuideScene(
     beats = listOf(GuideBeat(0f, "① 移到提示的距离并停稳"), GuideBeat(0.12f, "② 点选 E 的开口方向"), GuideBeat(0.36f, "③ 依次换到下一个距离")),
     keyframe = 0.2f,
 ) { phase ->
-    floorShadow(62f, 182f, 96f)
-    scope.drawFigure(colors, p(62f, 112f), u(96f), gaze = Offset(1f, 0f))
+    person(p(62f, 112f), u(96f), gaze = Offset(1f, 0f))
     ruler(120f, 300f, 188f)
     val x = keyframes(phase, 0f to 290f, 0.3f to 290f, 0.38f to 200f, 0.64f to 200f, 0.72f to 165f, 1f to 165f)
     val (tl, screen) = scope.drawPhone(colors, p(x, 102f), u(140f))

@@ -35,6 +35,9 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.zkyjss.eyeproject.core.designsystem.theme.testTooClose
+import com.zkyjss.eyeproject.core.designsystem.theme.testReady
+import com.zkyjss.eyeproject.core.designsystem.theme.testReadySoft
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeMotion
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeShapes
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
@@ -45,7 +48,7 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /**
- * 眼—屏距离所处区间。颜色约定：太近 = 红、太远 = 蓝、合适 = 绿、未知 = 灰；
+ * 眼—屏距离所处区间。颜色约定：太近 = 红、太远 = 蓝、合适 = 主题到位色、未知 = 灰；
  * MOVE_TO = 刚换了目标距离、还在移过去的路上（主色），提示「请移动到 xx 厘米处」而不是太近 / 太远。
  */
 internal enum class DistanceZone { UNKNOWN, TOO_CLOSE, OK, TOO_FAR, MOVE_TO }
@@ -103,8 +106,8 @@ internal fun distanceStatus(distanceCm: Float, faceVisible: Boolean, targetCm: F
 }
 
 /**
- * 距离状态横幅：整块填充状态色（太近红 / 太远蓝 / 合适绿），大字结论 + 具体移动量 +
- * 右侧示意标尺（中间绿色带为目标区间，圆点为当前位置）。进入异常区间时轻震一次。
+ * 距离状态横幅：柔和语义底色配高对比文字与方向符号，大字结论 + 具体移动量 +
+ * 右侧示意标尺（中间加粗带为目标区间，圆点为当前位置）。进入异常区间时轻震一次。
  */
 @Composable
 internal fun DistanceBanner(status: DistanceStatus, modifier: Modifier = Modifier, compact: Boolean = false, singleLine: Boolean = false) {
@@ -112,15 +115,20 @@ internal fun DistanceBanner(status: DistanceStatus, modifier: Modifier = Modifie
     val typography = LocalEyeTypography.current
     val bg by animateColorAsState(
         when (status.zone) {
-            DistanceZone.TOO_CLOSE -> colors.tooClose
-            DistanceZone.TOO_FAR -> colors.tooFar
-            DistanceZone.OK -> colors.success
-            DistanceZone.MOVE_TO -> colors.primary
+            DistanceZone.TOO_CLOSE -> colors.dangerSoft
+            DistanceZone.TOO_FAR -> colors.primarySoft
+            DistanceZone.OK -> colors.testReadySoft
+            DistanceZone.MOVE_TO -> colors.primarySoft
             DistanceZone.UNKNOWN -> colors.neutralSoft
         },
         tween(EyeMotion.MEDIUM), label = "距离状态色"
     )
-    val fg = if (status.zone == DistanceZone.UNKNOWN) colors.textPrimary else colors.onStatus
+    val fg by animateColorAsState(when (status.zone) {
+        DistanceZone.TOO_CLOSE -> colors.testTooClose
+        DistanceZone.TOO_FAR, DistanceZone.MOVE_TO -> colors.primaryDark
+        DistanceZone.OK -> colors.testReady
+        DistanceZone.UNKNOWN -> colors.textSecondary
+    }, tween(EyeMotion.MEDIUM), label = "距离文字色")
     Row(
         modifier
             .fillMaxWidth()

@@ -25,7 +25,10 @@ struct TestDistanceBanner: View {
     private var close: Bool { known && !moving && distance < target - tolerance }
     private var far: Bool { known && !moving && distance > target + tolerance }
     private var background: Color {
-        moving ? EyeStyle.primary : !known ? EyeStyle.surfaceVariant : close ? EyeStyle.tooClose : far ? EyeStyle.tooFar : EyeStyle.success
+        moving ? EyeStyle.primarySoft : !known ? EyeStyle.surfaceVariant : close ? EyeStyle.dangerSoft : far ? EyeStyle.primarySoft : EyeStyle.testReadySoft
+    }
+    private var foreground: Color {
+        moving ? EyeStyle.primaryDark : !known ? EyeStyle.secondary : close ? EyeStyle.testTooClose : far ? EyeStyle.primaryDark : EyeStyle.testReady
     }
     private var title: String {
         moving ? "请移动到 \(Int(moveTo.rounded())) 厘米处" : !known ? "请正对屏幕" : close ? "太近了" : far ? "太远了" : "距离合适"
@@ -47,8 +50,8 @@ struct TestDistanceBanner: View {
                 Text(title).font(.headline).lineLimit(1)
                 Text(detail).font(.subheadline).monospacedDigit().lineLimit(1)
             }.frame(maxWidth: .infinity, alignment: .leading)
-            if known && tolerance > 0 { DistanceRuler(distance: distance, target: target, tolerance: tolerance) }
-        }.foregroundStyle(known || moving ? EyeStyle.onStatus : EyeStyle.text).padding(.horizontal, 16).padding(.vertical, 10)
+            if known && tolerance > 0 { DistanceRuler(distance: distance, target: target, tolerance: tolerance, color: foreground) }
+        }.foregroundStyle(foreground).padding(.horizontal, 16).padding(.vertical, 10)
             .background(background, in: RoundedRectangle(cornerRadius: 16))
             .animation(.easeInOut(duration: 0.28), value: background)
             .accessibilityElement(children: .combine)
@@ -58,16 +61,17 @@ struct TestDistanceBanner: View {
 /// 与安卓同一示意：左近右远，中间亮带为目标区间，圆点为当前位置。
 private struct DistanceRuler: View {
     let distance: Double, target: Double, tolerance: Double
+    let color: Color
     var body: some View {
         GeometryReader { geometry in
             let width = geometry.size.width
             let range = tolerance * 4
             let x = { (cm: Double) in CGFloat(min(1, max(0, (cm - target + range) / (2 * range)))) * width }
-            Capsule().fill(EyeStyle.panel.opacity(0.35)).frame(width: width, height: 6).position(x: width / 2, y: 14)
-            Capsule().fill(EyeStyle.panel.opacity(0.85)).frame(width: x(target + tolerance) - x(target - tolerance), height: 10)
+            Capsule().fill(color.opacity(0.35)).frame(width: width, height: 6).position(x: width / 2, y: 14)
+            Capsule().fill(color.opacity(0.85)).frame(width: x(target + tolerance) - x(target - tolerance), height: 10)
                 .position(x: (x(target + tolerance) + x(target - tolerance)) / 2, y: 14)
-            Circle().fill(EyeStyle.panel.opacity(0.3)).frame(width: 22, height: 22).position(x: x(distance), y: 14)
-            Circle().fill(EyeStyle.panel).frame(width: 14, height: 14).position(x: x(distance), y: 14)
+            Circle().fill(color.opacity(0.3)).frame(width: 22, height: 22).position(x: x(distance), y: 14)
+            Circle().fill(color).frame(width: 14, height: 14).position(x: x(distance), y: 14)
         }.frame(width: 72, height: 28).accessibilityHidden(true)
             .animation(.easeOut(duration: 0.2), value: distance)
     }

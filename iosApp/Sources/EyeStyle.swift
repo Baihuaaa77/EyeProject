@@ -34,6 +34,23 @@ enum EyeStyle {
     static let gray = dyn(0x5F6B85, 0x8A9AC0)
     static let blue = dyn(0x2563EB, 0x6E9BFF)
     static let warning = dyn(0x8A6200, 0xF2CB70)
+    // 测试到位提示与演示插画（短发男孩）；与安卓 Illustration.kt 同值。
+    static let testReady = dyn(0x137538, 0x91C8D3)
+    static let testTooClose = dyn(0xB42332, 0xFF7A86)
+    static let testReadySoft = dyn(0xE3F5EA, 0x1A3547)
+    enum Illustration {
+        static let skin = Color(rgb: 0xFFCBA8)
+        /// 脖子、耳内、领口阴影
+        static let skinShade = Color(rgb: 0xEBA884)
+        /// 鼻子、手的轮廓与指缝
+        static let skinLine = Color(rgb: 0xC98463)
+        static let blush = Color(rgb: 0xF4A58A)
+        static let hair = Color(rgb: 0x3D4956)
+        static let mouth = Color(rgb: 0x8E4F42)
+        static let shirt = EyeStyle.dyn(0x557FC1, 0x648BC8)
+        /// 领口滚边
+        static let shirtLight = EyeStyle.dyn(0x7599D1, 0x86A6DA)
+    }
     static let success = dyn(0x15803D, 0x5EE3A1)
     static let successSoft = dyn(0xE3F5EA, 0x10302A)
     static let warningSoft = dyn(0xFBF3DE, 0x2E2814)

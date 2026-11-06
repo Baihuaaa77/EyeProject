@@ -1,5 +1,6 @@
 package com.zkyjss.eyeproject.feature.services
 
+import com.zkyjss.eyeproject.core.designsystem.theme.testReady
 import android.Manifest
 import android.app.Activity
 import android.content.pm.PackageManager
@@ -476,7 +477,7 @@ private fun HoldTimer(key: Int, holdMs: Long, text: String) {
     LaunchedEffect(key) { progress.animateTo(1f, androidx.compose.animation.core.tween(holdMs.toInt(), easing = androidx.compose.animation.core.LinearEasing)) }
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         EyeText(if (progress.value >= 1f) "可以进行下一步" else text, LocalEyeTypography.current.body,
-            if (progress.value >= 1f) colors.success else colors.textSecondary)
+            if (progress.value >= 1f) colors.testReady else colors.textSecondary)
         androidx.compose.material3.LinearProgressIndicator(
             progress = { progress.value },
             modifier = Modifier.fillMaxWidth().height(6.dp).clip(EyeShapes.small),

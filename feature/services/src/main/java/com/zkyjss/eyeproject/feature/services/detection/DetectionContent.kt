@@ -1,5 +1,6 @@
 package com.zkyjss.eyeproject.feature.services.detection
 
+import com.zkyjss.eyeproject.core.designsystem.theme.testReady
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -106,7 +107,7 @@ fun DetectionContent(
             MetricRow(
                 label = "用眼距离",
                 value = formatDistanceCm(state.distanceCm),
-                valueColor = if (state.distanceCm > 0f) colors.success else colors.textSecondary
+                valueColor = if (state.distanceCm > 0f) colors.testReady else colors.textSecondary
             )
             MetricRow(
                 label = "眨眼次数",
@@ -116,7 +117,7 @@ fun DetectionContent(
             MetricRow(
                 label = "人脸状态",
                 value = if (state.faceDetected) "已识别" else "未识别",
-                valueColor = if (state.faceDetected) colors.success else colors.textSecondary
+                valueColor = if (state.faceDetected) colors.testReady else colors.textSecondary
             )
             if (state.error != null) {
                 Spacer(Modifier.height(8.dp))

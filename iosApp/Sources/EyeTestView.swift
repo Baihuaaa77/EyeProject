@@ -356,7 +356,7 @@ private struct HoldProgress: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(finished ? "可以进行下一步" : label).font(EyeStyle.body)
-                .foregroundStyle(finished ? EyeStyle.success : EyeStyle.secondary)
+                .foregroundStyle(finished ? EyeStyle.testReady : EyeStyle.secondary)
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
                     Capsule().fill(EyeStyle.surfaceVariant)
@@ -584,7 +584,7 @@ struct DryEyePauseView: View {
                 Text("测试已暂停").font(EyeStyle.title).foregroundStyle(EyeStyle.text)
                 Text("计时已停止，恢复后接着测。").font(EyeStyle.body).foregroundStyle(EyeStyle.secondary)
                 Text(ready ? "已回到合适位置，可以继续了" : (reason.isEmpty ? "请正对屏幕，保持约 40 cm" : reason))
-                    .font(EyeStyle.subtitle).foregroundStyle(ready ? EyeStyle.success : EyeStyle.warning)
+                    .font(EyeStyle.subtitle).foregroundStyle(ready ? EyeStyle.testReady : EyeStyle.warning)
                 Button("继续测试") { EyeHaptics.tap(); resume() }.buttonStyle(EyeButtonStyle()).disabled(!ready)
                 Button("结束测试") { EyeHaptics.tap(); stop() }.buttonStyle(EyeButtonStyle(role: .secondary))
             }

@@ -1,5 +1,6 @@
 package com.zkyjss.eyeproject.feature.services
 
+import com.zkyjss.eyeproject.core.designsystem.theme.testReady
 import android.Manifest
 import android.app.Activity
 import android.content.pm.PackageManager
@@ -509,7 +510,7 @@ internal fun PauseDialog(reason: String?, ready: Boolean, onResume: () -> Unit, 
             EyeText("测试已暂停", style = typography.title, color = colors.textPrimary)
             EyeText("计时已停止，恢复后接着测。", style = typography.body, color = colors.textSecondary)
             EyeText(if (ready) "已回到合适位置，可以继续了" else reason ?: "请正对屏幕，保持约 40 cm",
-                style = typography.subtitle, color = if (ready) colors.success else colors.warning)
+                style = typography.subtitle, color = if (ready) colors.testReady else colors.warning)
             EyeButton("继续测试", EyeButtonRole.PRIMARY, onResume, Modifier.fillMaxWidth(), enabled = ready)
             EyeButton("结束测试", EyeButtonRole.SECONDARY, onStop, Modifier.fillMaxWidth())
         }
