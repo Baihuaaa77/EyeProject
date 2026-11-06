@@ -5,7 +5,7 @@ struct TestStagePanel: ViewModifier {
     @ViewBuilder func body(content: Content) -> some View {
         content.padding(20).frame(maxWidth: .infinity)
             .eyeGlass()
-            .overlay { RoundedRectangle(cornerRadius: 22).stroke(EyeStyle.primary.opacity(0.16), lineWidth: 1) }
+            .overlay { RoundedRectangle(cornerRadius: EyeStyle.radius, style: .continuous).stroke(EyeStyle.primary.opacity(0.16), lineWidth: 1) }
             .shadow(color: EyeStyle.primary.opacity(0.08), radius: 3, x: 0, y: 2)
     }
 }
@@ -52,7 +52,7 @@ struct TestDistanceBanner: View {
             }.frame(maxWidth: .infinity, alignment: .leading)
             if known && tolerance > 0 { DistanceRuler(distance: distance, target: target, tolerance: tolerance, color: foreground) }
         }.foregroundStyle(foreground).padding(.horizontal, 16).padding(.vertical, 10)
-            .background(background, in: RoundedRectangle(cornerRadius: 16))
+            .background(background, in: RoundedRectangle(cornerRadius: EyeStyle.radiusLarge, style: .continuous))
             .animation(.easeInOut(duration: 0.28), value: background)
             .accessibilityElement(children: .combine)
     }
@@ -67,8 +67,8 @@ private struct DistanceRuler: View {
             let width = geometry.size.width
             let range = tolerance * 4
             let x = { (cm: Double) in CGFloat(min(1, max(0, (cm - target + range) / (2 * range)))) * width }
-            Capsule().fill(color.opacity(0.35)).frame(width: width, height: 6).position(x: width / 2, y: 14)
-            Capsule().fill(color.opacity(0.85)).frame(width: x(target + tolerance) - x(target - tolerance), height: 10)
+            EyeStyle.chipShape.fill(color.opacity(0.35)).frame(width: width, height: 6).position(x: width / 2, y: 14)
+            EyeStyle.chipShape.fill(color.opacity(0.85)).frame(width: x(target + tolerance) - x(target - tolerance), height: 10)
                 .position(x: (x(target + tolerance) + x(target - tolerance)) / 2, y: 14)
             Circle().fill(color.opacity(0.3)).frame(width: 22, height: 22).position(x: x(distance), y: 14)
             Circle().fill(color).frame(width: 14, height: 14).position(x: x(distance), y: 14)
@@ -87,7 +87,7 @@ struct TestNoticeSlot: View {
             if !text.isEmpty {
                 Text(text).font(.body).foregroundStyle(EyeStyle.warning).multilineTextAlignment(.center).lineLimit(2)
                     .padding(.horizontal, 16).padding(.vertical, 8).frame(maxWidth: .infinity)
-                    .background(EyeStyle.warning.opacity(0.12), in: Capsule())
+                    .background(EyeStyle.warning.opacity(0.12), in: EyeStyle.chipShape)
                     .transition(.opacity)
             }
         }.frame(maxWidth: .infinity).frame(height: 64)
@@ -102,8 +102,8 @@ struct TestNotice: View {
         if !text.isEmpty {
             Text(text).font(.body).foregroundStyle(EyeStyle.warning).multilineTextAlignment(.center).lineLimit(floating ? 2 : nil)
                 .padding(.horizontal, 16).padding(.vertical, 10).frame(maxWidth: .infinity)
-                .background(EyeStyle.warning.opacity(0.12), in: Capsule())
-                .background(floating ? EyeStyle.panel : Color.clear, in: Capsule())
+                .background(EyeStyle.warning.opacity(0.12), in: EyeStyle.chipShape)
+                .background(floating ? EyeStyle.panel : Color.clear, in: EyeStyle.chipShape)
                 .shadow(color: floating ? .black.opacity(0.12) : .clear, radius: 4, y: 2)
                 .transition(floating ? .opacity : .opacity.combined(with: .move(edge: .top)))
         }
@@ -238,8 +238,8 @@ struct TestProgressBar: View {
         HStack(spacing: 10) {
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
-                    Capsule().fill(EyeStyle.surfaceVariant)
-                    Capsule().fill(EyeStyle.primary).frame(width: geometry.size.width * min(1, max(0, fraction)))
+                    EyeStyle.chipShape.fill(EyeStyle.surfaceVariant)
+                    EyeStyle.chipShape.fill(EyeStyle.primary).frame(width: geometry.size.width * min(1, max(0, fraction)))
                 }
             }.frame(height: 4)
             Text(text).font(.footnote).foregroundStyle(EyeStyle.secondary).monospacedDigit()

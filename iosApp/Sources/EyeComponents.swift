@@ -412,8 +412,8 @@ struct ChoiceChip: View {
         Button { EyeHaptics.toggle(); action() } label: {
             Text(label).font(EyeStyle.body).foregroundStyle(selected ? EyeStyle.primary : EyeStyle.text)
                 .padding(.horizontal, 14).padding(.vertical, 9)
-                .background(selected ? EyeStyle.primarySoft : EyeStyle.surfaceVariant, in: Capsule())
-                .overlay { Capsule().stroke(selected ? EyeStyle.primary : EyeStyle.surfaceVariant, lineWidth: 1) }
+                .background(selected ? EyeStyle.primarySoft : EyeStyle.surfaceVariant, in: EyeStyle.chipShape)
+                .overlay { EyeStyle.chipShape.stroke(selected ? EyeStyle.primary : EyeStyle.surfaceVariant, lineWidth: 1) }
         }.buttonStyle(PressScale())
     }
 }
@@ -427,7 +427,7 @@ struct PillButton: View {
         Button { EyeHaptics.tap(); action() } label: {
             Text(label).font(EyeStyle.chip).foregroundStyle(primary ? EyeStyle.onPrimary : EyeStyle.text)
                 .padding(.horizontal, 14).padding(.vertical, 8)
-                .background { if primary { Capsule().fill(EyeStyle.buttonGradient) } else { Capsule().fill(EyeStyle.surfaceVariant) } }
+                .background { if primary { EyeStyle.chipShape.fill(EyeStyle.buttonGradient) } else { EyeStyle.chipShape.fill(EyeStyle.surfaceVariant) } }
         }.buttonStyle(PressScale())
     }
 }
@@ -449,7 +449,7 @@ struct StatusChip: View {
         let fill = EyeStyle.statusFill(color)
         Text(text).font(EyeStyle.chip).foregroundStyle(filled ? fill.1 : color)
             .padding(.horizontal, 12).padding(.vertical, 6)
-            .background(filled ? fill.0 : color.opacity(0.12), in: Capsule())
+            .background(filled ? fill.0 : color.opacity(0.12), in: EyeStyle.chipShape)
     }
 }
 
@@ -475,7 +475,7 @@ struct SegmentedPicker: View {
             let width = (geometry.size.width - 6) / CGFloat(max(options.count, 1))
             let index = CGFloat(options.firstIndex(where: { $0.0 == selected }) ?? 0)
             ZStack(alignment: .leading) {
-                RoundedRectangle(cornerRadius: 10, style: .continuous).fill(EyeStyle.buttonGradient).frame(width: width).offset(x: width * index)
+                RoundedRectangle(cornerRadius: EyeStyle.radiusSmall, style: .continuous).fill(EyeStyle.buttonGradient).frame(width: width).offset(x: width * index)
                     .animation(.spring(response: 0.35, dampingFraction: 0.8), value: selected)
                 HStack(spacing: 0) {
                     ForEach(Array(options.enumerated()), id: \.offset) { _, option in
@@ -591,8 +591,8 @@ struct SplashView: View {
                 Text("眼健康助手").font(EyeStyle.title).foregroundStyle(EyeStyle.text).padding(.top, 20)
                 Text("你的主动眼健康助手").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary).padding(.top, 6)
                 ZStack(alignment: .leading) {
-                    Capsule().fill(EyeStyle.borderSubtle)
-                    Capsule().fill(EyeStyle.flowGradient).frame(width: 120 * progress)
+                    EyeStyle.chipShape.fill(EyeStyle.borderSubtle)
+                    EyeStyle.chipShape.fill(EyeStyle.flowGradient).frame(width: 120 * progress)
                 }.frame(width: 120, height: 3).padding(.top, 32)
             }
         }

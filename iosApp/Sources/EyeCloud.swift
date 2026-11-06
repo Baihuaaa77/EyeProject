@@ -196,7 +196,7 @@ struct AccountPage: View {
         }
         .padding(20).frame(maxWidth: .infinity, alignment: .leading)
         .background(LinearGradient(colors: [EyeStyle.primarySoft, EyeStyle.panel], startPoint: .topLeading, endPoint: .bottomTrailing),
-                    in: RoundedRectangle(cornerRadius: 22))
+                    in: RoundedRectangle(cornerRadius: EyeStyle.radius, style: .continuous))
     }
 
     private var signedIn: some View {

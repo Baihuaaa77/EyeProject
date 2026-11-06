@@ -41,7 +41,7 @@ struct TestGuideView: View {
         }
         .padding(16).frame(maxWidth: .infinity)
         .eyeGlass()
-        .overlay { RoundedRectangle(cornerRadius: 22).stroke(EyeStyle.borderSubtle, lineWidth: 1) }
+        .overlay { RoundedRectangle(cornerRadius: EyeStyle.radius).stroke(EyeStyle.borderSubtle, lineWidth: 1) }
         .onChange(of: motion) { _ in start = Date(); frozen = nil; playing = true }
     }
 
@@ -64,7 +64,7 @@ struct TestGuideView: View {
                 Text(title).font(EyeStyle.title).foregroundStyle(EyeStyle.text).frame(maxWidth: .infinity, alignment: .leading)
                 Button(chip) { toggle(scene) }
                     .font(EyeStyle.chip).foregroundStyle(EyeStyle.primary)
-                    .padding(.horizontal, 12).padding(.vertical, 8).background(EyeStyle.primarySoft, in: Capsule())
+                    .padding(.horizontal, 12).padding(.vertical, 8).background(EyeStyle.primarySoft, in: EyeStyle.chipShape)
                     .disabled(reduceMotion)
             }
             GuideStage(scene: scene, phase: phase).accessibilityLabel(cue)

@@ -100,7 +100,7 @@ private struct EyeBottomBar: View {
                 Button { if !active { EyeHaptics.tap() }; selected = tab } label: {
                     // 只显示图标（名称作为无障碍标签）
                     ZStack {
-                        Capsule().fill(EyeStyle.primarySoft).frame(width: active ? 64 : 0, height: 40)
+                        EyeStyle.chipShape.fill(EyeStyle.primarySoft).frame(width: active ? 64 : 0, height: 40)
                         NavIconView(icon: tab.icon).frame(width: 30, height: 30).scaleEffect(active ? 1.08 : 1)
                     }.frame(width: 64, height: 40)
                         .foregroundStyle(active ? EyeStyle.primary : EyeStyle.secondary)
@@ -158,7 +158,7 @@ private struct SelectCard<Leading: View>: View {
                 Image(systemName: "arrow.right").font(.system(size: 15, weight: .medium)).foregroundStyle(EyeStyle.secondary)
             }.padding(.horizontal, 20).padding(.vertical, 16).frame(minHeight: 80)
                 .eyeGlass()
-                .contentShape(RoundedRectangle(cornerRadius: 22))
+                .contentShape(RoundedRectangle(cornerRadius: EyeStyle.radius))
         }.buttonStyle(PressScale(scale: 0.98))
     }
 }

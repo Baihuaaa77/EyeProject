@@ -104,6 +104,9 @@ class HomeVisualTest {
         // 护眼操与用眼趋势、亮度与蓝光并排成彩色方块，三个方块只有名称，护眼操没有「开始」按钮
         compose.onNodeWithText("用眼趋势报告").assertDoesNotExist()
         compose.onNodeWithText("开始").assertDoesNotExist()
+        // 休息提醒不再给出建议间隔与「采用」
+        compose.onNodeWithText("采用").assertDoesNotExist()
+        compose.onNodeWithText("建议每", substring = true).assertDoesNotExist()
         listOf("约 1 分钟", "近 7 天变化", "夜间模式与护眼").forEach { compose.onNodeWithText(it, substring = true).assertDoesNotExist() }
         compose.onNodeWithText("日均用屏", substring = true).assertDoesNotExist()
         compose.onNodeWithText("用眼趋势").performScrollTo().performClick()

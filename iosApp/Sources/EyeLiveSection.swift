@@ -85,7 +85,7 @@ struct LiveEyeSection: View {
         }()
         let chip = EyeStyle.statusFill(color)
         return Text(text).font(EyeStyle.chip).foregroundStyle(chip.1)
-            .padding(.horizontal, 10).padding(.vertical, 4).background(chip.0, in: Capsule())
+            .padding(.horizontal, 10).padding(.vertical, 4).background(chip.0, in: EyeStyle.chipShape)
     }
 
     private var statusChip: some View {
@@ -101,7 +101,7 @@ struct LiveEyeSection: View {
             Circle().fill(color).frame(width: 7, height: 7)
             Text(text).font(EyeStyle.chip)
         }.foregroundStyle(color).padding(.horizontal, 10).padding(.vertical, 5)
-            .background(color.opacity(0.12), in: Capsule())
+            .background(color.opacity(0.12), in: EyeStyle.chipShape)
             .animation(.easeOut(duration: 0.2), value: text)
     }
 }
@@ -219,7 +219,7 @@ private struct EarTraceChart: View {
     var body: some View {
         Canvas { context, size in
             let lane = CGRect(origin: .zero, size: size)
-            context.fill(Path(roundedRect: lane, cornerRadius: 12), with: .color(EyeStyle.background))
+            context.fill(Path(roundedRect: lane, cornerRadius: EyeStyle.radiusMedium), with: .color(EyeStyle.background))
             guard let s = snapshot, let now = s.samples.last?.timeMs else {
                 context.draw(Text("等待相机画面…").font(EyeStyle.bodySecondary).foregroundColor(EyeStyle.secondary),
                              at: CGPoint(x: size.width / 2, y: size.height / 2))

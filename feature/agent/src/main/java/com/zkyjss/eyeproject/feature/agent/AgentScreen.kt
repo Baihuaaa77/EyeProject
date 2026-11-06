@@ -26,6 +26,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.zkyjss.eyeproject.core.designsystem.theme.EyeShapes
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
 import com.zkyjss.eyeproject.core.designsystem.util.getTopStatusBarPadding
@@ -97,7 +98,7 @@ private fun MessageBubble(message: AgentMessage) {
             modifier = Modifier
                 .background(
                     color = if (isUser) colors.blue else colors.borderSubtle,
-                    shape = RoundedCornerShape(12.dp)
+                    shape = EyeShapes.large
                 )
                 .padding(horizontal = 12.dp, vertical = 8.dp)
         ) {
@@ -128,7 +129,7 @@ private fun AgentInputBar(
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             Button(
-                shape = RoundedCornerShape(20.dp),
+                shape = EyeShapes.card,
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
             ) {
                 EyeText(
@@ -138,7 +139,7 @@ private fun AgentInputBar(
             }
 
             Button(
-                shape = RoundedCornerShape(20.dp),
+                shape = EyeShapes.card,
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
             ) {
                 EyeText(
@@ -165,7 +166,7 @@ private fun AgentInputBar(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(colors.borderSubtle, RoundedCornerShape(20.dp))
+                            .background(colors.borderSubtle, EyeShapes.card)
                             .padding(horizontal = 20.dp, vertical = 14.dp)
                     ) {
                         if (value.isEmpty()) {
@@ -181,7 +182,7 @@ private fun AgentInputBar(
             )
             Spacer(Modifier.width(8.dp))
             Button(
-                shape = RoundedCornerShape(20.dp),
+                shape = EyeShapes.card,
                 contentPadding = PaddingValues(horizontal = 20.dp, vertical = 14.dp),
                 onClick = onSend
             ) {

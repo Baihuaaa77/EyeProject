@@ -148,7 +148,7 @@ private struct ResultHero: View {
         EyeHeroCard(spacing: 14) {
             let badge = EyeStyle.statusFill(tone.0)
             Text(report.badge).font(EyeStyle.chip).foregroundStyle(badge.1)
-                .padding(.horizontal, 12).padding(.vertical, 5).background(badge.0, in: Capsule())
+                .padding(.horizontal, 12).padding(.vertical, 5).background(badge.0, in: EyeStyle.chipShape)
             // 长结论用标题字号，避免大字折成三行；与安卓 LONG_TITLE 一致
             Text(report.title).font(report.title.count > 8 ? EyeStyle.title : EyeStyle.headline).foregroundStyle(EyeStyle.text)
                 .fixedSize(horizontal: false, vertical: true)
@@ -177,7 +177,7 @@ private struct RiskSegments: View {
             ForEach(["LOW", "UNCERTAIN", "MEDIUM", "HIGH"], id: \.self) { step in
                 let on = step == level
                 let color = EyeStyle.statusFill(ReportTone.level(step).0).0
-                Capsule().fill(on ? color : EyeStyle.borderSubtle).frame(height: 6)
+                EyeStyle.chipShape.fill(on ? color : EyeStyle.borderSubtle).frame(height: 6)
                     .shadow(color: on && scheme == .dark ? color.opacity(0.7) : .clear, radius: 5)
             }
         }
@@ -210,7 +210,7 @@ private struct MetricGrid: View {
             Text(m.value).font(EyeStyle.metricValue).foregroundStyle(m.status == "ABNORMAL" ? EyeStyle.warning : EyeStyle.text)
                 .lineLimit(1).minimumScaleFactor(0.7)
             Text(m.status == "UNAVAILABLE" ? "参考" : ReportTone.label(m.status)).font(EyeStyle.chip).foregroundStyle(tone.0)
-                .padding(.horizontal, 10).padding(.vertical, 3).background(tone.1, in: Capsule())
+                .padding(.horizontal, 10).padding(.vertical, 3).background(tone.1, in: EyeStyle.chipShape)
         }.frame(maxWidth: .infinity, alignment: .leading)
     }
 }

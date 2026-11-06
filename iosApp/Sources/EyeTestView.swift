@@ -359,8 +359,8 @@ private struct HoldProgress: View {
                 .foregroundStyle(finished ? EyeStyle.testReady : EyeStyle.secondary)
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
-                    Capsule().fill(EyeStyle.surfaceVariant)
-                    Capsule().fill(EyeStyle.primary).frame(width: geometry.size.width * progress)
+                    EyeStyle.chipShape.fill(EyeStyle.surfaceVariant)
+                    EyeStyle.chipShape.fill(EyeStyle.primary).frame(width: geometry.size.width * progress)
                 }
             }.frame(height: 6)
         }
@@ -452,7 +452,7 @@ private struct TestExitConfirm: View {
                     Button("确认退出") { EyeHaptics.tap(); exit() }.buttonStyle(EyeButtonStyle(role: .secondary))
                 }
                 .padding(24).frame(maxWidth: .infinity)
-                .background(EyeStyle.panel, in: RoundedRectangle(cornerRadius: 22))
+                .background(EyeStyle.panel, in: RoundedRectangle(cornerRadius: EyeStyle.radius, style: .continuous))
             }
             .padding(24)
         }

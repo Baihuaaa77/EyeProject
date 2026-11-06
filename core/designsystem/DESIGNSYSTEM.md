@@ -18,7 +18,7 @@
 | `EyeTheme` | 便捷读取器：`EyeTheme.colors` / `EyeTheme.typography` |
 | `EyeColors` | 「深海蓝 / 瓷白深蓝」色彩令牌（`@Immutable`）：主色深蓝 + `onPrimary`、品牌渐变 `brandStart/brandEnd`、主卡 `heroStart/heroEnd/heroBorder`、按钮渐变 `buttonStart/buttonEnd`、光晕 `glow`（仅深色）、玻璃 `glassFill/glassEdgeTop/glassEdgeBottom`、柠檬黄 `accent`（留意，色块配深色字 `onWarning`）、示意墨色 `ink`、三级文字、语义色及 soft 色 |
 | `EyeTypography` | 字号阶梯 13/14/16/18/22/30/56：大数字 display 56 → 页标题 headline 30 → 分区标题 title 22 → 卡片标题 subtitle 18 → 正文 body 16 → 辅助 bodySecondary 14 → 标签 chip 13；读数 metricValue 26、按钮 button 16 |
-| `EyeShapes` | 圆角令牌：small 12（图标块）→ medium 14（按钮 / 输入）→ large 16（内嵌面板）→ card / panel 20 → hero 24，chip 为胶囊 |
+| `EyeShapes` | 圆角令牌（2026-11-06 统一收小）：small 8（图标块）→ medium 10（按钮 / 输入）→ large 12（内嵌面板、功能色块）→ card / panel 14 → hero 16（取景框），chip 8（标签与小按钮，不再用整圆胶囊）；苹果端 `EyeStyle.radius*` / `chipShape` 同值，界面里不写死圆角 |
 | `EyeSpacing` | 间距令牌（4/8 节奏）：xxs 4 · xs 8 · sm 12 · md 16 · lg 20 · xl 24 · xxl 32；页面留白 gutter 16、卡片内边距 20、主卡 24、卡片间距 16、块间距 12 |
 | `EyeMotion` | 动效令牌：SHORT/MEDIUM/LONG/DEMO_CYCLE 时长、Standard/Gentle 缓动、按压/落定弹簧 |
 | `rememberReducedMotion()` | 系统「移除动画」开启时为 true：循环动效停在关键帧 |
@@ -59,6 +59,6 @@
 
 ### 教学与测试反馈（2026-11-06）
 
-`Vivid.kt` 是首页功能色块令牌 `EyeColors.vivid`：蓝 / 珊瑚红 / 紫 / 绿四组左上到右下渐变（`VividTone.brush`），色块上的文字与图标一律 `onVivid`（白），深色主题整体压暗一档；苹果端 `EyeStyle.Vivid` 同值。
+`Vivid.kt` 是首页功能色块令牌 `EyeColors.vivid`：蓝 / 珊瑚红 / 紫 / 薄荷绿四组左上到右下渐变（`VividTone.brush`），色块上的文字与图标一律 `onVivid`（白），深色主题整体压暗一档；苹果端 `EyeStyle.Vivid` 同值。
 
 `Illustration.kt` 集中维护演示男孩的肤色、头发、嘴、腮红与蓝色上衣，两套主题保持自然肤色（深色只把上衣略提亮）。`testReady/testReadySoft` 是测试到位状态专用令牌：日间沿用绿色，夜间蓝青色 `#91C8D3` 配低饱和底 `#1A3547`。距离横幅使用柔和底色配语义文字和方向图形，不再整块填充高亮状态色。报告风险等级仍使用原有 success 语义。

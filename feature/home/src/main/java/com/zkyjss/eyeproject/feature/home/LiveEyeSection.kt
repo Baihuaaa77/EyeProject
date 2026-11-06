@@ -257,7 +257,7 @@ private fun EarTraceChart(s: LiveEyeMonitor.Snapshot?, modifier: Modifier) {
     val typography = LocalEyeTypography.current
     Box(modifier) {
         Canvas(Modifier.matchParentSize()) {
-            drawRoundRect(colors.appBackground, cornerRadius = CornerRadius(12.dp.toPx()))
+            drawRoundRect(colors.appBackground, cornerRadius = CornerRadius(10.dp.toPx()))  // 同 EyeShapes.medium
             val samples = s?.samples.orEmpty()
             val now = samples.lastOrNull()?.timeMs ?: return@Canvas
             val window = LiveEyeMonitor.DEFAULT_WINDOW_MS.toFloat()

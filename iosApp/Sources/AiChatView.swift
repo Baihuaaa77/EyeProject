@@ -135,7 +135,7 @@ struct AiChatPage: View {
                     TextField("说说今天眼睛的感受…", text: $draft, axis: .vertical)
                         .lineLimit(1...4).font(EyeStyle.body).focused($focused)
                         .padding(.horizontal, 14).padding(.vertical, 11)
-                        .background(EyeStyle.background, in: RoundedRectangle(cornerRadius: 22))
+                        .background(EyeStyle.background, in: RoundedRectangle(cornerRadius: EyeStyle.radius, style: .continuous))
                         .onChange(of: draft) { value in if value.count > limit { draft = String(value.prefix(limit)) } }
                     let empty = draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                     Button {
@@ -146,7 +146,7 @@ struct AiChatPage: View {
                     } label: {
                         Text("发送").font(EyeStyle.button).foregroundStyle(.white)
                             .padding(.horizontal, 16).frame(minHeight: 44)
-                            .background(empty || sending ? EyeStyle.primary.opacity(0.4) : EyeStyle.primary, in: Capsule())
+                            .background(empty || sending ? EyeStyle.primary.opacity(0.4) : EyeStyle.primary, in: EyeStyle.chipShape)
                     }.buttonStyle(PressScale()).disabled(empty || sending)
                 }
             }
@@ -275,13 +275,13 @@ private struct ChatBubble: View {
                     }
                 }
                 .padding(.horizontal, 14).padding(.vertical, 10)
-                .background(mine ? EyeStyle.primarySoft : EyeStyle.panel, in: RoundedRectangle(cornerRadius: 18))
+                .background(mine ? EyeStyle.primarySoft : EyeStyle.panel, in: RoundedRectangle(cornerRadius: EyeStyle.radiusLarge, style: .continuous))
                 if !mine { Spacer(minLength: 32) }
             }
             if mine && urgent {
                 Text(urgentNotice).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.danger)
                     .padding(12).frame(maxWidth: .infinity, alignment: .leading)
-                    .background(EyeStyle.dangerSoft, in: RoundedRectangle(cornerRadius: 14))
+                    .background(EyeStyle.dangerSoft, in: RoundedRectangle(cornerRadius: EyeStyle.radiusMedium, style: .continuous))
             }
         }
     }

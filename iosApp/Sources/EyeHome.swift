@@ -37,7 +37,7 @@ struct HomePage: View {
                 if report.signals("BASIC").contains(where: { $0.id != "brightness" }) { BasicCard(report: report) }
                 FeatureCard(report: report, navigate: navigate) { exerciseOpen = true }
                 CheckInCard(report: report) { feelingEditing = true }
-                ReminderCard(reminder: reminder, suggested: report.loaded ? report.suggestedReminderMinutes : nil)
+                ReminderCard(reminder: reminder)
                 Panel { LiveEyeSection(startRequests: liveRequests) }.id("live")
             }
         }
@@ -76,7 +76,7 @@ private struct HeroCard: View {
                     .accessibilityLabel(index.map { "今日眼健康指数 \($0) 分" } ?? "今日眼健康指数暂无数据")
                 let chip = EyeStyle.statusFill(levelColor(report.level))
                 Text(report.label).font(EyeStyle.body.weight(.semibold)).foregroundStyle(chip.1)
-                    .padding(.horizontal, 14).padding(.vertical, 4).background(chip.0, in: Capsule())
+                    .padding(.horizontal, 14).padding(.vertical, 4).background(chip.0, in: EyeStyle.chipShape)
             }
         }
         .frame(width: 296, height: 296)
@@ -132,7 +132,7 @@ private struct CheckInCard: View {
                         Text(label).font(EyeStyle.body.weight(.semibold))
                             .foregroundStyle(EyeStyle.primary)
                             .padding(.horizontal, 12).padding(.vertical, 6)
-                            .background(EyeStyle.primarySoft, in: Capsule())
+                            .background(EyeStyle.primarySoft, in: EyeStyle.chipShape)
                     }
                 }
             }
@@ -162,7 +162,7 @@ private struct FeelingSheet: View {
                     .disabled(selected.isEmpty).padding(.top, 4)
             }
             .padding(24).frame(maxWidth: .infinity, alignment: .leading)
-            .background(EyeStyle.panel, in: RoundedRectangle(cornerRadius: 22))
+            .background(EyeStyle.panel, in: RoundedRectangle(cornerRadius: EyeStyle.radius, style: .continuous))
             .padding(24)
         }
         .accessibilityAddTraits(.isModal)
@@ -259,10 +259,9 @@ private struct BasicCard: View {
 
 // MARK: - 功能卡与休息提醒
 
-/// 休息提醒：开关（间隔）+ 间隔选择；建议间隔与当前不同时给出一键采用。
+/// 休息提醒：开关（间隔）+ 间隔选择。不再给出建议间隔。与安卓 ReminderCard 一致。
 private struct ReminderCard: View {
     @ObservedObject var reminder: EyeReminder
-    let suggested: Int?
     var body: some View {
         Panel {
             HStack(spacing: 10) {
@@ -275,19 +274,12 @@ private struct ReminderCard: View {
                     .labelsHidden().tint(EyeStyle.primary)
             }.frame(minHeight: 48)
             SegmentedPicker(options: [(20, "20分钟"), (30, "30分钟"), (60, "60分钟")], selected: reminder.intervalMinutes) { reminder.setInterval($0) }
-            if let suggested, suggested != reminder.intervalMinutes {
-                HStack {
-                    Text("建议每 \(suggested) 分钟休息一次").font(EyeStyle.body).foregroundStyle(EyeStyle.secondary)
-                    Spacer()
-                    PillButton(label: "采用") { reminder.setInterval(suggested); reminder.setEnabled(true) }
-                }
-            }
             if let notice = reminder.notice { Text(notice).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.warning) }
         }
     }
 }
 
-/// 功能卡：一张卡里上排三个彩色方块（护眼操绿、用眼趋势紫、亮度与蓝光珊瑚红），下面整行蓝色的 AI 主动问诊。
+/// 功能卡：一张卡里上排三个彩色方块（护眼操薄荷绿、用眼趋势紫、亮度与蓝光珊瑚红），下面整行蓝色的 AI 主动问诊。
 /// 色块上文字与图标一律白色，靠整块颜色做视觉区分。与安卓 FeatureCard 一致。
 private struct FeatureCard: View {
     let report: CareReport
@@ -296,7 +288,7 @@ private struct FeatureCard: View {
     var body: some View {
         VStack(spacing: 10) {
             HStack(spacing: 10) {
-                VividTile(title: "护眼操", glyph: .eye, fill: EyeStyle.Vivid.green, action: openExercise)
+                VividTile(title: "护眼操", glyph: .eye, fill: EyeStyle.Vivid.mint, action: openExercise)
                 VividTile(title: "用眼趋势", glyph: .chart, fill: EyeStyle.Vivid.violet) { navigate(.trend) }
                 VividTile(title: "亮度与蓝光", glyph: .sun, fill: EyeStyle.Vivid.red) { navigate(.brightness) }
             }.fixedSize(horizontal: false, vertical: true)
@@ -440,7 +432,7 @@ private struct ConsultCard: View {
             Text(consult.detail).font(EyeStyle.body).foregroundStyle(EyeStyle.text).fixedSize(horizontal: false, vertical: true)
             if !consult.department.isEmpty {
                 Text(consult.department).font(EyeStyle.chip).foregroundStyle(strong)
-                    .padding(.horizontal, 10).padding(.vertical, 5).background(soft, in: Capsule())
+                    .padding(.horizontal, 10).padding(.vertical, 5).background(soft, in: EyeStyle.chipShape)
             }
         }
     }
@@ -544,8 +536,8 @@ struct EyeExerciseView: View {
                     HStack(spacing: 8) {
                         Button("结束") { dismiss() }.font(EyeStyle.body).foregroundStyle(.white).frame(minWidth: 44, minHeight: 44)
                         ZStack(alignment: .leading) {
-                            Capsule().fill(Color.white.opacity(0.25))
-                            Capsule().fill(EyeStyle.flowGradient).frame(width: max(0, (geo.size.width - 100) * CGFloat(state?.progress ?? 0)))
+                            EyeStyle.chipShape.fill(Color.white.opacity(0.25))
+                            EyeStyle.chipShape.fill(EyeStyle.flowGradient).frame(width: max(0, (geo.size.width - 100) * CGFloat(state?.progress ?? 0)))
                         }.frame(height: 6)
                     }
                     // 上半区：动作提示；中间：注视点；下半区：倒计时与提示语。上下等高，注视点正好在屏幕中央

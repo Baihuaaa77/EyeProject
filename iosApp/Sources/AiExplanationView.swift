@@ -198,7 +198,7 @@ private struct AiLoadingView: View {
         VStack(alignment: .leading, spacing: 10) {
             ForEach([1.0, 0.86, 0.62], id: \.self) { fraction in
                 GeometryReader { proxy in
-                    Capsule().fill(EyeStyle.primarySoft).frame(width: proxy.size.width * fraction)
+                    EyeStyle.chipShape.fill(EyeStyle.primarySoft).frame(width: proxy.size.width * fraction)
                 }.frame(height: 14).opacity(pulse ? 0.85 : 0.35)
             }
             Text(Self.steps[step]).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)

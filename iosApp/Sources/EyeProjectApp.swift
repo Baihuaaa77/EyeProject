@@ -92,7 +92,7 @@ private struct RecordRow: View {
                     }
                     Spacer()
                     Text(entry.badge).font(EyeStyle.chip).foregroundStyle(tone)
-                        .padding(.horizontal, 10).padding(.vertical, 4).background(tone.opacity(0.12), in: Capsule())
+                        .padding(.horizontal, 10).padding(.vertical, 4).background(tone.opacity(0.12), in: EyeStyle.chipShape)
                     Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(EyeStyle.secondary)
                         .rotationEffect(.degrees(expanded ? 90 : 0))
                 }.frame(minHeight: 44).contentShape(Rectangle())

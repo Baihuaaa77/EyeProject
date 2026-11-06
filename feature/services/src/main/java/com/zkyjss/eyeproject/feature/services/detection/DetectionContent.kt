@@ -32,6 +32,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.zkyjss.eyeproject.core.common.formatDistanceCm
+import com.zkyjss.eyeproject.core.designsystem.theme.EyeShapes
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
 import com.zkyjss.eyeproject.core.designsystem.util.screenHorizontalPaddingLarge
@@ -89,7 +90,7 @@ fun DetectionContent(
                 modifier = Modifier
                     .fillMaxWidth(0.7f)
                     .aspectRatio(3f / 4f)
-                    .clip(RoundedCornerShape(12.dp))
+                    .clip(EyeShapes.large)
                     .background(colors.cameraSurface),
             ) {
                 AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())

@@ -210,7 +210,7 @@ struct AiMark: View {
             .onAppear { if !reduceMotion { withAnimation(.easeInOut(duration: 1.8).repeatForever(autoreverses: true)) { breathe = true } } }
         } else {
             Image(systemName: "waveform").font(.system(size: size * 0.42, weight: .semibold)).foregroundStyle(EyeStyle.primary)
-                .frame(width: size, height: size).background(EyeStyle.primarySoft, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .frame(width: size, height: size).background(EyeStyle.primarySoft, in: RoundedRectangle(cornerRadius: EyeStyle.radiusSmall, style: .continuous))
         }
     }
 }

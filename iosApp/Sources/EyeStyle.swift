@@ -38,13 +38,13 @@ enum EyeStyle {
     static let testReady = dyn(0x137538, 0x91C8D3)
     static let testTooClose = dyn(0xB42332, 0xFF7A86)
     static let testReadySoft = dyn(0xE3F5EA, 0x1A3547)
-    /// 首页功能色块（护眼操绿、用眼趋势紫、亮度与蓝光珊瑚红、AI 主动问诊蓝）：左上到右下渐变，上面文字与图标一律白色。
+    /// 首页功能色块（护眼操薄荷绿、用眼趋势紫、亮度与蓝光珊瑚红、AI 主动问诊蓝）：左上到右下渐变，上面文字与图标一律白色。
     /// 深色主题压暗一档；与安卓 Vivid.kt 同值。
     enum Vivid {
         static let blue = gradient(dyn(0x4F8DFF, 0x3F7DF5), dyn(0x2B5FEA, 0x2550D2))
         static let red = gradient(dyn(0xFF7D6B, 0xF0685C), dyn(0xEC4A5C, 0xD33E52))
         static let violet = gradient(dyn(0x9D7CFF, 0x8C6DF2), dyn(0x6B47E6, 0x5C3ED2))
-        static let green = gradient(dyn(0x2EC48B, 0x27AF7C), dyn(0x0F9767, 0x0C855B))
+        static let mint = gradient(dyn(0x4FE0DF, 0x33C8CC), dyn(0x22BCC6, 0x169FAA))
         static let on = Color.white
         private static func gradient(_ top: Color, _ bottom: Color) -> LinearGradient {
             LinearGradient(colors: [top, bottom], startPoint: .topLeading, endPoint: .bottomTrailing)
@@ -95,11 +95,14 @@ enum EyeStyle {
     static let fixedPrimary = Color(rgb: 0x23367A)
 
     /// EyeShapes：small 12（图标块）、medium 14（按钮 / 输入）、large 16（内嵌面板）、card / panel 20、hero 24。
-    static let radiusSmall: CGFloat = 12
-    static let radius: CGFloat = 20
-    static let radiusMedium: CGFloat = 14
-    static let radiusLarge: CGFloat = 16
-    static let radiusHero: CGFloat = 24
+    static let radiusSmall: CGFloat = 8
+    static let radius: CGFloat = 14
+    static let radiusMedium: CGFloat = 10
+    static let radiusLarge: CGFloat = 12
+    static let radiusHero: CGFloat = 16
+    /// 标签、小按钮（不再用整圆胶囊；细进度条高度不足 16 时自然仍是圆头）。与安卓 EyeShapes.chip 一致。
+    static let radiusChip: CGFloat = 8
+    static var chipShape: RoundedRectangle { RoundedRectangle(cornerRadius: radiusChip, style: .continuous) }
     static let spacing: CGFloat = 12
     /// EyeTypography 阶梯 13 / 14 / 16 / 18 / 22 / 30 / 56：大数字 display 56 → 页标题 headline 30 → 分区标题 title 22 →
     /// 卡片标题 subtitle 18 → 正文 body 16 → 辅助 bodySecondary 14 → 标签 chip 13（最小）；读数 metricValue 26、按钮 button 16。

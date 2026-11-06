@@ -415,12 +415,11 @@ private fun LiveCard(modifier: Modifier, live: @Composable () -> Unit) {
 
 // region 护眼操、提醒与服务入口
 
-/** 休息提醒：开关（下次提醒时间）+ 间隔；建议间隔与当前不同时给出一键采用。 */
+/** 休息提醒：开关（下次提醒时间）+ 间隔。不再给出建议间隔。 */
 @Composable
 private fun ReminderCard(state: HomeUiState, actions: HomeActions) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
-    val suggested = state.report?.suggestedReminderMinutes
     EyeCard {
         // 整行可点（48dp 触控区），开关本身只做展示，避免出现两个点击目标
         Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).toggleable(state.reminderEnabled, role = Role.Switch) { actions.toggleReminder() },
@@ -434,16 +433,12 @@ private fun ReminderCard(state: HomeUiState, actions: HomeActions) {
         }
         EyeSegmentedRow(listOf(SegmentedOption(20, "20分钟"), SegmentedOption(30, "30分钟"), SegmentedOption(60, "60分钟")),
             state.reminderIntervalMinutes, actions.selectReminderInterval)
-        if (suggested != null && suggested != state.reminderIntervalMinutes) Row(verticalAlignment = Alignment.CenterVertically) {
-            EyeText("建议每 $suggested 分钟休息一次", Modifier.weight(1f), style = typography.body, color = colors.textSecondary)
-            PillButton("采用") { actions.enableReminder(suggested) }
-        }
         state.notice?.let { EyeText(it, style = typography.bodySecondary, color = colors.warning) }
     }
 }
 
 /**
- * 功能卡：一张卡里上排三个彩色方块（护眼操绿、用眼趋势紫、亮度与蓝光珊瑚红），下面整行蓝色的 AI 主动问诊。
+ * 功能卡：一张卡里上排三个彩色方块（护眼操薄荷绿、用眼趋势紫、亮度与蓝光珊瑚红），下面整行蓝色的 AI 主动问诊。
  * 色块上文字与图标一律白色，靠整块颜色做视觉区分。与苹果端 FeatureCard 一致。
  */
 @Composable
@@ -451,7 +446,7 @@ private fun FeatureCard(navigation: HomeNavigation, onOpenExercise: () -> Unit) 
     val vivid = LocalEyeColors.current.vivid
     EyeCard(contentPadding = 12.dp, verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            VividTile("护眼操", EyeGlyph.EYE, vivid.green, Modifier.weight(1f).fillMaxHeight(), onOpenExercise)
+            VividTile("护眼操", EyeGlyph.EYE, vivid.mint, Modifier.weight(1f).fillMaxHeight(), onOpenExercise)
             VividTile("用眼趋势", EyeGlyph.CHART, vivid.violet, Modifier.weight(1f).fillMaxHeight(), navigation.onOpenTrend)
             VividTile("亮度与蓝光", EyeGlyph.SUN, vivid.red, Modifier.weight(1f).fillMaxHeight(), navigation.onOpenBrightness)
         }
