@@ -18,7 +18,7 @@ swift = (root / 'iosApp/Sources/EyeStyle.swift').read_text(encoding='utf-8')
 mapping = {'background':'appBackground','panel':'panelBackground','text':'textPrimary','secondary':'textSecondary','tertiary':'textTertiary',
     'surfaceVariant':'surfaceVariant','primary':'primary','primarySoft':'primarySoft','brandStart':'brandStart','brandEnd':'brandEnd',
     'accent':'accent','warning':'warning','success':'success','danger':'danger','tooClose':'tooClose','tooFar':'tooFar',
-    'buttonStart':'buttonStart','buttonEnd':'buttonEnd','flowStart':'flowStart','flowEnd':'flowEnd','onWarning':'onWarning'}
+    'buttonStart':'buttonStart','buttonEnd':'buttonEnd','flowStart':'flowStart','flowEnd':'flowEnd','onWarning':'onWarning','ice':'ice'}
 for key, value in mapping.items():
     match = re.search(rf'static let {key} = dyn\(0x([0-9A-Fa-f]{{6}}), 0x([0-9A-Fa-f]{{6}})', swift)
     if match is None or match.group(1).upper() != light[value].upper() or match.group(2).upper() != dark[value].upper():
@@ -89,7 +89,12 @@ for module in ('feature/services', 'core/ui'):
 if '../shared/feedback/res/raw' not in (root / 'iosApp/project.yml').read_text(encoding='utf-8'):
     errors.append('iOS feedback sounds must use the shared asset directory')
 
+# 代理说明：AGENTS.md 与 CLAUDE.md 必须完全一致（修改时两份一起改）
+claude_md, agents_md = root / 'CLAUDE.md', root / 'AGENTS.md'
+if not agents_md.exists() or agents_md.read_text(encoding='utf-8').replace(chr(13), '') != claude_md.read_text(encoding='utf-8').replace(chr(13), ''):
+    errors.append('AGENTS.md and CLAUDE.md must have identical content')
+
 if errors:
     for error in errors: print(error)
     sys.exit(1)
-print('Shared platform boundaries, theme tokens, model hash, SDK versions and iOS source inventory passed.')
+print('Shared platform boundaries, theme tokens, model hash, SDK versions, iOS source inventory and agent docs passed.')

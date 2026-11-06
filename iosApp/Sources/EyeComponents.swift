@@ -246,13 +246,17 @@ enum GlyphPainter {
     }
 }
 
-/// 图标色块的配色：primary/accent/success/blue 统一为深海蓝单色，danger 红、neutral 灰（与安卓 EyeTileTone 一致）。
+/// 图标色块的配色：primary 电光蓝 / accent 香槟金 / success 薄荷绿 / blue 冰蓝 / violet 薰衣草紫 / danger 红 / neutral 灰（与安卓 EyeTileTone 一致）。
 enum TileTone {
-    case primary, accent, success, blue, danger, neutral
+    case primary, accent, success, blue, violet, danger, neutral
     var colors: (Color, Color) {
         switch self {
-        // 统一深海蓝单色（不再按功能分彩色），只有警示保留红色
-        case .primary, .accent, .success, .blue: return (EyeStyle.primarySoft, EyeStyle.primary)
+        // 分类图标按功能各用一种点缀色（电光蓝 / 香槟金 / 薄荷绿 / 冰蓝 / 薰衣草紫），底色为同色调浅块
+        case .primary: return (EyeStyle.primarySoft, EyeStyle.primary)
+        case .accent: return (EyeStyle.accentSoft, EyeStyle.warning)
+        case .success: return (EyeStyle.successSoft, EyeStyle.success)
+        case .blue: return (EyeStyle.iceSoft, EyeStyle.iceInk)
+        case .violet: return (EyeStyle.violetSoft, EyeStyle.violet)
         case .danger: return (EyeStyle.dangerSoft, EyeStyle.danger)
         case .neutral: return (EyeStyle.surfaceVariant, EyeStyle.secondary)
         }
@@ -267,7 +271,7 @@ struct IconTile: View {
     var body: some View {
         let (background, foreground) = tone.colors
         EyeGlyphView(glyph: glyph, color: foreground).frame(width: size * 0.58, height: size * 0.58)
-            .frame(width: size, height: size).background(background, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .frame(width: size, height: size).background(background, in: RoundedRectangle(cornerRadius: EyeStyle.radiusSmall, style: .continuous))
     }
 }
 
@@ -378,8 +382,8 @@ struct SubPage<Content: View>: View {
     @ViewBuilder let content: Content
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 12) { content }
-                .padding(.horizontal, 16).padding(.top, 4).padding(.bottom, 28)
+            VStack(alignment: .leading, spacing: EyeSpacing.cardGap) { content }
+                .padding(.horizontal, EyeSpacing.gutter).padding(.top, EyeSpacing.xxs).padding(.bottom, 28)
         }
         .background(EyeBackdrop())
         .navigationTitle(title).navigationBarTitleDisplayMode(.inline)
@@ -388,10 +392,10 @@ struct SubPage<Content: View>: View {
 
 /// 圆角玻璃面板（平铺卡片，同 EyeCard）。
 struct Panel<Content: View>: View {
-    var padding: CGFloat = 18
+    var padding: CGFloat = EyeSpacing.cardPadding
     @ViewBuilder let content: Content
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) { content }
+        VStack(alignment: .leading, spacing: EyeSpacing.itemGap) { content }
             .padding(padding).frame(maxWidth: .infinity, alignment: .leading)
             .eyeGlass()
     }

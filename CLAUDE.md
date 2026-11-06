@@ -8,6 +8,8 @@ CameraX / AVFoundation + MediaPipe Face Landmarker 采集眼部数据，安卓 C
 
 - 交流、代码注释、文档一律**中文**
 - 代码风格向周围代码看齐；UI 样式只从 `core:designsystem` 令牌读，禁止写死颜色/字号
+- 界面原则：Avoid unnecessary secondary labels and descriptions. Let the layout do the explaining.
+- 本文件与 `AGENTS.md` 内容完全一致（分别供 Claude Code 与其他代理读取），修改时两份一起改；`scripts/ios/check_project.py`（CI 会跑）校验两者一致
 
 ## 构建与验证
 
@@ -73,6 +75,7 @@ backend/server/ Ktor 服务端（见其 SERVER.md）；backend/screening_model.p
 | `/session-continue [关键词]` | 会话续接：从记忆恢复进度/决定/下一步，缺失内容明说，确认后直接继续 |
 | `/memory-maintain` | 记忆库定期体检：合并/修正/删除/拆分，10 项检查单，拿不准的先问 |
 | `/memory-init` | 记忆库初始化/检查：开启确认闸门 + 盘点 + 写入纪律 + 幂等出口 |
+| `ui-ux-pro-max` | UI/UX 设计规范库（第三方，MIT，`.claude/skills/ui-ux-pro-max`）：改界面前用其 `scripts/search.py` 查规范，交付前过 `references/pro-rules.md` 检查清单；配色以本项目令牌为准 |
 
 ## 技术深水区（docs/）
 

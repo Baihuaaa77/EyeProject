@@ -55,6 +55,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeColors
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeMotion
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeShapes
+import com.zkyjss.eyeproject.core.designsystem.theme.EyeSpacing
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
 import com.zkyjss.eyeproject.core.designsystem.util.getTopStatusBarPadding
@@ -66,7 +67,6 @@ import com.zkyjss.eyeproject.core.eyecare.EyeSignal
 import com.zkyjss.eyeproject.core.eyecare.LoopStage
 import com.zkyjss.eyeproject.core.ui.component.*
 import java.time.LocalDate
-import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
@@ -95,12 +95,10 @@ internal data class HomeActions(
     val openUsageAccess: () -> Unit = {},
 )
 
-internal const val LOOP_HELP = "按「感知 → 评估 → 归因 → 干预 → 反馈」帮你管理用眼：汇总用屏、眨眼、距离、环境光和你的档案，" +
-    "评估今天的用眼负荷（0–100，越高越累），找出主要原因，给出马上能做的建议，再根据你每天的感受调整。结果仅供参考，不是诊断。"
 internal const val USAGE_HELP_ANDROID = "需要在系统设置里允许「使用情况访问」，才能统计每天用屏多久、连续用了多久和夜间使用；统计只在本机进行。"
 
 /**
- * 首页：问候与日期（右上角账户、系统设置）→ 今日用眼（主卡：负荷分、圆环、建议）→ AI 主动问诊（爱科）→ 今日感受 →
+ * 首页：「今日」与日期（右上角账户、白天 / 夜晚、系统设置）→ 带刻度的大号仪表圈包住负荷分（不加卡片框）→ 基础数据 → AI 主动问诊（爱科）→ 今日感受 →
  * 基础数据 → 实时检测 → 护眼操、休息提醒 → 用眼趋势报告、亮度与蓝光。不分小节标题。
  * 与苹果端 HomePage 同一顺序、排版与文案（苹果端没有开发者工具）。
  */
@@ -139,7 +137,6 @@ internal fun HomeContent(
 ) {
     val colors = LocalEyeColors.current
     val report = state.report
-    var breakOpen by rememberSaveable { mutableStateOf(false) }
     var exerciseOpen by rememberSaveable { mutableStateOf(false) }
     var liveRequests by rememberSaveable { mutableIntStateOf(0) }
     val live = remember { BringIntoViewRequester() }
@@ -149,25 +146,14 @@ internal fun HomeContent(
     Column(
         modifier.fillMaxSize().background(colors.appBackground).verticalScroll(rememberScrollState()).eyeBackdrop(colors)
             .padding(top = getTopStatusBarPadding()).screenHorizontalPaddingLarge(),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+        verticalArrangement = Arrangement.spacedBy(com.zkyjss.eyeproject.core.designsystem.theme.EyeSpacing.cardGap),
     ) {
-        EyePageHeader(greeting(), navigation.onOpenSettings, onOpenAccount = navigation.onOpenAccount,
+        EyePageHeader("今日", navigation.onOpenSettings, onOpenAccount = navigation.onOpenAccount,
             subtitle = remember { LocalDate.now().format(DateTimeFormatter.ofPattern("M月d日 EEEE", Locale.CHINA)) })
-        EyeCareHero(report) { tip ->
-            when (tip.kind) {
-                "BREAK" -> breakOpen = true
-                "EXERCISE" -> exerciseOpen = true
-                "REMINDER" -> actions.enableReminder(tip.value ?: 20)
-                "BRIGHTNESS", "NIGHT" -> navigation.onOpenBrightness()
-                "TEST" -> tip.target?.let(navigation.onOpenTest)
-                "PROFILE" -> navigation.onEditProfile(state.selfId)
-                "USAGE_ACCESS" -> actions.openUsageAccess()
-                "LIVE" -> { liveRequests++; scrollTarget = live }
-            }
-        }
+        EyeCareHero(report)
+        BasicDataCard(state, actions, Modifier.bringIntoViewRequester(basic))
         ChatEntryCard(navigation.onOpenChat)
         CheckInCard(report, actions.checkIn)
-        BasicDataCard(state, actions, Modifier.bringIntoViewRequester(basic))
         LiveCard(Modifier.bringIntoViewRequester(live)) { liveEye(liveRequests) }
         ExerciseCard { exerciseOpen = true }
         ReminderCard(state, actions)
@@ -177,16 +163,9 @@ internal fun HomeContent(
         }
         Spacer(Modifier.height(24.dp))
     }
-    if (breakOpen) RestBreakPage { breakOpen = false }
     if (exerciseOpen) EyeExercisePage({ exerciseOpen = false })
 }
 
-private fun greeting(): String = when (LocalTime.now().hour) {
-    in 5..10 -> "早上好"
-    in 11..12 -> "中午好"
-    in 13..17 -> "下午好"
-    else -> "晚上好"
-}
 
 // region 今日用眼
 
@@ -207,63 +186,30 @@ internal fun EyeColors.ringTone(level: String?): Color = when (level) {
 }
 
 /**
- * 今日用眼（主卡）：大号负荷分 + 等级徽标 + 渐变圆环 → 一句话 → 第一条建议的操作按钮；其余建议收在「更多建议」里。
+ * 今日用眼：不加卡片框，页面正中一只大号光流仪表圈包住眼健康指数，是首页的视觉中心；
+ * 眼健康指数 = 100 − 用眼负荷分，圈越满越健康。圈内自上而下居中：「眼健康指数」、大号分数、等级徽标。
+ * 与苹果端 HeroCard 一致。
  */
 @Composable
-private fun EyeCareHero(report: EyeCareReport?, onTip: (EyeTip) -> Unit) {
+private fun EyeCareHero(report: EyeCareReport?) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
     val (strong, _) = colors.levelTone(report?.level)
-    EyeHeroCard {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            EyeText("今日用眼", style = typography.subtitle, color = colors.textPrimary)
-            EyeHelpButton("主动护眼", LOOP_HELP)
-        }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    val index = report?.score?.let(::healthIndex)
+    Box(Modifier.fillMaxWidth().padding(vertical = EyeSpacing.xs), contentAlignment = Alignment.Center) {
+        EyeProgressRing(index?.let { it / 100f }, Modifier.size(296.dp), strokeWidth = 16.dp,
+            description = index?.let { "今日眼健康指数 $it 分，${report.label}" } ?: "今日眼健康指数暂无数据") {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(EyeSpacing.xs)) {
+                // 自上而下居中：「眼健康指数」→ 大号分数 → 等级徽标
+                EyeText("眼健康指数", style = typography.subtitle, color = colors.textSecondary)
                 EyeText(buildAnnotatedString {
-                    append(report?.score?.toString() ?: "—")
+                    append(index?.toString() ?: "—")
                     withStyle(SpanStyle(fontSize = typography.title.fontSize, fontWeight = FontWeight.SemiBold, color = colors.textTertiary,
-                        letterSpacing = 0.sp)) { append(" /100") }
+                        letterSpacing = 0.sp)) { append("/100") }
                 }, style = typography.display, color = colors.textPrimary, maxLines = 1)
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    EyeText("用眼负荷", style = typography.bodySecondary, color = colors.textSecondary)
-                    val (fill, ink) = colors.statusFill(strong)
-                    EyeText(report?.label ?: "读取中", style = typography.chip, color = ink,
-                        modifier = Modifier.clip(EyeShapes.chip).background(fill).padding(horizontal = 10.dp, vertical = 3.dp))
-                }
-            }
-            EyeProgressRing(report?.score?.let { it / 100f }, Modifier.size(108.dp),
-                description = report?.score?.let { "今日用眼负荷 $it 分" } ?: "今日用眼负荷暂无数据")
-        }
-        EyeText(report?.headline ?: "正在汇总今天的用眼数据…", style = typography.body, color = colors.textPrimary)
-        val tips = report?.tips.orEmpty()
-        val first = tips.firstOrNull()
-        if (first != null) {
-            first.action?.let { action -> EyeButton(action, EyeButtonRole.PRIMARY, { onTip(first) }) }
-        }
-        if (tips.size > 1) MoreTips(tips.drop(1), onTip)
-    }
-}
-
-/** 其余建议：默认收起，展开后每条一行（可执行的右侧是主色文字操作）。 */
-@Composable
-private fun MoreTips(tips: List<EyeTip>, onTip: (EyeTip) -> Unit) {
-    val colors = LocalEyeColors.current
-    val typography = LocalEyeTypography.current
-    var open by rememberSaveable { mutableStateOf(false) }
-    Column(Modifier.fillMaxWidth().animateContentSize()) {
-        EyeText(if (open) "收起" else "更多建议（${tips.size}）", Modifier.clip(EyeShapes.chip)
-            .clickable(role = Role.Button) { open = !open }.padding(vertical = 6.dp),
-            style = typography.bodySecondary, color = colors.primary, fontWeight = FontWeight.SemiBold)
-        if (open) tips.forEach { tip ->
-            Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                EyeText(tip.text, Modifier.weight(1f), style = typography.body, color = colors.textPrimary)
-                tip.action?.let { action ->
-                    Spacer(Modifier.width(12.dp))
-                    EyeText(action, Modifier.clip(EyeShapes.chip).clickable(role = Role.Button) { onTip(tip) }.padding(vertical = 4.dp),
-                        style = typography.bodySecondary, color = colors.primary, fontWeight = FontWeight.SemiBold)
-                }
+                val (fill, ink) = colors.statusFill(strong)
+                EyeText(report?.label ?: "读取中", style = typography.body, color = ink, fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.clip(EyeShapes.chip).background(fill).padding(horizontal = 14.dp, vertical = 4.dp))
             }
         }
     }
@@ -436,7 +382,7 @@ private fun BasicDataCard(state: HomeUiState, actions: HomeActions, modifier: Mo
     if (signals.isEmpty()) return
     EyeCard(modifier.animateContentSize()) {
         CardHeader("基础数据", EyeGlyph.HOURGLASS, EyeTileTone.BLUE)
-        SignalGrid(signals, columns = 3)
+        SignalGrid(signals, columns = 2)  // 读数为 26 号大字，两列才放得下「6小时25分」
         if (state.usageAccess == EyeCareEngine.ACCESS_DENIED) Row(verticalAlignment = Alignment.CenterVertically) {
             EyeText("开启用屏统计，自动记录每天用屏", Modifier.weight(1f), style = typography.body, color = colors.textSecondary)
             EyeHelpButton("用屏统计", USAGE_HELP_ANDROID)
@@ -512,7 +458,7 @@ private fun ReminderCard(state: HomeUiState, actions: HomeActions) {
 private fun ServiceTiles(state: HomeUiState, navigation: HomeNavigation) {
     val trend = state.report?.trend?.averageScreenMinutes?.let { "日均用屏 ${EyeCareEngine.duration(it)}" } ?: "近 7 天变化"
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        ServiceTile("用眼趋势报告", trend, EyeGlyph.CHART, EyeTileTone.SUCCESS, Modifier.weight(1f), navigation.onOpenTrend)
+        ServiceTile("用眼趋势报告", trend, EyeGlyph.CHART, EyeTileTone.BLUE, Modifier.weight(1f), navigation.onOpenTrend)
         ServiceTile("亮度与蓝光", state.screenBrightness?.let { "屏幕亮度 ${(it * 100).toInt()}%" } ?: "夜间模式与护眼",
             EyeGlyph.SUN, EyeTileTone.ACCENT, Modifier.weight(1f), navigation.onOpenBrightness)
     }

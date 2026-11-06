@@ -56,6 +56,8 @@ import com.zkyjss.eyeproject.core.designsystem.util.screenHorizontalPaddingLarge
 import com.zkyjss.eyeproject.core.ui.component.EyePageHeader
 import com.zkyjss.eyeproject.core.ui.component.EyeSelectCard
 import com.zkyjss.eyeproject.core.ui.component.EyeText
+import com.zkyjss.eyeproject.core.ui.component.EyeTileTone
+import com.zkyjss.eyeproject.core.ui.component.colors
 import com.zkyjss.eyeproject.core.ui.component.EyeHeroCard
 import com.zkyjss.eyeproject.core.ui.component.rememberEyeHaptics
 import com.zkyjss.eyeproject.core.ui.component.drawTumblingE
@@ -84,7 +86,7 @@ fun ServicesScreen(
             .eyeBackdrop(colors)
             .padding(top = getTopStatusBarPadding())
             .screenHorizontalPaddingLarge(),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(com.zkyjss.eyeproject.core.designsystem.theme.EyeSpacing.itemGap)
     ) {
         EyePageHeader("服务", onOpenSettings, onOpenAccount = onOpenAccount)
         DemoHero()
@@ -94,25 +96,29 @@ fun ServicesScreen(
         EyeSelectCard(
             content = "干眼自测",
             subtitle = "约 2 分钟 · 自然眨眼与睁眼观察",
-            leading = { ServiceGlyph(ServiceKind.DRY_EYE) },
+            leading = { ServiceGlyph(ServiceKind.DRY_EYE, EyeTileTone.BLUE) },
+            leadingTone = EyeTileTone.BLUE,
             onClick = onDryEyeClick
         )
         EyeSelectCard(
             content = "眼位自测",
             subtitle = "注视、遮眼、跟随 · 需一位协助者",
-            leading = { ServiceGlyph(ServiceKind.ALIGNMENT) },
+            leading = { ServiceGlyph(ServiceKind.ALIGNMENT, EyeTileTone.VIOLET) },
+            leadingTone = EyeTileTone.VIOLET,
             onClick = onStrabismusClick,
         )
         EyeSelectCard(
             content = "老视自测",
             subtitle = "近视力与调节 · 看 E 选方向",
-            leading = { ServiceGlyph(ServiceKind.PRESBYOPIA) },
+            leading = { ServiceGlyph(ServiceKind.PRESBYOPIA, EyeTileTone.PRIMARY) },
+            leadingTone = EyeTileTone.PRIMARY,
             onClick = onPresbyopiaClick,
         )
         EyeSelectCard(
             content = "色觉自测",
             subtitle = "约 1 分钟 · 看色点图认数字",
-            leading = { ServiceGlyph(ServiceKind.COLOR) },
+            leading = { ServiceGlyph(ServiceKind.COLOR, EyeTileTone.ACCENT) },
+            leadingTone = EyeTileTone.ACCENT,
             onClick = onColorVisionClick,
         )
         EyeText(
@@ -182,10 +188,11 @@ private fun segmentAt(ms: Float, lengths: List<Int>): Pair<Int, Float> {
 
 private enum class ServiceKind { DRY_EYE, ALIGNMENT, PRESBYOPIA, COLOR }
 
-/** 入口卡图标：水滴（干眼）/ 双眼对位（眼位）/ 视标 E（老视）/ 色点圆（色觉），统一主色线性风格。 */
+/** 入口卡图标：水滴（干眼，冰蓝）/ 双眼对位（眼位，薰衣草紫）/ 视标 E（老视，电光蓝）/ 色点圆（色觉，香槟金），线性风格。 */
 @Composable
-private fun ServiceGlyph(kind: ServiceKind) {
+private fun ServiceGlyph(kind: ServiceKind, tone: EyeTileTone) {
     val colors = LocalEyeColors.current
+    val ink = tone.colors().second
     Canvas(Modifier.size(28.dp)) {
         val s = size.minDimension
         val stroke = Stroke(s * 0.09f, cap = StrokeCap.Round)
@@ -199,27 +206,27 @@ private fun ServiceGlyph(kind: ServiceKind) {
                     cubicTo(s * 0.16f, s * 0.48f, s * 0.38f, s * 0.3f, s * 0.5f, s * 0.08f)
                     close()
                 }
-                drawPath(drop, colors.primary, style = stroke)
-                drawArc(colors.primary, 100f, 70f, false, Offset(s * 0.3f, s * 0.5f), Size(s * 0.34f, s * 0.3f), style = Stroke(s * 0.08f, cap = StrokeCap.Round))
+                drawPath(drop, ink, style = stroke)
+                drawArc(ink, 100f, 70f, false, Offset(s * 0.3f, s * 0.5f), Size(s * 0.34f, s * 0.3f), style = Stroke(s * 0.08f, cap = StrokeCap.Round))
             }
             ServiceKind.ALIGNMENT -> {
                 for (side in listOf(-1, 1)) {
                     val cx = s * 0.5f + side * s * 0.24f
-                    drawPath(leafEyePath(cx - s * 0.2f, cx + s * 0.2f, s * 0.5f, s * 0.13f), colors.primary, style = Stroke(s * 0.08f))
-                    drawCircle(colors.primary, s * 0.06f, Offset(cx, s * 0.5f))
+                    drawPath(leafEyePath(cx - s * 0.2f, cx + s * 0.2f, s * 0.5f, s * 0.13f), ink, style = Stroke(s * 0.08f))
+                    drawCircle(ink, s * 0.06f, Offset(cx, s * 0.5f))
                 }
-                drawLine(colors.primary, Offset(s * 0.1f, s * 0.86f), Offset(s * 0.9f, s * 0.86f), s * 0.08f, StrokeCap.Round)
+                drawLine(ink, Offset(s * 0.1f, s * 0.86f), Offset(s * 0.9f, s * 0.86f), s * 0.08f, StrokeCap.Round)
             }
-            ServiceKind.PRESBYOPIA -> drawTumblingE(colors.primary, Offset(s / 2, s / 2), s * 0.62f, 0)
+            ServiceKind.PRESBYOPIA -> drawTumblingE(ink, Offset(s / 2, s / 2), s * 0.62f, 0)
             ServiceKind.COLOR -> {
-                drawCircle(colors.primary, s * 0.42f, Offset(s / 2, s / 2), style = Stroke(s * 0.07f))
+                drawCircle(ink, s * 0.42f, Offset(s / 2, s / 2), style = Stroke(s * 0.07f))
                 // 一圈主色点、中间一竖暖色点：像一张极简的色觉图
                 for (i in 0 until 6) {
                     val a = Math.toRadians(i * 60.0 + 30.0)
-                    drawCircle(colors.primary, s * 0.07f, Offset(s / 2 + (s * 0.24f * kotlin.math.cos(a)).toFloat(), s / 2 + (s * 0.24f * kotlin.math.sin(a)).toFloat()))
+                    drawCircle(ink, s * 0.07f, Offset(s / 2 + (s * 0.24f * kotlin.math.cos(a)).toFloat(), s / 2 + (s * 0.24f * kotlin.math.sin(a)).toFloat()))
                 }
-                drawCircle(colors.primary, s * 0.08f, Offset(s / 2, s * 0.38f))
-                drawCircle(colors.primary, s * 0.08f, Offset(s / 2, s * 0.62f))
+                drawCircle(ink, s * 0.08f, Offset(s / 2, s * 0.38f))
+                drawCircle(ink, s * 0.08f, Offset(s / 2, s * 0.62f))
             }
         }
     }

@@ -36,6 +36,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
@@ -51,6 +52,7 @@ import androidx.compose.ui.unit.sp
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeColors
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeMotion
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeShapes
+import com.zkyjss.eyeproject.core.designsystem.theme.EyeSpacing
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
 import com.zkyjss.eyeproject.core.designsystem.theme.rememberReducedMotion
@@ -69,8 +71,8 @@ import kotlin.math.sin
 @Composable
 fun EyeHeroCard(
     modifier: Modifier = Modifier,
-    contentPadding: Dp = 20.dp,
-    verticalArrangement: Arrangement.Vertical = Arrangement.spacedBy(12.dp),
+    contentPadding: Dp = EyeSpacing.heroPadding,
+    verticalArrangement: Arrangement.Vertical = Arrangement.spacedBy(EyeSpacing.itemGap),
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val colors = LocalEyeColors.current
@@ -110,8 +112,8 @@ fun Modifier.eyeGlass(
 fun EyeCard(
     modifier: Modifier = Modifier,
     tinted: Boolean = false,
-    contentPadding: Dp = 18.dp,
-    verticalArrangement: Arrangement.Vertical = Arrangement.spacedBy(12.dp),
+    contentPadding: Dp = EyeSpacing.cardPadding,
+    verticalArrangement: Arrangement.Vertical = Arrangement.spacedBy(EyeSpacing.itemGap),
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val colors = LocalEyeColors.current
@@ -174,13 +176,39 @@ fun EyeProgressRing(
     strokeWidth: Dp = 9.dp,
     tint: Color? = null,
     description: String = "",
+    /** 圆环内侧的刻度数（0 不画）：每 5 格一根长刻度，已走过的刻度用光流色点亮。 */
+    ticks: Int = 0,
     center: @Composable () -> Unit = {},
 ) {
     val colors = LocalEyeColors.current
     val animated by animateFloatAsState((fraction ?: 0f).coerceIn(0f, 1f), tween(EyeMotion.LONG, easing = EyeMotion.Standard), label = "圆环进度")
     Box(modifier.semantics { if (description.isNotEmpty()) contentDescription = description }, contentAlignment = Alignment.Center) {
-        Canvas(Modifier.fillMaxSize()) { drawProgressRing(colors, if (fraction == null) null else animated, strokeWidth.toPx(), tint) }
+        Canvas(Modifier.fillMaxSize()) {
+            val progress = if (fraction == null) null else animated
+            if (ticks > 0) drawRingTicks(colors, progress, strokeWidth.toPx(), ticks)
+            drawProgressRing(colors, progress, strokeWidth.toPx(), tint)
+        }
         center()
+    }
+}
+
+/** 圆环内侧的刻度装饰：[count] 根放射短线，每 5 根一根长刻度；进度内的刻度用光流色（主蓝 → 冰蓝）点亮。 */
+fun DrawScope.drawRingTicks(colors: EyeColors, fraction: Float?, stroke: Float, count: Int) {
+    val ringRadius = (size.minDimension - stroke * 3.2f) / 2
+    val outer = ringRadius - stroke / 2 - stroke * 0.9f
+    for (i in 0 until count) {
+        val major = i % 5 == 0
+        val inner = outer - if (major) stroke * 1.1f else stroke * 0.6f
+        val t = i.toFloat() / count
+        val a = Math.toRadians((t * 360f - 90f).toDouble())
+        val lit = fraction != null && t <= fraction
+        val color = when {
+            lit -> lerp(colors.flowStart, colors.flowEnd, t / fraction!!.coerceAtLeast(0.01f))
+            else -> colors.textTertiary.copy(alpha = if (major) 0.55f else 0.28f)
+        }
+        val c = cos(a).toFloat(); val s = sin(a).toFloat()
+        drawLine(color, Offset(center.x + c * inner, center.y + s * inner), Offset(center.x + c * outer, center.y + s * outer),
+            strokeWidth = if (major) stroke * 0.2f else stroke * 0.13f, cap = StrokeCap.Round, alpha = if (lit) (if (major) 1f else 0.75f) else 1f)
     }
 }
 

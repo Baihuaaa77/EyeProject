@@ -34,15 +34,20 @@ import com.zkyjss.eyeproject.core.designsystem.theme.EyeShapes
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
 
-/** 图标色块的配色：PRIMARY/ACCENT/SUCCESS/BLUE 统一为深海蓝单色，DANGER 红、NEUTRAL 灰。全部取自设计令牌。 */
-enum class EyeTileTone { PRIMARY, ACCENT, SUCCESS, BLUE, DANGER, NEUTRAL }
+/** 图标色块的配色：PRIMARY 电光蓝 / ACCENT 香槟金 / SUCCESS 薄荷绿 / BLUE 冰蓝 / VIOLET 薰衣草紫 / DANGER 红 / NEUTRAL 灰。全部取自设计令牌。 */
+enum class EyeTileTone { PRIMARY, ACCENT, SUCCESS, BLUE, VIOLET, DANGER, NEUTRAL }
 
+/** 图标块的（底色, 图标色）。 */
 @Composable
-private fun EyeTileTone.colors(): Pair<Color, Color> {
+fun EyeTileTone.colors(): Pair<Color, Color> {
     val c = LocalEyeColors.current
     return when (this) {
-        // 统一深海蓝单色（不再按功能分彩色），只有警示保留红色
-        EyeTileTone.PRIMARY, EyeTileTone.ACCENT, EyeTileTone.SUCCESS, EyeTileTone.BLUE -> c.primarySoft to c.primary
+        // 分类图标按功能各用一种点缀色（电光蓝 / 香槟金 / 薄荷绿 / 冰蓝 / 薰衣草紫），底色为同色调浅块
+        EyeTileTone.PRIMARY -> c.primarySoft to c.primary
+        EyeTileTone.ACCENT -> c.accentSoft to c.warning
+        EyeTileTone.SUCCESS -> c.successSoft to c.success
+        EyeTileTone.BLUE -> c.iceSoft to c.iceInk
+        EyeTileTone.VIOLET -> c.violetSoft to c.violet
         EyeTileTone.DANGER -> c.dangerSoft to c.danger
         EyeTileTone.NEUTRAL -> c.surfaceVariant to c.textSecondary
     }
@@ -151,7 +156,7 @@ fun EyeSwitchRow(
 }
 
 /**
- * 卡片分类头：主色小图标 + 主色标题，右侧可放操作（胶囊按钮、开关等）。
+ * 卡片分类头：主色小图标 + 卡片标题（[subtitle] 字号、主文字色），右侧可放操作（胶囊按钮、开关等）。
  */
 @Composable
 fun EyeCategoryHeader(
@@ -163,10 +168,10 @@ fun EyeCategoryHeader(
 ) {
     val (_, foreground) = tone.colors()
     Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        EyeGlyphIcon(glyph, Modifier.size(18.dp), foreground)
-        Spacer(Modifier.width(6.dp))
-        EyeText(title, Modifier.weight(1f), style = LocalEyeTypography.current.body, color = foreground,
-            fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+        // 卡片标题：主色小图标 + 标题字号（18）的主文字，与正文、辅助信息拉开层级
+        EyeGlyphIcon(glyph, Modifier.size(20.dp), foreground)
+        Spacer(Modifier.width(8.dp))
+        EyeText(title, Modifier.weight(1f), style = LocalEyeTypography.current.subtitle, color = LocalEyeColors.current.textPrimary)
         trailing()
     }
 }

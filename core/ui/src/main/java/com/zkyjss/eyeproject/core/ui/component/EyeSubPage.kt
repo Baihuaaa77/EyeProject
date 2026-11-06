@@ -37,7 +37,7 @@ fun EyeSubPage(
         TopBackBar(title = title, noText = true, containerColor = androidx.compose.ui.graphics.Color.Transparent, onBackClick = onBack)
         Column(
             Modifier.weight(1f).fillMaxWidth().verticalScroll(scroll).screenHorizontalPaddingLarge().padding(top = 4.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(com.zkyjss.eyeproject.core.designsystem.theme.EyeSpacing.cardGap),
         ) {
             content()
             Spacer(Modifier.height(if (bottomBar == null) 28.dp else 8.dp))

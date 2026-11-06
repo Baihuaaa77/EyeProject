@@ -85,16 +85,18 @@ class HomeVisualTest {
             }
         }
         compose.mainClock.advanceTimeBy(100)
-        compose.onNodeWithText("今日用眼").assertExists()
+        compose.onNodeWithText("今日").assertExists()
+        compose.onNodeWithText("今日用眼").assertDoesNotExist()
         compose.onNodeWithText("留意", useUnmergedTree = true).assertExists()
         compose.onNodeWithText("为你推荐").assertDoesNotExist()
         compose.onNodeWithText("个体档案").assertDoesNotExist()
         // 首页精简：问诊入口改名、不再分小节标题、去掉专业咨询建议与视觉行为读数
         compose.onNodeWithText(CHAT_TITLE).assertExists()
         listOf("AI 综合建议", "多源感知", "主动服务", "专业咨询建议", "视觉行为").forEach { compose.onNodeWithText(it).assertDoesNotExist() }
-        // 主卡只放第一条建议的主按钮（今天最该做的事），其余收在「更多建议」
+        // 主卡只有大圆环包住的负荷分，不再放建议与按钮
         compose.mainClock.advanceTimeBy(1_400)
-        compose.onNodeWithText("去休息").assertExists()
+        compose.onNodeWithContentDescription("今日眼健康指数", substring = true).assertExists()
+        compose.onNodeWithText("去休息").assertDoesNotExist()
         capture("01-首页-首屏", advance = false)
         compose.mainClock.autoAdvance = true
         compose.onNodeWithText("休息提醒").performScrollTo().performClick()
@@ -104,16 +106,6 @@ class HomeVisualTest {
         compose.onNodeWithText("开发者工具").performScrollTo().performClick()
         compose.onNodeWithText("模型测试").performScrollTo().performClick()
         assertTrue(openedModel)
-    }
-
-    /** 主卡里第一条建议的按钮直接去做：「去休息」打开 20 秒休息页。 */
-    @Test fun tappingTheFirstTipActionStartsIt() {
-        compose.mainClock.autoAdvance = false
-        compose.setContent { EyeProjectTheme { HomeContent(demoState(), HomeNavigation(), HomeActions()) } }
-        compose.mainClock.advanceTimeBy(1_500)
-        compose.onNodeWithText("去休息").performClick()
-        compose.mainClock.advanceTimeBy(500)
-        compose.onNodeWithText("提前结束").assertExists()
     }
 
     @Test @Config(qualifiers = "zh-rCN-w390dp-h2600dp-mdpi")
@@ -148,7 +140,7 @@ class HomeVisualTest {
         capture("03-首页-深色-还没有数据")
     }
 
-    /** 负荷偏高的一天：主卡第一条建议劝你闭眼歇会儿。 */
+    /** 负荷偏高的一天：主卡等级为「偏累」。 */
     @Test fun highLoadDaySuggestsRest() {
         val usage = UsageDay(today, screenMinutes = 7 * 60, longestSessionMinutes = 130, nightMinutes = 70, breaks = 2)
         val ledger = LedgerData().withSession(today, 1L, LiveEyeMonitor.Session(120_000, 12, 6f, 24f, 0.8f, 10f))
@@ -158,7 +150,7 @@ class HomeVisualTest {
         compose.mainClock.autoAdvance = false
         compose.setContent { EyeProjectTheme { HomeContent(HomeUiState(report = report), HomeNavigation(), HomeActions()) } }
         compose.mainClock.advanceTimeBy(2_400)
-        compose.onNodeWithText("去休息").assertExists()
+        compose.onNodeWithText("偏累", useUnmergedTree = true).assertExists()
         capture("01b-首页-负荷偏高", advance = false)
     }
 

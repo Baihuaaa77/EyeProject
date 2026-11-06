@@ -3,7 +3,6 @@ import EyeScreening
 
 // 首页与它的二级页面（用眼趋势报告、健康建议、亮度与蓝光、休息一下）。与安卓 feature:home 同一顺序、排版与文案。
 
-private let loopHelp = "按「感知 → 评估 → 归因 → 干预 → 反馈」帮你管理用眼：汇总眨眼、距离、屏幕亮度和你的档案，评估今天的用眼负荷（0–100，越高越累），找出主要原因，给出马上能做的建议，再根据你每天的感受调整。结果仅供参考，不是诊断。"
 private let noDiscomfort = "没有不适"
 
 /// 等级配色：轻松绿、留意琥珀、偏累红、待感知灰。
@@ -19,19 +18,10 @@ struct HomePage: View {
     @ObservedObject private var store = EyeCareStore.shared
     @ObservedObject private var subjects = SubjectStore.shared
     @StateObject private var reminder = EyeReminder()
-    @State private var breakOpen = false
     @State private var exerciseOpen = false
     @State private var liveRequests = 0
     @State private var feelingEditing = false
 
-    private var greeting: String {
-        switch Calendar.current.component(.hour, from: Date()) {
-        case 5...10: return "早上好"
-        case 11...12: return "中午好"
-        case 13...17: return "下午好"
-        default: return "晚上好"
-        }
-    }
     private let today: String = {
         let formatter = DateFormatter(); formatter.locale = Locale(identifier: "zh_CN"); formatter.dateFormat = "M月d日 EEEE"
         return formatter.string(from: Date())
@@ -42,24 +32,11 @@ struct HomePage: View {
         let report = store.report
         ScrollViewReader { proxy in
             PageScroll {
-                PageHeader(title: greeting, subtitle: today, openAccount: { navigate(.account) }, openSettings: { navigate(.settings) })
-                HeroCard(report: report) { tip in
-                    switch tip.kind {
-                    case "BREAK": breakOpen = true
-                    case "EXERCISE": exerciseOpen = true
-                    case "REMINDER": reminder.setInterval(tip.value ?? 20); reminder.setEnabled(true)
-                    case "BRIGHTNESS", "NIGHT": navigate(.brightness)
-                    case "TEST": if let target = tip.target { openTest(target) }
-                    case "PROFILE": navigate(.subjectEdit(selfId))
-                    case "LIVE":
-                        liveRequests += 1
-                        withAnimation(.easeOut(duration: 0.3)) { proxy.scrollTo("live", anchor: .top) }
-                    default: break
-                    }
-                }
+                PageHeader(title: "今日", subtitle: today, openAccount: { navigate(.account) }, openSettings: { navigate(.settings) })
+                HeroCard(report: report)
+                if report.signals("BASIC").contains(where: { $0.id != "brightness" }) { BasicCard(report: report) }
                 ChatEntryCard { navigate(.chat) }
                 CheckInCard(report: report) { feelingEditing = true }
-                if report.signals("BASIC").contains(where: { $0.id != "brightness" }) { BasicCard(report: report) }
                 Panel { LiveEyeSection(startRequests: liveRequests) }.id("live")
                 ExerciseCard { exerciseOpen = true }
                 ReminderCard(reminder: reminder, suggested: report.loaded ? report.suggestedReminderMinutes : nil)
@@ -68,7 +45,6 @@ struct HomePage: View {
         }
         .onAppear { store.refresh() }
         .onChange(of: reminder.enabled) { _ in store.refresh() }
-        .fullScreenCover(isPresented: $breakOpen) { RestBreakView() }
         .fullScreenCover(isPresented: $exerciseOpen) { EyeExerciseView() }
         .overlay {
             if feelingEditing {
@@ -85,55 +61,29 @@ struct HomePage: View {
 
 // MARK: - 今日用眼
 
-/// 今日用眼（主卡）：大号负荷分 + 等级徽标 + 渐变圆环 → 一句话 → 第一条建议的操作按钮；其余建议收在「更多建议」里。与安卓 EyeCareHero 一致。
+/// 今日用眼：不加卡片框，页面正中一只大号光流仪表圈包住眼健康指数，是首页的视觉中心；
+/// 眼健康指数 = 100 − 用眼负荷分，圈越满越健康。圈内自上而下居中：「眼健康指数」、大号分数、等级徽标。与安卓 EyeCareHero 一致。
 private struct HeroCard: View {
     let report: CareReport
-    let onTip: (CareReport.Tip) -> Void
-    @State private var moreOpen = false
     var body: some View {
-        EyeHeroCard {
-            HStack(spacing: 0) {
-                Text("今日用眼").font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text)
-                HelpButton(title: "主动护眼", text: loopHelp)
-            }
-            HStack(alignment: .center) {
-                VStack(alignment: .leading, spacing: 8) {
-                    (Text(report.score.map { "\($0)" } ?? "—").font(EyeStyle.display).foregroundColor(EyeStyle.text)
-                     + Text(" /100").font(EyeStyle.title).foregroundColor(EyeStyle.tertiary))
-                        .monospacedDigit().lineLimit(1)
-                    HStack(spacing: 8) {
-                        Text("用眼负荷").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
-                        let chip = EyeStyle.statusFill(levelColor(report.level))
-                        Text(report.label).font(EyeStyle.chip).foregroundStyle(chip.1)
-                            .padding(.horizontal, 10).padding(.vertical, 3).background(chip.0, in: Capsule())
-                    }
-                }.frame(maxWidth: .infinity, alignment: .leading)
-                ProgressRing(fraction: report.score.map { Double($0) / 100 }).frame(width: 108, height: 108)
-            }
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel(report.score.map { "今日用眼负荷 \($0) 分，\(report.label)" } ?? "今日用眼负荷暂无数据")
-            Text(report.headline).font(EyeStyle.body).foregroundStyle(EyeStyle.text).fixedSize(horizontal: false, vertical: true)
-            if let first = report.tips.first {
-                if let action = first.action {
-                    Button(action) { EyeHaptics.tap(); onTip(first) }.buttonStyle(EyeButtonStyle()).fixedSize()
-                }
-            }
-            if report.tips.count > 1 {
-                Button(moreOpen ? "收起" : "更多建议（\(report.tips.count - 1)）") { withAnimation(.easeOut(duration: 0.25)) { moreOpen.toggle() } }
-                    .font(EyeStyle.bodySecondary.weight(.semibold)).foregroundStyle(EyeStyle.primary).buttonStyle(.plain)
-                if moreOpen {
-                    ForEach(Array(report.tips.dropFirst().enumerated()), id: \.offset) { _, tip in
-                        HStack(spacing: 12) {
-                            Text(tip.text).font(EyeStyle.body).foregroundStyle(EyeStyle.text).frame(maxWidth: .infinity, alignment: .leading)
-                            if let action = tip.action {
-                                Button(action) { EyeHaptics.tap(); onTip(tip) }.font(EyeStyle.bodySecondary.weight(.semibold))
-                                    .foregroundStyle(EyeStyle.primary).buttonStyle(.plain)
-                            }
-                        }.padding(.vertical, 4)
-                    }
-                }
+        let index = report.score.map(healthIndex)
+        ZStack {
+            ProgressRing(fraction: index.map { Double($0) / 100 }, lineWidth: 16)
+            VStack(spacing: EyeSpacing.xs) {
+                // 自上而下居中：「眼健康指数」→ 大号分数 → 等级徽标
+                Text("眼健康指数").font(EyeStyle.subtitle).foregroundStyle(EyeStyle.secondary)
+                (Text(index.map { "\($0)" } ?? "—").font(EyeStyle.display).foregroundColor(EyeStyle.text)
+                 + Text("/100").font(EyeStyle.title).foregroundColor(EyeStyle.tertiary))
+                    .monospacedDigit().lineLimit(1)
+                    .accessibilityLabel(index.map { "今日眼健康指数 \($0) 分" } ?? "今日眼健康指数暂无数据")
+                let chip = EyeStyle.statusFill(levelColor(report.level))
+                Text(report.label).font(EyeStyle.body.weight(.semibold)).foregroundStyle(chip.1)
+                    .padding(.horizontal, 14).padding(.vertical, 4).background(chip.0, in: Capsule())
             }
         }
+        .frame(width: 296, height: 296)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, EyeSpacing.xs)
     }
 }
 
@@ -304,7 +254,7 @@ private struct BasicCard: View {
     var body: some View {
         Panel {
             CardHeader(title: "基础数据", glyph: .hourglass, tone: .blue)
-            SignalGrid(signals: report.signals("BASIC"), columns: 3)
+            SignalGrid(signals: report.signals("BASIC"), columns: 2)  // 与安卓一致：读数大字两列
         }
     }
 }
@@ -358,7 +308,7 @@ private struct ServiceTiles: View {
     let navigate: (AppRoute) -> Void
     var body: some View {
         HStack(spacing: 10) {
-            tile("用眼趋势报告", "近 7 天变化", .chart, .success) { navigate(.trend) }
+            tile("用眼趋势报告", "近 7 天变化", .chart, .blue) { navigate(.trend) }
             tile("亮度与蓝光", report.signal("brightness").map { "屏幕亮度 \($0.value)" } ?? "夜间模式与护眼", .sun, .accent) { navigate(.brightness) }
         }
     }
@@ -381,24 +331,28 @@ private struct ServiceTiles: View {
 
 // MARK: - 用眼趋势报告
 
-/// 近 7 天用眼负荷、眨眼频率的趋势与小结，以及今天的主要原因。
+/// 眼健康指数 = 100 − 用眼负荷分（规则仍按负荷算，界面只展示指数，越高越好）。与安卓 healthIndex 一致。
+func healthIndex(_ loadScore: Int) -> Int { min(max(100 - loadScore, 0), 100) }
+
+/// 近 7 天眼健康指数、眨眼频率的趋势与小结，以及今天的主要原因。
 struct TrendPage: View {
     @ObservedObject private var store = EyeCareStore.shared
     var body: some View {
         let report = store.report
-        let scores = report.days.compactMap { $0.score }
+        let scores = report.days.compactMap { $0.score.map(healthIndex) }
         SubPage(title: "用眼趋势报告") {
             EyeHeroCard {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("近 7 天平均用眼负荷").font(EyeStyle.body).foregroundStyle(EyeStyle.secondary)
+                    Text("近 7 天平均眼健康指数").font(EyeStyle.body).foregroundStyle(EyeStyle.secondary)
                     Text(scores.isEmpty ? "—" : "\(scores.reduce(0, +) / scores.count) 分").font(EyeStyle.headline).foregroundStyle(EyeStyle.text)
                 }
                 ForEach(Array(report.summary.enumerated()), id: \.offset) { _, line in Bullet(text: line) }
             }
-            chart("用眼负荷", unit: "分", help: nil) {
-                BarChartView(bars: report.days.enumerated().map { i, d in
-                    BarItem(id: i, label: d.label, value: d.score.map { Double($0) }, text: d.score.map { "\($0)" }, highlight: d.label == "今天",
-                            warning: (d.score ?? 0) >= 60)
+            chart("眼健康指数", unit: "分", help: nil) {
+                BarChartView(bars: report.days.enumerated().map { i, d -> BarItem in
+                    let index = d.score.map(healthIndex)
+                    return BarItem(id: i, label: d.label, value: index.map { Double($0) }, text: index.map { "\($0)" }, highlight: d.label == "今天",
+                            warning: (index ?? 100) <= 40)
                 }, maxValue: 100)
             }
             chart("眨眼频率", unit: "次/分", help: "平时每分钟约眨眼 15 次，专注看屏幕时会明显变少。每次实时检测都会记下眨眼频率。") {

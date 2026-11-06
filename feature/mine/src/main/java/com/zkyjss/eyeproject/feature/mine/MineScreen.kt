@@ -76,7 +76,7 @@ internal fun MineContent(state: MineUiState, navigation: MineNavigation, modifie
     Column(
         modifier.fillMaxSize().background(colors.appBackground).verticalScroll(rememberScrollState()).eyeBackdrop(colors)
             .padding(top = getTopStatusBarPadding()).screenHorizontalPaddingLarge(),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(com.zkyjss.eyeproject.core.designsystem.theme.EyeSpacing.cardGap),
     ) {
         EyePageHeader("我的", navigation.onOpenSettings, onOpenAccount = navigation.onOpenAccount)
         ProfileCard(ready, navigation)
@@ -84,12 +84,12 @@ internal fun MineContent(state: MineUiState, navigation: MineNavigation, modifie
         EyeListGroup(title = "健康档案") {
             EyeListRow("测试记录", navigation.onOpenRecords, glyph = EyeGlyph.DOCUMENT,
                 value = ready?.recordCount?.let { if (it == 0) "暂无" else "$it 条" })
-            EyeListRow("家庭成员与资料", navigation.onOpenSubjects, glyph = EyeGlyph.FAMILY, tone = EyeTileTone.ACCENT,
+            EyeListRow("家庭成员与资料", navigation.onOpenSubjects, glyph = EyeGlyph.FAMILY, tone = EyeTileTone.VIOLET,
                 value = ready?.memberCount?.let { "$it 人" })
-            EyeListRow("用眼趋势报告", navigation.onOpenTrend, glyph = EyeGlyph.CHART, tone = EyeTileTone.SUCCESS, divider = false)
+            EyeListRow("用眼趋势报告", navigation.onOpenTrend, glyph = EyeGlyph.CHART, tone = EyeTileTone.BLUE, divider = false)
         }
         EyeListGroup(title = "数据与隐私") {
-            EyeListRow("云端同步", navigation.onOpenCloudSync, glyph = EyeGlyph.CLOUD, tone = EyeTileTone.BLUE,
+            EyeListRow("云端同步", navigation.onOpenCloudSync, glyph = EyeGlyph.CLOUD, tone = EyeTileTone.PRIMARY,
                 value = ready?.let { cloudSummary(it.cloudConfigured, it.email, it.healthDataSync) })
             EyeListRow("权限与通知", navigation.onOpenPermissions, glyph = EyeGlyph.SHIELD, tone = EyeTileTone.SUCCESS, divider = false)
         }

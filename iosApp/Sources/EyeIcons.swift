@@ -42,11 +42,13 @@ enum ServiceGlyph { case dryEye, alignment, presbyopia, color }
 
 struct ServiceGlyphView: View {
     let glyph: ServiceGlyph
+    /// 图标色（随入口卡的分类色调）。
+    var color: Color = EyeStyle.primary
     var body: some View {
         Canvas { context, size in
             let s = min(size.width, size.height)
             func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * s, y: y * s) }
-            let primary = GraphicsContext.Shading.color(EyeStyle.primary)
+            let primary = GraphicsContext.Shading.color(color)
             switch glyph {
             case .dryEye:
                 var drop = Path(); drop.move(to: p(0.5, 0.08))
@@ -74,7 +76,7 @@ struct ServiceGlyphView: View {
                     context.fill(Path(ellipseIn: CGRect(x: c.x - s * 0.07, y: c.y - s * 0.07, width: s * 0.14, height: s * 0.14)), with: primary)
                 }
                 for y in [0.38, 0.62] as [CGFloat] {
-                    context.fill(Path(ellipseIn: CGRect(x: s * 0.42, y: y * s - s * 0.08, width: s * 0.16, height: s * 0.16)), with: .color(EyeStyle.primary))
+                    context.fill(Path(ellipseIn: CGRect(x: s * 0.42, y: y * s - s * 0.08, width: s * 0.16, height: s * 0.16)), with: .color(color))
                 }
             case .alignment:
                 for side in [-1.0, 1.0] as [CGFloat] {
@@ -84,7 +86,7 @@ struct ServiceGlyphView: View {
                     context.fill(Path(ellipseIn: CGRect(x: cx - s * 0.06, y: s * 0.44, width: s * 0.12, height: s * 0.12)), with: primary)
                 }
                 var base = Path(); base.move(to: p(0.1, 0.86)); base.addLine(to: p(0.9, 0.86))
-                context.stroke(base, with: .color(EyeStyle.primary), style: StrokeStyle(lineWidth: s * 0.08, lineCap: .round))
+                context.stroke(base, with: .color(color), style: StrokeStyle(lineWidth: s * 0.08, lineCap: .round))
             case .presbyopia:
                 let edge = s * 0.62, bar = edge / 5
                 let origin = CGPoint(x: (s - edge) / 2, y: (s - edge) / 2)

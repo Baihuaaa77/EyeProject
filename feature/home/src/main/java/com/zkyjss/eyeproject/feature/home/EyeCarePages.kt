@@ -39,7 +39,7 @@ import kotlin.math.roundToInt
 
 // region 用眼趋势报告
 
-/** 近 7 天用屏、用眼负荷、眨眼频率的趋势与小结，以及今天的主要原因。与苹果端 TrendPage 同一排版与文案。 */
+/** 近 7 天用屏、眼健康指数、眨眼频率的趋势与小结，以及今天的主要原因。与苹果端 TrendPage 同一排版与文案。 */
 @Composable
 fun EyeTrendScreen(onBack: () -> Unit, viewModel: HomeViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -82,9 +82,11 @@ internal fun EyeTrendContent(report: EyeCareReport?, onBack: () -> Unit) {
                     (d.screenMinutes ?: 0) > 360)
             }, reference = 6f, description = "近 7 天每日用屏时长")
         }
-        ChartCard("用眼负荷", "分") {
-            EyeBarChart(days.map { d -> EyeBar(d.label, d.score?.toFloat(), d.score?.toString(), d.label == "今天", (d.score ?: 0) >= 60) },
-                maxValue = 100f, description = "近 7 天每日用眼负荷分")
+        ChartCard("眼健康指数", "分") {
+            EyeBarChart(days.map { d ->
+                val index = d.score?.let(::healthIndex)
+                EyeBar(d.label, index?.toFloat(), index?.toString(), d.label == "今天", (index ?: 100) <= 40)
+            }, maxValue = 100f, description = "近 7 天每日眼健康指数")
         }
         ChartCard("眨眼频率", "次/分", help = "平时每分钟约眨眼 15 次，专注看屏幕时会明显变少。每次实时检测都会记下眨眼频率。") {
             EyeBarChart(days.map { d -> EyeBar(d.label, d.blinksPerMinute, d.blinksPerMinute?.roundToInt()?.toString(), d.label == "今天",
@@ -102,6 +104,9 @@ internal fun EyeTrendContent(report: EyeCareReport?, onBack: () -> Unit) {
         }
     }
 }
+
+/** 眼健康指数 = 100 − 用眼负荷分（规则仍按负荷算，界面只展示指数，越高越好）。 */
+internal fun healthIndex(loadScore: Int): Int = (100 - loadScore).coerceIn(0, 100)
 
 @Composable
 private fun ChartCard(title: String, unit: String, help: String? = null, content: @Composable ColumnScope.() -> Unit) {

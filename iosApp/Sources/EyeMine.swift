@@ -30,11 +30,11 @@ struct MinePage: View {
             }
             ListGroup(title: "健康档案") {
                 ListRow(title: "测试记录", glyph: .document, value: recordCount == 0 ? "暂无" : "\(recordCount) 条") { navigate(.records) }
-                ListRow(title: "家庭成员与资料", glyph: .family, tone: .accent, value: "\(store.subjects.count) 人") { navigate(.subjects) }
-                ListRow(title: "用眼趋势报告", glyph: .chart, tone: .success, divider: false) { navigate(.trend) }
+                ListRow(title: "家庭成员与资料", glyph: .family, tone: .violet, value: "\(store.subjects.count) 人") { navigate(.subjects) }
+                ListRow(title: "用眼趋势报告", glyph: .chart, tone: .blue, divider: false) { navigate(.trend) }
             }
             ListGroup(title: "数据与隐私") {
-                ListRow(title: "云端同步", glyph: .cloud, tone: .blue, value: cloudSummary) { navigate(.cloud) }
+                ListRow(title: "云端同步", glyph: .cloud, tone: .primary, value: cloudSummary) { navigate(.cloud) }
                 ListRow(title: "权限与通知", glyph: .shield, tone: .success, divider: false) { navigate(.permissions) }
             }
             ListGroup(title: "通用") {

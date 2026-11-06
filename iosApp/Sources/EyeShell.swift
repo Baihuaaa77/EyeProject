@@ -132,8 +132,8 @@ struct PageScroll<Content: View>: View {
     @ViewBuilder let content: Content
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 14) { content }
-                .padding(.horizontal, 20).padding(.bottom, 24)
+            VStack(alignment: .leading, spacing: EyeSpacing.cardGap) { content }
+                .padding(.horizontal, EyeSpacing.gutter).padding(.bottom, EyeSpacing.xl)
         }.background(EyeBackdrop())
     }
 }
@@ -142,12 +142,14 @@ struct PageScroll<Content: View>: View {
 private struct SelectCard<Leading: View>: View {
     let title: String
     var subtitle: String?
+    /// 前置图标块的色调（底色取浅块）。
+    var tone: TileTone = .primary
     @ViewBuilder let leading: Leading
     let action: () -> Void
     var body: some View {
         Button { EyeHaptics.tap(); action() } label: {
             HStack(spacing: 14) {
-                leading.frame(width: 48, height: 48).background(EyeStyle.primarySoft, in: RoundedRectangle(cornerRadius: EyeStyle.radiusMedium))
+                leading.frame(width: 48, height: 48).background(tone.colors.0, in: RoundedRectangle(cornerRadius: EyeStyle.radiusMedium))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title).font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text)
                     if let subtitle { Text(subtitle).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary) }
@@ -212,17 +214,17 @@ private struct ServicesPage: View {
             PageHeader(title: "服务", openAccount: { navigate(.account) }, openSettings: { navigate(.settings) })
             DemoHeroCard()
             Text("选择一项自测").font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text).padding(.top, 4)
-            SelectCard(title: "干眼自测", subtitle: "约 2 分钟 · 自然眨眼与睁眼观察") {
-                ServiceGlyphView(glyph: .dryEye).frame(width: 28, height: 28)
+            SelectCard(title: "干眼自测", subtitle: "约 2 分钟 · 自然眨眼与睁眼观察", tone: .blue) {
+                ServiceGlyphView(glyph: .dryEye, color: TileTone.blue.colors.1).frame(width: 28, height: 28)
             } action: { open("DRY_EYE") }
-            SelectCard(title: "眼位自测", subtitle: "注视、遮眼、跟随 · 需一位协助者") {
-                ServiceGlyphView(glyph: .alignment).frame(width: 28, height: 28)
+            SelectCard(title: "眼位自测", subtitle: "注视、遮眼、跟随 · 需一位协助者", tone: .violet) {
+                ServiceGlyphView(glyph: .alignment, color: TileTone.violet.colors.1).frame(width: 28, height: 28)
             } action: { open("STRABISMUS") }
-            SelectCard(title: "老视自测", subtitle: "近视力与调节 · 看 E 选方向") {
-                ServiceGlyphView(glyph: .presbyopia).frame(width: 28, height: 28)
+            SelectCard(title: "老视自测", subtitle: "近视力与调节 · 看 E 选方向", tone: .primary) {
+                ServiceGlyphView(glyph: .presbyopia, color: TileTone.primary.colors.1).frame(width: 28, height: 28)
             } action: { open("PRESBYOPIA") }
-            SelectCard(title: "色觉自测", subtitle: "约 1 分钟 · 看色点图认数字") {
-                ServiceGlyphView(glyph: .color).frame(width: 28, height: 28)
+            SelectCard(title: "色觉自测", subtitle: "约 1 分钟 · 看色点图认数字", tone: .accent) {
+                ServiceGlyphView(glyph: .color, color: TileTone.accent.colors.1).frame(width: 28, height: 28)
             } action: { open("COLOR_VISION") }
             Text("自测结果仅供参考，不能替代医院检查。").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary).padding(.top, 4)
         }

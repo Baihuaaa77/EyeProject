@@ -56,8 +56,8 @@ struct EyeBackdrop: View {
 
 /// 主卡：每页一张，更亮的玻璃（深色为深蓝渐变）+ 深投影（深色带蓝色泛光）。
 struct EyeHeroCard<Content: View>: View {
-    var padding: CGFloat = 20
-    var spacing: CGFloat = 12
+    var padding: CGFloat = EyeSpacing.heroPadding
+    var spacing: CGFloat = EyeSpacing.itemGap
     @ViewBuilder let content: Content
     @Environment(\.colorScheme) private var scheme
     var body: some View {
@@ -72,8 +72,8 @@ struct EyeHeroCard<Content: View>: View {
 
 /// 普通卡片：平铺玻璃面。[tinted] 为 true 时用浅色块底。
 struct EyeCard<Content: View>: View {
-    var padding: CGFloat = 18
-    var spacing: CGFloat = 12
+    var padding: CGFloat = EyeSpacing.cardPadding
+    var spacing: CGFloat = EyeSpacing.itemGap
     var tinted = false
     @ViewBuilder let content: Content
     var body: some View {
@@ -90,9 +90,10 @@ struct CategoryHeader<Trailing: View>: View {
     var tone: TileTone = .primary
     @ViewBuilder var trailing: Trailing
     var body: some View {
-        HStack(spacing: 6) {
-            EyeGlyphView(glyph: glyph, color: tone.colors.1).frame(width: 18, height: 18)
-            Text(title).font(EyeStyle.body.weight(.semibold)).foregroundStyle(tone.colors.1)
+        // 卡片标题：主色小图标 + 卡片标题字号（18）的主文字，与正文、辅助信息拉开层级
+        HStack(spacing: EyeSpacing.xs) {
+            EyeGlyphView(glyph: glyph, color: tone.colors.1).frame(width: 20, height: 20)
+            Text(title).font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text)
             Spacer(minLength: 8)
             trailing
         }
@@ -137,6 +138,8 @@ struct VDivider: View {
 struct ProgressRing: View {
     let fraction: Double?
     var lineWidth: CGFloat = 9
+    /// 圆环内侧的刻度数（0 不画）：每 5 根一根长刻度，进度内的刻度用光流色点亮（与安卓 drawRingTicks 一致）。
+    var ticks: Int = 0
     @Environment(\.colorScheme) private var scheme
     @State private var shown: Double = 0
     var body: some View {
@@ -160,6 +163,29 @@ struct ProgressRing: View {
         }
         .rotationEffect(.degrees(-90))
         .padding(lineWidth * 1.2)
+        .background {
+            if ticks > 0 {
+                Canvas { ctx, size in
+                    let side = min(size.width, size.height)
+                    let c = CGPoint(x: size.width / 2, y: size.height / 2)
+                    let ringRadius = (side - lineWidth * 3.2) / 2 + lineWidth * 0.8
+                    let outer = ringRadius - lineWidth / 2 - lineWidth * 0.9
+                    for i in 0..<ticks {
+                        let major = i % 5 == 0
+                        let inner = outer - (major ? lineWidth * 1.1 : lineWidth * 0.6)
+                        let t = Double(i) / Double(ticks)
+                        let angle = (t * 360 - 90) * .pi / 180
+                        let lit = fraction != nil && t <= shown
+                        var line = Path()
+                        line.move(to: CGPoint(x: c.x + cos(angle) * inner, y: c.y + sin(angle) * inner))
+                        line.addLine(to: CGPoint(x: c.x + cos(angle) * outer, y: c.y + sin(angle) * outer))
+                        let color = lit ? (t / max(shown, 0.01) < 0.5 ? EyeStyle.flowStart : EyeStyle.flowEnd)
+                            : EyeStyle.tertiary.opacity(major ? 0.55 : 0.28)
+                        ctx.stroke(line, with: .color(color), style: StrokeStyle(lineWidth: major ? lineWidth * 0.2 : lineWidth * 0.13, lineCap: .round))
+                    }
+                }
+            }
+        }
         .onAppear { withAnimation(.easeOut(duration: 0.7)) { shown = fraction ?? 0 } }
         .onChange(of: fraction ?? 0) { value in withAnimation(.easeOut(duration: 0.7)) { shown = value } }
     }

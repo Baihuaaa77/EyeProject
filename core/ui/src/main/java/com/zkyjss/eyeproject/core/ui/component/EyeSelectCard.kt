@@ -31,7 +31,7 @@ import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
 
 /**
- * 入口卡片：可选前置图标（放在浅主色圆角底上）+ 标题/副标题 + 右箭头，按下弹簧轻缩。
+ * 入口卡片：可选前置图标（放在 [leadingTone] 色调的浅色圆角底上）+ 标题/副标题 + 右箭头，按下弹簧轻缩。
  */
 @Composable
 fun EyeSelectCard(
@@ -39,6 +39,8 @@ fun EyeSelectCard(
     content: String,
     subtitle: String? = null,
     leading: (@Composable () -> Unit)? = null,
+    /** 前置图标块的配色（底色取该色调的浅块）。 */
+    leadingTone: EyeTileTone = EyeTileTone.PRIMARY,
     onClick: () -> Unit
 ) {
     val colors = LocalEyeColors.current
@@ -62,7 +64,7 @@ fun EyeSelectCard(
     ) {
         if (leading != null) {
             Box(
-                Modifier.size(48.dp).clip(EyeShapes.medium).background(colors.primarySoft),
+                Modifier.size(48.dp).clip(EyeShapes.medium).background(leadingTone.colors().first),
                 contentAlignment = Alignment.Center
             ) { leading() }
             Spacer(Modifier.width(14.dp))

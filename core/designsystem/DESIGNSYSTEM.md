@@ -17,8 +17,9 @@
 | `EyeProjectTheme` | 主题入口：按 `isSystemInDarkTheme()` 选择 `LightEyeColors` / `DarkEyeColors`，同时提供颜色与排版两个 Local |
 | `EyeTheme` | 便捷读取器：`EyeTheme.colors` / `EyeTheme.typography` |
 | `EyeColors` | 「深海蓝 / 瓷白深蓝」色彩令牌（`@Immutable`）：主色深蓝 + `onPrimary`、品牌渐变 `brandStart/brandEnd`、主卡 `heroStart/heroEnd/heroBorder`、按钮渐变 `buttonStart/buttonEnd`、光晕 `glow`（仅深色）、玻璃 `glassFill/glassEdgeTop/glassEdgeBottom`、柠檬黄 `accent`（留意，色块配深色字 `onWarning`）、示意墨色 `ink`、三级文字、语义色及 soft 色 |
-| `EyeTypography` | 9 个字号令牌：display（主卡大数字 56）/headline/title/subtitle/body/bodySecondary/metricValue/chip/button，最小 13 |
-| `EyeShapes` | 圆角令牌：small(10dp) → panel(22dp) → hero(26dp)，chip 为胶囊 |
+| `EyeTypography` | 字号阶梯 13/14/16/18/22/30/56：大数字 display 56 → 页标题 headline 30 → 分区标题 title 22 → 卡片标题 subtitle 18 → 正文 body 16 → 辅助 bodySecondary 14 → 标签 chip 13；读数 metricValue 26、按钮 button 16 |
+| `EyeShapes` | 圆角令牌：small 12（图标块）→ medium 14（按钮 / 输入）→ large 16（内嵌面板）→ card / panel 20 → hero 24，chip 为胶囊 |
+| `EyeSpacing` | 间距令牌（4/8 节奏）：xxs 4 · xs 8 · sm 12 · md 16 · lg 20 · xl 24 · xxl 32；页面留白 gutter 16、卡片内边距 20、主卡 24、卡片间距 16、块间距 12 |
 | `EyeMotion` | 动效令牌：SHORT/MEDIUM/LONG/DEMO_CYCLE 时长、Standard/Gentle 缓动、按压/落定弹簧 |
 | `rememberReducedMotion()` | 系统「移除动画」开启时为 true：循环动效停在关键帧 |
 | `LocalEyeColors` / `LocalEyeTypography` | CompositionLocal，组件层直接 `LocalEyeColors.current` |
@@ -35,7 +36,7 @@
 
 ## 视觉语言「深海蓝 / 瓷白深蓝」（2026-11 改版，去卡通化）
 
-- **两套主题跟随系统**：深色「深海蓝」（近黑蓝底 `#050912`、主色电光蓝 `#4A7DFF`）与浅色「瓷白深蓝」（冷白底 `#F3F4F7`、主色藏青 `#23367A`），是同一产品的夜与昼。iOS `EyeStyle.swift` 用动态颜色逐项对应
+- **两套主题**（默认跟随系统，右上角太阳 / 月亮可手动切换）：夜晚深海蓝底 `#081426`、深蓝卡片 `#132644`、主操作电光蓝 `#3578FF`（按钮 `#2A66F0 → #3578FF`，深色上的蓝色文字 `#6E9BFF`）；白天冷白底 `#F2F5FA`、白卡、主色 `#2563EB`。点缀：冰蓝 `ice #49D9F5`（光流末端、主卡描边、状态点，少量）与香槟金 `accent #F2CB70`（「留意」，色块配深色字）。文字与分隔线在两套主题下都按 ui-ux-pro-max 规范核对对比度（正文 / 辅助 / 三级 ≥ 4.5:1），是同一产品的夜与昼。iOS `EyeStyle.swift` 用动态颜色逐项对应
 - **层次**：字号只分三级（大数字 → 卡片标题与数值 → 标签，最小 13）；一张卡一件事，同卡多项用细竖线分隔；每页一张主卡（`EyeHeroCard`，更亮、深投影）浮在最上，其余卡平铺；一屏一个主按钮（按钮渐变，深色带泛光）
 - **质感**：页面为纯色底（`eyeBackdrop`），卡片为玻璃面（半透明 + 上亮下淡描边 + 斜向柔光，`eyeGlass`）。安卓不依赖系统模糊，所有版本一致；iOS 用系统毛玻璃材质，iOS 26 起叠加 Liquid Glass
 - **发光**：只在深色主题，且只用于进度圆环、主按钮与图表当前项（多层半透明描边叠出，不用模糊）
