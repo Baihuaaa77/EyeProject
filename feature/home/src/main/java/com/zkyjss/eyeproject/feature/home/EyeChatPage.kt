@@ -87,7 +87,7 @@ class ChatViewModel @Inject constructor(private val chat: ChatRepository) : View
     fun clear() { viewModelScope.launch { chat.clear() } }
 }
 
-/** 首页「AI 主动问诊」入口（功能卡下排整行）：紫色渐变色块上爱科头像 + 白色标题，点了进入对话页。与苹果端 ChatEntryCard 一致。 */
+/** 首页「AI 主动问诊」入口（功能卡下排整行）：蓝色渐变色块上爱科头像 + 白色标题，点了进入对话页。与苹果端 ChatEntryCard 一致。 */
 @Composable
 internal fun ChatEntryCard(onOpen: () -> Unit) {
     val colors = LocalEyeColors.current
@@ -97,7 +97,7 @@ internal fun ChatEntryCard(onOpen: () -> Unit) {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(if (pressed) 0.97f else 1f, EyeMotion.pressSpring(), label = "问诊入口按压")
-    Box(Modifier.fillMaxWidth().graphicsLayer { scaleX = scale; scaleY = scale }.clip(EyeShapes.large).background(colors.vivid.violet.brush)
+    Box(Modifier.fillMaxWidth().graphicsLayer { scaleX = scale; scaleY = scale }.clip(EyeShapes.large).background(colors.vivid.blue.brush)
         .clickable(interactionSource = interaction, indication = null, role = Role.Button) { haptics.tap(); onOpen() }) {
         EyeGlyphIcon(EyeGlyph.CHAT, Modifier.align(Alignment.CenterEnd).offset(x = 14.dp).size(88.dp), on.copy(alpha = 0.14f))
         Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {

@@ -101,10 +101,11 @@ class HomeVisualTest {
         compose.mainClock.autoAdvance = true
         compose.onNodeWithText("休息提醒").performScrollTo().performClick()
         assertTrue(reminder)
-        // 护眼操与用眼趋势、亮度与蓝光并排成彩色方块，护眼操不再有「开始」按钮
+        // 护眼操与用眼趋势、亮度与蓝光并排成彩色方块，三个方块只有名称，护眼操没有「开始」按钮
         compose.onNodeWithText("用眼趋势报告").assertDoesNotExist()
         compose.onNodeWithText("开始").assertDoesNotExist()
-        compose.onNodeWithText("约 1 分钟").assertExists()
+        listOf("约 1 分钟", "近 7 天变化", "夜间模式与护眼").forEach { compose.onNodeWithText(it, substring = true).assertDoesNotExist() }
+        compose.onNodeWithText("日均用屏", substring = true).assertDoesNotExist()
         compose.onNodeWithText("用眼趋势").performScrollTo().performClick()
         assertTrue(trend)
         compose.onNodeWithText("开发者工具").performScrollTo().performClick()

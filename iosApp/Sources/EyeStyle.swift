@@ -38,7 +38,7 @@ enum EyeStyle {
     static let testReady = dyn(0x137538, 0x91C8D3)
     static let testTooClose = dyn(0xB42332, 0xFF7A86)
     static let testReadySoft = dyn(0xE3F5EA, 0x1A3547)
-    /// 首页功能色块（护眼操绿、用眼趋势蓝、亮度与蓝光珊瑚红、AI 主动问诊紫）：左上到右下渐变，上面文字与图标一律白色。
+    /// 首页功能色块（护眼操绿、用眼趋势紫、亮度与蓝光珊瑚红、AI 主动问诊蓝）：左上到右下渐变，上面文字与图标一律白色。
     /// 深色主题压暗一档；与安卓 Vivid.kt 同值。
     enum Vivid {
         static let blue = gradient(dyn(0x4F8DFF, 0x3F7DF5), dyn(0x2B5FEA, 0x2550D2))

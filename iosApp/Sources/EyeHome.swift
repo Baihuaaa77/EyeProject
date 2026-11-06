@@ -287,7 +287,7 @@ private struct ReminderCard: View {
     }
 }
 
-/// 功能卡：一张卡里上排三个彩色方块（护眼操绿、用眼趋势蓝、亮度与蓝光珊瑚红），下面整行紫色的 AI 主动问诊。
+/// 功能卡：一张卡里上排三个彩色方块（护眼操绿、用眼趋势紫、亮度与蓝光珊瑚红），下面整行蓝色的 AI 主动问诊。
 /// 色块上文字与图标一律白色，靠整块颜色做视觉区分。与安卓 FeatureCard 一致。
 private struct FeatureCard: View {
     let report: CareReport
@@ -296,10 +296,9 @@ private struct FeatureCard: View {
     var body: some View {
         VStack(spacing: 10) {
             HStack(spacing: 10) {
-                VividTile(title: "护眼操", subtitle: "约 1 分钟", glyph: .eye, fill: EyeStyle.Vivid.green, action: openExercise)
-                VividTile(title: "用眼趋势", subtitle: "近 7 天变化", glyph: .chart, fill: EyeStyle.Vivid.blue) { navigate(.trend) }
-                VividTile(title: "亮度与蓝光", subtitle: report.signal("brightness").map { "屏幕亮度 \($0.value)" } ?? "夜间模式与护眼",
-                          glyph: .sun, fill: EyeStyle.Vivid.red) { navigate(.brightness) }
+                VividTile(title: "护眼操", glyph: .eye, fill: EyeStyle.Vivid.green, action: openExercise)
+                VividTile(title: "用眼趋势", glyph: .chart, fill: EyeStyle.Vivid.violet) { navigate(.trend) }
+                VividTile(title: "亮度与蓝光", glyph: .sun, fill: EyeStyle.Vivid.red) { navigate(.brightness) }
             }.fixedSize(horizontal: false, vertical: true)
             ChatEntryCard { navigate(.chat) }
         }
@@ -308,28 +307,25 @@ private struct FeatureCard: View {
     }
 }
 
-/// 功能色块：渐变底 + 左上白色图标块 + 白色标题与一行说明，右下角放大的半透明图标做装饰；按下轻微缩小。与安卓 VividTile 一致。
+/// 功能色块：渐变底 + 左上白色图标块 + 白色名称（不加说明小字），右下角放大的半透明图标做装饰；按下轻微缩小。与安卓 VividTile 一致。
 private struct VividTile: View {
     let title: String
-    let subtitle: String
     let glyph: EyeGlyph
     let fill: LinearGradient
     let action: () -> Void
     var body: some View {
         Button { EyeHaptics.tap(); action() } label: {
             VStack(alignment: .leading, spacing: 0) {
-                EyeGlyphView(glyph: glyph, color: EyeStyle.Vivid.on).frame(width: 28, height: 28)
-                    .frame(width: 42, height: 42)
+                EyeGlyphView(glyph: glyph, color: EyeStyle.Vivid.on).frame(width: 26, height: 26)
+                    .frame(width: 38, height: 38)
                     .background(EyeStyle.Vivid.on.opacity(0.22), in: RoundedRectangle(cornerRadius: EyeStyle.radiusMedium, style: .continuous))
-                Spacer(minLength: 14)
+                Spacer(minLength: 10)
                 Text(title).font(EyeStyle.button).foregroundStyle(EyeStyle.Vivid.on)
-                Text(subtitle).font(EyeStyle.chip).foregroundStyle(EyeStyle.Vivid.on.opacity(0.86))
-                    .lineLimit(2).multilineTextAlignment(.leading).padding(.top, 2)
             }
             .padding(12).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .frame(minHeight: 140)
+            .frame(minHeight: 96)
             .background(alignment: .bottomTrailing) {
-                EyeGlyphView(glyph: glyph, color: EyeStyle.Vivid.on.opacity(0.16)).frame(width: 76, height: 76).offset(x: 16, y: 16)
+                EyeGlyphView(glyph: glyph, color: EyeStyle.Vivid.on.opacity(0.16)).frame(width: 64, height: 64).offset(x: 14, y: 14)
             }
             .background(fill)
             .clipShape(RoundedRectangle(cornerRadius: EyeStyle.radiusLarge, style: .continuous))

@@ -3,7 +3,7 @@ import SwiftUI
 /// 入口与对话页标题（与安卓 CHAT_TITLE 一致）。
 let chatTitle = "AI 主动问诊"
 
-/// 首页「AI 主动问诊」入口（功能卡下排整行）：紫色渐变色块上爱科头像 + 白色标题，点了进入对话页。与安卓 ChatEntryCard 一致。
+/// 首页「AI 主动问诊」入口（功能卡下排整行）：蓝色渐变色块上爱科头像 + 白色标题，点了进入对话页。与安卓 ChatEntryCard 一致。
 struct ChatEntryCard: View {
     let open: () -> Void
     var body: some View {
@@ -17,7 +17,7 @@ struct ChatEntryCard: View {
             .background(alignment: .trailing) {
                 EyeGlyphView(glyph: .chat, color: EyeStyle.Vivid.on.opacity(0.14)).frame(width: 88, height: 88).offset(x: 14)
             }
-            .background(EyeStyle.Vivid.violet)
+            .background(EyeStyle.Vivid.blue)
             .clipShape(RoundedRectangle(cornerRadius: EyeStyle.radiusLarge, style: .continuous))
             .contentShape(RoundedRectangle(cornerRadius: EyeStyle.radiusLarge))
         }.buttonStyle(PressScale(scale: 0.97))

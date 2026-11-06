@@ -154,7 +154,7 @@ internal fun HomeContent(
             subtitle = remember { LocalDate.now().format(DateTimeFormatter.ofPattern("M月d日 EEEE", Locale.CHINA)) })
         EyeCareHero(report)
         BasicDataCard(state, actions, Modifier.bringIntoViewRequester(basic))
-        FeatureCard(state, navigation) { exerciseOpen = true }
+        FeatureCard(navigation) { exerciseOpen = true }
         CheckInCard(report, actions.checkIn)
         ReminderCard(state, actions)
         LiveCard(Modifier.bringIntoViewRequester(live)) { liveEye(liveRequests) }
@@ -443,44 +443,40 @@ private fun ReminderCard(state: HomeUiState, actions: HomeActions) {
 }
 
 /**
- * 功能卡：一张卡里上排三个彩色方块（护眼操绿、用眼趋势蓝、亮度与蓝光珊瑚红），下面整行紫色的 AI 主动问诊。
+ * 功能卡：一张卡里上排三个彩色方块（护眼操绿、用眼趋势紫、亮度与蓝光珊瑚红），下面整行蓝色的 AI 主动问诊。
  * 色块上文字与图标一律白色，靠整块颜色做视觉区分。与苹果端 FeatureCard 一致。
  */
 @Composable
-private fun FeatureCard(state: HomeUiState, navigation: HomeNavigation, onOpenExercise: () -> Unit) {
+private fun FeatureCard(navigation: HomeNavigation, onOpenExercise: () -> Unit) {
     val vivid = LocalEyeColors.current.vivid
-    val trend = state.report?.trend?.averageScreenMinutes?.let { "日均用屏 ${EyeCareEngine.duration(it)}" } ?: "近 7 天变化"
-    val brightness = state.screenBrightness?.let { "屏幕亮度 ${(it * 100).toInt()}%" } ?: "夜间模式与护眼"
     EyeCard(contentPadding = 12.dp, verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            VividTile("护眼操", "约 1 分钟", EyeGlyph.EYE, vivid.green, Modifier.weight(1f).fillMaxHeight(), onOpenExercise)
-            VividTile("用眼趋势", trend, EyeGlyph.CHART, vivid.blue, Modifier.weight(1f).fillMaxHeight(), navigation.onOpenTrend)
-            VividTile("亮度与蓝光", brightness, EyeGlyph.SUN, vivid.red, Modifier.weight(1f).fillMaxHeight(), navigation.onOpenBrightness)
+            VividTile("护眼操", EyeGlyph.EYE, vivid.green, Modifier.weight(1f).fillMaxHeight(), onOpenExercise)
+            VividTile("用眼趋势", EyeGlyph.CHART, vivid.violet, Modifier.weight(1f).fillMaxHeight(), navigation.onOpenTrend)
+            VividTile("亮度与蓝光", EyeGlyph.SUN, vivid.red, Modifier.weight(1f).fillMaxHeight(), navigation.onOpenBrightness)
         }
         ChatEntryCard(navigation.onOpenChat)
     }
 }
 
-/** 功能色块：渐变底 + 左上白色图标块 + 白色标题与一行说明，右下角放大的半透明图标做装饰；按下轻微缩小。 */
+/** 功能色块：渐变底 + 左上白色图标块 + 白色名称（不加说明小字），右下角放大的半透明图标做装饰；按下轻微缩小。 */
 @Composable
-private fun VividTile(title: String, subtitle: String, glyph: EyeGlyph, tone: VividTone, modifier: Modifier, onClick: () -> Unit) {
+private fun VividTile(title: String, glyph: EyeGlyph, tone: VividTone, modifier: Modifier, onClick: () -> Unit) {
     val typography = LocalEyeTypography.current
     val on = LocalEyeColors.current.vivid.onVivid
     val haptics = rememberEyeHaptics()
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(if (pressed) 0.96f else 1f, EyeMotion.pressSpring(), label = "功能色块按压")
-    Box(modifier.heightIn(min = 140.dp).graphicsLayer { scaleX = scale; scaleY = scale }.clip(EyeShapes.large).background(tone.brush)
+    Box(modifier.heightIn(min = 96.dp).graphicsLayer { scaleX = scale; scaleY = scale }.clip(EyeShapes.large).background(tone.brush)
         .clickable(interactionSource = interaction, indication = null, role = Role.Button) { haptics.tap(); onClick() }) {
-        EyeGlyphIcon(glyph, Modifier.align(Alignment.BottomEnd).offset(x = 16.dp, y = 16.dp).size(76.dp), on.copy(alpha = 0.16f))
+        EyeGlyphIcon(glyph, Modifier.align(Alignment.BottomEnd).offset(x = 14.dp, y = 14.dp).size(64.dp), on.copy(alpha = 0.16f))
         Column(Modifier.padding(12.dp)) {
-            Box(Modifier.size(42.dp).clip(EyeShapes.medium).background(on.copy(alpha = 0.22f)), contentAlignment = Alignment.Center) {
-                EyeGlyphIcon(glyph, Modifier.size(28.dp), on)
+            Box(Modifier.size(38.dp).clip(EyeShapes.medium).background(on.copy(alpha = 0.22f)), contentAlignment = Alignment.Center) {
+                EyeGlyphIcon(glyph, Modifier.size(26.dp), on)
             }
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(10.dp))
             EyeText(title, style = typography.body, color = on, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(2.dp))
-            EyeText(subtitle, style = typography.chip, color = on.copy(alpha = 0.86f), maxLines = 2)
         }
     }
 }

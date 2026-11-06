@@ -2,8 +2,8 @@
 
 首页 = 主动眼健康助手：标题「今日」与日期（右上角账户头像 + 白天 / 夜晚切换 + 系统设置齿轮）→ 大号光流仪表圈包住眼健康指数（不加卡片框）→ 基础数据 →
 功能卡 → 今日感受 → 休息提醒 → 实时检测 → 开发者工具（模型测试）。
-- 功能卡（`FeatureCard`，2026-11-06）：一张玻璃卡里上排三个等高彩色方块 `VividTile`——护眼操（绿，只写「约 1 分钟」，点了直接进护眼操，没有「开始」按钮）、
-  用眼趋势（蓝）、亮度与蓝光（珊瑚红），下排整行紫色的 AI 主动问诊（`ChatEntryCard`）。色块取 `core:designsystem` 的 `vivid` 渐变令牌，文字与图标一律白色，
+- 功能卡（`FeatureCard`，2026-11-06）：一张玻璃卡里上排三个等高彩色方块 `VividTile`——护眼操（绿，点了直接进护眼操，没有「开始」按钮）、
+  用眼趋势（紫）、亮度与蓝光（珊瑚红），下排整行蓝色的 AI 主动问诊（`ChatEntryCard`）。三个方块只写名称，不加说明小字。色块取 `core:designsystem` 的 `vivid` 渐变令牌，文字与图标一律白色，
   左上白色半透明底图标块、右下角放大的半透明图标做装饰。首页不再用彩色文字做强调，颜色靠色块。
 不分小节标题；首页不放眨眼频率、观看距离等读数（看实时检测即可），也不放专业咨询建议入口（`AdvicePage` 仍在，从其他入口进入）。
 本人档案不在首页单独成卡（仍参与评估，在「我的 → 家庭成员」维护）；报告里的建议（`tips`）目前不在首页展示；「休息 20 秒」页（`RestBreakPage`）暂无入口，保留待用。
@@ -46,7 +46,7 @@
 - AI 综合建议对话（`EyeChatPage.kt`）：由爱尔眼科数字人「爱科 Eyecho」主持（真人形象，入口为玻璃卡 + 头像 + 「聊聊今天的用眼感受」）。
   图片在 `core:designsystem` 的 `drawable-nodpi/eyecho_avatar.png`（256 圆形头像）与 `eyecho_half.png`（半身、底边平切），
   苹果端同名素材 `EyechoAvatar` / `EyechoHalf`；`EyechoAvatar(size)` 用在入口、对话气泡、「正在想」与同意弹窗。
-  首页功能卡下排的 `ChatEntryCard`（紫色渐变色块 + 爱科头像 + 白色标题）→ `EyeChatScreen`（`EyeChatRoute`）：顶部 `EyechoIntro`（半身像站在卡片底边 + 自我介绍），
+  首页功能卡下排的 `ChatEntryCard`（蓝色渐变色块 + 爱科头像 + 白色标题）→ `EyeChatScreen`（`EyeChatRoute`）：顶部 `EyechoIntro`（半身像站在卡片底边 + 自我介绍），
   接着是综合建议卡（`AiExplanationCard(text = AiCardText.ADVICE)`，取自 `HomeViewModel.aiAdvice`），下面是与爱科的对话（`ChatViewModel` → `core:data` `ChatRepository`），
   未登录提示去登录；按钮一律「发送」，同意说明不在页面上，点发送时按需弹 `ChatConsentDialog`（还没同意时每次都弹；已同意但没勾「以后不再提示」时每次进页面首次发送弹一次；
   「不同意」只关闭、保留输入）；提到危险信号时在提问下方醒目提示尽快就医；记录只存本机，可清空。与苹果端 `AiChatView.swift` 一致。
