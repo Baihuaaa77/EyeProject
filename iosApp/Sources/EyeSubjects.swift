@@ -105,7 +105,7 @@ struct SubjectsPage: View {
                     Button { EyeHaptics.tap(); edit(s.id) } label: {
                         VStack(spacing: 0) {
                             HStack(spacing: 12) {
-                                Text(String(s.displayName.prefix(1))).font(EyeStyle.subtitle).foregroundStyle(EyeStyle.primary)
+                                Text(String(s.displayName.prefix(1))).font(EyeStyle.subtitle).foregroundStyle(EyeStyle.readableText(EyeStyle.primary))
                                     .frame(width: 40, height: 40).background(EyeStyle.primarySoft, in: Circle())
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(s.displayName).font(EyeStyle.body).foregroundStyle(EyeStyle.text)
@@ -119,8 +119,8 @@ struct SubjectsPage: View {
                 }
                 Button { EyeHaptics.tap(); edit(nil) } label: {
                     HStack(spacing: 12) {
-                        Text("添加家庭成员").font(EyeStyle.body).foregroundStyle(EyeStyle.primary).frame(maxWidth: .infinity, alignment: .leading)
-                        Text("+").font(EyeStyle.title).foregroundStyle(EyeStyle.primary)
+                        Text("添加家庭成员").font(EyeStyle.body).foregroundStyle(EyeStyle.readableText(EyeStyle.primary)).frame(maxWidth: .infinity, alignment: .leading)
+                        Text("+").font(EyeStyle.title).foregroundStyle(EyeStyle.readableText(EyeStyle.primary))
                             .frame(width: 36, height: 36).background(EyeStyle.primarySoft, in: Circle())
                     }.padding(.horizontal, 16).padding(.vertical, 10).frame(minHeight: 60).contentShape(Rectangle())
                 }.buttonStyle(RowPressStyle())
@@ -174,7 +174,7 @@ struct SubjectEditView: View {
                             ForEach(Array((section["questions"] as? [[String: Any]] ?? []).enumerated()), id: \.offset) { _, q in question(q) }
                         }
                     }
-                    if let error { Text(error).foregroundStyle(EyeStyle.danger) }
+                    if let error { Text(error).foregroundStyle(EyeStyle.readableText(EyeStyle.danger)) }
                     if confirmDelete { Text("将删除该成员的资料，测试记录保留。").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary) }
                     HStack(spacing: 8) {
                         if draft.relation != "SELF" && !isNew {
@@ -296,7 +296,7 @@ struct SubjectPickerView: View {
                         Text(s.displayName).font(EyeStyle.body)
                         Text(subjectSummary(s)).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
                         if !missing.isEmpty {
-                            Text("需补充：\(missing.joined(separator: "、"))（点此去填写）").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.warning)
+                            Text("需补充：\(missing.joined(separator: "、"))（点此去填写）").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.readableText(EyeStyle.warning))
                         }
                     }
                 }.buttonStyle(EyeCardButtonStyle(selected: chosenId == s.id))
@@ -334,7 +334,7 @@ struct PreTestCheckView: View {
         VStack(alignment: .leading, spacing: 16) {
             Text("这次的情况").font(EyeStyle.title).foregroundStyle(EyeStyle.text)
             ForEach(Array(questions.enumerated()), id: \.offset) { _, q in question(q) }
-            if let error = runtime.error { Text(error).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.danger) }
+            if let error = runtime.error { Text(error).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.readableText(EyeStyle.danger)) }
             Button("开始测试") { EyeHaptics.tap(); runtime.confirmCheck(answers) }
                 .buttonStyle(EyeButtonStyle()).disabled(!runtime.checkComplete(answers))
         }

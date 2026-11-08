@@ -36,6 +36,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
+import com.zkyjss.eyeproject.core.designsystem.theme.eyeSoftSurface
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -51,6 +52,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeColors
+import com.zkyjss.eyeproject.core.designsystem.theme.EyeGlow
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeMotion
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeShapes
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeSpacing
@@ -60,14 +62,9 @@ import com.zkyjss.eyeproject.core.designsystem.theme.rememberReducedMotion
 import kotlin.math.cos
 import kotlin.math.sin
 
-/*
- * 层次规则（2026-11-08 视觉改版，与苹果端 EyeStyle / EyeSurfaces 一致）：
- * - 卡片一律纯色、不描边、不投影，只靠「灰底白卡 / 黑底深灰卡」的明度差分层
- * - 每页最重要的一张卡用 [EyeHeroCard]（大圆角 22、内边距更宽），其余用 [EyeCard]（圆角 18）
- * - 一张卡只讲一件事；读数「大数字 + 小一半的灰色单位」（[eyeReading]）
- */
+/* DESIGN.md：柔和双阴影表面，图形使用渐变光晕，文字保持中性色。 */
 
-/** 主卡：每页一张，纯色面、大圆角。 */
+/** 主卡：每页一个视觉焦点，同色浮雕表面。 */
 @Composable
 fun EyeHeroCard(
     modifier: Modifier = Modifier,
@@ -85,20 +82,14 @@ fun EyeHeroCard(
     )
 }
 
-/**
- * 卡片面：裁圆角 → 纯色填充。改版后不再有高光与描边；[elevation] 大于 0 时才加投影（只给浮在内容上的元素用）。
- * 卡片、列表组共用（名称沿用旧的「玻璃面」）。
- */
+/** 统一表面入口：保留旧 API，内部使用设计系统双阴影。 */
 fun Modifier.eyeGlass(
     colors: EyeColors,
     shape: Shape,
     fill: Brush = SolidColor(colors.glassFill),
     edgeTop: Color = colors.glassEdgeTop,
     elevation: Dp = 0.dp,
-): Modifier = (if (elevation > 0.dp) shadow(elevation, shape, clip = false, ambientColor = colors.shadow, spotColor = colors.shadow) else this)
-    .clip(shape)
-    .background(fill)
-    .then(if (edgeTop.alpha > 0f) Modifier.border(1.dp, edgeTop, shape) else Modifier)
+): Modifier = eyeSoftSurface(colors, shape, fill, compact = elevation > 0.dp)
 
 /**
  * 读数排版：把「6小时25分」「180 lx」「22 次/分」拆成数字与单位——数字沿用外层文字样式（大号），
@@ -126,7 +117,7 @@ fun eyeReading(value: String, unit: String? = null, unitColor: Color = LocalEyeC
     }
 }
 
-/** 普通卡片：纯色面。[tinted] 为 true 时用浅填充底。 */
+/** 普通浮雕卡片。[tinted] 为 true 时用浅填充底。 */
 @Composable
 fun EyeCard(
     modifier: Modifier = Modifier,
@@ -178,7 +169,7 @@ fun EyeMetricRow(modifier: Modifier = Modifier, items: List<@Composable (Modifie
     }
 }
 
-/** 进度圆环：浅填充底环 + 纯色圆头进度弧（默认主色，或 [tint]），从 12 点钟顺时针。不发光。 */
+/** 进度圆环：浅填充底环 + 纯色圆头进度弧（默认主色，或 [tint]），从 12 点钟顺时针。默认使用蓝青渐变。 */
 @Composable
 fun EyeProgressRing(
     fraction: Float?,
@@ -188,15 +179,18 @@ fun EyeProgressRing(
     description: String = "",
     /** 圆环内侧的刻度数（0 不画）：每 5 格一根长刻度，已走过的刻度用光流色点亮。 */
     ticks: Int = 0,
+    /** 在进度末端加一个亮点，供小尺寸首页圆环使用。 */
+    showEndpoint: Boolean = false,
     center: @Composable () -> Unit = {},
 ) {
     val colors = LocalEyeColors.current
-    val animated by animateFloatAsState((fraction ?: 0f).coerceIn(0f, 1f), tween(EyeMotion.LONG, easing = EyeMotion.Standard), label = "圆环进度")
+    val reduced = rememberReducedMotion()
+    val animated by animateFloatAsState((fraction ?: 0f).coerceIn(0f, 1f), tween(if (reduced) 0 else EyeMotion.LONG, easing = EyeMotion.Standard), label = "圆环进度")
     Box(modifier.semantics { if (description.isNotEmpty()) contentDescription = description }, contentAlignment = Alignment.Center) {
         Canvas(Modifier.fillMaxSize()) {
             val progress = if (fraction == null) null else animated
             if (ticks > 0) drawRingTicks(colors, progress, strokeWidth.toPx(), ticks)
-            drawProgressRing(colors, progress, strokeWidth.toPx(), tint)
+            drawProgressRing(colors, progress, strokeWidth.toPx(), tint, showEndpoint)
         }
         center()
     }
@@ -222,37 +216,49 @@ fun DrawScope.drawRingTicks(colors: EyeColors, fraction: Float?, stroke: Float, 
     }
 }
 
-fun DrawScope.drawProgressRing(colors: EyeColors, fraction: Float?, stroke: Float, tint: Color? = null) {
+fun DrawScope.drawProgressRing(colors: EyeColors, fraction: Float?, stroke: Float, tint: Color? = null, showEndpoint: Boolean = false) {
     val arcSize = Size(size.minDimension - stroke, size.minDimension - stroke)
     val topLeft = Offset((size.width - arcSize.width) / 2, (size.height - arcSize.height) / 2)
     drawArc(colors.surfaceVariant, 0f, 360f, false, topLeft, arcSize, style = Stroke(stroke))
     if (fraction == null) return
-    val sweep = 360f * fraction.coerceIn(0.01f, 1f)
-    drawArc(tint ?: colors.primary, -90f, sweep, false, topLeft, arcSize, style = Stroke(stroke, cap = StrokeCap.Round))
+    val sweep = 360f * fraction.coerceIn(0f, 1f)
+    if (sweep <= 0f) return
+    val brush = if (tint != null) SolidColor(tint) else Brush.sweepGradient(
+        0f to colors.brandStart, 0.39f to colors.dataCyan, 0.72f to colors.dataAqua, 1f to colors.dataAqua,
+        center = center,
+    )
+    // 发光只落在数据弧的副本，主图形与文字保持清晰。
+    rotate(-90f) {
+        if (tint == null) {
+            drawDataGlowArc(colors, topLeft, arcSize, sweep, stroke)
+            drawArc(brush, 0f, sweep, false, topLeft, arcSize, alpha = 0.06f, style = Stroke(stroke * 2.1f, cap = StrokeCap.Round))
+            drawArc(brush, 0f, sweep, false, topLeft, arcSize, alpha = 0.12f, style = Stroke(stroke * 1.5f, cap = StrokeCap.Round))
+        }
+        drawArc(brush, 0f, sweep, false, topLeft, arcSize, style = Stroke(stroke))
+        val radius = arcSize.width / 2
+        val end = Math.toRadians(sweep.toDouble())
+        val fractionOfCircle = sweep / 360f
+        val endColor = tint ?: when {
+            fractionOfCircle < 0.39f -> lerp(colors.brandStart, colors.dataCyan, fractionOfCircle / 0.39f)
+            fractionOfCircle < 0.72f -> lerp(colors.dataCyan, colors.dataAqua, (fractionOfCircle - 0.39f) / 0.33f)
+            else -> colors.dataAqua
+        }
+        // 独立圆帽避免角度零点处把渐变尾色混入起点。
+        drawCircle(tint ?: colors.brandStart, stroke / 2, Offset(center.x + radius, center.y))
+        drawCircle(endColor, stroke / 2, Offset(center.x + radius * cos(end).toFloat(), center.y + radius * sin(end).toFloat()))
+        if (tint == null) drawArc(colors.white, 0f, sweep, false, topLeft, arcSize,
+            alpha = EyeGlow.coreOpacity, style = Stroke(stroke * 0.18f, cap = StrokeCap.Round))
+        if (showEndpoint) drawCircle(colors.white, stroke * 0.28f,
+            Offset(center.x + radius * cos(end).toFloat(), center.y + radius * sin(end).toFloat()))
+    }
 }
 
-/**
- * AI 标识（替代旧的卡通头像）：深色主题为发光光球（轻呼吸），浅色主题为主色声波线。
- * 真人数字人形象到位后，问诊页头部用照片，列表入口仍用本标识。
- */
+/** AI 入口标识：浮雕图标底与主色声波线，不创建无意义的循环动画。 */
 @Composable
 fun EyeAiMark(size: Dp, modifier: Modifier = Modifier) {
     val colors = LocalEyeColors.current
-    if (colors.hasGlow) {
-        val reduced = rememberReducedMotion()
-        val breathe by rememberInfiniteTransition(label = "AI 光球").animateFloat(
-            0.9f, 1.06f, infiniteRepeatable(tween(1800, easing = EyeMotion.Gentle), RepeatMode.Reverse), label = "呼吸")
-        Canvas(modifier.size(size)) {
-            val r = this.size.minDimension / 2
-            val halo = if (reduced) 1f else breathe
-            drawCircle(Brush.radialGradient(listOf(colors.glow.copy(alpha = 0.5f), colors.glow.copy(alpha = 0f)), center, r * halo), r * halo)
-            drawCircle(Brush.radialGradient(listOf(colors.white, colors.brandStart, colors.primary, colors.buttonStart),
-                Offset(center.x - r * 0.24f, center.y - r * 0.3f), r * 0.9f), r * 0.6f)
-        }
-    } else {
-        Box(modifier.size(size).clip(EyeShapes.small).background(colors.primarySoft), contentAlignment = Alignment.Center) {
-            Canvas(Modifier.size(size * 0.56f)) { drawWaveGlyph(colors.primary) }
-        }
+    Box(modifier.size(size).eyeSoftSurface(colors, EyeShapes.medium, compact = true), contentAlignment = Alignment.Center) {
+        Canvas(Modifier.size(size * 0.56f)) { drawWaveGlyph(colors.primary) }
     }
 }
 

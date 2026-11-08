@@ -20,6 +20,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeShapes
+import com.zkyjss.eyeproject.core.designsystem.theme.eyeSoftSurface
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
 
@@ -58,8 +59,7 @@ fun EyeTextField(
                     Modifier
                         .fillMaxWidth()
                         .heightIn(min = 48.dp)
-                        .background(colors.surfaceVariant, EyeShapes.medium)
-                        .border(1.dp, colors.borderSubtle, EyeShapes.medium)
+                        .eyeSoftSurface(colors, EyeShapes.medium, SolidColor(colors.surfaceVariant), pressed = true)
                         .padding(horizontal = 14.dp, vertical = 12.dp),
                     contentAlignment = Alignment.CenterStart,
                 ) {

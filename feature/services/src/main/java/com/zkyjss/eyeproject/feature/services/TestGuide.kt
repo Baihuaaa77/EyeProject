@@ -48,6 +48,10 @@ import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeColors
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeMotion
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeShapes
@@ -99,9 +103,14 @@ private class SceneScope(
 
     /** 以 [center] 为中心画一段文字（舞台坐标）。 */
     fun label(text: String, x: Float, y: Float, color: Color, alpha: Float = 1f) {
-        val layout = measurer.measure(text, labelStyle.copy(color = color))
         val c = p(x, y)
-        scope.drawText(layout, topLeft = Offset(c.x - layout.size.width / 2f, c.y - layout.size.height / 2f), alpha = alpha)
+        // 标签靠近舞台边缘时向内收，避免大字号被圆角画布裁切。
+        val maxWidth = (scope.size.width - u(24f)).coerceAtLeast(1f).toInt()
+        val layout = measurer.measure(text, labelStyle.copy(color = colors.readableText(color), textAlign = TextAlign.Center),
+            constraints = Constraints(maxWidth = maxWidth))
+        val half = layout.size.width / 2f
+        val safeX = c.x.coerceIn(half, (scope.size.width - half).coerceAtLeast(half))
+        scope.drawText(layout, topLeft = Offset(safeX - half, c.y - layout.size.height / 2f), alpha = alpha)
     }
 }
 
@@ -138,13 +147,15 @@ internal fun TestGuide(motion: GuideMotion, title: String, cue: String, onReady:
 
     EyeSectionCard {
         Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                EyeText(title, Modifier.weight(1f), style = type.title, color = colors.textPrimary)
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                EyeText(title, style = type.title, color = colors.textPrimary)
                 EyeText(
                     text = if (reduced) "示意" else if (playing) "暂停演示" else "继续演示",
                     style = type.chip,
                     color = colors.primary,
                     modifier = Modifier
+                        .align(Alignment.End)
+                        .heightIn(min = 48.dp)
                         .clip(EyeShapes.chip)
                         .background(colors.primarySoft)
                         .clickable(enabled = !reduced, role = Role.Button) {
@@ -176,7 +187,7 @@ private fun BeatRow(label: String, active: Boolean, done: Boolean) {
         when {
             active -> colors.primary
             done -> colors.textSecondary
-            else -> colors.textSecondary.copy(alpha = 0.7f)
+            else -> colors.textSecondary
         },
         tween(EyeMotion.MEDIUM),
         label = "分镜文字色"

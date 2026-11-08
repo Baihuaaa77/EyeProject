@@ -17,14 +17,14 @@ object EyeSpacing {
     val xxl = 32.dp
 
     /** 页面左右留白。 */
-    val gutter = 16.dp
+    val gutter = 20.dp
     /** 普通卡片内边距。 */
-    val cardPadding = 16.dp
+    val cardPadding = 20.dp
     /** 主卡内边距（更宽松，突出层级）。 */
     val heroPadding = 20.dp
     /** 卡片之间的间距（分区标题上方另留 [sectionGap]）。 */
-    val cardGap = 12.dp
+    val cardGap = 16.dp
     /** 分区标题与上一块内容之间。 */
-    val sectionGap = 28.dp
+    val sectionGap = 24.dp
     val itemGap = 12.dp
 }

@@ -183,7 +183,7 @@ struct AccountPage: View {
             ZStack {
                 Circle().fill(EyeStyle.panel)
                 if signedIn && !address.isEmpty {
-                    Text(String(address.prefix(1)).uppercased()).font(EyeStyle.title).foregroundStyle(EyeStyle.primary)
+                    Text(String(address.prefix(1)).uppercased()).font(EyeStyle.title).foregroundStyle(EyeStyle.readableText(EyeStyle.primary))
                 } else {
                     EyeGlyphView(glyph: .person).frame(width: 30, height: 30)
                 }

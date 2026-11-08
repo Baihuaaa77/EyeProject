@@ -24,6 +24,7 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -32,6 +33,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeMotion
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeShapes
+import com.zkyjss.eyeproject.core.designsystem.theme.EyeControlSizes
 import com.zkyjss.eyeproject.core.designsystem.theme.LightEyeColors
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
@@ -40,7 +42,6 @@ import com.zkyjss.eyeproject.core.ui.component.EyeText
 /** 刺激区固定白底、与深浅主题无关，其上的视标环与校准点统一取亮色主色令牌保证对比。 */
 internal val StageAccent get() = LightEyeColors.primary
 
-private val KeySize = 68.dp
 private val KeyGap = 8.dp
 
 /**
@@ -77,6 +78,7 @@ internal fun OptotypeAnswerPad(direction: Int, size: Dp, visible: Boolean, below
 @Composable
 private fun DirectionButton(direction: Int, label: String, enabled: Boolean, onClick: () -> Unit) {
     val colors = LocalEyeColors.current
+    val keySize = if (LocalDensity.current.fontScale > 1.2f) EyeControlSizes.answerKeyCompact else EyeControlSizes.answerKey
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(if (pressed && enabled) 0.9f else 1f, EyeMotion.pressSpring(), label = "方向键缩放")
@@ -84,7 +86,7 @@ private fun DirectionButton(direction: Int, label: String, enabled: Boolean, onC
         tween(EyeMotion.SHORT), label = "方向键底色")
     val alpha by animateFloatAsState(if (enabled) 1f else 0.35f, tween(EyeMotion.SHORT), label = "方向键可用")
     Box(
-        Modifier.size(KeySize)
+        Modifier.size(keySize)
             .graphicsLayer { scaleX = scale; scaleY = scale; this.alpha = alpha }
             .clip(CircleShape).background(fill)
             .clickable(enabled = enabled, role = Role.Button, interactionSource = interaction, indication = null, onClick = onClick)
@@ -108,12 +110,13 @@ private fun DirectionButton(direction: Int, label: String, enabled: Boolean, onC
 @Composable
 private fun SkipButton(enabled: Boolean, onClick: () -> Unit) {
     val colors = LocalEyeColors.current
+    val keySize = if (LocalDensity.current.fontScale > 1.2f) EyeControlSizes.answerKeyCompact else EyeControlSizes.answerKey
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(if (pressed && enabled) 0.9f else 1f, EyeMotion.pressSpring(), label = "跳过缩放")
     val alpha by animateFloatAsState(if (enabled) 1f else 0.4f, tween(EyeMotion.SHORT), label = "跳过可用")
     Box(
-        Modifier.size(KeySize)
+        Modifier.size(keySize)
             .graphicsLayer { scaleX = scale; scaleY = scale; this.alpha = alpha }
             .clip(CircleShape)
             .background(if (pressed && enabled) colors.surfaceVariant else colors.surfaceVariant.copy(alpha = 0f))

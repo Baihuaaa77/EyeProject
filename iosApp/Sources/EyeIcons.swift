@@ -5,6 +5,7 @@ enum NavIcon { case home, services, mine }
 
 struct NavIconView: View {
     let icon: NavIcon
+    var selected = false
     var body: some View {
         Canvas { context, size in
             let k = min(size.width, size.height) / 24
@@ -18,20 +19,22 @@ struct NavIconView: View {
                 house.move(to: p(4, 10.5)); house.addLine(to: p(12, 4)); house.addLine(to: p(20, 10.5)); house.addLine(to: p(20, 20))
                 house.addLine(to: p(14.8, 20)); house.addLine(to: p(14.8, 14.5)); house.addLine(to: p(9.2, 14.5)); house.addLine(to: p(9.2, 20))
                 house.addLine(to: p(4, 20)); house.closeSubpath()
-                context.stroke(house, with: ink, style: line)
+                if selected { context.fill(house, with: ink) } else { context.stroke(house, with: ink, style: line) }
             case .services:
                 // 自测清单：圆角板 + 勾 + 两条线
-                context.stroke(Path(roundedRect: CGRect(x: 4 * k, y: 3.5 * k, width: 16 * k, height: 17 * k), cornerRadius: 2 * k), with: ink, style: line)
+                let board = Path(roundedRect: CGRect(x: 4 * k, y: 3.5 * k, width: 16 * k, height: 17 * k), cornerRadius: 2 * k)
+                if selected { context.fill(board, with: ink) } else { context.stroke(board, with: ink, style: line) }
                 var check = Path(); check.move(to: p(7.5, 9)); check.addLine(to: p(9.2, 10.7)); check.addLine(to: p(12, 7.8))
-                context.stroke(check, with: ink, style: line)
+                context.stroke(check, with: selected ? .color(EyeStyle.panel) : ink, style: line)
                 var lines = Path(); lines.move(to: p(14, 9.3)); lines.addLine(to: p(16.5, 9.3)); lines.move(to: p(7.5, 15)); lines.addLine(to: p(16.5, 15))
-                context.stroke(lines, with: ink, style: line)
+                context.stroke(lines, with: selected ? .color(EyeStyle.panel) : ink, style: line)
             case .mine:
-                context.stroke(Path(ellipseIn: CGRect(x: 8.2 * k, y: 4.7 * k, width: 7.6 * k, height: 7.6 * k)), with: ink, style: line)
+                let head = Path(ellipseIn: CGRect(x: 8.2 * k, y: 4.7 * k, width: 7.6 * k, height: 7.6 * k))
+                if selected { context.fill(head, with: ink) } else { context.stroke(head, with: ink, style: line) }
                 var body = Path(); body.move(to: p(4.5, 20))
                 body.addCurve(to: p(12, 14), control1: p(5.5, 15.8), control2: p(8.5, 14))
                 body.addCurve(to: p(19.5, 20), control1: p(15.5, 14), control2: p(18.5, 15.8))
-                context.stroke(body, with: ink, style: line)
+                if selected { body.closeSubpath(); context.fill(body, with: ink) } else { context.stroke(body, with: ink, style: line) }
             }
         }
     }

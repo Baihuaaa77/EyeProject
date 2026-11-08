@@ -16,7 +16,7 @@
 | `EyeText` | 文字原语（BasicText 封装），替代 Material `Text` |
 | `EyeIcon` | 图标（Image + ColorFilter.tint），装饰性图标 `contentDescription = null` |
 | `Button.kt` | 通用基础按钮（形状/背景/边框/内边距可配，默认矩形） |
-| `EyeButton` | 业务按钮，三态 `EyeButtonRole(PRIMARY/SECONDARY/DANGER)`：主按钮品牌蓝纯色、次要浅填充，不描边不投影；最小高 50、圆角 14，按下弹簧缩放、角色切换颜色过渡 |
+| `EyeButton` | 三种角色保留；同色浮雕表面、主操作短渐变标记、按下内凹；最小高 52、圆角 14，禁用不可点。 |
 | `EyeBrand.kt` | 品牌与示意图绘制：`EyeBrandMark` / `EyeBrandLockup`、`leafEyePath`、示意人物 `drawFigure`（平面上半身短发男孩，`figureEyeCenter`，视线 / 闭眼 / 睁大，`bottom` 控制上衣下沿）、`drawHand`（肤色手掌 + 袖子）、`drawPhone`、注视准星 `drawFixationTarget`、应用图标展示 `EyeAppIcon`（与桌面图标同一张图）、`drawTumblingE` |
 | `EyeGlyph.kt` | 线性小图标（`EyeGlyph`，Canvas 自绘，跟随 tint），列表行与服务入口用 |
 
@@ -24,11 +24,12 @@
 
 | 组件 | 说明 |
 |---|---|
-| `EyeSectionCard` | 分区卡片：纯色面 + 可选标题 |
-| `EyeSurfaces.kt` | 层次与质感（2026-11-08 改版）：`EyeHeroCard`（每页一张主卡，圆角 22）、`EyeCard`（圆角 18）、`Modifier.eyeGlass`（纯色卡片面，名称沿用；`elevation` > 0 才投影）、`Modifier.eyeBackdrop`（页面纯色底）、`eyeReading`（读数排版：数字沿用外层大字、单位小一半配次要文字色）、`EyeMetric` / `EyeMetricRow`（标签在上数值在下、竖线分隔）、`EyeProgressRing` / `drawProgressRing`（纯色圆头圆环，可传 `tint`，不发光）、`EyeAiMark`（声波）、`EyeCallout` |
+| `EyeSectionCard` | 分区卡片：柔和双阴影表面 + 可选标题 |
+| `EyeSurfaces.kt` | `EyeHeroCard` / `EyeCard` 使用 20 圆角双阴影表面；`eyeGlass` 转交设计系统 `eyeSoftSurface`。圆环默认蓝青渐变并带柔光，支持语义 `tint`；`eyeReading` 分离数字与单位排版。 |
+| `EyeDataGlow.kt` | 数据图形副本的蓝色模糊外晕，原图形与亮芯单独清晰绘制；统一用于圆环、柱图、首页迷你光条和按钮主操作标记 |
 | `EyeDisclosure` | 默认折叠的次级信息，展开/收起高度+透明度过渡、箭头旋转，带展开状态无障碍语义 |
 | `EyeSelectCard` | 入口卡：可选前置图标 + 标题/副标题 + 箭头，按下轻缩，最小 80dp 高；不传副标题时标题用大一号的 `title` 字号 |
-| `EyeList.kt` | 卡片分类头 `EyeCategoryHeader`（分类色图标 + 标题 + 右侧操作）、数据卡类别标签 `EyeCategoryLabel`（类别色小图标 + 13 号类别色名称）；iOS 设置式分组列表：`EyeListGroup`（组标题 + 圆角面板）、`EyeListRow`（实心图标块 `EyeIconTile`（白色图标）或自绘 `leading` / 标题 / 副标题 / 右侧值 / 箭头，可禁用）、`EyeSwitchRow`（可带「?」说明），色调 `EyeTileTone`（`colors()` 浅底配色、`solid()` 实心块色） |
+| `EyeList.kt` | 组标题 + 独立浮雕行，取消连续分隔线；图标为同色浮雕底与彩色线稿，名称用中性文字。保留值、箭头、禁用、自绘图标、整行开关与说明入口。 |
 | `EyeSubPage` | 二级完整页面骨架：返回栏 + 标题 + 滚动内容 + 可选底栏 |
 | `EyeFullScreenPage` | 盖在当前页上的全屏页面（全屏 Dialog），替代底部弹窗，系统返回键关闭 |
 
@@ -36,13 +37,13 @@
 
 | 组件 | 说明 |
 |---|---|
-| `EyeSwitch` | 开关（Box + 动画），选中轨道主色；`onCheckedChange = null` 时仅展示（由外层整行切换） |
+| `EyeSwitch` | 内凹轨道与浮雕滑块，选中滑块蓝青渐变；外层整行开关暴露选中状态。 |
 | `EyeSegmentedRow` | 分段选择器，泛型 `SegmentedOption<T>`：浅色轨道 + 主色滑块弹簧滑动，RadioButton 语义 |
-| `EyeTextField` | 单行输入框（BasicTextField 自绘）：上方标签、浅底细边框、占位文字；`password` 遮挡输入 |
+| `EyeTextField` | 单行输入框：标签 + 内凹表面 + 占位文字，保留密码、键盘类型与禁用行为。 |
 | `AiExplanationCard` | AI 解读 / AI 综合建议卡片（文案由 `AiCardText` 给出，`AiCardText.ADVICE` 为综合建议），状态 `AiCardState`（Locked / Idle（可带同意说明，卡内展开）/ Loading（骨架 + 轮换进度语）/ Done（一句话总结、这说明、可以这样做、何时就医、参考资料、免责说明）/ Failed）；`embedded` 用于嵌在记录行里。苹果端 `AiExplanationView.swift` 同一排版 |
 | `EyeStatusChip` | 状态徽标，`StatusTone(NEUTRAL/SUCCESS/DANGER/WARNING)` 语义色；`live` 时带呼吸圆点 |
 | `EyeHelp.kt` | `EyeHelpButton`：灰色圆形「?」，点开气泡说明（替代括号小字）；`EyeTitleWithHelp` 标题 + 问号。苹果端 `HelpButton` 同一样式 |
-| `EyeCharts.kt` | `EyeBarChart`：近 7 天柱状图（纯色 `tint`、今天实色其余变淡、不画底槽；只写今天与超标天的读数，超标用琥珀色；虚线刻度与类别色参考线、空值留白） |
+| `EyeCharts.kt` | 凹槽内的细胶囊渐变柱，空值只画轨道、零值不伪造柱高；薄荷色虚线参考，文字读数与无障碍描述保留；移除动画时直接到终态。 |
 
 ### 启动与提示音
 

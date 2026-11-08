@@ -42,7 +42,7 @@ struct AiChatPage: View {
                         }
                         if sending { typing }
                         if let error = info["error"] as? String, !error.isEmpty {
-                            Text(error).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.danger)
+                            Text(error).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.readableText(EyeStyle.danger))
                         }
                         Text(info["disclaimer"] as? String ?? "").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
                         Color.clear.frame(height: 1).id("bottom")
@@ -226,7 +226,7 @@ private struct ChatBubble: View {
                     Text(message["text"] as? String ?? "").font(EyeStyle.body).foregroundStyle(mine ? EyeStyle.onPrimary : EyeStyle.text)
                         .textSelection(.enabled)
                     if message["inquiryComplete"] as? Bool == true && !urgent {
-                        Text("本次问询已总结").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.primary)
+                        Text("本次问询已总结").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.readableText(EyeStyle.primary))
                     }
                     if let q = message["question"] as? [String: Any] {
                         let options = q["options"] as? [String] ?? []
@@ -258,7 +258,7 @@ private struct ChatBubble: View {
                 HStack(alignment: .top, spacing: 10) {
                     EyeGlyphView(glyph: .info, color: EyeStyle.danger).frame(width: 20, height: 20).padding(.top, 1)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("建议尽快就医").font(EyeStyle.body.weight(.semibold)).foregroundStyle(EyeStyle.danger)
+                        Text("建议尽快就医").font(EyeStyle.body.weight(.semibold)).foregroundStyle(EyeStyle.readableText(EyeStyle.danger))
                         Text(urgentNotice).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.text).fixedSize(horizontal: false, vertical: true)
                     }
                 }

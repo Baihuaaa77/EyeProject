@@ -26,9 +26,9 @@ private val LightIllustration = IllustrationColors()
 private val DarkIllustration = IllustrationColors(shirt = Color(0xFF648BC8), shirtLight = Color(0xFF86A6DA))
 val EyeColors.illustration: IllustrationColors get() = if (isDark) DarkIllustration else LightIllustration
 
-/** 测试到位提示：与「正常」同一组绿色（2026-11 改版后夜间是纯黑底，不再需要蓝青色替代）。 */
+/** 测试到位提示：沿用 DESIGN.md 的语义图形色。 */
 val EyeColors.testReady: Color get() = success
 val EyeColors.testReadySoft: Color get() = successSoft
 
-/** 柔和警示底上的文字色，浅色比实心警示块更深，确保正文对比度。 */
-val EyeColors.testTooClose: Color get() = if (isDark) danger else Color(0xFFB42332)
+/** 太近状态的图形色；正文由文字原语映射为中性墨色。 */
+val EyeColors.testTooClose: Color get() = danger

@@ -59,7 +59,7 @@ struct MinePage: View {
             Button { EyeHaptics.tap(); navigate(.subjectEdit(me?.id)) } label: {
                 HStack(spacing: 14) {
                     Text(String((me?.displayName ?? "我").prefix(1))).font(EyeStyle.title).foregroundStyle(EyeStyle.onPrimary)
-                        .frame(width: 56, height: 56).background(EyeStyle.buttonStart, in: Circle())
+                        .frame(width: 56, height: 56).eyeGlass(cornerRadius: EyeStyle.radiusMedium)
                     VStack(alignment: .leading, spacing: 4) {
                         Text(me?.displayName ?? "我").font(EyeStyle.title).foregroundStyle(EyeStyle.text)
                         Text(([age.map { "\($0) 岁" }, complete >= 5 ? "档案已完善" : "档案完善 \(complete)/5"] as [String?]).compactMap { $0 }.joined(separator: " · "))
@@ -74,7 +74,7 @@ struct MinePage: View {
                     Text(signedIn ? cloud.string("email") : "未登录").font(EyeStyle.body)
                         .foregroundStyle(signedIn ? EyeStyle.text : EyeStyle.secondary).lineLimit(1)
                     Spacer()
-                    Text(signedIn ? "账户" : "登录 / 注册").font(EyeStyle.body).foregroundStyle(EyeStyle.primary)
+                    Text(signedIn ? "账户" : "登录 / 注册").font(EyeStyle.body).foregroundStyle(EyeStyle.readableText(EyeStyle.primary))
                 }.padding(.horizontal, 20).padding(.vertical, 14).contentShape(Rectangle())
             }.buttonStyle(RowPressStyle())
         }

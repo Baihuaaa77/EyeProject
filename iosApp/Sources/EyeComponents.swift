@@ -15,7 +15,7 @@ struct HelpButton: View {
         Button { EyeHaptics.tap(); open = true } label: {
             Text("?").font(EyeStyle.chip).foregroundStyle(EyeStyle.secondary)
                 .frame(width: 20, height: 20).background(EyeStyle.surfaceVariant, in: Circle())
-                .frame(width: 36, height: 36).contentShape(Rectangle())
+                .frame(width: 44, height: 44).contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(title) 说明")
@@ -49,8 +49,7 @@ struct SettingsGear: View {
     var body: some View {
         Button { EyeHaptics.tap(); action() } label: {
             Image(systemName: "gearshape.fill").font(.system(size: 18)).foregroundStyle(EyeStyle.primary)
-                .frame(width: 36, height: 36).background(EyeStyle.surfaceVariant, in: Circle())
-                .frame(width: 44, height: 44).contentShape(Rectangle())
+                .frame(width: 48, height: 48).eyeGlass(cornerRadius: EyeStyle.radiusMedium).contentShape(Rectangle())
         }.buttonStyle(.plain).accessibilityLabel("系统设置")
     }
 }
@@ -79,20 +78,18 @@ struct AccountButton: View {
         let email = cloud.bool("signedIn") ? cloud.string("email") : ""
         Button { EyeHaptics.tap(); action() } label: {
             ZStack {
-                Circle().fill(email.isEmpty ? EyeStyle.surfaceVariant : EyeStyle.buttonStart)
+                Color.clear
                 if email.isEmpty {
                     EyeGlyphView(glyph: .person, color: EyeStyle.primary).frame(width: 20, height: 20)
                 } else {
                     Text(String(email.prefix(1)).uppercased()).font(EyeStyle.subtitle).foregroundStyle(EyeStyle.onPrimary)
                 }
             }
-            .frame(width: 36, height: 36)
-            .frame(width: 44, height: 44).contentShape(Rectangle())
+            .frame(width: 48, height: 48).eyeGlass(cornerRadius: EyeStyle.radiusMedium).contentShape(Rectangle())
         }.buttonStyle(.plain).accessibilityLabel(email.isEmpty ? "账户（未登录）" : "账户（已登录）")
     }
 }
 
-/// 顶层页标题行：小号日期等副标题在上、32 号大标题在下，右上角一个圆钮（有账户入口时为账户头像，否则为齿轮，都没有则不放）。
 /// 与安卓 EyePageHeader 一致。
 struct PageHeader: View {
     let title: String
@@ -100,13 +97,13 @@ struct PageHeader: View {
     var openAccount: (() -> Void)? = nil
     var openSettings: (() -> Void)? = nil
     var body: some View {
-        HStack(alignment: .bottom, spacing: 10) {
-            VStack(alignment: .leading, spacing: 0) {
-                if let subtitle { Text(subtitle).font(EyeStyle.chip).foregroundStyle(EyeStyle.secondary) }
-                Text(title).font(EyeStyle.headline).foregroundStyle(EyeStyle.text).lineLimit(1).minimumScaleFactor(0.7)
+        HStack(alignment: .center, spacing: 10) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title).font(EyeStyle.headline).foregroundStyle(EyeStyle.heading).lineLimit(1).minimumScaleFactor(0.7)
+                if let subtitle { Text(subtitle).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary) }
             }.frame(maxWidth: .infinity, alignment: .leading)
             if let openAccount { AccountButton(action: openAccount) } else if let openSettings { SettingsGear(action: openSettings) }
-        }.padding(.top, 12).padding(.bottom, 4)
+        }.padding(.top, 20).padding(.bottom, 12)
     }
 }
 
@@ -250,8 +247,8 @@ enum TileTone {
         case .primary: return (EyeStyle.primarySoft, EyeStyle.primary)
         case .accent: return (EyeStyle.sunSoft, EyeStyle.sun)
         case .success: return (EyeStyle.successSoft, EyeStyle.success)
-        case .blue: return (EyeStyle.iceSoft, EyeStyle.iceInk)
-        case .violet: return (EyeStyle.screenSoft, EyeStyle.screen)
+        case .blue: return (EyeStyle.iceSoft, EyeStyle.Tile.teal)
+        case .violet: return (EyeStyle.violetSoft, EyeStyle.violet)
         case .danger: return (EyeStyle.dangerSoft, EyeStyle.danger)
         case .neutral: return (EyeStyle.surfaceVariant, EyeStyle.secondary)
         }
@@ -270,14 +267,13 @@ enum TileTone {
     }
 }
 
-/// 列表图标块：实心圆角色块 + 白色线性图标（iOS 设置式）。
 struct IconTile: View {
     let glyph: EyeGlyph
     var tone: TileTone = .primary
     var size: CGFloat = 32
     var body: some View {
-        EyeGlyphView(glyph: glyph, color: .white).frame(width: size * 0.6, height: size * 0.6)
-            .frame(width: size, height: size).background(tone.solid, in: RoundedRectangle(cornerRadius: size * 0.27, style: .continuous))
+        EyeGlyphView(glyph: glyph, color: tone.solid).frame(width: size * 0.6, height: size * 0.6)
+            .frame(width: size, height: size).eyeGlass(cornerRadius: EyeStyle.radiusMedium)
     }
 }
 
@@ -289,9 +285,8 @@ struct ListGroup<Content: View>: View {
     @ViewBuilder let content: Content
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if let title { Text(title).font(EyeStyle.chip).foregroundStyle(EyeStyle.secondary).padding(.leading, 16) }
-            VStack(spacing: 0) { content }
-                .eyeGlass()
+            if let title { Text(title).font(EyeStyle.title).foregroundStyle(EyeStyle.heading).padding(.leading, 4).padding(.top, 12).padding(.bottom, 8) }
+            VStack(spacing: EyeSpacing.sm) { content }
         }.frame(maxWidth: .infinity, alignment: .leading)
     }
 }
@@ -331,19 +326,17 @@ struct ListRow: View {
             HStack(spacing: 14) {
                 if let glyph { IconTile(glyph: glyph, tone: tone) }
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(title).font(EyeStyle.body).foregroundStyle(enabled ? titleColor : EyeStyle.secondary)
+                    Text(title).font(EyeStyle.body).foregroundStyle(enabled ? EyeStyle.readableText(titleColor) : EyeStyle.secondary)
                     if let subtitle { Text(subtitle).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary).multilineTextAlignment(.leading) }
                 }.frame(maxWidth: .infinity, alignment: .leading)
-                if let value { Text(value).font(EyeStyle.body).foregroundStyle(valueColor).lineLimit(1) }
+                if let value { Text(value).font(EyeStyle.body).foregroundStyle(EyeStyle.readableText(valueColor)).lineLimit(1) }
                 if action != nil {
                     Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(EyeStyle.tertiary)
                 }
             }
-            .padding(.leading, 16 + indent).padding(.trailing, 16).padding(.vertical, 10).frame(minHeight: 52)
-            if divider {
-                Rectangle().fill(EyeStyle.borderSubtle).frame(height: 0.5).padding(.leading, (glyph == nil ? 16 : 62) + indent)
-            }
-        }.contentShape(Rectangle())
+            .padding(.leading, 16 + indent).padding(.trailing, 16).padding(.vertical, 10).frame(minHeight: 56)
+
+        }.eyeGlass().contentShape(Rectangle())
     }
 }
 
@@ -372,11 +365,8 @@ struct SwitchRow: View {
                 Toggle("", isOn: Binding(get: { isOn }, set: { EyeHaptics.toggle(); isOn = $0 }))
                     .labelsHidden().tint(EyeStyle.primary).disabled(!enabled)
             }
-            .padding(.horizontal, 16).padding(.vertical, 6).frame(minHeight: 52)
-            if divider {
-                Rectangle().fill(EyeStyle.borderSubtle).frame(height: 0.5).padding(.leading, glyph == nil ? 16 : 62)
-            }
-        }
+            .padding(.horizontal, 16).padding(.vertical, 6).frame(minHeight: 56)
+        }.eyeGlass()
     }
 }
 
@@ -453,10 +443,12 @@ struct StatusChip: View {
     let color: Color
     var filled = false
     var body: some View {
-        let fill = EyeStyle.statusFill(color)
-        Text(text).font(EyeStyle.chip).foregroundStyle(filled ? fill.1 : color)
+        HStack(spacing: 6) {
+            Circle().fill(color).frame(width: 6, height: 6)
+            Text(text).font(EyeStyle.chip).foregroundStyle(EyeStyle.text)
+        }
             .padding(.horizontal, 12).padding(.vertical, 6)
-            .background(filled ? fill.0 : color.opacity(0.12), in: EyeStyle.chipShape)
+            .background(EyeStyle.surfaceVariant, in: EyeStyle.chipShape)
     }
 }
 
@@ -517,6 +509,7 @@ struct BarChartView: View {
     var height: CGFloat = 140
     /// 柱子颜色（类别色），默认主色。
     var tint: Color = EyeStyle.primary
+    @Environment(\.accessibilityReduceMotion) private var reduced
     @State private var grow: CGFloat = 0
 
     var body: some View {
@@ -525,34 +518,33 @@ struct BarChartView: View {
             HStack(spacing: 0) {
                 ForEach(bars) { bar in
                     Text(bar.highlight || bar.warning ? (bar.text ?? " ") : " ").font(EyeStyle.caption)
-                        .foregroundStyle(bar.warning ? EyeStyle.warning : EyeStyle.text)
+                        .foregroundStyle(EyeStyle.text)
                         .lineLimit(1).frame(maxWidth: .infinity)
                 }
             }
             Canvas { context, size in
-                // 横向刻度：顶部与中间虚线、底部实线
-                for f in [0.0, 0.5] {
-                    var grid = Path(); grid.move(to: CGPoint(x: 0, y: size.height * f)); grid.addLine(to: CGPoint(x: size.width, y: size.height * f))
-                    context.stroke(grid, with: .color(EyeStyle.borderSubtle), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
-                }
-                var base = Path(); base.move(to: CGPoint(x: 0, y: size.height)); base.addLine(to: CGPoint(x: size.width, y: size.height))
-                context.stroke(base, with: .color(EyeStyle.borderSubtle), lineWidth: 1)
                 let slot = size.width / CGFloat(max(bars.count, 1))
-                let barWidth = min(max(slot * 0.5, 10), 24)
-                let radius = min(6, barWidth / 2)
+                let trackWidth = min(max(slot * 0.6, 12), 24)
+                let barWidth = trackWidth * 0.44
+                let radius = barWidth / 2
                 for (i, bar) in bars.enumerated() {
-                    guard let v = bar.value else { continue }
+                    let tx = slot * CGFloat(i) + (slot - trackWidth) / 2
+                    context.fill(Path(roundedRect: CGRect(x: tx, y: 0, width: trackWidth, height: size.height), cornerRadius: trackWidth / 2), with: .color(EyeStyle.surfaceVariant))
+                    guard let v = bar.value, v > 0 else { continue }
                     let x = slot * CGFloat(i) + (slot - barWidth) / 2
                     let h = max(CGFloat(v / top) * size.height * grow, v > 0 ? radius * 2 : 0)
                     let rect = CGRect(x: x, y: size.height - h, width: barWidth, height: h)
                     var layer = context
-                    layer.opacity = bar.highlight ? 1 : 0.32
-                    layer.fill(Path(roundedRect: rect, cornerRadius: radius), with: .color(tint))
+                    layer.addFilter(.shadow(color: EyeStyle.primary.opacity(EyeStyle.glowOpacity), radius: EyeStyle.glowRadius))
+                    layer.addFilter(.shadow(color: EyeStyle.glow, radius: 3))
+                    layer.fill(Path(roundedRect: rect, cornerRadius: radius), with: .linearGradient(
+                        Gradient(colors: [EyeStyle.brandStart, EyeStyle.dataCyan, EyeStyle.dataAqua]),
+                        startPoint: CGPoint(x: x, y: size.height - h), endPoint: CGPoint(x: x, y: size.height)))
                 }
                 if let reference {
                     let y = size.height - CGFloat(reference / top) * size.height
                     var line = Path(); line.move(to: CGPoint(x: 0, y: y)); line.addLine(to: CGPoint(x: size.width, y: y))
-                    context.stroke(line, with: .color(tint.opacity(0.6)), style: StrokeStyle(lineWidth: 1.5, dash: [4, 4]))
+                    context.stroke(line, with: .color(EyeStyle.dataMint.opacity(0.6)), style: StrokeStyle(lineWidth: 1.5, dash: [4, 4]))
                 }
             }.frame(height: height)
             HStack(spacing: 0) {
@@ -562,7 +554,7 @@ struct BarChartView: View {
                 }
             }.padding(.top, 2)
         }
-        .onAppear { withAnimation(.easeOut(duration: 0.7)) { grow = 1 } }
+        .onAppear { withAnimation(reduced ? nil : .easeOut(duration: 0.9)) { grow = 1 } }
     }
 }
 

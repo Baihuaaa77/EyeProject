@@ -136,6 +136,34 @@ class HomeVisualTest {
         capture("03-首页-深色-还没有数据")
     }
 
+    /** 深色模式展示真实页面与虚构报告，检查圆环、空槽和正文层次。 */
+    @Test fun homeDarkWithData() {
+        compose.setContent { EyeProjectTheme(darkTheme = true) { HomeContent(demoState(), HomeNavigation(), HomeActions()) } }
+        compose.onNodeWithText("眼健康指数").assertIsDisplayed()
+        compose.onNodeWithText("做 1 分钟护眼操").assertIsDisplayed()
+        capture("01c-首页-深色-首屏")
+    }
+
+    /** 375dp 小屏放大字号后，所有护眼工具仍能滚动触达并正常派发事件。 */
+    @Test @Config(qualifiers = "zh-rCN-w375dp-h812dp-mdpi")
+    fun smallHomeLargeTextKeepsToolsReachable() {
+        var openedBrightness = false
+        compose.setContent {
+            EyeProjectTheme {
+                androidx.compose.runtime.CompositionLocalProvider(
+                    androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(1f, 1.5f),
+                ) {
+                    HomeContent(demoState(), HomeNavigation(onOpenBrightness = { openedBrightness = true }), HomeActions())
+                }
+            }
+        }
+        compose.onNodeWithText("眼健康指数").assertIsDisplayed()
+        compose.onNodeWithText("亮度与蓝光").performScrollTo().assertIsDisplayed().performClick()
+        assertTrue(openedBrightness)
+        compose.onNodeWithText("休息提醒").performScrollTo().assertIsDisplayed()
+        capture("01d-首页-375-大字号")
+    }
+
     /** 负荷偏高的一天：主卡等级为「偏累」。 */
     @Test fun highLoadDaySuggestsRest() {
         val usage = UsageDay(today, screenMinutes = 7 * 60, longestSessionMinutes = 130, nightMinutes = 70, breaks = 2)

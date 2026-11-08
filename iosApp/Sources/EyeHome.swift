@@ -11,7 +11,6 @@ private func levelColor(_ level: String) -> Color {
 }
 
 /// 首页（2026-11-08 视觉改版）：日期 +「今日」与右上角账户头像 → 主卡（实心圆环包住的眼健康指数、一句结论、「做 1 分钟护眼操」）→
-/// 今日数据（系统提供的读数，两列小卡）→ 护眼工具（护眼操、用眼趋势、亮度与蓝光三张白卡）→ 爱科卡（半身像 +「今天眼睛感觉怎么样？」，
 /// 快捷记下今日感受）→ 实时检测（未开始时一行）→ 休息提醒一行。与安卓 HomeContent 一致。
 struct HomePage: View {
     let navigate: (AppRoute) -> Void
@@ -75,36 +74,35 @@ private func ringColor(_ level: String) -> Color {
     switch level { case "LOW": return EyeStyle.success; case "MEDIUM": return EyeStyle.accent; case "HIGH": return EyeStyle.danger; default: return EyeStyle.tertiary }
 }
 
-/// 主卡：左侧实心圆环（等级色，圈越满越健康）中间一只眼睛，右侧「眼健康指数」、大号分数与等级（小圆点 + 等级色文字）；
 /// 下面一句结论和主按钮「做 1 分钟护眼操」。眼健康指数 = 100 − 用眼负荷分。与安卓 EyeCareHero 一致。
 private struct HeroCard: View {
     let report: CareReport
     let openExercise: () -> Void
     var body: some View {
         let index = report.score.map(healthIndex)
-        let ring = ringColor(report.level)
-        EyeHeroCard(spacing: 18) {
-            HStack(spacing: 22) {
-                ZStack {
-                    ProgressRing(fraction: index.map { Double($0) / 100 }, lineWidth: 14, tint: ring)
-                    EyeGlyphView(glyph: .eye, color: ring).frame(width: 30, height: 30)
-                }
-                .frame(width: 124, height: 124)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(index.map { "今日眼健康指数 \($0) 分，\(report.label)" } ?? "今日眼健康指数暂无数据")
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("眼健康指数").font(EyeStyle.chip).foregroundStyle(EyeStyle.secondary)
-                    (Text(index.map { "\($0)" } ?? "—").font(EyeStyle.display).foregroundColor(EyeStyle.text)
-                     + Text(" /100").font(EyeStyle.subtitle.weight(.medium)).foregroundColor(EyeStyle.tertiary))
-                        .monospacedDigit().lineLimit(1)
-                    HStack(spacing: 6) {
-                        Circle().fill(ring).frame(width: 8, height: 8)
-                        Text(report.label).font(EyeStyle.subtitle).foregroundStyle(levelColor(report.level))
+        EyeHeroCard(spacing: EyeSpacing.lg) {
+            HStack(spacing: EyeSpacing.md) {
+                VStack(alignment: .leading, spacing: EyeSpacing.xs) {
+                    Text("眼健康指数").font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text)
+                    HStack(alignment: .firstTextBaseline, spacing: EyeSpacing.xxs) {
+                        Text(index.map { "\($0)" } ?? "—").font(EyeStyle.display).foregroundStyle(EyeStyle.text)
+                            .monospacedDigit().lineLimit(1).minimumScaleFactor(0.75)
+                        Text("/100").font(EyeStyle.body).foregroundStyle(EyeStyle.secondary)
                     }
-                }
+                    HStack(spacing: EyeSpacing.xs) {
+                        Circle().fill(ringColor(report.level)).frame(width: 7, height: 7)
+                        Text(report.label).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.text)
+                    }.padding(.horizontal, EyeSpacing.sm).padding(.vertical, EyeSpacing.xxs)
+                        .background(EyeStyle.surfaceVariant, in: EyeStyle.chipShape)
+                }.frame(maxWidth: .infinity, alignment: .leading)
+                ProgressRing(fraction: index.map { Double($0) / 100 }, lineWidth: 9, showEndpoint: true)
+                    .frame(width: 112, height: 112)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(index.map { "今日眼健康指数 \($0) 分，\(report.label)" } ?? "今日眼健康指数暂无数据")
             }
             if !report.headline.isEmpty {
-                Text(report.headline).font(EyeStyle.body).foregroundStyle(EyeStyle.secondary).fixedSize(horizontal: false, vertical: true)
+                Text(report.headline).font(EyeStyle.body.weight(.medium)).foregroundStyle(EyeStyle.text)
+                    .multilineTextAlignment(.leading).frame(maxWidth: .infinity).fixedSize(horizontal: false, vertical: true)
             }
             Button("做 1 分钟护眼操", action: openExercise).buttonStyle(EyeButtonStyle())
         }
@@ -168,13 +166,13 @@ private struct EyechoCard: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 6) {
                     EyeGlyphView(glyph: .chat, color: EyeStyle.violet).frame(width: 16, height: 16)
-                    Text(eyechoCardLabel).font(EyeStyle.chip).foregroundStyle(EyeStyle.violet)
+                    Text(eyechoCardLabel).font(EyeStyle.chip).foregroundStyle(EyeStyle.readableText(EyeStyle.violet))
                 }
                 Text(checked ? "今天的感受已记下" : "今天眼睛感觉怎么样？").font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text)
                 FlowLayout(spacing: 8) {
                     if checked {
                         ForEach(symptoms.isEmpty ? [noDiscomfort] : symptoms, id: \.self) { label in
-                            Text(label).font(EyeStyle.chip).foregroundStyle(EyeStyle.primary)
+                            Text(label).font(EyeStyle.chip).foregroundStyle(EyeStyle.readableText(EyeStyle.primary))
                                 .padding(.horizontal, 10).padding(.vertical, 6).background(EyeStyle.primarySoft, in: EyeStyle.chipShape)
                         }
                         QuickChip(label: "修改", action: edit)
@@ -313,8 +311,8 @@ private struct CardHeader: View {
 private func signalCategory(_ key: String) -> (EyeGlyph, Color) {
     switch key {
     case "screen": return (.hourglass, EyeStyle.screen)
-    case "longest": return (.clock, EyeStyle.screen)
-    case "night": return (.moon, EyeStyle.screen)
+    case "longest": return (.clock, EyeStyle.sun)
+    case "night": return (.moon, EyeStyle.violet)
     case "breaks": return (.coffee, EyeStyle.success)
     case "light", "brightness": return (.sun, EyeStyle.sun)
     default: return (.info, EyeStyle.secondary)
@@ -346,7 +344,7 @@ private struct SignalCard: View {
                 EyeGlyphView(glyph: category.0, color: category.1).frame(width: 16, height: 16)
                 Text(signal.label).font(EyeStyle.chip).foregroundStyle(category.1).lineLimit(1)
                 Spacer(minLength: 4)
-                if signal.status == "ATTENTION" { Text("留意").font(EyeStyle.chip).foregroundStyle(EyeStyle.warning) }
+                if signal.status == "ATTENTION" { Text("留意").font(EyeStyle.chip).foregroundStyle(EyeStyle.readableText(EyeStyle.warning)) }
             }
             EyeStyle.reading(signal.value, color: signal.status == "UNAVAILABLE" ? EyeStyle.tertiary : EyeStyle.text)
                 .lineLimit(1).minimumScaleFactor(0.7)
@@ -375,7 +373,7 @@ private struct ReminderCard: View {
             if reminder.enabled {
                 SegmentedPicker(options: [(20, "每 20 分钟"), (30, "每 30 分钟"), (60, "每 60 分钟")], selected: reminder.intervalMinutes) { reminder.setInterval($0) }
             }
-            if let notice = reminder.notice { Text(notice).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.warning) }
+            if let notice = reminder.notice { Text(notice).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.readableText(EyeStyle.warning)) }
         }
         .padding(.horizontal, 16).padding(.vertical, 12).frame(maxWidth: .infinity, alignment: .leading)
         .eyeGlass()

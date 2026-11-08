@@ -40,6 +40,7 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeMotion
+import com.zkyjss.eyeproject.core.designsystem.theme.eyeSoftSurface
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeShapes
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
@@ -56,7 +57,7 @@ fun EyeHelpButton(title: String, text: String, modifier: Modifier = Modifier) {
     var open by remember { mutableStateOf(false) }
     Box(
         modifier
-            .size(36.dp)
+            .size(48.dp)
             .clip(CircleShape)
             .clickable(role = Role.Button, interactionSource = remember { MutableInteractionSource() }, indication = null) {
                 haptics.tap(); open = true
@@ -91,9 +92,7 @@ private fun HelpPopup(title: String, text: String, onDismiss: () -> Unit) {
             Column(
                 Modifier
                     .widthIn(max = 300.dp)
-                    .shadow(12.dp, EyeShapes.large, clip = false)
-                    .clip(EyeShapes.large)
-                    .background(colors.panelBackground)
+                    .eyeSoftSurface(colors, EyeShapes.large)
                     .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDismiss)
                     .padding(horizontal = 16.dp, vertical = 14.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),

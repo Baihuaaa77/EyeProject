@@ -83,7 +83,7 @@ struct TestNoticeSlot: View {
     var body: some View {
         ZStack {
             if !text.isEmpty {
-                Text(text).font(.body).foregroundStyle(EyeStyle.warning).multilineTextAlignment(.center).lineLimit(2)
+                Text(text).font(.body).foregroundStyle(EyeStyle.readableText(EyeStyle.warning)).multilineTextAlignment(.center).lineLimit(2)
                     .padding(.horizontal, 16).padding(.vertical, 8).frame(maxWidth: .infinity)
                     .background(EyeStyle.warning.opacity(0.12), in: EyeStyle.chipShape)
                     .transition(.opacity)
@@ -98,7 +98,7 @@ struct TestNotice: View {
     var floating = false
     var body: some View {
         if !text.isEmpty {
-            Text(text).font(.body).foregroundStyle(EyeStyle.warning).multilineTextAlignment(.center).lineLimit(floating ? 2 : nil)
+            Text(text).font(.body).foregroundStyle(EyeStyle.readableText(EyeStyle.warning)).multilineTextAlignment(.center).lineLimit(floating ? 2 : nil)
                 .padding(.horizontal, 16).padding(.vertical, 10).frame(maxWidth: .infinity)
                 .background(EyeStyle.warning.opacity(0.12), in: EyeStyle.chipShape)
                 .background(floating ? EyeStyle.panel : Color.clear, in: EyeStyle.chipShape)
@@ -131,7 +131,7 @@ struct CountdownRing: View {
     var body: some View {
         TimerRing(progress: sweep) {
             Text("\(seconds)").font(.system(size: 64, weight: .semibold, design: .rounded)).monospacedDigit()
-                .foregroundStyle(EyeStyle.primary).id(seconds)
+                .foregroundStyle(EyeStyle.readableText(EyeStyle.primary)).id(seconds)
                 .transition(reduceMotion ? AnyTransition.identity : AnyTransition.scale(scale: 0.6).combined(with: .opacity))
         }.frame(width: 168, height: 168)
             .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.7), value: seconds)

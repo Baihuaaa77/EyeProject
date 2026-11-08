@@ -15,6 +15,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.SolidColor
+import com.zkyjss.eyeproject.core.designsystem.theme.eyeSoftSurface
 import androidx.compose.ui.unit.dp
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
 
@@ -35,7 +37,7 @@ fun EyeSwitch(
         if (checked) colors.primary else colors.borderSubtle,
         label = "eyeSwitchTrack"
     )
-    val thumbColor = colors.white
+    val thumbColor = colors.panelBackground
 
     // 滑块水平位移动画（轨道 52dp、滑块 28dp、两侧各 2dp padding）
     val thumbOffsetX by animateDpAsState(
@@ -55,16 +57,15 @@ fun EyeSwitch(
             .padding(vertical = 8.dp)
             .size(width = 52.dp, height = 32.dp)
             .alpha(if (enabled) 1f else 0.5f)
-            .clip(RoundedCornerShape(16.dp))
-            .background(trackColor)
+            .eyeSoftSurface(colors, RoundedCornerShape(16.dp), SolidColor(colors.surfaceVariant), pressed = true)
 
     ) {
         Box(
             modifier = Modifier
                 .offset(x = thumbOffsetX, y = 2.dp)
                 .size(28.dp)
-                .clip(CircleShape)
-                .background(thumbColor)
+                .eyeSoftSurface(colors, CircleShape, compact = true)
+                .background(if (checked) colors.flowBrush else SolidColor(thumbColor))
         )
     }
 }

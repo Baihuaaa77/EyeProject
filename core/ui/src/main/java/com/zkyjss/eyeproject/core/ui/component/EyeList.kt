@@ -5,6 +5,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
@@ -25,6 +26,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import com.zkyjss.eyeproject.core.designsystem.theme.eyeSoftSurface
+import com.zkyjss.eyeproject.core.designsystem.theme.EyeSpacing
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
@@ -49,8 +52,8 @@ fun EyeTileTone.colors(): Pair<Color, Color> {
         EyeTileTone.PRIMARY -> c.primarySoft to c.primary
         EyeTileTone.ACCENT -> c.sunSoft to c.sun
         EyeTileTone.SUCCESS -> c.successSoft to c.success
-        EyeTileTone.BLUE -> c.iceSoft to c.iceInk
-        EyeTileTone.VIOLET -> c.screenSoft to c.screen
+        EyeTileTone.BLUE -> c.iceSoft to c.tileTeal
+        EyeTileTone.VIOLET -> c.violetSoft to c.violet
         EyeTileTone.DANGER -> c.dangerSoft to c.danger
         EyeTileTone.NEUTRAL -> c.surfaceVariant to c.textSecondary
     }
@@ -71,30 +74,27 @@ fun EyeTileTone.solid(): Color {
     }
 }
 
-/** 列表图标块：实心圆角色块 + 白色线性图标（iOS 设置式）。列表行、服务入口共用。 */
+/** 浮雕小图标：同色表面、语义色线稿。 */
 @Composable
 fun EyeIconTile(glyph: EyeGlyph, tone: EyeTileTone = EyeTileTone.PRIMARY, size: androidx.compose.ui.unit.Dp = 32.dp) {
-    Box(Modifier.size(size).clip(RoundedCornerShape(size * 0.27f)).background(tone.solid()), contentAlignment = Alignment.Center) {
-        EyeGlyphIcon(glyph, Modifier.size(size * 0.6f), LocalEyeColors.current.white)
+    Box(Modifier.size(size).eyeSoftSurface(LocalEyeColors.current, EyeShapes.medium, compact = true), contentAlignment = Alignment.Center) {
+        EyeGlyphIcon(glyph, Modifier.size(size * 0.6f), tone.solid())
     }
 }
 
-/** 分组列表：可选组标题（小号灰字）+ 纯色圆角面板，行与行之间细分隔线（从图标右侧开始）。 */
+/** 分组列表：分区标题与独立浮雕行，以间距代替连续分隔线。 */
 @Composable
 fun EyeListGroup(modifier: Modifier = Modifier, title: String? = null, content: @Composable ColumnScope.() -> Unit) {
     val colors = LocalEyeColors.current
     Column(modifier.fillMaxWidth()) {
         if (title != null) {
-            EyeText(title, Modifier.padding(start = 16.dp, bottom = 8.dp), style = LocalEyeTypography.current.chip, color = colors.textSecondary)
+            EyeText(title, Modifier.padding(start = 4.dp, top = EyeSpacing.sm, bottom = EyeSpacing.md), style = LocalEyeTypography.current.title, color = colors.textHeading)
         }
-        Column(Modifier.fillMaxWidth().eyeGlass(colors, EyeShapes.panel), content = content)
+        Column(Modifier.fillMaxWidth(), verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(EyeSpacing.sm), content = content)
     }
 }
 
-/**
- * 列表行：图标色块 + 标题（可带一行副标题）+ 右侧取值 + 箭头；按下时整行浅底高亮。
- * [divider] 为 true 时在行底部画分隔线（组内最后一行传 false）。[trailing] 替换右侧取值与箭头（如开关）。
- */
+/** 浮雕列表行，保留图标、标题、副标题、取值、箭头和可替换尾部控件。 */
 @Composable
 fun EyeListRow(
     title: String,
@@ -118,11 +118,11 @@ fun EyeListRow(
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val background by animateColorAsState(if (pressed) colors.surfaceVariant else colors.panelBackground, tween(EyeMotion.SHORT), label = "列表行按压")
-    Column(modifier.fillMaxWidth().background(background)
+    Column(modifier.fillMaxWidth().eyeSoftSurface(colors, EyeShapes.card, pressed = pressed, compact = true).background(background)
         .then(if (onClick != null) Modifier.clickable(enabled = enabled, interactionSource = interaction, indication = null, role = Role.Button) { haptics.tap(); onClick() } else Modifier)) {
-        Row(Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             if (leading != null) {
-                Box(Modifier.size(32.dp).clip(RoundedCornerShape(32.dp * 0.27f)).background(tone.solid()), contentAlignment = Alignment.Center) { leading() }
+                Box(Modifier.size(40.dp).clip(EyeShapes.medium).background(colors.surfaceVariant), contentAlignment = Alignment.Center) { leading() }
                 Spacer(Modifier.width(14.dp))
             } else if (glyph != null) {
                 EyeIconTile(glyph, tone)
@@ -134,10 +134,9 @@ fun EyeListRow(
             }
             if (trailing != null) trailing() else {
                 if (value != null) EyeText(value, Modifier.padding(start = 8.dp), style = typography.body, color = valueColor ?: colors.textSecondary, maxLines = 1)
-                if (onClick != null) EyeIcon(painterResource(R.drawable.ic_arrow_right), null, Modifier.padding(start = 6.dp).size(14.dp), tint = colors.textTertiary)
+                if (onClick != null) EyeIcon(painterResource(R.drawable.ic_arrow_right), null, Modifier.padding(start = 6.dp).size(14.dp), tint = colors.primary)
             }
         }
-        if (divider) Box(Modifier.padding(start = if (glyph != null || leading != null) 62.dp else 16.dp).fillMaxWidth().height(0.5.dp).background(colors.borderSubtle))
     }
 }
 
@@ -158,8 +157,9 @@ fun EyeSwitchRow(
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
     val haptics = rememberEyeHaptics()
-    Column(modifier.fillMaxWidth().clickable(enabled = enabled, role = Role.Switch) { haptics.toggle(!checked); onChange(!checked) }) {
-        Row(Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+    Column(modifier.fillMaxWidth().eyeSoftSurface(colors, EyeShapes.card, compact = true)
+        .toggleable(value = checked, enabled = enabled, role = Role.Switch) { haptics.toggle(it); onChange(it) }) {
+        Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             if (glyph != null) {
                 EyeIconTile(glyph, tone)
                 Spacer(Modifier.width(14.dp))
@@ -173,7 +173,6 @@ fun EyeSwitchRow(
             }
             EyeSwitch(checked, null, enabled = enabled)
         }
-        if (divider) Box(Modifier.padding(start = if (glyph != null) 62.dp else 16.dp).fillMaxWidth().height(0.5.dp).background(colors.borderSubtle))
     }
 }
 
@@ -183,7 +182,7 @@ fun EyeCategoryLabel(title: String, glyph: EyeGlyph, tint: Color, modifier: Modi
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         EyeGlyphIcon(glyph, Modifier.size(16.dp), tint)
         Spacer(Modifier.width(6.dp))
-        EyeText(title, style = LocalEyeTypography.current.chip, color = tint, maxLines = 1)
+        EyeText(title, style = LocalEyeTypography.current.chip, color = LocalEyeColors.current.textSecondary, maxLines = 1)
     }
 }
 

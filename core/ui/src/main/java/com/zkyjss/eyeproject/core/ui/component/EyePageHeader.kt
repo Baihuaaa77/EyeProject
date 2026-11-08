@@ -19,6 +19,9 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import com.zkyjss.eyeproject.core.designsystem.theme.eyeSoftSurface
+import com.zkyjss.eyeproject.core.designsystem.theme.EyeShapes
+import com.zkyjss.eyeproject.core.designsystem.theme.EyeSpacing
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.StrokeCap
@@ -52,8 +55,7 @@ fun EyeThemeButton(modifier: Modifier = Modifier) {
     val colors = LocalEyeColors.current
     val haptics = rememberEyeHaptics()
     Box(
-        modifier.size(44.dp).clip(CircleShape).background(colors.panelBackground)
-            .border(1.dp, colors.borderSubtle, CircleShape)
+        modifier.size(48.dp).eyeSoftSurface(colors, EyeShapes.medium, compact = true)
             .clickable(role = Role.Button) { haptics.tap(); onToggle() }
             .semantics { contentDescription = if (toggle.isDark) "切换到白天模式" else "切换到夜晚模式" },
         contentAlignment = Alignment.Center,
@@ -68,11 +70,11 @@ fun EyeSettingsGear(onClick: () -> Unit, modifier: Modifier = Modifier) {
     val colors = LocalEyeColors.current
     val haptics = rememberEyeHaptics()
     Box(
-        modifier.size(44.dp).clickable(role = Role.Button) { haptics.tap(); onClick() }
+        modifier.size(48.dp).eyeSoftSurface(colors, EyeShapes.medium, compact = true).clickable(role = Role.Button) { haptics.tap(); onClick() }
             .semantics { contentDescription = "系统设置" },
         contentAlignment = Alignment.Center,
     ) {
-        Box(Modifier.size(36.dp).clip(CircleShape).background(colors.surfaceVariant), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(36.dp), contentAlignment = Alignment.Center) {
             EyeIcon(painterResource(R.drawable.ic_settings_gear), null, Modifier.size(20.dp), tint = colors.primary)
         }
     }
@@ -89,11 +91,11 @@ fun EyeAccountButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
     val haptics = rememberEyeHaptics()
     val signedIn = badge.signedIn && badge.initial.isNotBlank()
     Box(
-        modifier.size(44.dp).clickable(role = Role.Button) { haptics.tap(); onClick() }
+        modifier.size(48.dp).eyeSoftSurface(colors, EyeShapes.medium, compact = true).clickable(role = Role.Button) { haptics.tap(); onClick() }
             .semantics { contentDescription = if (badge.signedIn) "账户（已登录）" else "账户（未登录）" },
         contentAlignment = Alignment.Center,
     ) {
-        Box(Modifier.size(36.dp).clip(CircleShape).background(if (signedIn) colors.buttonStart else colors.surfaceVariant),
+        Box(Modifier.size(36.dp),
             contentAlignment = Alignment.Center) {
             if (signedIn) {
                 EyeText(badge.initial.take(1).uppercase(), style = LocalEyeTypography.current.subtitle, color = colors.onPrimary)
@@ -125,10 +127,7 @@ fun EyeHeaderActions(onOpenAccount: (() -> Unit)?, onOpenSettings: (() -> Unit)?
     }
 }
 
-/**
- * 顶层页标题行：小号日期等副标题在上、32 号大标题在下，右上角一个圆钮（账户头像或齿轮）。
- * 「今日」「服务」「我的」共用，与苹果端 PageHeader 一致。
- */
+/** 顶层标题行：22 号标题在上，日期在下，右侧一个浮雕图标按钮。 */
 @Composable
 fun EyePageHeader(
     title: String,
@@ -139,10 +138,10 @@ fun EyePageHeader(
 ) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
-    Row(modifier.fillMaxWidth().padding(top = 12.dp, bottom = 4.dp), verticalAlignment = Alignment.Bottom) {
+    Row(modifier.fillMaxWidth().padding(top = EyeSpacing.lg, bottom = EyeSpacing.sm), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-            if (subtitle != null) EyeText(subtitle, style = typography.chip, color = colors.textSecondary)
-            EyeText(title, style = typography.headline, color = colors.textPrimary)
+            EyeText(title, style = typography.headline, color = colors.textHeading)
+            if (subtitle != null) EyeText(subtitle, Modifier.padding(top = EyeSpacing.xxs), style = typography.bodySecondary, color = colors.textSecondary)
         }
         EyeHeaderActions(onOpenAccount, onOpenSettings)
     }

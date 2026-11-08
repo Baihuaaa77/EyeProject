@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import com.zkyjss.eyeproject.core.designsystem.theme.EyeShapes
+import com.zkyjss.eyeproject.core.designsystem.theme.eyeSoftSurface
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
@@ -63,9 +65,11 @@ fun TopBackBar(
             Row(
                 modifier = Modifier
                     .align(Alignment.CenterStart)
+                    .offset(x = 20.dp)
+                    .eyeSoftSurface(LocalEyeColors.current, EyeShapes.medium, compact = true)
                     .clickable(role = Role.Button, onClick = onBackClick)
                     .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
-                    .offset(x = 12.dp),
+                    .padding(horizontal = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(
                     space = 4.dp,
                     alignment = Alignment.Start

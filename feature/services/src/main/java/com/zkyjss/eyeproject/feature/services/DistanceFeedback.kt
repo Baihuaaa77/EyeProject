@@ -11,6 +11,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -23,6 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -130,25 +132,29 @@ internal fun DistanceBanner(status: DistanceStatus, modifier: Modifier = Modifie
         DistanceZone.OK -> colors.testReady
         DistanceZone.UNKNOWN -> colors.textSecondary
     }, tween(EyeMotion.MEDIUM), label = "距离文字色")
-    Row(
-        modifier
-            .fillMaxWidth()
-            .clip(EyeShapes.large)
-            .background(bg)
-            .semantics { liveRegion = LiveRegionMode.Polite }
-            .padding(horizontal = 16.dp, vertical = if (singleLine) 6.dp else if (compact) 10.dp else 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        DirectionGlyph(status.zone, fg, Modifier.size(if (compact) 28.dp else 36.dp))
-        Column(Modifier.weight(1f)) {
-            if (singleLine) EyeText(status.detail, style = typography.body, color = fg, maxLines = 1)
-            else {
-                EyeText(status.title, style = if (compact) typography.subtitle else typography.title, color = fg)
-                EyeText(status.detail, style = typography.bodySecondary, color = fg)
+    BoxWithConstraints(modifier.fillMaxWidth()) {
+        // 大字号窄屏优先展示完整移动提示，隐藏装饰标尺，避免把作答区挤出屏幕。
+        val showRuler = !singleLine && maxWidth / LocalDensity.current.fontScale >= 240.dp
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clip(EyeShapes.large)
+                .background(bg)
+                .semantics { liveRegion = LiveRegionMode.Polite }
+                .padding(horizontal = 16.dp, vertical = if (singleLine) 6.dp else if (compact) 10.dp else 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            DirectionGlyph(status.zone, fg, Modifier.size(if (compact) 28.dp else 36.dp))
+            Column(Modifier.weight(1f)) {
+                if (singleLine) EyeText(status.detail, style = typography.body, color = fg, maxLines = 1)
+                else {
+                    EyeText(status.title, style = if (compact) typography.subtitle else typography.title, color = fg)
+                    EyeText(status.detail, style = typography.bodySecondary, color = fg)
+                }
             }
+            if (showRuler && status.zone != DistanceZone.UNKNOWN) DistanceRuler(status, fg, Modifier.size(width = 72.dp, height = 28.dp))
         }
-        if (!singleLine && status.zone != DistanceZone.UNKNOWN) DistanceRuler(status, fg, Modifier.size(width = 72.dp, height = 28.dp))
     }
 }
 

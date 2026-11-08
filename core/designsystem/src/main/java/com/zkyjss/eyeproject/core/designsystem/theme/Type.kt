@@ -16,16 +16,13 @@ val EyeNumberFamily: FontFamily = FontFamily.SansSerif
 /** 等宽数字特性（tabular figures）。 */
 const val EYE_TABULAR_NUMBERS = "tnum"
 
-/**
- * 排版令牌（2026-11-08 视觉改版）：页面大标题 [headline] 32 → 分区标题 [title] 20 → 卡片标题 [subtitle] 17 →
- * 正文 [body] 16 → 辅助 [bodySecondary] 14 → 类别标签 / 徽标 [chip] 13；大数字 [display] 56、读数 [metricValue] 28、
- * 读数单位 [unit] 14（约为数字一半、配次要文字色）、按钮 [button] 17。
- * 中文最粗用到 SemiBold，Bold 只留给页面大标题与数字。与苹果端 EyeStyle 字体一一对应。
- */
+/** DESIGN.md 字阶：中文标题最多 SemiBold，正文保留 1.5 倍行高。 */
 @Immutable
 data class EyeTypography(
     /** 主卡里的大数字（眼健康指数等）。 */
     val display: TextStyle,
+    /** 窄屏或大字号环境下的主分数，保留与正文的字号差。 */
+    val displayCompact: TextStyle,
     val headline: TextStyle,
     val title: TextStyle,
     val subtitle: TextStyle,
@@ -37,36 +34,45 @@ data class EyeTypography(
     val chip: TextStyle,
     val button: TextStyle,
     /** 最小一级：底栏名称、图表坐标（11 号半粗）。 */
-    val caption: TextStyle
+    val caption: TextStyle,
+    val tab: TextStyle,
 )
 
 val EyeTypographyDefaults = EyeTypography(
     display = TextStyle(
         fontFamily = EyeNumberFamily,
         fontWeight = FontWeight.SemiBold,
-        fontSize = 56.sp,
-        lineHeight = 60.sp,
-        letterSpacing = (-2).sp,
+        fontSize = 60.sp,
+        lineHeight = 66.sp,
+        letterSpacing = (-1.2).sp,
+        fontFeatureSettings = EYE_TABULAR_NUMBERS
+    ),
+    displayCompact = TextStyle(
+        fontFamily = EyeNumberFamily,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 48.sp,
+        lineHeight = 56.sp,
+        letterSpacing = (-0.96).sp,
         fontFeatureSettings = EYE_TABULAR_NUMBERS
     ),
     headline = TextStyle(
         fontFamily = FontFamily.SansSerif,
-        fontWeight = FontWeight.Bold,
-        fontSize = 32.sp,
-        lineHeight = 40.sp,
-        letterSpacing = (-0.5).sp
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 26.sp,
+        lineHeight = 34.sp,
+        letterSpacing = 0.sp
     ),
     title = TextStyle(
         fontFamily = FontFamily.SansSerif,
         fontWeight = FontWeight.SemiBold,
         fontSize = 20.sp,
-        lineHeight = 26.sp
+        lineHeight = 28.sp
     ),
     subtitle = TextStyle(
         fontFamily = FontFamily.SansSerif,
         fontWeight = FontWeight.SemiBold,
-        fontSize = 17.sp,
-        lineHeight = 22.sp
+        fontSize = 18.sp,
+        lineHeight = 26.sp
     ),
     body = TextStyle(
         fontFamily = FontFamily.SansSerif,
@@ -78,13 +84,13 @@ val EyeTypographyDefaults = EyeTypography(
         fontFamily = FontFamily.SansSerif,
         fontWeight = FontWeight.Normal,
         fontSize = 14.sp,
-        lineHeight = 20.sp
+        lineHeight = 22.sp
     ),
     metricValue = TextStyle(
         fontFamily = EyeNumberFamily,
         fontWeight = FontWeight.SemiBold,
-        fontSize = 28.sp,
-        lineHeight = 32.sp,
+        fontSize = 30.sp,
+        lineHeight = 36.sp,
         letterSpacing = (-0.6).sp,
         fontFeatureSettings = EYE_TABULAR_NUMBERS
     ),
@@ -109,6 +115,12 @@ val EyeTypographyDefaults = EyeTypography(
     caption = TextStyle(
         fontFamily = FontFamily.SansSerif,
         fontWeight = FontWeight.SemiBold,
+        fontSize = 12.sp,
+        lineHeight = 16.sp
+    ),
+    tab = TextStyle(
+        fontFamily = FontFamily.SansSerif,
+        fontWeight = FontWeight.Medium,
         fontSize = 11.sp,
         lineHeight = 14.sp
     )

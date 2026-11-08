@@ -144,7 +144,7 @@ private struct ResultHero: View {
     var body: some View {
         let tone = ReportTone.level(report.level)
         EyeHeroCard(spacing: 14) {
-            Text(report.badge).font(EyeStyle.chip).foregroundStyle(tone.0)
+            Text(report.badge).font(EyeStyle.chip).foregroundStyle(EyeStyle.text)
                 .padding(.horizontal, 10).padding(.vertical, 4).background(tone.1, in: EyeStyle.chipShape)
             // 长结论用标题字号，避免大字折成三行；与安卓 LONG_TITLE 一致
             Text(report.title).font(report.title.count > 8 ? EyeStyle.title : EyeStyle.headline).foregroundStyle(EyeStyle.text)
@@ -153,7 +153,7 @@ private struct ResultHero: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Rectangle().fill(EyeStyle.borderSubtle).frame(height: 1).padding(.bottom, 8)
                     Text(highlight.label).font(EyeStyle.body).foregroundStyle(EyeStyle.secondary)
-                    Text(highlight.value).font(EyeStyle.headline).foregroundStyle(EyeStyle.primary)
+                    Text(highlight.value).font(EyeStyle.headline).foregroundStyle(EyeStyle.readableText(EyeStyle.primary))
                     Text(highlight.note).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -251,7 +251,7 @@ private struct EvidenceRow: View {
                         Text(item.summary).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
                             .multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
                     }.frame(maxWidth: .infinity, alignment: .leading)
-                    Text(ReportTone.label(item.status)).font(EyeStyle.chip).foregroundStyle(tone.0)
+                    Text(ReportTone.label(item.status)).font(EyeStyle.chip).foregroundStyle(EyeStyle.text)
                     if !item.details.isEmpty {
                         Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(EyeStyle.tertiary)
                             .rotationEffect(.degrees(expanded ? 90 : 0))

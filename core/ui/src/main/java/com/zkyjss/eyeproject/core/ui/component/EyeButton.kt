@@ -19,6 +19,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.StrokeCap
+import com.zkyjss.eyeproject.core.designsystem.theme.eyeSoftSurface
+import com.zkyjss.eyeproject.core.designsystem.theme.rememberReducedMotion
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -29,11 +36,7 @@ import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
 
 enum class EyeButtonRole { PRIMARY, SECONDARY, DANGER }
 
-/**
- * 自定义按钮，三态（primary/secondary/danger），不使用 Material Button。
- * 主按钮品牌蓝纯色底、白字；次要按钮浅填充底；都不描边、不投影。一屏只放一个主按钮，其余用 SECONDARY 或文字。
- * 交互：按下以弹簧缩放到 96%，角色切换（如 开始↔停止）时底色平滑过渡。
- */
+/** 浮雕按钮：主操作下方带渐变短线，按下呈内凹，保留角色与禁用语义。 */
 @Composable
 fun EyeButton(
     text: String,
@@ -51,7 +54,7 @@ fun EyeButton(
     val backgroundColor by animateColorAsState(
         targetValue = when (role) {
             EyeButtonRole.PRIMARY -> colors.buttonStart
-            EyeButtonRole.SECONDARY -> colors.surfaceVariant
+            EyeButtonRole.SECONDARY -> colors.panelBackground
             EyeButtonRole.DANGER -> colors.dangerSoft
         },
         animationSpec = tween(EyeMotion.MEDIUM),
@@ -61,13 +64,14 @@ fun EyeButton(
         targetValue = when (role) {
             EyeButtonRole.PRIMARY -> colors.onPrimary
             EyeButtonRole.SECONDARY -> colors.textPrimary
-            EyeButtonRole.DANGER -> colors.danger
+            EyeButtonRole.DANGER -> colors.textPrimary
         },
         animationSpec = tween(EyeMotion.MEDIUM),
         label = "按钮文字色"
     )
+    val reduced = rememberReducedMotion()
     val scale by animateFloatAsState(
-        targetValue = if (pressed && enabled) 0.96f else 1f,
+        targetValue = if (pressed && enabled && !reduced) 0.98f else 1f,
         animationSpec = EyeMotion.pressSpring(),
         label = "按压缩放"
     )
@@ -79,15 +83,21 @@ fun EyeButton(
                 scaleY = scale
                 alpha = if (enabled) 1f else 0.5f
             }
-            .clip(EyeShapes.medium)
-            .background(backgroundColor)
+            .eyeSoftSurface(colors, EyeShapes.medium, SolidColor(backgroundColor), pressed = pressed && enabled, compact = true)
+            .drawBehind {
+                if (role == EyeButtonRole.PRIMARY && enabled) {
+                    val y = size.height - 5.dp.toPx()
+                    drawDataGlowBar(colors, Offset(size.width * 0.38f, y - 1.5.dp.toPx()), Size(size.width * 0.24f, 3.dp.toPx()))
+                    drawLine(colors.flowBrush, Offset(size.width * 0.38f, y), Offset(size.width * 0.62f, y), 3.dp.toPx(), StrokeCap.Round)
+                }
+            }
             .clickable(
                 enabled = enabled,
                 role = Role.Button,
                 interactionSource = interactionSource,
                 indication = null
             ) { onClick() }
-            .defaultMinSize(minHeight = 50.dp)
+            .defaultMinSize(minHeight = 52.dp)
             .padding(horizontal = 16.dp, vertical = 12.dp),
         contentAlignment = Alignment.Center
     ) {

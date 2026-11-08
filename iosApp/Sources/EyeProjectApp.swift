@@ -91,7 +91,7 @@ private struct RecordRow: View {
                             .font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
                     }
                     Spacer()
-                    Text(entry.badge).font(EyeStyle.chip).foregroundStyle(tone)
+                    Text(entry.badge).font(EyeStyle.chip).foregroundStyle(EyeStyle.text)
                         .padding(.horizontal, 10).padding(.vertical, 4).background(tone.opacity(0.12), in: EyeStyle.chipShape)
                     Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(EyeStyle.secondary)
                         .rotationEffect(.degrees(expanded ? 90 : 0))
@@ -132,7 +132,7 @@ private struct RecordRow: View {
                 Button("导出报告") { EyeHaptics.tap(); exportingReport = true }
                 ShareLink(item: entry.url) { Text("导出原始数据") }.simultaneousGesture(TapGesture().onEnded { EyeHaptics.tap() })
             }.buttonStyle(EyeButtonStyle(role: .secondary))
-            if let exportError { Text(exportError).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.danger) }
+            if let exportError { Text(exportError).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.readableText(EyeStyle.danger)) }
         }.transition(.opacity)
     }
 }

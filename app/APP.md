@@ -15,7 +15,7 @@
 | 类型 | 说明 |
 |---|---|
 | `MainActivity` | `@AndroidEntryPoint`，edge-to-edge，`EyeProjectTheme { EyeProjectNavHost() }` |
-| `ui/EyeProjectNavHost` | NavHost（startDestination = HomeRoute）+ 自绘底部导航栏（3 Tab，只显示 30dp 图标、名称作无障碍描述）+ 智能体 FAB；顶层页才显示底栏/FAB（按 `NavDestination.hierarchy` + 路由全限定名判断） |
+| `ui/EyeProjectNavHost` | NavHost（startDestination = HomeRoute）+ 64dp 高浮雕底栏，保留首页 / 服务 / 我的；24dp 图标与 11sp 名称，选中实心、未选线稿。顶层页才显示底栏，预留系统手势区 |
 | `ui/TopLevelDestination` | 顶层目的地枚举：HOME / SERVICES / MINE，切换用 `popUpTo + saveState/restoreState`（NIA 同款） |
 
 ### DI（di/）

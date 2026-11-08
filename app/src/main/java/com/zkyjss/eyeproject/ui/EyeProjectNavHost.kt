@@ -29,6 +29,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.draw.clip
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeShapes
+import com.zkyjss.eyeproject.core.designsystem.theme.eyeSoftSurface
+import com.zkyjss.eyeproject.core.designsystem.theme.EyeSpacing
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
@@ -202,15 +204,12 @@ private fun EyeProjectBottomBar(
     currentDestination: NavDestination?,
 ) {
     val colors = LocalEyeColors.current
-    Box(Modifier.fillMaxWidth().navigationBarsPadding().padding(start = 24.dp, end = 24.dp, top = 6.dp, bottom = 10.dp)) {
+    Box(Modifier.fillMaxWidth().navigationBarsPadding().padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 12.dp)) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(64.dp)
-                .shadow(16.dp, CircleShape, ambientColor = colors.shadow, spotColor = colors.shadow)
-                .clip(CircleShape)
-                .background(colors.tabBarFill)
-                .border(1.dp, colors.tabBarEdge, CircleShape)
+                .eyeSoftSurface(colors, EyeShapes.card)
                 .padding(6.dp)
                 .selectableGroup(),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -238,13 +237,11 @@ private fun BottomBarItem(
     modifier: Modifier = Modifier,
 ) {
     val colors = LocalEyeColors.current
-    val pill by animateColorAsState(if (selected) colors.surfaceVariant else colors.surfaceVariant.copy(alpha = 0f), tween(EyeMotion.MEDIUM), label = "导航胶囊")
     val tint by animateColorAsState(if (selected) colors.primary else colors.textSecondary, tween(EyeMotion.MEDIUM), label = "导航色")
     val iconScale by animateFloatAsState(if (selected) 1.06f else 1f, EyeMotion.settleSpring(), label = "导航图标")
     Column(
         modifier = modifier
             .clip(CircleShape)
-            .background(pill)
             .selectable(
                 selected = selected,
                 role = Role.Tab,
@@ -256,12 +253,12 @@ private fun BottomBarItem(
         verticalArrangement = Arrangement.Center,
     ) {
         EyeIcon(
-            painter = painterResource(destination.iconRes),
+            painter = painterResource(if (selected) destination.selectedIconRes else destination.iconRes),
             contentDescription = null,
             tint = tint,
-            modifier = Modifier.size(22.dp).graphicsLayer { scaleX = iconScale; scaleY = iconScale },
+            modifier = Modifier.size(24.dp).graphicsLayer { scaleX = iconScale; scaleY = iconScale },
         )
-        EyeText(destination.label, style = LocalEyeTypography.current.caption, color = tint)
+        EyeText(destination.label, style = LocalEyeTypography.current.tab, color = tint)
     }
 }
 

@@ -16,19 +16,19 @@ import androidx.compose.ui.unit.IntOffset
  */
 object EyeMotion {
     /** 微交互（按压、开关）。 */
-    const val SHORT = 160
+    const val SHORT = 150
 
     /** 状态切换（展开收起、选中指示器）。 */
-    const val MEDIUM = 280
+    const val MEDIUM = 300
 
     /** 数值过渡（仪表盘、读数）。 */
-    const val LONG = 700
+    const val LONG = 900
 
     /** 方法演示动画单次循环时长。 */
     const val DEMO_CYCLE = 3600
 
     /** 标准缓动：快出慢停。 */
-    val Standard = CubicBezierEasing(0.2f, 0f, 0f, 1f)
+    val Standard = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)
 
     /** 柔和进出：用于演示中的往复运动。 */
     val Gentle = CubicBezierEasing(0.45f, 0f, 0.55f, 1f)

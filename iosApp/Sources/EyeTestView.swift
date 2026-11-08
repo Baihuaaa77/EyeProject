@@ -213,7 +213,7 @@ struct EyeTestView: View {
             Text("闭眼休息").font(EyeStyle.title)
             TimerRing(progress: 1 - runtime.number("progress")) {
                 Text("\(Int(runtime.number("secondsLeft")))").font(.system(size: 56, weight: .semibold, design: .rounded))
-                    .monospacedDigit().foregroundStyle(EyeStyle.primary)
+                    .monospacedDigit().foregroundStyle(EyeStyle.readableText(EyeStyle.primary))
             }.frame(width: 184, height: 184).animation(.linear(duration: 0.25), value: runtime.number("progress"))
         } else {
             if phase == "Natural" || phase == "Open" || phase == "Practice" {
@@ -631,7 +631,7 @@ struct ColorVisionContent: View {
         let demo = runtime.bool("demo")
         return VStack(spacing: 16) {
             Text(demo ? "示例图" : "第 \(Int(runtime.number("plateNumber"))) / \(Int(runtime.number("plateCount"))) 张")
-                .font(EyeStyle.subtitle).foregroundStyle(EyeStyle.primary)
+                .font(EyeStyle.subtitle).foregroundStyle(EyeStyle.readableText(EyeStyle.primary))
             ColorPlateCanvas(dots: runtime.colorPlateDots(plateId))
                 .aspectRatio(1, contentMode: .fit).frame(maxWidth: 360)
                 .id(plateId)

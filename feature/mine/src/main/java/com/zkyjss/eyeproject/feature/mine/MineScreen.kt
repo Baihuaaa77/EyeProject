@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeShapes
+import com.zkyjss.eyeproject.core.designsystem.theme.eyeSoftSurface
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
 import com.zkyjss.eyeproject.core.designsystem.util.getTopStatusBarPadding
@@ -124,7 +125,7 @@ private fun ProfileCard(state: MineUiState.Ready?, navigation: MineNavigation) {
                 .padding(start = 18.dp, end = 16.dp, top = 18.dp, bottom = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(Modifier.size(56.dp).clip(CircleShape).background(colors.buttonStart), contentAlignment = Alignment.Center) {
+            Box(Modifier.size(56.dp).eyeSoftSurface(colors, EyeShapes.medium, compact = true), contentAlignment = Alignment.Center) {
                 EyeText((self?.nickname?.ifBlank { null } ?: "我").take(1), style = typography.title, color = colors.onPrimary)
             }
             Spacer(Modifier.width(14.dp))
@@ -134,7 +135,7 @@ private fun ProfileCard(state: MineUiState.Ready?, navigation: MineNavigation) {
                 EyeText(listOfNotNull(age?.let { "$it 岁" }, if (complete >= 5) "档案已完善" else "档案完善 $complete/5").joinToString(" · "),
                     style = typography.body, color = colors.textSecondary)
             }
-            EyeIcon(painterResource(com.zkyjss.eyeproject.core.designsystem.R.drawable.ic_arrow_right), null, Modifier.size(14.dp), tint = colors.textTertiary)
+            EyeIcon(painterResource(com.zkyjss.eyeproject.core.designsystem.R.drawable.ic_arrow_right), null, Modifier.size(14.dp), tint = colors.primary)
         }
         Box(Modifier.padding(start = 16.dp).fillMaxWidth().height(0.5.dp).background(colors.borderSubtle))
         Row(

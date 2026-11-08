@@ -13,6 +13,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -25,6 +27,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -68,12 +73,21 @@ import com.zkyjss.eyeproject.core.ui.component.EyeListGroup
 import com.zkyjss.eyeproject.core.ui.component.EyeListRow
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.ui.res.painterResource
+import com.zkyjss.eyeproject.core.ui.component.*
+import com.zkyjss.eyeproject.core.designsystem.theme.eyeSoftSurface
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import androidx.compose.ui.text.style.TextAlign
 
-/**
- * 服务页（2026-11-08 视觉改版）：「服务」大标题与账户头像 → 示范主卡（轮流演示三项自测的做法）→
- * 「全部自测」分组列表（实心色块图标 + 名称）→ 免责声明。与苹果端 ServicesPage 同一排版与文案。
- */
+/** 自测页：方法示范与四项浮雕入口；普通字号双列，窄屏大字号自动单列。 */
 @Composable
 fun ServicesScreen(
     onDryEyeClick: () -> Unit,
@@ -101,12 +115,25 @@ fun ServicesScreen(
         DemoHero()
         EyeText("全部自测", Modifier.padding(top = EyeSpacing.sectionGap - EyeSpacing.cardGap, start = 4.dp),
             style = typography.title, color = colors.textPrimary)
-        EyeListGroup {
-            EyeListRow("干眼自测", onDryEyeClick, tone = EyeTileTone.BLUE, leading = { ServiceGlyph(ServiceKind.DRY_EYE, colors.white) })
-            EyeListRow("眼位自测", onStrabismusClick, tone = EyeTileTone.VIOLET, leading = { ServiceGlyph(ServiceKind.ALIGNMENT, colors.white) })
-            EyeListRow("老视自测", onPresbyopiaClick, tone = EyeTileTone.PRIMARY, leading = { ServiceGlyph(ServiceKind.PRESBYOPIA, colors.white) })
-            EyeListRow("色觉自测", onColorVisionClick, tone = EyeTileTone.ACCENT, divider = false,
-                leading = { ServiceGlyph(ServiceKind.COLOR, colors.white) })
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val singleColumn = maxWidth / LocalDensity.current.fontScale < 280.dp
+            Column(verticalArrangement = Arrangement.spacedBy(EyeSpacing.md)) {
+                if (singleColumn) {
+                    ServiceTile("干眼自测", ServiceKind.DRY_EYE, Modifier.fillMaxWidth(), onDryEyeClick)
+                    ServiceTile("眼位自测", ServiceKind.ALIGNMENT, Modifier.fillMaxWidth(), onStrabismusClick)
+                    ServiceTile("老视自测", ServiceKind.PRESBYOPIA, Modifier.fillMaxWidth(), onPresbyopiaClick)
+                    ServiceTile("色觉自测", ServiceKind.COLOR, Modifier.fillMaxWidth(), onColorVisionClick)
+                } else {
+                    Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(EyeSpacing.md)) {
+                        ServiceTile("干眼自测", ServiceKind.DRY_EYE, Modifier.weight(1f).fillMaxHeight(), onDryEyeClick)
+                        ServiceTile("眼位自测", ServiceKind.ALIGNMENT, Modifier.weight(1f).fillMaxHeight(), onStrabismusClick)
+                    }
+                    Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(EyeSpacing.md)) {
+                        ServiceTile("老视自测", ServiceKind.PRESBYOPIA, Modifier.weight(1f).fillMaxHeight(), onPresbyopiaClick)
+                        ServiceTile("色觉自测", ServiceKind.COLOR, Modifier.weight(1f).fillMaxHeight(), onColorVisionClick)
+                    }
+                }
+            }
         }
         EyeText(
             "自测结果仅供参考，不能替代医院检查。",
@@ -115,6 +142,30 @@ fun ServicesScreen(
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 24.dp)
         )
+    }
+}
+
+/** 四项自测等权展示，标题与箭头一起提供可操作线索。 */
+@Composable
+private fun ServiceTile(title: String, kind: ServiceKind, modifier: Modifier, onClick: () -> Unit) {
+    val colors = LocalEyeColors.current
+    val typography = LocalEyeTypography.current
+    val haptics = rememberEyeHaptics()
+    Column(modifier.eyeGlass(colors, EyeShapes.card).clickable(role = Role.Button) { haptics.tap(); onClick() }
+        .padding(EyeSpacing.lg), verticalArrangement = Arrangement.spacedBy(EyeSpacing.lg)) {
+        Box(Modifier.size(48.dp).eyeSoftSurface(colors, EyeShapes.medium, compact = true), contentAlignment = Alignment.Center) {
+            ServiceGlyph(kind, when (kind) {
+                ServiceKind.DRY_EYE -> colors.tileTeal
+                ServiceKind.ALIGNMENT -> colors.tileIndigo
+                ServiceKind.PRESBYOPIA -> colors.tileOrange
+                ServiceKind.COLOR -> colors.tileRed
+            }, 26.dp)
+        }
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            EyeText(title, Modifier.weight(1f), style = typography.subtitle, color = colors.textPrimary)
+            EyeIcon(painterResource(com.zkyjss.eyeproject.core.designsystem.R.drawable.ic_arrow_right), null,
+                Modifier.size(16.dp), tint = colors.primary)
+        }
     }
 }
 
@@ -142,10 +193,14 @@ private fun DemoHero() {
     val order = remember { DEMO_CLIPS.shuffled() }
     val lengths = remember(order) { order.map { guideCycleMs(it.motion) * DEMO_REPEATS } }
     val total = lengths.sum()
-    val clock = rememberInfiniteTransition(label = "服务页示范").animateFloat(
-        0f, total.toFloat(), infiniteRepeatable(tween(total, easing = LinearEasing)), label = "示范进度")
+    val reduced = rememberReducedMotion()
+    var paused by remember { mutableStateOf(false) }
+    var clock by remember { mutableFloatStateOf(0f) }
+    LaunchedEffect(paused, reduced) {
+        if (!paused && !reduced) while (isActive) { delay(32); clock = (clock + 32f) % total }
+    }
     var skip by remember { mutableIntStateOf(0) }
-    val segment by remember { derivedStateOf { segmentAt(clock.value, lengths).first } }
+    val segment by remember { derivedStateOf { segmentAt(clock, lengths).first } }
     val clip = order[(segment + skip) % order.size]
     EyeHeroCard(contentPadding = 16.dp, verticalArrangement = Arrangement.spacedBy(10.dp)) {
         AnimatedContent(clip, transitionSpec = { fadeIn(tween(EyeMotion.MEDIUM)) togetherWith fadeOut(tween(EyeMotion.SHORT)) },
@@ -155,8 +210,13 @@ private fun DemoHero() {
                 EyeText(c.line, style = typography.bodySecondary, color = colors.textSecondary)
             }
         }
+        if (!reduced) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            EyeText(if (paused) "播放示范" else "暂停示范",
+                Modifier.defaultMinSize(minHeight = 48.dp).clickable(role = Role.Button) { paused = !paused }.padding(12.dp),
+                style = typography.bodySecondary, color = colors.primaryDark)
+        }
         GuideFrame(clip.motion, {
-            val (index, elapsed) = segmentAt(clock.value, lengths)
+            val (index, elapsed) = segmentAt(clock, lengths)
             val cycle = guideCycleMs(clip.motion).toFloat()
             if (index >= 0) (elapsed % cycle) / cycle else 0f
         }, "正在示范${clip.name}，点一下换下一个示范", Modifier.fillMaxWidth().height(190.dp).clip(EyeShapes.large)

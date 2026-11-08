@@ -1,60 +1,57 @@
 import SwiftUI
 import UIKit
 
-/// 对齐 core/designsystem 的令牌（2026-11-08 视觉改版「澄澈」：白天浅灰底白卡、夜晚纯黑底深灰卡，卡片不描边不投影、不用光晕与大面积渐变，
-/// 品牌蓝按钮 + 类别色只用在小图标与图表上）：每个颜色都随系统深浅色切换，浅色取 LightEyeColors、深色取 DarkEyeColors。
-/// iOS 绘制器只消费令牌，不定义另一套主题。
+/// DESIGN.md 的双端主题令牌：同色浮雕表面、中性文字与蓝青渐变数据。
 enum EyeStyle {
-    static let background = dyn(0xF2F2F7, 0x000000)
-    static let panel = dyn(0xFFFFFF, 0x1C1C1E)
+    static let background = dyn(0xF1F3FA, 0x1E2023)
+    static let panel = dyn(0xF4F7FD, 0x26282B)
     /// 浅填充：次要按钮、分段控件底、输入框、圆环底环。
-    static let surfaceVariant = dyn(0xE9E9EE, 0x2C2C2E)
-    static let borderSubtle = dyn(0xE3E3E8, 0x38383A)
-    static let text = dyn(0x1C1C1E, 0xF5F5F7)
+    static let surfaceVariant = dyn(0xE8EDF7, 0x1B1D20)
+    static let borderSubtle = dyn(0x5D6280, 0xFFFFFF, lightAlpha: 0.1216, darkAlpha: 0.0706)
+    static let text = dyn(0x313949, 0xE3E5E8)
     /// 示意图墨色：深浅主题都保持深色（视标、示意人物五官）。
-    static let ink = dyn(0x1C1C1E, 0x0B0B0D)
-    static let secondary = dyn(0x636366, 0xAEAEB2)
-    static let tertiary = dyn(0x737378, 0x8E8E93)
-    static let primary = dyn(0x0A66D8, 0x4C9BFF)
-    static let primaryDark = dyn(0x0852B0, 0x8AB8FF)
-    static let primarySoft = dyn(0xE8F0FB, 0x243042)
-    static let onPrimary = Color.white
-    static let neutralSoft = dyn(0xE9E9EE, 0x2C2C2E)
-    static let brandStart = dyn(0x0A66D8, 0x4C9BFF)
-    static let brandEnd = dyn(0x0A66D8, 0x4C9BFF)
+    static let ink = dyn(0x141A2B, 0x141A2B)
+    static let secondary = dyn(0x5D6280, 0x9A9DA3)
+    static let tertiary = dyn(0x878EA3, 0x73767C)
+    static let primary = dyn(0x2F7BFF, 0x2F7BFF)
+    static let primaryDark = dyn(0x0A6CFF, 0x0A6CFF)
+    static let primarySoft = dyn(0xE8EDF7, 0x1B1D20)
+    static let onPrimary = dyn(0x313949, 0xE3E5E8)
+    static let neutralSoft = dyn(0xE8EDF7, 0x1B1D20)
+    static let brandStart = dyn(0x2F7BFF, 0x2F7BFF)
+    static let brandEnd = dyn(0x00EFE0, 0x00EFE0)
     /// 眨眼类别（青）：ice 图形、iceInk 文字与图标、iceSoft 浅底。
-    static let ice = dyn(0x14A3B3, 0x3CC8D6)
-    static let iceInk = dyn(0x08808D, 0x3CC8D6)
-    static let iceSoft = dyn(0xE3F3F4, 0x3CC8D6, lightAlpha: 1, darkAlpha: 0.16)
+    static let ice = dyn(0x18C2FF, 0x18C2FF)
+    static let iceInk = dyn(0x5D6280, 0x9A9DA3)
+    static let iceSoft = dyn(0xE8EDF7, 0x1B1D20)
     /// AI 爱科类别（紫）。
-    static let violet = dyn(0x7A4FD8, 0xB49CFF)
-    static let violetSoft = dyn(0xF1ECFC, 0xB49CFF, lightAlpha: 1, darkAlpha: 0.16)
+    static let violet = dyn(0x8B78E6, 0x8B78E6)
+    static let violetSoft = dyn(0xE8EDF7, 0x1B1D20)
     /// 用屏类别（靛蓝）。
-    static let screen = dyn(0x5856D6, 0x8E8CFF)
-    static let screenSoft = dyn(0xEEEEFC, 0x8E8CFF, lightAlpha: 1, darkAlpha: 0.16)
+    static let screen = dyn(0x2F7BFF, 0x2F7BFF)
+    static let screenSoft = dyn(0xE8EDF7, 0x1B1D20)
     /// 光照类别（橙）。
-    static let sun = dyn(0xB4500A, 0xFF9F43)
-    static let sunSoft = dyn(0xFCEFE3, 0xFF9F43, lightAlpha: 1, darkAlpha: 0.16)
-    static let brandMarkStart = dyn(0x0A66D8, 0x4C9BFF)
+    static let sun = dyn(0xFFB020, 0xFFB020)
+    static let sunSoft = dyn(0xE8EDF7, 0x1B1D20)
+    static let brandMarkStart = dyn(0x2F7BFF, 0x2F7BFF)
     /// 琥珀「留意」：圆环、状态点与色块底（色块上配深色字 onWarning；浅底上作文字用 warning）。
-    static let accent = dyn(0xF5A524, 0xFFB340)
-    static let accentSoft = dyn(0xFDF1DE, 0xFFB340, lightAlpha: 1, darkAlpha: 0.16)
-    static let gray = dyn(0x737378, 0x8E8E93)
-    static let blue = dyn(0x0A66D8, 0x4C9BFF)
-    static let warning = dyn(0xA15C00, 0xFFB340)
+    static let accent = dyn(0xFFB020, 0xFFB020)
+    static let accentSoft = dyn(0xE8EDF7, 0x1B1D20)
+    static let gray = dyn(0x878EA3, 0x73767C)
+    static let blue = dyn(0x2F7BFF, 0x2F7BFF)
+    static let warning = dyn(0xFFB020, 0xFFB020)
     // 测试到位提示（与「正常」同一组绿色）与演示插画（短发男孩）；与安卓 Illustration.kt 同值。
-    static let testReady = dyn(0x1C7F3B, 0x4CD675)
-    static let testTooClose = dyn(0xB42332, 0xFF6B6B)
-    static let testReadySoft = dyn(0xE6F4EA, 0x4CD675, lightAlpha: 1, darkAlpha: 0.16)
-    /// 列表图标块的实心底色（白色图标），两套主题同值。与安卓 tileBlue 等一致。
+    static let testReady = dyn(0x12B886, 0x12B886)
+    static let testTooClose = dyn(0xFF5A6E, 0xFF5A6E)
+    static let testReadySoft = dyn(0xE8EDF7, 0x1B1D20)
     enum Tile {
-        static let blue = Color(rgb: 0x2F7CF6)
-        static let indigo = Color(rgb: 0x5E5CE6)
-        static let teal = Color(rgb: 0x14A3B3)
-        static let orange = Color(rgb: 0xF28C28)
-        static let green = Color(rgb: 0x30B158)
-        static let red = Color(rgb: 0xF0454F)
-        static let gray = Color(rgb: 0x8E8E93)
+        static let blue = Color(rgb: 0x2F7BFF)
+        static let indigo = Color(rgb: 0x8B78E6)
+        static let teal = Color(rgb: 0x12B886)
+        static let orange = Color(rgb: 0xFFB020)
+        static let green = Color(rgb: 0x12B886)
+        static let red = Color(rgb: 0xFF5A6E)
+        static let gray = Color(rgb: 0x878EA3)
     }
     enum Illustration {
         static let skin = Color(rgb: 0xFFCBA8)
@@ -69,60 +66,78 @@ enum EyeStyle {
         /// 领口滚边
         static let shirtLight = EyeStyle.dyn(0x7599D1, 0x86A6DA)
     }
-    static let success = dyn(0x1C7F3B, 0x4CD675)
-    static let successSoft = dyn(0xE6F4EA, 0x4CD675, lightAlpha: 1, darkAlpha: 0.16)
-    static let warningSoft = dyn(0xFDF1DE, 0xFFB340, lightAlpha: 1, darkAlpha: 0.16)
-    static let onStatus = dyn(0xFFFFFF, 0x000000)
+    static let success = dyn(0x12B886, 0x12B886)
+    static let successSoft = dyn(0xE8EDF7, 0x1B1D20)
+    static let warningSoft = dyn(0xE8EDF7, 0x1B1D20)
+    static let onStatus = dyn(0x141A2B, 0xF2F3F5)
     /// 琥珀「留意」色块上的深色字。
-    static let onWarning = dyn(0x2A1F00, 0x1B1608)
-    static let danger = dyn(0xD70015, 0xFF6B6B)
-    static let dangerSoft = dyn(0xFDECEE, 0xFF6B6B, lightAlpha: 1, darkAlpha: 0.16)
-    static let tooClose = dyn(0xD70015, 0xFF6B6B)
-    static let tooFar = dyn(0x0A66D8, 0x4C9BFF)
-    /// 主卡底（改版后与普通卡片同色、纯色）；描边令牌透明。
-    static let heroStart = dyn(0xFFFFFF, 0x1C1C1E)
-    static let heroEnd = dyn(0xFFFFFF, 0x1C1C1E)
+    static let onWarning = dyn(0x141A2B, 0xF2F3F5)
+    static let danger = dyn(0xFF5A6E, 0xFF5A6E)
+    static let dangerSoft = dyn(0xE8EDF7, 0x1B1D20)
+    static let tooClose = dyn(0xFF5A6E, 0xFF5A6E)
+    static let tooFar = dyn(0x2F7BFF, 0x2F7BFF)
+    static let heroStart = dyn(0xF4F7FD, 0x26282B)
+    static let heroEnd = dyn(0xF4F7FD, 0x26282B)
     static let heroBorder = Color.clear
-    /// 主按钮底：品牌蓝纯色（两套主题同值，白字 ≥ 5:1）。
-    static let buttonStart = dyn(0x0A66D8, 0x0A66D8)
-    static let buttonEnd = dyn(0x0A66D8, 0x0A66D8)
-    /// 数据图形色（纯色）。
-    static let flowStart = dyn(0x0A66D8, 0x4C9BFF)
-    static let flowEnd = dyn(0x0A66D8, 0x4C9BFF)
-    /// 光晕（改版后透明，不再发光）与投影色（只给浮在内容上的底栏用）。
-    static let glow = Color.clear
-    static let shadow = dyn(0x000000, 0x000000, lightAlpha: 0.12, darkAlpha: 0.55)
-    /// 卡片面（纯色）；描边令牌改版后透明。
-    static let glassFill = dyn(0xFFFFFF, 0x1C1C1E)
-    static let glassEdgeTop = Color.clear
+    /// 同色浮雕按钮表面，渐变短线标记主操作。
+    static let buttonStart = dyn(0xF4F7FD, 0x26282B)
+    static let buttonEnd = dyn(0xF4F7FD, 0x26282B)
+    /// 蓝 → 水绿的数据图形渐变。
+    static let flowStart = dyn(0x2F7BFF, 0x2F7BFF)
+    static let flowEnd = dyn(0x00EFE0, 0x00EFE0)
+    static let glow = dyn(0x00EFE0, 0x00EFE0, lightAlpha: 0.55, darkAlpha: 0.7)
+    static let shadow = dyn(0xA3B1CD, 0x000000, lightAlpha: 0.4510, darkAlpha: 0.5490)
+    static let glassFill = dyn(0xF4F7FD, 0x26282B)
+    static let glassEdgeTop = dyn(0xFFFFFF, 0xFFFFFF, lightAlpha: 0, darkAlpha: 0.035)
     static let glassEdgeBottom = Color.clear
+
+    static let heading = dyn(0x141A2B, 0xF2F3F5)
+    static let shadowLight = dyn(0xFFFFFF, 0xFFFFFF, lightAlpha: 0.95, darkAlpha: 0.045)
+    static let glowRadius: CGFloat = 7
+    static let glowOpacity: Double = 0.9
+    static let glowCoreOpacity: Double = 0.32
+    static let dataCyan = Color(rgb: 0x18C2FF)
+    static let dataAqua = Color(rgb: 0x00EFE0)
+    static let dataMint = Color(rgb: 0x2CF2C8)
+    static var dataGradient: LinearGradient {
+        LinearGradient(colors: [brandStart, dataCyan, dataAqua], startPoint: .top, endPoint: .bottom)
+    }
+    static var ringGradient: AngularGradient {
+        AngularGradient(stops: [.init(color: brandStart, location: 0), .init(color: dataCyan, location: 0.39),
+            .init(color: dataAqua, location: 0.72), .init(color: dataAqua, location: 1)], center: .center)
+    }
+    static func readableText(_ color: Color) -> Color {
+        if [primary, screen, blue, violet, Tile.indigo, Tile.teal].contains(color) { return text }
+        if [ice, dataCyan, dataAqua, dataMint, sun, accent, warning, danger, success, tooClose].contains(color) { return text }
+        return color
+    }
 
     /// 固定浅色主色：白底测试画布上的注视目标（深色模式下也保持高对比）。
     static let fixedPrimary = Color(rgb: 0x23367A)
 
-    /// EyeShapes（.continuous 平滑圆角）：small 10（图标块）、medium 14（按钮 / 输入）、large 14（内嵌块）、card / panel 18、hero 22、chip 10。
     static let radiusSmall: CGFloat = 10
-    static let radius: CGFloat = 18
+    static let radius: CGFloat = 20
     static let radiusMedium: CGFloat = 14
     static let radiusLarge: CGFloat = 14
-    static let radiusHero: CGFloat = 22
+    static let radiusHero: CGFloat = 20
     /// 标签、小按钮。与安卓 EyeShapes.chip 一致。
-    static let radiusChip: CGFloat = 10
+    static let radiusChip: CGFloat = 999
     static var chipShape: RoundedRectangle { RoundedRectangle(cornerRadius: radiusChip, style: .continuous) }
     static let spacing: CGFloat = 12
-    /// EyeTypography：页面大标题 headline 32 → 分区标题 title 20 → 卡片标题 subtitle 17 → 正文 body 16 → 辅助 bodySecondary 14 →
-    /// 标签 chip 13 → 最小 caption 11；数字用 SF Pro Rounded：大数字 display 56、读数 metricValue 28，单位 unit 14（次要文字色）；按钮 17。
-    /// 中文最粗用到 semibold，bold 只留给页面大标题。
-    static let display = Font.system(size: 56, weight: .semibold, design: .rounded)
-    static let headline = Font.system(size: 32, weight: .bold)
+    /// DESIGN.md 字阶：主数字 48、页面标题 22、卡片读数 26、正文 15、辅助 13。
+    /// 中文标题最多使用 semibold。
+    static let display = Font.system(size: 60, weight: .semibold)
+    static let displayCompact = Font.system(size: 48, weight: .semibold)
+    static let headline = Font.system(size: 26, weight: .semibold)
     static let chip = Font.system(size: 13, weight: .semibold)
-    static let caption = Font.system(size: 11, weight: .semibold)
+    static let caption = Font.system(size: 12, weight: .semibold)
+    static let tab = Font.system(size: 11, weight: .medium)
     static let title = Font.system(size: 20, weight: .semibold)
-    static let subtitle = Font.system(size: 17, weight: .semibold)
+    static let subtitle = Font.system(size: 18, weight: .semibold)
     static let button = Font.system(size: 17, weight: .semibold)
     static let body = Font.system(size: 16)
     static let bodySecondary = Font.system(size: 14)
-    static let metricValue = Font.system(size: 28, weight: .semibold, design: .rounded)
+    static let metricValue = Font.system(size: 30, weight: .semibold)
     static let unit = Font.system(size: 14, weight: .medium)
     /// EyeMotion.pressSpring：阻尼 0.6、中等刚度。
     static let pressSpring = Animation.spring(response: 0.3, dampingFraction: 0.6)
@@ -152,7 +167,7 @@ enum EyeStyle {
         func flush() {
             guard let isNumber = runIsNumber, !run.isEmpty else { return }
             if let last, last != isNumber { result = result + Text("\u{2009}") }
-            result = result + (isNumber ? Text(run).font(numberFont).foregroundColor(color) : Text(run).font(unit).foregroundColor(secondary))
+            result = result + (isNumber ? Text(run).font(numberFont).foregroundColor(readableText(color)) : Text(run).font(unit).foregroundColor(secondary))
             last = isNumber
             run = ""
         }
@@ -183,11 +198,11 @@ enum EyeSpacing {
     static let lg: CGFloat = 20
     static let xl: CGFloat = 24
     static let xxl: CGFloat = 32
-    static let gutter: CGFloat = 16
-    static let cardPadding: CGFloat = 16
+    static let gutter: CGFloat = 20
+    static let cardPadding: CGFloat = 20
     static let heroPadding: CGFloat = 20
-    static let cardGap: CGFloat = 12
-    static let sectionGap: CGFloat = 28
+    static let cardGap: CGFloat = 16
+    static let sectionGap: CGFloat = 24
     static let itemGap: CGFloat = 12
 }
 
@@ -202,7 +217,6 @@ extension UIColor {
 }
 
 /// 与安卓 EyeButton 同规格：最小高 50、圆角 14、按下弹簧缩到 96%，不用系统按压变暗。
-/// 主按钮品牌蓝纯色底；次要操作（重试、延长、复测）用 `.secondary` 浅填充底；都不描边、不投影。
 struct EyeButtonStyle: ButtonStyle {
     var role: Role = .primary
     enum Role { case primary, secondary, danger }
@@ -212,17 +226,23 @@ struct EyeButtonStyle: ButtonStyle {
         let content: Color = switch role {
         case .primary: EyeStyle.onPrimary
         case .secondary: EyeStyle.text
-        case .danger: EyeStyle.danger
+        case .danger: EyeStyle.text
         }
         let fill: Color = switch role {
         case .primary: EyeStyle.buttonStart
-        case .secondary: EyeStyle.surfaceVariant
+        case .secondary: EyeStyle.panel
         case .danger: EyeStyle.dangerSoft
         }
         return configuration.label.font(EyeStyle.button).multilineTextAlignment(.center)
-            .padding(.horizontal, 16).padding(.vertical, 12).frame(maxWidth: .infinity, minHeight: 50)
+            .padding(.horizontal, 16).padding(.vertical, 12).frame(maxWidth: .infinity, minHeight: 52)
             .foregroundStyle(content)
-            .background(fill, in: shape)
+            .eyeGlass(cornerRadius: EyeStyle.radiusMedium, fill: AnyShapeStyle(fill), pressed: configuration.isPressed)
+            .overlay(alignment: .bottom) {
+                if role == .primary {
+                    Capsule().fill(EyeStyle.flowGradient).frame(width: 56, height: 3)
+                        .shadow(color: EyeStyle.primary.opacity(EyeStyle.glowOpacity), radius: EyeStyle.glowRadius).padding(.bottom, 5)
+                }
+            }
             .contentShape(shape)
             .scaleEffect(configuration.isPressed && enabled ? 0.96 : 1)
             .opacity(enabled ? 1 : 0.5)
@@ -236,8 +256,7 @@ struct EyeCardButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label.font(EyeStyle.body).foregroundStyle(EyeStyle.text)
             .padding(.horizontal, 16).padding(.vertical, 14).frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
-            .eyeGlass(cornerRadius: EyeStyle.radiusLarge, fill: selected ? AnyShapeStyle(EyeStyle.primarySoft) : nil)
-            .overlay { if selected { RoundedRectangle(cornerRadius: EyeStyle.radiusLarge, style: .continuous).stroke(EyeStyle.primary, lineWidth: 1.5) } }
+            .eyeGlass(cornerRadius: EyeStyle.radiusLarge, fill: selected ? AnyShapeStyle(EyeStyle.primarySoft) : nil, pressed: selected)
             .contentShape(RoundedRectangle(cornerRadius: EyeStyle.radiusLarge))
             .scaleEffect(configuration.isPressed ? 0.98 : 1)
             .animation(EyeStyle.pressSpring, value: configuration.isPressed)

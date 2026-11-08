@@ -90,8 +90,6 @@ struct EyeRootView: View {
 
 private struct TestSelection: Identifiable { let id: String; init(_ id: String) { self.id = id } }
 
-/// 浮动底栏：左右留白的胶囊，三项都是「图标 + 名称」；选中项后方浅填充胶囊淡入，图标与名称变品牌色并轻微放大。
-/// iOS 26 起胶囊为系统 Liquid Glass（玻璃只用于浮在内容上的导航层），低版本为毛玻璃 + 半透明面。与安卓 EyeProjectBottomBar 一致。
 private struct EyeBottomBar: View {
     @Binding var selected: TopLevelTab
     var body: some View {
@@ -100,12 +98,12 @@ private struct EyeBottomBar: View {
                 let active = tab == selected
                 Button { if !active { EyeHaptics.tap() }; selected = tab } label: {
                     VStack(spacing: 2) {
-                        NavIconView(icon: tab.icon).frame(width: 22, height: 22).scaleEffect(active ? 1.06 : 1)
-                        Text(tab.label).font(EyeStyle.caption)
+                        NavIconView(icon: tab.icon, selected: active).frame(width: 24, height: 24).scaleEffect(active ? 1.06 : 1)
+                        Text(tab.label).font(EyeStyle.tab)
                     }
                     .foregroundStyle(active ? EyeStyle.primary : EyeStyle.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(active ? EyeStyle.surfaceVariant : Color.clear, in: Capsule())
+                    .background(Color.clear, in: Capsule())
                     .contentShape(Capsule())
                 }.buttonStyle(.plain)
                     .accessibilityLabel(tab.label)
@@ -115,21 +113,16 @@ private struct EyeBottomBar: View {
         }
         .padding(6).frame(height: 64)
         .background { TabBarGlass() }
-        .padding(.horizontal, 24).padding(.top, 6).padding(.bottom, 10)
+        .padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 12)
     }
 }
 
-/// 底栏胶囊背景：iOS 26 起为系统 Liquid Glass；低版本为毛玻璃 + 半透明卡片色 + 极淡描边 + 柔和投影。
 private struct TabBarGlass: View {
     var body: some View {
-        if #available(iOS 26.0, *) {
-            Capsule().fill(Color.clear).glassEffect(.regular, in: Capsule())
-        } else {
-            Capsule().fill(.ultraThinMaterial)
-                .overlay(Capsule().fill(EyeStyle.panel.opacity(0.85)))
-                .overlay(Capsule().stroke(EyeStyle.borderSubtle, lineWidth: 0.5))
-                .shadow(color: EyeStyle.shadow, radius: 16, y: 6)
-        }
+        RoundedRectangle(cornerRadius: EyeStyle.radius, style: .continuous).fill(EyeStyle.panel)
+            .shadow(color: EyeStyle.shadowLight, radius: 16, x: -6, y: -6)
+            .shadow(color: EyeStyle.shadow, radius: 22, x: 8, y: 8)
+            .overlay { RoundedRectangle(cornerRadius: EyeStyle.radius).stroke(EyeStyle.glassEdgeTop, lineWidth: 1) }
     }
 }
 
@@ -188,7 +181,6 @@ final class EyeReminder: ObservableObject {
 // MARK: 服务
 
 /// 服务页（2026-11-08 视觉改版）：「服务」大标题与账户头像 → 示范主卡（轮流演示三项自测的做法）→
-/// 「全部自测」分组列表（实心色块图标 + 名称）→ 免责声明。顺序、文案、图标与安卓 ServicesScreen 一致。
 private struct ServicesPage: View {
     let open: (String) -> Void
     let navigate: (AppRoute) -> Void
@@ -198,12 +190,12 @@ private struct ServicesPage: View {
             DemoHeroCard()
             Text("全部自测").font(EyeStyle.title).foregroundStyle(EyeStyle.text)
                 .padding(.top, EyeSpacing.sectionGap - EyeSpacing.cardGap).padding(.leading, 4)
-            VStack(spacing: 0) {
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 16), GridItem(.flexible(), spacing: 16)], spacing: 16) {
                 ServiceRow(title: "干眼自测", glyph: .dryEye, tone: .blue) { open("DRY_EYE") }
                 ServiceRow(title: "眼位自测", glyph: .alignment, tone: .violet) { open("STRABISMUS") }
                 ServiceRow(title: "老视自测", glyph: .presbyopia, tone: .primary) { open("PRESBYOPIA") }
                 ServiceRow(title: "色觉自测", glyph: .color, tone: .accent, divider: false) { open("COLOR_VISION") }
-            }.eyeGlass()
+            }
             Text("自测结果仅供参考，不能替代医院检查。").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.tertiary)
                 .frame(maxWidth: .infinity).multilineTextAlignment(.center).padding(.top, 4)
         }
@@ -225,11 +217,13 @@ private struct DemoHeroCard: View {
     @State private var order = DemoHeroCard.clips.shuffled()
     @State private var start = Date()
     @State private var skip = 0
+    @State private var pausedAt: Date?
+    @State private var pausedDuration: TimeInterval = 0
 
     var body: some View {
         let lengths = order.map { GuideScene.scene($0.motion).cycle * Self.repeats }
-        TimelineView(.animation(paused: reduceMotion)) { timeline in
-            let (segment, elapsed) = segmentAt(timeline.date.timeIntervalSince(start), lengths)
+        TimelineView(.animation(paused: reduceMotion || pausedAt != nil)) { timeline in
+            let (segment, elapsed) = segmentAt((pausedAt ?? timeline.date).timeIntervalSince(start) - pausedDuration, lengths)
             let clip = order[(segment + skip) % order.count]
             let scene = GuideScene.scene(clip.motion)
             EyeHeroCard(padding: 16, spacing: 10) {
@@ -240,6 +234,15 @@ private struct DemoHeroCard: View {
                 .padding(.horizontal, 4)
                 .id(clip.name).transition(.opacity)
                 .animation(.easeOut(duration: 0.28), value: clip.name)
+                if !reduceMotion {
+                    HStack {
+                        Spacer()
+                        Button(pausedAt == nil ? "暂停示范" : "播放示范") {
+                            if let paused = pausedAt { pausedDuration += Date().timeIntervalSince(paused); pausedAt = nil }
+                            else { pausedAt = Date() }
+                        }.font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.primaryDark).frame(minHeight: 44)
+                    }
+                }
                 GuideFrame(motion: clip.motion, phase: reduceMotion ? scene.keyframe : elapsed.truncatingRemainder(dividingBy: scene.cycle) / scene.cycle)
                     .clipShape(RoundedRectangle(cornerRadius: EyeStyle.radiusLarge, style: .continuous))
                     .contentShape(Rectangle())
@@ -263,7 +266,6 @@ private struct DemoHeroCard: View {
     }
 }
 
-/// 「全部自测」列表的一行：实心色块里的白色自测图标 + 名称 + 箭头。
 private struct ServiceRow: View {
     let title: String
     let glyph: ServiceGlyph
@@ -272,15 +274,22 @@ private struct ServiceRow: View {
     let action: () -> Void
     var body: some View {
         Button { EyeHaptics.tap(); action() } label: {
-            VStack(spacing: 0) {
-                HStack(spacing: 14) {
-                    ServiceGlyphView(glyph: glyph, color: .white).frame(width: 20, height: 20)
-                        .frame(width: 32, height: 32).background(tone.solid, in: RoundedRectangle(cornerRadius: 32 * 0.27, style: .continuous))
-                    Text(title).font(EyeStyle.body).foregroundStyle(EyeStyle.text).frame(maxWidth: .infinity, alignment: .leading)
-                    Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(EyeStyle.tertiary)
-                }.padding(.horizontal, 16).padding(.vertical, 10).frame(minHeight: 52)
-                if divider { Rectangle().fill(EyeStyle.borderSubtle).frame(height: 0.5).padding(.leading, 62) }
-            }.contentShape(Rectangle())
-        }.buttonStyle(RowPressStyle())
+            VStack(alignment: .leading, spacing: 20) {
+                ServiceGlyphView(glyph: glyph, color: {
+                    switch glyph {
+                    case .dryEye: EyeStyle.Tile.teal
+                    case .alignment: EyeStyle.Tile.indigo
+                    case .presbyopia: EyeStyle.Tile.orange
+                    case .color: EyeStyle.Tile.red
+                    }
+                }()).frame(width: 26, height: 26)
+                    .frame(width: 48, height: 48).eyeGlass(cornerRadius: EyeStyle.radiusMedium)
+                HStack {
+                    Text(title).font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text)
+                    Spacer(minLength: 4)
+                    Image(systemName: "chevron.right").foregroundStyle(EyeStyle.primary)
+                }
+            }.padding(EyeSpacing.lg).frame(maxWidth: .infinity, alignment: .leading).eyeGlass()
+        }.buttonStyle(PressScale(scale: 0.98))
     }
 }

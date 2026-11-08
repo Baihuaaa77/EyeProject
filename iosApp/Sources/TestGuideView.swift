@@ -41,7 +41,6 @@ struct TestGuideView: View {
         }
         .padding(16).frame(maxWidth: .infinity)
         .eyeGlass()
-        .overlay { RoundedRectangle(cornerRadius: EyeStyle.radius).stroke(EyeStyle.borderSubtle, lineWidth: 1) }
         .onChange(of: motion) { _ in start = Date(); frozen = nil; playing = true }
     }
 
@@ -60,11 +59,11 @@ struct TestGuideView: View {
         let active = scene.beats.lastIndex(where: { phase >= $0.start }) ?? 0
         let chip: String = reduceMotion ? "示意" : (playing ? "暂停演示" : "继续演示")
         return VStack(spacing: 14) {
-            HStack {
+            VStack(alignment: .trailing, spacing: 8) {
                 Text(title).font(EyeStyle.title).foregroundStyle(EyeStyle.text).frame(maxWidth: .infinity, alignment: .leading)
                 Button(chip) { toggle(scene) }
-                    .font(EyeStyle.chip).foregroundStyle(EyeStyle.primary)
-                    .padding(.horizontal, 12).padding(.vertical, 8).background(EyeStyle.primarySoft, in: EyeStyle.chipShape)
+                    .font(EyeStyle.chip).foregroundStyle(EyeStyle.text)
+                    .frame(minHeight: 44).padding(.horizontal, 12).padding(.vertical, 8).background(EyeStyle.primarySoft, in: EyeStyle.chipShape)
                     .disabled(reduceMotion)
             }
             GuideStage(scene: scene, phase: phase).accessibilityLabel(cue)
@@ -111,7 +110,7 @@ private struct GuideBeatRow: View {
     let done: Bool
     var body: some View {
         Text(label).font(EyeStyle.body)
-            .foregroundStyle(active ? EyeStyle.primary : EyeStyle.secondary.opacity(done ? 1 : 0.7))
+            .foregroundStyle(active ? EyeStyle.text : EyeStyle.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 12).padding(.vertical, 8)
             .background(active ? EyeStyle.primarySoft : EyeStyle.panel, in: RoundedRectangle(cornerRadius: 12))
@@ -130,7 +129,7 @@ struct GuidePainter {
 
     func label(_ text: String, _ x: CGFloat, _ y: CGFloat, _ color: Color, alpha: Double = 1) {
         var c = ctx; c.opacity = alpha
-        c.draw(Text(text).font(EyeStyle.chip).foregroundColor(color), at: p(x, y), anchor: .center)
+        c.draw(Text(text).font(EyeStyle.chip).foregroundColor(EyeStyle.readableText(color)), at: p(x, y), anchor: .center)
     }
     func line(_ a: CGPoint, _ b: CGPoint, _ color: Color, _ width: CGFloat, alpha: Double = 1, dash: [CGFloat] = [], dashPhase: CGFloat = 0) {
         var path = Path(); path.move(to: a); path.addLine(to: b)

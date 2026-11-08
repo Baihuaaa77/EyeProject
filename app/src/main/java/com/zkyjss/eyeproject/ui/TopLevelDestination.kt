@@ -7,8 +7,9 @@ import com.zkyjss.eyeproject.core.designsystem.R
 enum class TopLevelDestination(
     val label: String,
     @DrawableRes val iconRes: Int,
+    @DrawableRes val selectedIconRes: Int,
 ) {
-    HOME("首页", R.drawable.ic_nav_home),
-    SERVICES("服务", R.drawable.ic_nav_services),
-    MINE("我的", R.drawable.ic_nav_mine),
+    HOME("首页", R.drawable.ic_nav_home, R.drawable.ic_nav_home_filled),
+    SERVICES("服务", R.drawable.ic_nav_services, R.drawable.ic_nav_services_filled),
+    MINE("我的", R.drawable.ic_nav_mine, R.drawable.ic_nav_mine_filled),
 }

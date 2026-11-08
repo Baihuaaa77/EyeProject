@@ -45,7 +45,7 @@ struct LiveEyeSection: View {
                 PillButton(label: "开始") { model.wanted = true; model.start() }
             }
             if let message = model.error ?? model.cameraNote {
-                Text(message).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.warning)
+                Text(message).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.readableText(EyeStyle.warning))
             }
         }
     }
@@ -74,7 +74,7 @@ struct LiveEyeSection: View {
                 if on { model.start() } else { model.stop() }
             }.buttonStyle(EyeButtonStyle(role: model.running ? .secondary : .primary))
             if let message = model.error ?? model.cameraNote {
-                Text(message).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.warning)
+                Text(message).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.readableText(EyeStyle.warning))
             }
         }
     }
@@ -110,9 +110,7 @@ struct LiveEyeSection: View {
             if !s.ready { return ("建立基线", EyeStyle.warning) }
             return s.closed ? ("闭眼", EyeStyle.danger) : ("睁眼", EyeStyle.success)
         }()
-        let chip = EyeStyle.statusFill(color)
-        return Text(text).font(EyeStyle.chip).foregroundStyle(chip.1)
-            .padding(.horizontal, 10).padding(.vertical, 4).background(chip.0, in: EyeStyle.chipShape)
+        return StatusChip(text: text, color: color)
     }
 
     private var statusChip: some View {
@@ -127,7 +125,7 @@ struct LiveEyeSection: View {
         return HStack(spacing: 6) {
             Circle().fill(color).frame(width: 7, height: 7)
             Text(text).font(EyeStyle.chip)
-        }.foregroundStyle(color).padding(.horizontal, 10).padding(.vertical, 5)
+        }.foregroundStyle(EyeStyle.text).padding(.horizontal, 10).padding(.vertical, 5)
             .background(color.opacity(0.12), in: EyeStyle.chipShape)
             .animation(.easeOut(duration: 0.2), value: text)
     }

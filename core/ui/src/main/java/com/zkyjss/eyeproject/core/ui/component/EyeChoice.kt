@@ -28,6 +28,8 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeMotion
+import com.zkyjss.eyeproject.core.designsystem.theme.eyeSoftSurface
+import androidx.compose.ui.graphics.SolidColor
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeShapes
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
@@ -48,7 +50,7 @@ fun EyeChoiceList(
     val haptics = rememberEyeHaptics()
     val stored = "、$value、"
     val selectedOptions = options.filter { "、$it、" in stored }.sortedBy { stored.indexOf("、$it、") }
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         options.forEach { option ->
             val selected = if (multiple) option in selectedOptions else value == option
             EyeOptionRow(option, hints[option], selected, multiple) {
@@ -80,8 +82,7 @@ fun EyeOptionRow(label: String, hint: String?, selected: Boolean, multiple: Bool
         Modifier.selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
     }
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 56.dp).clip(EyeShapes.medium).background(bg)
-            .border(2.dp, border, EyeShapes.medium).then(selection).padding(horizontal = 16.dp, vertical = 12.dp),
+        Modifier.fillMaxWidth().heightIn(min = 56.dp).eyeSoftSurface(colors, EyeShapes.medium, SolidColor(bg), pressed = selected, compact = true).then(selection).padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {

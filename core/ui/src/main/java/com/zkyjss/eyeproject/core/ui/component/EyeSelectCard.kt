@@ -80,7 +80,7 @@ fun EyeSelectCard(
             modifier = Modifier.padding(start = 8.dp).size(20.dp),
             painter = painterResource(com.zkyjss.eyeproject.core.designsystem.R.drawable.ic_arrow_right),
             contentDescription = null,
-            tint = colors.gray
+            tint = colors.primary
         )
     }
 }

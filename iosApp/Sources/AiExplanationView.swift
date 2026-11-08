@@ -146,7 +146,7 @@ struct AiCardView: View {
             }
             if !list("sources").isEmpty {
                 Button { EyeHaptics.tap(); withAnimation(.easeOut(duration: 0.2)) { sourcesOpen.toggle() } } label: {
-                    Text(sourcesOpen ? "收起参考资料 ▴" : "参考资料（\(list("sources").count)）▾").font(EyeStyle.body).foregroundStyle(EyeStyle.primary)
+                    Text(sourcesOpen ? "收起参考资料 ▴" : "参考资料（\(list("sources").count)）▾").font(EyeStyle.body).foregroundStyle(EyeStyle.readableText(EyeStyle.primary))
                         .frame(maxWidth: .infinity, minHeight: 40, alignment: .leading).contentShape(Rectangle())
                 }.buttonStyle(.plain)
                 if sourcesOpen {
@@ -166,7 +166,7 @@ struct AiCardView: View {
                     Text(f["indicator"] as? String ?? "").font(EyeStyle.body.weight(.semibold)).foregroundStyle(EyeStyle.text)
                     Text(f["observation"] as? String ?? "").font(EyeStyle.body).foregroundStyle(EyeStyle.text)
                         .fixedSize(horizontal: false, vertical: true)
-                    Text("可能提示：" + (f["possible"] as? String ?? "")).font(EyeStyle.body).foregroundStyle(EyeStyle.warning)
+                    Text("可能提示：" + (f["possible"] as? String ?? "")).font(EyeStyle.body).foregroundStyle(EyeStyle.readableText(EyeStyle.warning))
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(12).frame(maxWidth: .infinity, alignment: .leading)

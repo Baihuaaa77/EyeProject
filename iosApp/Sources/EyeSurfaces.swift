@@ -1,39 +1,39 @@
 import AVFoundation
 import SwiftUI
 
-/*
- * 层次与质感（2026-11-08 视觉改版，与安卓 core:ui EyeSurfaces.kt 一致）：
- * - 页面为纯色底（EyeBackdrop）：白天浅灰、夜晚纯黑
- * - 卡片纯色、不描边、不投影，只靠底色明度差分层；Liquid Glass 只留给浮在内容上的导航层（系统 TabView / 工具栏），内容卡不用玻璃
- * - 每页最重要的一张卡用 HeroCard（圆角 22、内边距更宽），其余卡片 EyeCard（圆角 18）
- * - 一张卡只讲一件事；读数「大号圆体数字 + 小一半的灰色单位」（EyeStyle.reading）
- */
-
-// MARK: - 玻璃面
-
+// DESIGN.md：阴影只作用于表面形状，前景文字与图标保持清晰。
 struct EyeGlassModifier: ViewModifier {
     var cornerRadius: CGFloat
     var fill: AnyShapeStyle?
     var edgeTop: Color = EyeStyle.glassEdgeTop
     var shadow = true
+    var pressed = false
 
-    @ViewBuilder func body(content: Content) -> some View {
-        // 纯色面（名称沿用旧的「玻璃」）；[shadow] 只给浮在内容上的元素用
+    func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-        content
-            .background { shape.fill(fill ?? AnyShapeStyle(EyeStyle.glassFill)) }
-            .shadow(color: shadow ? EyeStyle.shadow : .clear, radius: 12, y: 4)
+        content.clipShape(shape)
+            .background {
+                if pressed {
+                    shape.fill(EyeStyle.panel
+                        .shadow(.inner(color: EyeStyle.shadow, radius: 5, x: 2, y: 2))
+                        .shadow(.inner(color: EyeStyle.shadowLight, radius: 5, x: -2, y: -2)))
+                } else {
+                    shape.fill(fill ?? AnyShapeStyle(EyeStyle.glassFill))
+                        .shadow(color: EyeStyle.shadowLight, radius: 16, x: -6, y: -6)
+                        .shadow(color: EyeStyle.shadow, radius: 22, x: 8, y: 8)
+                }
+            }
+            .overlay { shape.stroke(EyeStyle.glassEdgeTop, lineWidth: 1).allowsHitTesting(false) }
     }
 }
 
 extension View {
-    /// 卡片面（卡片、列表组、入口行共用）。[fill] 为空时用令牌 glassFill；默认不投影。
-    func eyeGlass(cornerRadius: CGFloat = EyeStyle.radius, fill: AnyShapeStyle? = nil, edgeTop: Color = EyeStyle.glassEdgeTop, shadow: Bool = false) -> some View {
-        modifier(EyeGlassModifier(cornerRadius: cornerRadius, fill: fill, edgeTop: edgeTop, shadow: shadow))
+    func eyeGlass(cornerRadius: CGFloat = EyeStyle.radius, fill: AnyShapeStyle? = nil, edgeTop: Color = EyeStyle.glassEdgeTop,
+                  shadow: Bool = true, pressed: Bool = false) -> some View {
+        modifier(EyeGlassModifier(cornerRadius: cornerRadius, fill: fill, edgeTop: edgeTop, shadow: shadow, pressed: pressed))
     }
 }
 
-/// 页面底色（纯色，不加渐变）。
 struct EyeBackdrop: View {
     var body: some View { EyeStyle.background.ignoresSafeArea() }
 }
@@ -115,21 +115,39 @@ struct VDivider: View {
 
 // MARK: - 圆环与 AI 标识
 
-/// 进度圆环：浅填充底环 + 纯色圆头进度弧（默认主色，或 [tint]），从 12 点钟顺时针；不发光（与安卓 drawProgressRing 一致）。
 struct ProgressRing: View {
     let fraction: Double?
     var lineWidth: CGFloat = 9
     var tint: Color? = nil
     /// 圆环内侧的刻度数（0 不画）：每 5 根一根长刻度，进度内的刻度用光流色点亮（与安卓 drawRingTicks 一致）。
     var ticks: Int = 0
+    var showEndpoint = false
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.accessibilityReduceMotion) private var reduced
     @State private var shown: Double = 0
     var body: some View {
-        let f = max(0.01, min(1, shown))
+        let f = max(0, min(1, shown))
         ZStack {
             Circle().stroke(EyeStyle.surfaceVariant, lineWidth: lineWidth)
             if fraction != nil {
-                Circle().trim(from: 0, to: f).stroke(tint ?? EyeStyle.primary, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                Circle().trim(from: 0, to: f)
+                    .stroke(tint.map { AnyShapeStyle($0) } ?? AnyShapeStyle(EyeStyle.ringGradient), style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                    .overlay {
+                        if tint == nil {
+                            Circle().trim(from: 0, to: f).stroke(Color.white.opacity(EyeStyle.glowCoreOpacity),
+                                style: StrokeStyle(lineWidth: lineWidth * 0.18, lineCap: .round))
+                        }
+                    }
+                    .shadow(color: tint == nil ? EyeStyle.primary.opacity(EyeStyle.glowOpacity) : .clear, radius: EyeStyle.glowRadius)
+                    .shadow(color: tint == nil ? EyeStyle.glow : .clear, radius: 3)
+                if showEndpoint && f > 0 {
+                    GeometryReader { geometry in
+                        let radius = min(geometry.size.width, geometry.size.height) / 2
+                        Circle().fill(Color.white).frame(width: lineWidth * 0.56, height: lineWidth * 0.56)
+                            .position(x: geometry.size.width / 2 + cos(f * 2 * .pi) * radius,
+                                      y: geometry.size.height / 2 + sin(f * 2 * .pi) * radius)
+                    }.allowsHitTesting(false).accessibilityHidden(true)
+                }
             }
         }
         .rotationEffect(.degrees(-90))
@@ -157,8 +175,8 @@ struct ProgressRing: View {
                 }
             }
         }
-        .onAppear { withAnimation(.easeOut(duration: 0.7)) { shown = fraction ?? 0 } }
-        .onChange(of: fraction ?? 0) { value in withAnimation(.easeOut(duration: 0.7)) { shown = value } }
+        .onAppear { withAnimation(reduced ? nil : .timingCurve(0.22, 1, 0.36, 1, duration: 0.9)) { shown = fraction ?? 0 } }
+        .onChange(of: fraction ?? 0) { value in withAnimation(reduced ? nil : .timingCurve(0.22, 1, 0.36, 1, duration: 0.9)) { shown = value } }
     }
 }
 

@@ -82,6 +82,37 @@ class ServiceVisualTest {
         assertEquals("cover", destination)
     }
 
+    /** 小屏、大字号下仍能滚动触达四项自测，点击事件保持原有路由。 */
+    @Test @Config(qualifiers = "zh-rCN-w320dp-h640dp-mdpi")
+    fun smallScreenLargeTextKeepsAllTestsReachable() {
+        checkAllServices(largeText = true, dark = true, name = "services-small-dark-large-text")
+    }
+
+    /** 横屏时卡片依然可滚动，不依赖固定的竖屏高度。 */
+    @Test @Config(qualifiers = "zh-rCN-w844dp-h390dp-land-mdpi")
+    fun landscapeKeepsAllTestsReachable() {
+        checkAllServices(largeText = false, dark = false, name = "services-landscape")
+    }
+
+    private fun checkAllServices(largeText: Boolean, dark: Boolean, name: String) {
+        var destination = ""
+        compose.setContent {
+            EyeProjectTheme(darkTheme = dark) {
+                CompositionLocalProvider(LocalDensity provides Density(1f, if (largeText) 1.5f else 1f)) {
+                    ServicesScreen(
+                        { destination = "dry" }, { destination = "near" }, { destination = "cover" },
+                        onColorVisionClick = { destination = "color" },
+                    )
+                }
+            }
+        }
+        listOf("干眼自测" to "dry", "眼位自测" to "cover", "老视自测" to "near", "色觉自测" to "color").forEach { (label, route) ->
+            compose.onNodeWithText(label).performScrollTo().assertIsDisplayed().performClick()
+            assertEquals(route, destination)
+        }
+        capture(name)
+    }
+
     @Test fun guideAndDisclosure() {
         var confirmed = 0
         compose.setContent {
@@ -383,6 +414,8 @@ class ServiceVisualTest {
                 }
             }
         }
+        // 等进度栏与字号布局稳定后检查，不能只验证动画刚开始时的短暂可见状态。
+        compose.mainClock.advanceTimeBy(1_000)
         compose.onNodeWithText("把手机往远处移约 10 cm").assertIsDisplayed()
         compose.onNodeWithText("太近了").assertIsDisplayed()
         compose.onNodeWithText("跳过").performScrollTo().assertIsDisplayed()

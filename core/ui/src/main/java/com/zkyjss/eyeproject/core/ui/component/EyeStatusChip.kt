@@ -87,7 +87,7 @@ fun EyeStatusChip(
             text = text,
             style = typography.chip,
             fontWeight = FontWeight.Bold,
-            color = foreground
+            color = colors.textPrimary
         )
     }
 }
