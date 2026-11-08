@@ -52,49 +52,51 @@ internal fun EyeTrendContent(report: EyeCareReport?, onBack: () -> Unit) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
     val trend = report?.trend
-    EyeSubPage("用眼趋势报告", onBack) {
-        // 小结卡：日均用屏、与前一周比较、要点
-        EyeHeroCard {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    EyeText("近 7 天日均用屏", style = typography.body, color = colors.textSecondary)
-                    EyeText(trend?.averageScreenMinutes?.let(EyeCareEngine::duration) ?: "—", style = typography.headline, color = colors.textPrimary)
-                    val avg = trend?.averageScreenMinutes
-                    val previous = trend?.previousAverageScreenMinutes
-                    if (avg != null && previous != null && previous > 0) {
-                        val change = ((avg - previous) * 100f / previous).roundToInt()
-                        val (label, tone) = when {
-                            change > 0 -> "比前一周多 $change%" to StatusTone.WARNING
-                            change < 0 -> "比前一周少 ${-change}%" to StatusTone.SUCCESS
-                            else -> "与前一周持平" to StatusTone.NEUTRAL
-                        }
-                        EyeStatusChip(label, tone)
-                    }
+    val days = trend?.days.orEmpty()
+    EyeSubPage("用眼趋势", onBack) {
+        // 本周要点（第一条「日均用屏…」在用屏卡里大字显示）
+        val points = trend?.summary.orEmpty().drop(if (trend?.averageScreenMinutes != null) 1 else 0)
+        if (points.isNotEmpty()) EyeCard(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            EyeText("本周要点", style = typography.chip, color = colors.textSecondary)
+            points.forEach { Bullet(it, colors.screen) }
+        }
+        // 用屏时长：日均大字 + 与前一周比较 + 每日柱图
+        val avg = trend?.averageScreenMinutes
+        val previous = trend?.previousAverageScreenMinutes
+        val change = if (avg != null && previous != null && previous > 0) ((avg - previous) * 100f / previous).roundToInt() else null
+        ChartCard("用屏时长", EyeGlyph.HOURGLASS, colors.screen, "近 7 天日均用屏", avg?.let(EyeCareEngine::duration) ?: "—",
+            trailing = change?.let {
+                when {
+                    it > 0 -> "较上周 ↑$it%" to colors.warning
+                    it < 0 -> "较上周 ↓${-it}%" to colors.success
+                    else -> "与上周持平" to colors.textSecondary
                 }
-            }
-            // 第一条「日均用屏…」已在上方大字显示
-            trend?.summary.orEmpty().drop(if (trend?.averageScreenMinutes != null) 1 else 0).forEach { Bullet(it) }
-        }
-        val days = trend?.days.orEmpty()
-        ChartCard("每日用屏", "小时") {
+            }) {
             EyeBarChart(days.map { d ->
-                EyeBar(d.label, d.screenMinutes?.div(60f), d.screenMinutes?.let { "%.1f".format(it / 60f) }, d.label == "今天",
+                EyeBar(d.label, d.screenMinutes?.div(60f), d.screenMinutes?.let { "%.1f 小时".format(it / 60f) }, d.label == "今天",
                     (d.screenMinutes ?: 0) > 360)
-            }, reference = 6f, description = "近 7 天每日用屏时长")
+            }, reference = 6f, tint = colors.screen, description = "近 7 天每日用屏时长")
         }
-        ChartCard("眼健康指数", "分") {
+        // 眼健康指数：今天的分数 + 等级 + 每日柱图
+        val todayIndex = report?.score?.let(::healthIndex)
+        ChartCard("眼健康指数", EyeGlyph.EYE, colors.primary, "今天", todayIndex?.let { "$it 分" } ?: "—",
+            trailing = report?.label?.let { it to colors.levelTone(report.level).first }) {
             EyeBarChart(days.map { d ->
                 val index = d.score?.let(::healthIndex)
-                EyeBar(d.label, index?.toFloat(), index?.toString(), d.label == "今天", (index ?: 100) <= 40)
-            }, maxValue = 100f, description = "近 7 天每日眼健康指数")
+                EyeBar(d.label, index?.toFloat(), index?.let { "$it 分" }, d.label == "今天", (index ?: 100) <= 40)
+            }, maxValue = 100f, tint = colors.primary, description = "近 7 天每日眼健康指数")
         }
-        ChartCard("眨眼频率", "次/分", help = "平时每分钟约眨眼 15 次，专注看屏幕时会明显变少。每次实时检测都会记下眨眼频率。") {
-            EyeBarChart(days.map { d -> EyeBar(d.label, d.blinksPerMinute, d.blinksPerMinute?.roundToInt()?.toString(), d.label == "今天",
-                (d.blinksPerMinute ?: 99f) < 12f) }, reference = 15f, maxValue = 20f, description = "近 7 天每日眨眼频率")
+        // 眨眼频率：平均 + 参考值 + 每日柱图
+        ChartCard("眨眼频率", EyeGlyph.EYE, colors.iceInk, "平均",
+            trend?.averageBlinksPerMinute?.let { "${"%.1f".format(it)} 次/分" } ?: "—",
+            trailing = "参考 15 次/分" to colors.textSecondary,
+            help = "平时每分钟约眨眼 15 次，专注看屏幕时会明显变少。每次实时检测都会记下眨眼频率。") {
+            EyeBarChart(days.map { d -> EyeBar(d.label, d.blinksPerMinute, d.blinksPerMinute?.roundToInt()?.let { "$it 次/分" }, d.label == "今天",
+                (d.blinksPerMinute ?: 99f) < 12f) }, reference = 15f, maxValue = 20f, tint = colors.ice, description = "近 7 天每日眨眼频率")
         }
-        if (!report?.factors.isNullOrEmpty()) EyeListGroup(title = "今天的主要原因") {
+        if (!report?.factors.isNullOrEmpty()) EyeListGroup(title = "今天的主要原因（拉低眼健康指数）") {
             report!!.factors.forEachIndexed { i, f ->
-                EyeListRow(f.title, onClick = null, subtitle = f.detail, value = "+${f.points}", valueColor = colors.warning,
+                EyeListRow(f.title, onClick = null, subtitle = f.detail, value = "−${f.points}", valueColor = colors.warning,
                     divider = i < report.factors.lastIndex)
             }
         }
@@ -108,18 +110,32 @@ internal fun EyeTrendContent(report: EyeCareReport?, onBack: () -> Unit) {
 /** 眼健康指数 = 100 − 用眼负荷分（规则仍按负荷算，界面只展示指数，越高越好）。 */
 internal fun healthIndex(loadScore: Int): Int = (100 - loadScore).coerceIn(0, 100)
 
+/**
+ * 图表卡：类别标签（类别色）+ 右侧一项对比 / 等级，下面小字说明 + 大号读数（数字大、单位灰），再下面是图。
+ */
 @Composable
-private fun ChartCard(title: String, unit: String, help: String? = null, content: @Composable ColumnScope.() -> Unit) {
+private fun ChartCard(
+    title: String,
+    glyph: EyeGlyph,
+    tint: androidx.compose.ui.graphics.Color,
+    caption: String,
+    value: String,
+    trailing: Pair<String, androidx.compose.ui.graphics.Color>? = null,
+    help: String? = null,
+    content: @Composable ColumnScope.() -> Unit,
+) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
-    Column(Modifier.fillMaxWidth().eyeGlass(colors, EyeShapes.panel).padding(18.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    EyeCard(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            EyeText(title, style = typography.subtitle, color = colors.textPrimary)
+            EyeCategoryLabel(title, glyph, tint)
             if (help != null) EyeHelpButton(title, help)
             Spacer(Modifier.weight(1f))
-            EyeText(unit, style = typography.chip, color = colors.textSecondary)
+            trailing?.let { (text, color) -> EyeText(text, style = typography.chip, color = color) }
         }
+        EyeText(caption, Modifier.padding(top = 6.dp), style = typography.bodySecondary, color = colors.textSecondary)
+        EyeText(eyeReading(value), style = typography.metricValue, color = colors.textPrimary, maxLines = 1)
+        Spacer(Modifier.height(10.dp))
         content()
     }
 }

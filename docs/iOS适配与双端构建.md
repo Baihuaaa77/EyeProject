@@ -331,3 +331,14 @@ export IOS_EXPORT_OPTIONS_PLIST="$PWD/iosApp/ExportOptions.local.plist"
 - 服务器地址默认 `SyncContract.DEFAULT_SERVER`（`https://geometrylearning.com/eyeapi`），仍可在账户页修改；清空即只在本机保存。
 - 连着云端却未登录时，冷启动的启动动画后显示登录引导（`WelcomeView` / 安卓 `WelcomeScreen`），可跳过；登录 / 注册表单两端都抽成 `SignInForm` 与账户页共用。
 
+
+## 视觉改版「澄澈」（2026-11-08）
+
+两端同步改为 Apple 健康式的克制风格（令牌与规则见 `core/designsystem/DESIGNSYSTEM.md`「视觉语言」）。苹果端要点：
+
+- `EyeStyle.swift` 逐项对应安卓 `Color.kt` / `Type.kt` / `Shape.kt` / `Spacing.kt`：白天 `#F2F2F7` 底白卡、夜晚纯黑底 `#1C1C1E` 卡；`Vivid` 色块令牌删除，新增类别色（`screen` / `sun`）与列表图标块实心色 `EyeStyle.Tile.*`；`scripts/ios/check_project.py` 比对的令牌一律写成不透明十六进制
+- 数字用 SF Pro Rounded（`display` / `metricValue`），读数统一 `EyeStyle.reading`（数字大、单位灰）；圆角一律 `.continuous`
+- 卡片（`eyeGlass`）改为纯色、不描边不投影，不再叠毛玻璃与 Liquid Glass；Liquid Glass 只留给浮动底栏胶囊（iOS 26 起 `glassEffect`，更低版本为毛玻璃 + 半透明卡片色）
+- 首页（`HomePage`）：主卡 → 今日数据 → 护眼工具 → 爱科卡（`EyechoCard`，并入原「今日感受」与 `ChatEntryCard`）→ 实时检测（未开始时一行）→ 休息提醒；服务页为示范主卡 `DemoHeroCard`（保留）+「全部自测」列表（删去 `SelectCard`）；「我的」右上角不放按钮，深色模式开关在「通用」里（写 `eye.themeMode`）
+- 部署目标仍是 iOS 16：不用 iOS 17 起的 API（如 `UnevenRoundedRectangle`），对话气泡四角同为 18
+- 本次改动在 Windows 上只跑了 `check_project.py`，未经 Xcode 编译，需在 Mac 上 `scripts/ios/verify.sh` 验证

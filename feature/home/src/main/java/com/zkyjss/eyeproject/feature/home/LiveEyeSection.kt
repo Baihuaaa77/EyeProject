@@ -37,7 +37,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeShapes
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
-import com.zkyjss.eyeproject.core.designsystem.theme.vivid
 import com.zkyjss.eyeproject.core.domain.LiveEyeMonitor
 import com.zkyjss.eyeproject.core.model.Point2f
 import com.zkyjss.eyeproject.core.ui.component.*
@@ -113,10 +112,31 @@ internal fun LiveEyeContent(
     val typography = LocalEyeTypography.current
     val haptics = rememberEyeHaptics()
     val s = state.snapshot
+    if (!state.running) {
+        // 未开始：一行（青色圆形图标 + 名称与一句说明 +「开始」），开始后才展开取景框
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(44.dp).clip(CircleShape).background(colors.iceSoft), contentAlignment = Alignment.Center) {
+                    EyeGlyphIcon(EyeGlyph.CAMERA, Modifier.size(22.dp), colors.iceInk)
+                }
+                Spacer(Modifier.width(14.dp))
+                Column(Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        EyeText("实时检测", style = typography.body, fontWeight = FontWeight.SemiBold, color = colors.textPrimary)
+                        EyeHelpButton("实时检测", LIVE_HELP)
+                    }
+                    EyeText("眨眼与距离，仅在本机处理", style = typography.bodySecondary, color = colors.textSecondary)
+                }
+                PillButton("开始") { haptics.toggle(true); onStart() }
+            }
+            note?.let { EyeText(it, style = typography.bodySecondary, color = colors.warning) }
+        }
+        return
+    }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         // 标题行：图标 + 标题 + 问号紧挨着，状态标签靠右
         Row(Modifier.fillMaxWidth().heightIn(min = 40.dp), verticalAlignment = Alignment.CenterVertically) {
-            EyeGlyphIcon(EyeGlyph.CAMERA, Modifier.size(20.dp), EyeTileTone.PRIMARY.colors().second)
+            EyeGlyphIcon(EyeGlyph.CAMERA, Modifier.size(20.dp), colors.iceInk)
             Spacer(Modifier.width(8.dp))
             EyeText("实时检测", style = typography.subtitle, color = colors.textPrimary)
             EyeHelpButton("实时检测", LIVE_HELP)
@@ -181,7 +201,7 @@ private fun Viewfinder(running: Boolean, modifier: Modifier, live: @Composable B
             val inset = 18.dp.toPx()
             val arm = 26.dp.toPx()
             val stroke = 3.dp.toPx()
-            val corner = if (running) colors.vivid.onVivid.copy(alpha = 0.9f) else colors.primary
+            val corner = if (running) colors.white.copy(alpha = 0.9f) else colors.primary
             listOf(Offset(inset, inset) to Offset(1f, 1f), Offset(size.width - inset, inset) to Offset(-1f, 1f),
                 Offset(inset, size.height - inset) to Offset(1f, -1f), Offset(size.width - inset, size.height - inset) to Offset(-1f, -1f),
             ).forEach { (o, d) ->

@@ -9,6 +9,12 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.shadow
+import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
+import com.zkyjss.eyeproject.core.ui.component.EyeText
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -102,7 +108,9 @@ fun EyeProjectNavHost(
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = backStackEntry?.destination
     val colors = LocalEyeColors.current
-    // 三个顶层页右上角：账户（人像）与系统设置（齿轮），都是完整页面
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val debuggable = remember { (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0 }
+    // 顶层页右上角：账户头像；系统设置在「我的」里，都是完整页面
     val openSettings = { navController.navigateToSystemSettings() }
     val openAccount = { navController.navigateToAccount() }
     val back: () -> Unit = { navController.navigateUp() }
@@ -138,7 +146,8 @@ fun EyeProjectNavHost(
             homeScreen(HomeNavigation(
                 onOpenAccount = openAccount,
                 onOpenSettings = openSettings,
-                onNavigateToTestModel = { navController.navigateToTestModel() },
+                // 开发者工具（模型测试）只在可调试包里出现
+                onNavigateToTestModel = if (debuggable) { { navController.navigateToTestModel() } } else null,
                 onOpenTest = openTest,
                 onEditProfile = { navController.navigateToSubjectEdit(it) },
                 onOpenTrend = { navController.navigateToEyeTrend() },
@@ -186,36 +195,41 @@ fun EyeProjectNavHost(
     }
 }
 
+/** 浮动底栏：左右留白的半透明胶囊（极淡描边 + 柔和投影），浮在页面底色上；三项都是「图标 + 名称」。 */
 @Composable
 private fun EyeProjectBottomBar(
     navController: NavHostController,
     currentDestination: NavDestination?,
 ) {
     val colors = LocalEyeColors.current
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(colors.panelBackground)
-            .borderTop(color = colors.cardBorder)
-            .navigationBarsPadding()
-            .height(68.dp)
-            .selectableGroup(),
-        horizontalArrangement = Arrangement.SpaceEvenly,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        TopLevelDestination.entries.forEach { destination ->
-            val selected = currentDestination.isInHierarchy(destination)
-            BottomBarItem(
-                destination = destination,
-                selected = selected,
-                onClick = { navController.navigateToTopLevelDestination(destination) },
-                modifier = Modifier.weight(1f),
-            )
+    Box(Modifier.fillMaxWidth().navigationBarsPadding().padding(start = 24.dp, end = 24.dp, top = 6.dp, bottom = 10.dp)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(64.dp)
+                .shadow(16.dp, CircleShape, ambientColor = colors.shadow, spotColor = colors.shadow)
+                .clip(CircleShape)
+                .background(colors.tabBarFill)
+                .border(1.dp, colors.tabBarEdge, CircleShape)
+                .padding(6.dp)
+                .selectableGroup(),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            TopLevelDestination.entries.forEach { destination ->
+                val selected = currentDestination.isInHierarchy(destination)
+                BottomBarItem(
+                    destination = destination,
+                    selected = selected,
+                    onClick = { navController.navigateToTopLevelDestination(destination) },
+                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                )
+            }
         }
     }
 }
 
-/** 选中项：图标后方的浅主色胶囊以弹簧展开，图标同步变色并轻微放大；只显示图标，名称作为无障碍描述。 */
+/** 一项：选中时后方浅填充胶囊淡入，图标与名称变品牌色并轻微放大。 */
 @Composable
 private fun BottomBarItem(
     destination: TopLevelDestination,
@@ -224,29 +238,30 @@ private fun BottomBarItem(
     modifier: Modifier = Modifier,
 ) {
     val colors = LocalEyeColors.current
-    val pillWidth by animateDpAsState(if (selected) 64.dp else 0.dp, EyeMotion.dpSpring, label = "导航胶囊")
+    val pill by animateColorAsState(if (selected) colors.surfaceVariant else colors.surfaceVariant.copy(alpha = 0f), tween(EyeMotion.MEDIUM), label = "导航胶囊")
     val tint by animateColorAsState(if (selected) colors.primary else colors.textSecondary, tween(EyeMotion.MEDIUM), label = "导航色")
-    val iconScale by animateFloatAsState(if (selected) 1.08f else 1f, EyeMotion.settleSpring(), label = "导航图标")
-    Box(
+    val iconScale by animateFloatAsState(if (selected) 1.06f else 1f, EyeMotion.settleSpring(), label = "导航图标")
+    Column(
         modifier = modifier
-            .fillMaxHeight()
+            .clip(CircleShape)
+            .background(pill)
             .selectable(
                 selected = selected,
                 role = Role.Tab,
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
                 onClick = onClick,
-            )
-            .semantics { contentDescription = destination.label },
-        contentAlignment = Alignment.Center,
+            ),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
     ) {
-        Box(Modifier.height(40.dp).width(pillWidth).clip(EyeShapes.chip).background(colors.primarySoft))
         EyeIcon(
             painter = painterResource(destination.iconRes),
             contentDescription = null,
             tint = tint,
-            modifier = Modifier.size(30.dp).graphicsLayer { scaleX = iconScale; scaleY = iconScale },
+            modifier = Modifier.size(22.dp).graphicsLayer { scaleX = iconScale; scaleY = iconScale },
         )
+        EyeText(destination.label, style = LocalEyeTypography.current.caption, color = tint)
     }
 }
 

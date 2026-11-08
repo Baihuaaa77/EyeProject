@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -60,14 +61,13 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 /*
- * 层次规则（与苹果端 EyeStyle / EyeSurfaces 一致）：
- * - 每页最重要的一张卡用 [EyeHeroCard]：更亮的底（深色为深蓝渐变 + 淡蓝描边）、更深的投影，浮在最上层
- * - 其余卡片用 [EyeCard] 平铺：玻璃面（半透明 + 上沿高光描边），不加投影
- * - 玻璃不依赖系统模糊（安卓 12 以下也一致）：底下是柔和渐变，半透明本身就是毛玻璃观感
- * - 一张卡只讲一件事；同卡多项读数用 [EyeMetricRow] 竖线分隔，标签在上、数值在下
+ * 层次规则（2026-11-08 视觉改版，与苹果端 EyeStyle / EyeSurfaces 一致）：
+ * - 卡片一律纯色、不描边、不投影，只靠「灰底白卡 / 黑底深灰卡」的明度差分层
+ * - 每页最重要的一张卡用 [EyeHeroCard]（大圆角 22、内边距更宽），其余用 [EyeCard]（圆角 18）
+ * - 一张卡只讲一件事；读数「大数字 + 小一半的灰色单位」（[eyeReading]）
  */
 
-/** 主卡：每页一张，渐变底 + 描边 + 深投影（深色主题投影带蓝色泛光）。 */
+/** 主卡：每页一张，纯色面、大圆角。 */
 @Composable
 fun EyeHeroCard(
     modifier: Modifier = Modifier,
@@ -78,10 +78,7 @@ fun EyeHeroCard(
     val colors = LocalEyeColors.current
     Column(
         modifier.fillMaxWidth()
-            .shadow(if (colors.isDark) 28.dp else 20.dp, EyeShapes.hero, clip = false,
-                ambientColor = if (colors.isDark) colors.glow else colors.shadow, spotColor = colors.shadow)
-            .eyeGlass(colors, EyeShapes.hero, colors.heroBrush,
-                edgeTop = if (colors.isDark) colors.heroBorder else colors.glassEdgeTop, elevation = 0.dp)
+            .eyeGlass(colors, EyeShapes.hero, SolidColor(colors.heroStart))
             .padding(contentPadding),
         verticalArrangement = verticalArrangement,
         content = content,
@@ -89,25 +86,47 @@ fun EyeHeroCard(
 }
 
 /**
- * 玻璃面：柔和投影 → 裁圆角 → 半透明填充 → 左上一道斜向柔光（液态玻璃的高光）→ 上亮下淡的渐变描边。
- * 卡片、列表组、底栏共用。
+ * 卡片面：裁圆角 → 纯色填充。改版后不再有高光与描边；[elevation] 大于 0 时才加投影（只给浮在内容上的元素用）。
+ * 卡片、列表组共用（名称沿用旧的「玻璃面」）。
  */
 fun Modifier.eyeGlass(
     colors: EyeColors,
     shape: Shape,
     fill: Brush = SolidColor(colors.glassFill),
     edgeTop: Color = colors.glassEdgeTop,
-    elevation: Dp = 6.dp,
+    elevation: Dp = 0.dp,
 ): Modifier = (if (elevation > 0.dp) shadow(elevation, shape, clip = false, ambientColor = colors.shadow, spotColor = colors.shadow) else this)
     .clip(shape)
     .background(fill)
-    .drawBehind {
-        drawRect(Brush.linearGradient(listOf(colors.white.copy(alpha = if (colors.isDark) 0.06f else 0.35f), Color.Transparent),
-            Offset.Zero, Offset(size.width * 0.6f, size.height * 0.7f)))
-    }
-    .border(1.dp, Brush.verticalGradient(listOf(edgeTop, colors.glassEdgeBottom)), shape)
+    .then(if (edgeTop.alpha > 0f) Modifier.border(1.dp, edgeTop, shape) else Modifier)
 
-/** 普通卡片：平铺玻璃面。[tinted] 为 true 时用浅色块底（入口行，如 AI 主动问诊）。 */
+/**
+ * 读数排版：把「6小时25分」「180 lx」「22 次/分」拆成数字与单位——数字沿用外层文字样式（大号），
+ * 单位用 [unit] 字号、次要文字色；数字与单位紧挨时补一个窄空格。[unit] 不为空时接在 [value] 后面。
+ */
+@Composable
+fun eyeReading(value: String, unit: String? = null, unitColor: Color = LocalEyeColors.current.textSecondary): androidx.compose.ui.text.AnnotatedString {
+    val unitStyle = LocalEyeTypography.current.unit.toSpanStyle().copy(color = unitColor)
+    val text = if (unit.isNullOrEmpty()) value else "$value $unit"
+    fun numeric(c: Char) = c.isDigit() || c in ".,:+−—" || (c == '-' && text.length == 1)
+    return buildAnnotatedString {
+        var i = 0
+        var last: Boolean? = null
+        while (i < text.length) {
+            val c = text[i]
+            if (c.isWhitespace()) { append(c); last = null; i++; continue }
+            val isNumber = numeric(c)
+            var j = i
+            while (j < text.length && !text[j].isWhitespace() && numeric(text[j]) == isNumber) j++
+            if (last != null && last != isNumber) append(' ')
+            if (isNumber) append(text.substring(i, j)) else withStyle(unitStyle) { append(text.substring(i, j)) }
+            last = isNumber
+            i = j
+        }
+    }
+}
+
+/** 普通卡片：纯色面。[tinted] 为 true 时用浅填充底。 */
 @Composable
 fun EyeCard(
     modifier: Modifier = Modifier,
@@ -119,14 +138,14 @@ fun EyeCard(
     val colors = LocalEyeColors.current
     Column(
         modifier.fillMaxWidth()
-            .eyeGlass(colors, EyeShapes.panel, SolidColor(if (tinted) colors.surfaceVariant.copy(alpha = 0.8f) else colors.glassFill))
+            .eyeGlass(colors, EyeShapes.panel, SolidColor(if (tinted) colors.surfaceVariant else colors.glassFill))
             .padding(contentPadding),
         verticalArrangement = verticalArrangement,
         content = content,
     )
 }
 
-/** 一项读数：标签在上，数值在下（数值大号粗体、单位常规字重）。 */
+/** 一项读数：标签在上，数值在下（大号数字 + 小一半的灰色单位）；[attention] 时标签后带琥珀小圆点。 */
 @Composable
 fun EyeMetric(
     label: String,
@@ -141,15 +160,9 @@ fun EyeMetric(
     Column(modifier.semantics(mergeDescendants = true) {}, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             EyeText(label, style = typography.bodySecondary, color = colors.textSecondary, maxLines = 1)
-            if (attention) Box(Modifier.padding(start = 6.dp).size(6.dp).clip(EyeShapes.chip).background(colors.accent))
+            if (attention) Box(Modifier.padding(start = 6.dp).size(6.dp).clip(CircleShape).background(colors.accent))
         }
-        EyeText(
-            buildAnnotatedString {
-                append(value)
-                if (!unit.isNullOrEmpty()) withStyle(SpanStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium)) { append(" $unit") }
-            },
-            style = typography.metricValue, color = valueColor, maxLines = 1,
-        )
+        EyeText(eyeReading(value, unit), style = typography.metricValue, color = valueColor, maxLines = 1)
     }
 }
 
@@ -165,10 +178,7 @@ fun EyeMetricRow(modifier: Modifier = Modifier, items: List<@Composable (Modifie
     }
 }
 
-/**
- * 进度圆环：底环 + 光流渐变进度弧（主蓝 → 青蓝，或 [tint]），深色主题下进度弧带同色泛光、末端一个亮点。
- * 光晕用多层半透明粗描边叠出，不依赖模糊（所有系统版本一致）。
- */
+/** 进度圆环：浅填充底环 + 纯色圆头进度弧（默认主色，或 [tint]），从 12 点钟顺时针。不发光。 */
 @Composable
 fun EyeProgressRing(
     fraction: Float?,
@@ -213,34 +223,12 @@ fun DrawScope.drawRingTicks(colors: EyeColors, fraction: Float?, stroke: Float, 
 }
 
 fun DrawScope.drawProgressRing(colors: EyeColors, fraction: Float?, stroke: Float, tint: Color? = null) {
-    val pad = stroke * 1.6f
-    val arcSize = Size(size.minDimension - pad * 2, size.minDimension - pad * 2)
+    val arcSize = Size(size.minDimension - stroke, size.minDimension - stroke)
     val topLeft = Offset((size.width - arcSize.width) / 2, (size.height - arcSize.height) / 2)
     drawArc(colors.surfaceVariant, 0f, 360f, false, topLeft, arcSize, style = Stroke(stroke))
     if (fraction == null) return
-    val f = fraction.coerceIn(0.02f, 1f)
-    val sweep = 360f * f
-    // 光流：从起点的主蓝沿弧线流向末端的青蓝（扫描渐变跟着画布一起转到 12 点钟起笔）
-    val brush = if (tint != null) Brush.sweepGradient(listOf(tint.copy(alpha = 0.55f), tint), center)
-    else {
-        // 起点的圆头会往回伸进 360° 之前的一小段：那一段也接回起始色，否则起点会冒出一块末端色的半圆
-        val tail = maxOf(f + 0.01f, 0.96f).coerceAtMost(0.999f)
-        Brush.sweepGradient(0f to colors.flowStart, f to colors.flowEnd, (f + tail) / 2 to colors.flowEnd, tail to colors.flowStart,
-            1f to colors.flowStart, center = center)
-    }
-    rotate(-90f) {
-        if (colors.hasGlow) {
-            for ((w, a) in listOf(3.2f to 0.07f, 2.4f to 0.11f, 1.7f to 0.17f)) {
-                drawArc(brush, 0f, sweep, false, topLeft, arcSize, alpha = a, style = Stroke(stroke * w, cap = StrokeCap.Round))
-            }
-        }
-        drawArc(brush, 0f, sweep, false, topLeft, arcSize, style = Stroke(stroke, cap = StrokeCap.Round))
-    }
-    if (colors.hasGlow) {
-        val r = arcSize.width / 2
-        val a = Math.toRadians((sweep - 90f).toDouble())
-        drawCircle(colors.white, stroke * 0.36f, Offset(center.x + r * cos(a).toFloat(), center.y + r * sin(a).toFloat()))
-    }
+    val sweep = 360f * fraction.coerceIn(0.01f, 1f)
+    drawArc(tint ?: colors.primary, -90f, sweep, false, topLeft, arcSize, style = Stroke(stroke, cap = StrokeCap.Round))
 }
 
 /**

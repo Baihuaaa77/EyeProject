@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
@@ -55,7 +56,6 @@ import com.zkyjss.eyeproject.core.designsystem.theme.EyeShapes
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeMotion
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
-import com.zkyjss.eyeproject.core.designsystem.theme.vivid
 import com.zkyjss.eyeproject.core.sync.AdviceRequest
 import com.zkyjss.eyeproject.core.sync.ChatEntry
 import com.zkyjss.eyeproject.core.sync.Chats
@@ -87,29 +87,7 @@ class ChatViewModel @Inject constructor(private val chat: ChatRepository) : View
     fun clear() { viewModelScope.launch { chat.clear() } }
 }
 
-/** 首页「AI 主动问诊」入口（功能卡下排整行）：蓝色渐变色块上爱科头像 + 白色标题，点了进入对话页。与苹果端 ChatEntryCard 一致。 */
-@Composable
-internal fun ChatEntryCard(onOpen: () -> Unit) {
-    val colors = LocalEyeColors.current
-    val typography = LocalEyeTypography.current
-    val on = colors.vivid.onVivid
-    val haptics = rememberEyeHaptics()
-    val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    val scale by animateFloatAsState(if (pressed) 0.97f else 1f, EyeMotion.pressSpring(), label = "问诊入口按压")
-    Box(Modifier.fillMaxWidth().graphicsLayer { scaleX = scale; scaleY = scale }.clip(EyeShapes.large).background(colors.vivid.blue.brush)
-        .clickable(interactionSource = interaction, indication = null, role = Role.Button) { haptics.tap(); onOpen() }) {
-        EyeGlyphIcon(EyeGlyph.CHAT, Modifier.align(Alignment.CenterEnd).offset(x = 14.dp).size(88.dp), on.copy(alpha = 0.14f))
-        Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(52.dp).clip(CircleShape).background(on.copy(alpha = 0.3f)), contentAlignment = Alignment.Center) { EyechoAvatar(46.dp) }
-            Spacer(Modifier.width(12.dp))
-            EyeText(CHAT_TITLE, Modifier.weight(1f), style = typography.subtitle, color = on)
-            EyeText("›", style = typography.title, color = on)
-        }
-    }
-}
-
-/** 入口与对话页标题（两端一致）。 */
+/** 对话页标题（两端一致）；首页入口是爱科卡（见 HomeScreen 的 EyechoCard）。 */
 internal const val CHAT_TITLE = "AI 主动问诊"
 
 /**
@@ -205,26 +183,25 @@ internal fun EyeChatContent(
     }
 }
 
-/** 爱科 Eyecho 圆形头像（浅主色底）。与苹果端 EyechoAvatar 一致。 */
+/** 爱科 Eyecho 圆形头像（浅紫底）。与苹果端 EyechoAvatar 一致。 */
 @Composable
 internal fun EyechoAvatar(size: Dp) {
     Image(painterResource(R.drawable.eyecho_avatar), contentDescription = null,
-        Modifier.size(size).clip(CircleShape).background(LocalEyeColors.current.primarySoft))
+        Modifier.size(size).clip(CircleShape).background(LocalEyeColors.current.violetSoft))
 }
 
-/** 对话页顶部：爱科半身像站在卡片底边上，右侧自我介绍。与苹果端 EyechoIntro 一致。 */
+/** 对话页顶部：居中的爱科大头像 + 问候 + 一句介绍，不加卡片。与苹果端 EyechoIntro 一致。 */
 @Composable
 private fun EyechoIntro() {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
-    Row(Modifier.fillMaxWidth().eyeGlass(colors, EyeShapes.hero).padding(start = 16.dp, end = 16.dp, top = 12.dp),
-        verticalAlignment = Alignment.Bottom) {
-        Image(painterResource(R.drawable.eyecho_half), contentDescription = "爱科 Eyecho", Modifier.height(132.dp))
-        Column(Modifier.weight(1f).padding(start = 14.dp, bottom = 16.dp).align(Alignment.CenterVertically),
-            verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            EyeText(EYECHO_HELLO, style = typography.title, color = colors.textPrimary)
-            EyeText(EYECHO_INTRO, style = typography.body, color = colors.textSecondary)
-        }
+    Column(Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 4.dp), horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Image(painterResource(R.drawable.eyecho_avatar), contentDescription = "爱科 Eyecho",
+            Modifier.size(84.dp).clip(CircleShape).background(colors.violetSoft))
+        EyeText(EYECHO_HELLO, Modifier.padding(top = 4.dp), style = typography.title, color = colors.textPrimary)
+        EyeText(EYECHO_INTRO, style = typography.bodySecondary, color = colors.textSecondary,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center)
     }
 }
 
@@ -245,7 +222,7 @@ private fun ChatInputBar(state: ChatState?, input: String, onInput: (String) -> 
         }
         else -> {
             Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Box(Modifier.weight(1f).eyeGlass(colors, EyeShapes.panel).padding(horizontal = 14.dp, vertical = 12.dp)) {
+                Box(Modifier.weight(1f).heightIn(min = 50.dp).eyeGlass(colors, EyeShapes.hero).padding(horizontal = 16.dp, vertical = 13.dp)) {
                     if (input.isEmpty()) EyeText("说说今天眼睛的感受…", style = typography.body, color = colors.textSecondary)
                     BasicTextField(input, onInput, Modifier.fillMaxWidth(), textStyle = typography.body.copy(color = colors.textPrimary),
                         cursorBrush = SolidColor(colors.primary), maxLines = 4)
@@ -283,20 +260,25 @@ internal fun ChatConsentDialog(onAgree: (Boolean) -> Unit, onDecline: () -> Unit
     }
 }
 
-/** 一条对话：用户的靠右（浅主色底），爱科的靠左（白底，带参考资料）；提到危险信号时在提问下方醒目提示尽快就医。 */
+/**
+ * 一条对话（信息式气泡）：用户的靠右（品牌蓝底白字、右下角收尖），爱科的靠左（卡片底、左下角收尖，带参考资料）；
+ * 提到危险信号时在提问下方给出「建议尽快就医」提示块。
+ */
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
 private fun ChatBubble(entry: ChatEntry, active: Boolean = false, onOption: (String) -> Unit = {}) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
     val mine = entry.role == Chats.USER
+    val shape = if (mine) androidx.compose.foundation.shape.RoundedCornerShape(18.dp, 18.dp, 6.dp, 18.dp)
+        else androidx.compose.foundation.shape.RoundedCornerShape(18.dp, 18.dp, 18.dp, 6.dp)
     Column(Modifier.fillMaxWidth().animateContentSize(), horizontalAlignment = if (mine) Alignment.End else Alignment.Start,
         verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(verticalAlignment = Alignment.Top) {
-            if (!mine) { EyechoAvatar(34.dp); Spacer(Modifier.width(8.dp)) }
-            Column(Modifier.widthIn(max = 300.dp).clip(EyeShapes.panel).background(if (mine) colors.primarySoft else colors.panelBackground)
+        Row(verticalAlignment = Alignment.Bottom) {
+            if (!mine) { EyechoAvatar(28.dp); Spacer(Modifier.width(8.dp)) }
+            Column(Modifier.widthIn(max = 290.dp).clip(shape).background(if (mine) colors.buttonStart else colors.panelBackground)
                 .padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                EyeText(entry.text, style = typography.body, color = colors.textPrimary)
+                EyeText(entry.text, style = typography.body, color = if (mine) colors.onPrimary else colors.textPrimary)
                 if (entry.inquiryComplete && !entry.urgent) EyeText("本次问询已总结", style = typography.bodySecondary, color = colors.primary)
                 entry.question?.let { q ->
                     EyeText(q.prompt, style = typography.subtitle, color = colors.textPrimary)
@@ -314,7 +296,13 @@ private fun ChatBubble(entry: ChatEntry, active: Boolean = false, onOption: (Str
                     style = typography.bodySecondary, color = colors.textSecondary)
             }
         }
-        if (mine && entry.urgent) EyeText(Chats.URGENT_NOTICE, Modifier.fillMaxWidth().clip(EyeShapes.medium).background(colors.dangerSoft).padding(12.dp),
-            style = typography.bodySecondary, color = colors.danger, fontWeight = FontWeight.SemiBold)
+        if (mine && entry.urgent) Row(Modifier.fillMaxWidth().clip(EyeShapes.card).background(colors.dangerSoft).padding(horizontal = 14.dp, vertical = 12.dp)) {
+            EyeGlyphIcon(EyeGlyph.INFO, Modifier.padding(top = 1.dp).size(20.dp), colors.danger)
+            Spacer(Modifier.width(10.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                EyeText("建议尽快就医", style = typography.body, color = colors.danger, fontWeight = FontWeight.SemiBold)
+                EyeText(Chats.URGENT_NOTICE, style = typography.bodySecondary, color = colors.textPrimary)
+            }
+        }
     }
 }

@@ -2,11 +2,11 @@ import AVFoundation
 import SwiftUI
 
 /*
- * 层次与质感（与安卓 core:ui EyeSurfaces.kt 一致）：
- * - 页面为纯色底（EyeBackdrop）；颜色只用深海蓝主调
- * - 卡片是「玻璃」：系统毛玻璃材质 + 半透明填充 + 上亮下淡的描边；iOS 26 起叠加系统 Liquid Glass，低版本不出现这一层
- * - 每页最重要的一张卡用 HeroCard：更亮（深色为深蓝渐变）、更深的投影，浮在最上层；其余卡片平铺
- * - 一张卡只讲一件事；同卡多项读数用 MetricRow 竖线分隔，标签在上、数值在下
+ * 层次与质感（2026-11-08 视觉改版，与安卓 core:ui EyeSurfaces.kt 一致）：
+ * - 页面为纯色底（EyeBackdrop）：白天浅灰、夜晚纯黑
+ * - 卡片纯色、不描边、不投影，只靠底色明度差分层；Liquid Glass 只留给浮在内容上的导航层（系统 TabView / 工具栏），内容卡不用玻璃
+ * - 每页最重要的一张卡用 HeroCard（圆角 22、内边距更宽），其余卡片 EyeCard（圆角 18）
+ * - 一张卡只讲一件事；读数「大号圆体数字 + 小一半的灰色单位」（EyeStyle.reading）
  */
 
 // MARK: - 玻璃面
@@ -18,31 +18,17 @@ struct EyeGlassModifier: ViewModifier {
     var shadow = true
 
     @ViewBuilder func body(content: Content) -> some View {
+        // 纯色面（名称沿用旧的「玻璃」）；[shadow] 只给浮在内容上的元素用
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-        let surface = content
-            .background {
-                ZStack {
-                    shape.fill(.ultraThinMaterial)
-                    shape.fill(fill ?? AnyShapeStyle(EyeStyle.glassFill))
-                    // 左上一道斜向柔光（液态玻璃的高光）
-                    shape.fill(LinearGradient(colors: [Color.white.opacity(0.28), .clear], startPoint: .topLeading, endPoint: UnitPoint(x: 0.6, y: 0.7)))
-                        .blendMode(.plusLighter).opacity(0.6)
-                }
-            }
-            .overlay { shape.strokeBorder(LinearGradient(colors: [edgeTop, EyeStyle.glassEdgeBottom], startPoint: .top, endPoint: .bottom), lineWidth: 1) }
-            // 柔和投影：卡片从底色上浮起（主卡另有更深的投影）
-            .shadow(color: shadow ? EyeStyle.shadow.opacity(0.7) : .clear, radius: 8, y: 3)
-        if #available(iOS 26.0, *) {
-            surface.glassEffect(.regular, in: shape)
-        } else {
-            surface
-        }
+        content
+            .background { shape.fill(fill ?? AnyShapeStyle(EyeStyle.glassFill)) }
+            .shadow(color: shadow ? EyeStyle.shadow : .clear, radius: 12, y: 4)
     }
 }
 
 extension View {
-    /// 玻璃面（卡片、列表组、入口行共用）。[fill] 为空时用令牌 glassFill。
-    func eyeGlass(cornerRadius: CGFloat = EyeStyle.radius, fill: AnyShapeStyle? = nil, edgeTop: Color = EyeStyle.glassEdgeTop, shadow: Bool = true) -> some View {
+    /// 卡片面（卡片、列表组、入口行共用）。[fill] 为空时用令牌 glassFill；默认不投影。
+    func eyeGlass(cornerRadius: CGFloat = EyeStyle.radius, fill: AnyShapeStyle? = nil, edgeTop: Color = EyeStyle.glassEdgeTop, shadow: Bool = false) -> some View {
         modifier(EyeGlassModifier(cornerRadius: cornerRadius, fill: fill, edgeTop: edgeTop, shadow: shadow))
     }
 }
@@ -54,19 +40,15 @@ struct EyeBackdrop: View {
 
 // MARK: - 卡片
 
-/// 主卡：每页一张，更亮的玻璃（深色为深蓝渐变）+ 深投影（深色带蓝色泛光）。
+/// 主卡：每页一张，纯色面、大圆角。
 struct EyeHeroCard<Content: View>: View {
     var padding: CGFloat = EyeSpacing.heroPadding
     var spacing: CGFloat = EyeSpacing.itemGap
     @ViewBuilder let content: Content
-    @Environment(\.colorScheme) private var scheme
     var body: some View {
         VStack(alignment: .leading, spacing: spacing) { content }
             .padding(padding).frame(maxWidth: .infinity, alignment: .leading)
-            .eyeGlass(cornerRadius: EyeStyle.radiusHero,
-                      fill: AnyShapeStyle(EyeStyle.heroGradient),
-                      edgeTop: EyeStyle.heroBorder, shadow: false)
-            .shadow(color: scheme == .dark ? EyeStyle.glow.opacity(0.22) : EyeStyle.shadow, radius: scheme == .dark ? 26 : 18, y: 10)
+            .eyeGlass(cornerRadius: EyeStyle.radiusHero, fill: AnyShapeStyle(EyeStyle.heroStart))
     }
 }
 
@@ -79,7 +61,7 @@ struct EyeCard<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: spacing) { content }
             .padding(padding).frame(maxWidth: .infinity, alignment: .leading)
-            .eyeGlass(fill: tinted ? AnyShapeStyle(EyeStyle.surfaceVariant.opacity(0.8)) : nil)
+            .eyeGlass(fill: tinted ? AnyShapeStyle(EyeStyle.surfaceVariant) : nil)
     }
 }
 
@@ -106,7 +88,7 @@ extension CategoryHeader where Trailing == EmptyView {
     }
 }
 
-/// 一项读数：标签在上，数值在下（数值大号粗体、单位常规字重）。[attention] 时标签后带琥珀小圆点。
+/// 一项读数：标签在上，数值在下（大号圆体数字 + 小一半的灰色单位）。[attention] 时标签后带琥珀小圆点。
 struct MetricView: View {
     let label: String
     let value: String
@@ -119,8 +101,7 @@ struct MetricView: View {
                 Text(label).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary).lineLimit(1)
                 if attention { Circle().fill(EyeStyle.accent).frame(width: 6, height: 6) }
             }
-            (Text(value).font(EyeStyle.metricValue) + Text(unit.map { " \($0)" } ?? "").font(.system(size: 14, weight: .medium)))
-                .foregroundStyle(valueColor).lineLimit(1).minimumScaleFactor(0.7)
+            EyeStyle.reading(value, unit: unit, color: valueColor).lineLimit(1).minimumScaleFactor(0.7)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
@@ -129,40 +110,30 @@ struct MetricView: View {
 
 /// 竖向细分隔线（同卡并排读数之间）。
 struct VDivider: View {
-    var body: some View { Rectangle().fill(EyeStyle.borderSubtle).frame(width: 1).padding(.horizontal, 14) }
+    var body: some View { Rectangle().fill(EyeStyle.borderSubtle).frame(width: 0.5).padding(.horizontal, 14) }
 }
 
 // MARK: - 圆环与 AI 标识
 
-/// 进度圆环：底环 + 光流渐变进度弧（主蓝 → 青蓝），深色主题下带同色泛光（与安卓 drawProgressRing 一致）。
+/// 进度圆环：浅填充底环 + 纯色圆头进度弧（默认主色，或 [tint]），从 12 点钟顺时针；不发光（与安卓 drawProgressRing 一致）。
 struct ProgressRing: View {
     let fraction: Double?
     var lineWidth: CGFloat = 9
+    var tint: Color? = nil
     /// 圆环内侧的刻度数（0 不画）：每 5 根一根长刻度，进度内的刻度用光流色点亮（与安卓 drawRingTicks 一致）。
     var ticks: Int = 0
     @Environment(\.colorScheme) private var scheme
     @State private var shown: Double = 0
     var body: some View {
-        let glow = true  // 深色电光蓝泛光，浅色为半透明青蓝柔光（令牌 glow 已按主题取值）
-        let f = max(0.02, min(1, shown))
-        // 光流：从 12 点钟的主蓝沿弧线流向末端的青蓝（角度渐变随视图一起旋转）
-        // 起点的圆头会往回伸进 360° 之前的一小段：那一段也接回起始色，否则起点会冒出一块末端色的半圆
-        let tail = min(max(f + 0.01, 0.96), 0.999)
-        let flow = AngularGradient(stops: [.init(color: EyeStyle.flowStart, location: 0), .init(color: EyeStyle.flowEnd, location: f),
-                                           .init(color: EyeStyle.flowEnd, location: (f + tail) / 2), .init(color: EyeStyle.flowStart, location: tail),
-                                           .init(color: EyeStyle.flowStart, location: 1)], center: .center)
+        let f = max(0.01, min(1, shown))
         ZStack {
             Circle().stroke(EyeStyle.surfaceVariant, lineWidth: lineWidth)
             if fraction != nil {
-                let arc = Circle().trim(from: 0, to: f)
-                if glow {
-                    arc.stroke(flow, style: StrokeStyle(lineWidth: lineWidth * 2.2, lineCap: .round)).blur(radius: 6).opacity(0.55)
-                }
-                arc.stroke(flow, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                Circle().trim(from: 0, to: f).stroke(tint ?? EyeStyle.primary, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
             }
         }
         .rotationEffect(.degrees(-90))
-        .padding(lineWidth * 1.2)
+        .padding(lineWidth / 2)
         .background {
             if ticks > 0 {
                 Canvas { ctx, size in
@@ -191,27 +162,12 @@ struct ProgressRing: View {
     }
 }
 
-/// AI 标识（替代旧的卡通头像）：深色主题为发光光球（轻呼吸），浅色主题为主色声波线。
+/// AI 标识：浅主色块上的主色声波线（2026-11 改版后两套主题一致，不再用发光光球）。与安卓 EyeAiMark 一致。
 struct AiMark: View {
     var size: CGFloat = 40
-    @Environment(\.colorScheme) private var scheme
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var breathe = false
     var body: some View {
-        if scheme == .dark {
-            ZStack {
-                Circle().fill(RadialGradient(colors: [EyeStyle.glow.opacity(0.5), .clear], center: .center, startRadius: 0, endRadius: size / 2))
-                    .scaleEffect(breathe ? 1.06 : 0.9)
-                Circle().fill(RadialGradient(colors: [.white, EyeStyle.brandStart, EyeStyle.primary, EyeStyle.buttonStart],
-                                             center: UnitPoint(x: 0.36, y: 0.3), startRadius: 0, endRadius: size * 0.45))
-                    .frame(width: size * 0.6, height: size * 0.6)
-            }
-            .frame(width: size, height: size)
-            .onAppear { if !reduceMotion { withAnimation(.easeInOut(duration: 1.8).repeatForever(autoreverses: true)) { breathe = true } } }
-        } else {
-            Image(systemName: "waveform").font(.system(size: size * 0.42, weight: .semibold)).foregroundStyle(EyeStyle.primary)
-                .frame(width: size, height: size).background(EyeStyle.primarySoft, in: RoundedRectangle(cornerRadius: EyeStyle.radiusSmall, style: .continuous))
-        }
+        Image(systemName: "waveform").font(.system(size: size * 0.42, weight: .semibold)).foregroundStyle(EyeStyle.primary)
+            .frame(width: size, height: size).background(EyeStyle.primarySoft, in: RoundedRectangle(cornerRadius: EyeStyle.radiusSmall, style: .continuous))
     }
 }
 

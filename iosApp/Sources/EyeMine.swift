@@ -12,6 +12,8 @@ struct MinePage: View {
     @ObservedObject private var cloud = CloudModel.shared
     @State private var recordCount = 0
     @Environment(\.colorScheme) private var scheme
+    /// 白天 / 夜晚（原在各顶层页右上角）：存在 UserDefaults「eye.themeMode」（system / light / dark），根视图据此设置 preferredColorScheme。
+    @AppStorage("eye.themeMode") private var themeMode = "system"
 
     private var me: SubjectProfileItem? { store.subjects.first { $0.relation == "SELF" } }
     private var signedIn: Bool { cloud.bool("signedIn") }
@@ -21,23 +23,30 @@ struct MinePage: View {
 
     var body: some View {
         PageScroll {
-            PageHeader(title: "我的", openAccount: { navigate(.account) }, openSettings: { navigate(.settings) })
+            PageHeader(title: "我的")
             profileCard
-            HStack(spacing: 10) {
+            // 三格概览：一张卡里细竖线分隔，数字大、单位灰（与安卓 StatsRow 一致）
+            HStack(spacing: 0) {
                 stat("测试记录", "\(recordCount)", "条") { navigate(.records) }
+                Rectangle().fill(EyeStyle.borderSubtle).frame(width: 0.5).padding(.vertical, 14)
                 stat("家庭成员", "\(store.subjects.count)", "人") { navigate(.subjects) }
+                Rectangle().fill(EyeStyle.borderSubtle).frame(width: 0.5).padding(.vertical, 14)
                 stat("已上传", "\(cloud.int("synced"))", "条") { navigate(.cloud) }
             }
+            .fixedSize(horizontal: false, vertical: true)
+            .eyeGlass()
             ListGroup(title: "健康档案") {
                 ListRow(title: "测试记录", glyph: .document, value: recordCount == 0 ? "暂无" : "\(recordCount) 条") { navigate(.records) }
                 ListRow(title: "家庭成员与资料", glyph: .family, tone: .violet, value: "\(store.subjects.count) 人") { navigate(.subjects) }
-                ListRow(title: "用眼趋势报告", glyph: .chart, tone: .blue, divider: false) { navigate(.trend) }
+                ListRow(title: "用眼趋势", glyph: .chart, tone: .violet, divider: false) { navigate(.trend) }
             }
             ListGroup(title: "数据与隐私") {
-                ListRow(title: "云端同步", glyph: .cloud, tone: .primary, value: cloudSummary) { navigate(.cloud) }
+                ListRow(title: "云端同步", glyph: .cloud, tone: .blue, value: cloudSummary) { navigate(.cloud) }
                 ListRow(title: "权限与通知", glyph: .shield, tone: .success, divider: false) { navigate(.permissions) }
             }
             ListGroup(title: "通用") {
+                SwitchRow(title: "深色模式", isOn: Binding(get: { scheme == .dark }, set: { themeMode = $0 ? "dark" : "light" }),
+                          glyph: .moon, tone: .neutral)
                 ListRow(title: "系统设置", glyph: .gear, tone: .neutral, divider: false) { navigate(.settings) }
             }
         }.onAppear(perform: recount)
@@ -50,16 +59,16 @@ struct MinePage: View {
             Button { EyeHaptics.tap(); navigate(.subjectEdit(me?.id)) } label: {
                 HStack(spacing: 14) {
                     Text(String((me?.displayName ?? "我").prefix(1))).font(EyeStyle.title).foregroundStyle(EyeStyle.onPrimary)
-                        .frame(width: 56, height: 56).background(EyeStyle.buttonGradient, in: Circle())
+                        .frame(width: 56, height: 56).background(EyeStyle.buttonStart, in: Circle())
                     VStack(alignment: .leading, spacing: 4) {
                         Text(me?.displayName ?? "我").font(EyeStyle.title).foregroundStyle(EyeStyle.text)
                         Text(([age.map { "\($0) 岁" }, complete >= 5 ? "档案已完善" : "档案完善 \(complete)/5"] as [String?]).compactMap { $0 }.joined(separator: " · "))
                             .font(EyeStyle.body).foregroundStyle(EyeStyle.secondary)
                     }.frame(maxWidth: .infinity, alignment: .leading)
-                    Image(systemName: "chevron.right").font(.system(size: 14, weight: .semibold)).foregroundStyle(EyeStyle.secondary)
+                    Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(EyeStyle.tertiary)
                 }.padding(.leading, 18).padding(.trailing, 16).padding(.top, 18).padding(.bottom, 14).contentShape(Rectangle())
             }.buttonStyle(RowPressStyle())
-            Rectangle().fill(EyeStyle.borderSubtle).frame(height: 1).padding(.horizontal, 16)
+            Rectangle().fill(EyeStyle.borderSubtle).frame(height: 0.5).padding(.leading, 16)
             Button { EyeHaptics.tap(); navigate(.account) } label: {
                 HStack {
                     Text(signedIn ? cloud.string("email") : "未登录").font(EyeStyle.body)
@@ -69,21 +78,16 @@ struct MinePage: View {
                 }.padding(.horizontal, 20).padding(.vertical, 14).contentShape(Rectangle())
             }.buttonStyle(RowPressStyle())
         }
-        .eyeGlass(cornerRadius: EyeStyle.radiusHero, fill: AnyShapeStyle(EyeStyle.heroGradient),
-                  edgeTop: EyeStyle.heroBorder, shadow: false)
-        .shadow(color: scheme == .dark ? EyeStyle.glow.opacity(0.22) : EyeStyle.shadow, radius: scheme == .dark ? 24 : 16, y: 8)
+        .eyeGlass(cornerRadius: EyeStyle.radiusHero)
     }
 
     private func stat(_ label: String, _ value: String, _ unit: String, _ action: @escaping () -> Void) -> some View {
         Button { EyeHaptics.tap(); action() } label: {
             VStack(alignment: .leading, spacing: 2) {
-                HStack(alignment: .firstTextBaseline, spacing: 3) {
-                    Text(value).font(EyeStyle.title).foregroundStyle(EyeStyle.text).monospacedDigit()
-                    Text(unit).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
-                }
+                EyeStyle.reading(value, unit: unit, numberFont: Font.system(size: 20, weight: .semibold, design: .rounded)).lineLimit(1)
                 Text(label).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
-            }.padding(.horizontal, 14).padding(.vertical, 12).frame(maxWidth: .infinity, alignment: .leading)
-                .eyeGlass(cornerRadius: EyeStyle.radiusLarge)
+            }.padding(.horizontal, 16).padding(.vertical, 14).frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
         }.buttonStyle(PressScale(scale: 0.97))
     }
 

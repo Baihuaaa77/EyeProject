@@ -6,15 +6,15 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 
 /**
- * 色彩体系「深海蓝」（2026-11 视觉升级，按 ui-ux-pro-max 规范核对对比度）：
+ * 色彩体系「澄澈」（2026-11-08 视觉改版，样稿见设计画布「眼健康助手 · 视觉改版样稿」）：
  *
- * - 夜晚：深海蓝底 #081426、深蓝卡片 #132644，主操作电光蓝 #3578FF（按钮 #2A66F0 → #3578FF 渐变，白字 ≥ 4.5:1），
- *   深色上的蓝色文字 / 图标用亮一档的 #6E9BFF（卡片上 5.6:1）
- * - 白天：冷白底 #F2F5FA、白卡，主色 #2563EB（白底文字 5.2:1），按钮同样渐变到电光蓝 #3578FF
- * - 点缀：冰蓝 [ice] #49D9F5 只做少量荧光（光流末端、实时状态、主卡描边）；香槟金 [accent] #F2CB70 克制地表示「留意」，
- *   色块配深色字 [onWarning]，白天作文字时用深一档 [warning] #8A6200
- * - 数据图形（圆环、柱、进度条）用光流渐变 [flowStart] → [flowEnd]（电光蓝 → 冰蓝），两套主题都带柔光
- * - 正文、辅助、三级文字在两套主题下都 ≥ 4.5:1；分隔线与描边两套都可见
+ * - 中性优先：白天浅灰底 #F2F2F7 + 白卡，夜晚纯黑底 #000 + #1C1C1E 卡；卡片不描边、不投影，只靠底色深浅分层
+ * - 不用光晕和大面积渐变：主按钮、圆环、图表一律纯色（各渐变令牌起止同色，[hasGlow] 恒为 false）
+ * - 品牌蓝只有一个：按钮底 #0A66D8（两套主题同值，白字 ≥ 5:1）；夜晚的蓝色文字 / 图标用亮一档的 #4C9BFF
+ * - 类别色只出现在小图标、类别标签和图表上，不铺大底：用屏靛蓝 [screen]、眨眼青 [iceInk]、光照橙 [sun]、
+ *   休息与正常绿 [success]、AI 爱科紫 [violet]；状态三级：正常绿 / 留意琥珀 / 风险红
+ * - 列表图标块用实心色块 + 白色图标（[tileBlue] 等，两套主题同值）
+ * - 正文、辅助、三级文字在两套主题下都 ≥ 4.5:1
  */
 @Immutable
 data class EyeColors(
@@ -25,6 +25,7 @@ data class EyeColors(
     val blue: Color,
     val appBackground: Color,
     val panelBackground: Color,
+    /** 浅填充：次要按钮、分段控件底、输入框、圆环底环。 */
     val surfaceVariant: Color,
     val cameraSurface: Color,
     val primary: Color,
@@ -32,10 +33,10 @@ data class EyeColors(
     val primarySoft: Color,
     /** 主色填充面上的文字/图标色。 */
     val onPrimary: Color,
-    /** 品牌渐变起止色（圆环、进度、图表当前项）：起点浅、终点为主色系。 */
+    /** 品牌图形色（改版后起止同色，即纯色）。 */
     val brandStart: Color,
     val brandEnd: Color,
-    /** 柠檬黄点缀色：表示「留意」，用于等级徽标底色、提示点与插图高光（不直接作浅色底上的文字）。 */
+    /** 琥珀「留意」：圆环、状态点与色块底（色块上配深色字 [onWarning]；浅底上作文字用 [warning]）。 */
     val accent: Color,
     val accentSoft: Color,
     /** 插图墨色：示意图里的线稿与人物五官，深浅主题都保持深色。 */
@@ -45,33 +46,52 @@ data class EyeColors(
     /** 第三级文字：单位、坐标轴、占位符。 */
     val textTertiary: Color,
     val textInverse: Color,
+    /** 分隔线。 */
     val borderSubtle: Color,
-    /** 普通卡片的极淡描边（深色下让卡片从底色里分出来）。 */
+    /** 卡片描边（改版后透明，保留令牌以免调用处改动）。 */
     val cardBorder: Color,
-    /** 主卡（每页最重要的一张）：渐变底 + 描边 + 投影色。 */
+    /** 主卡底（改版后与普通卡片同色、纯色）。 */
     val heroStart: Color,
     val heroEnd: Color,
     val heroBorder: Color,
+    /** 投影色：只给浮在内容上的底栏用。 */
     val shadow: Color,
-    /** 主按钮底（深色为渐变，浅色起止同色）。 */
+    /** 主按钮底（纯色）。 */
     val buttonStart: Color,
     val buttonEnd: Color,
-    /** 光晕色：圆环、主按钮与图表当前项的泛光（深色电光蓝，浅色半透明青蓝柔光）。 */
+    /** 光晕色（改版后透明，不再发光）。 */
     val glow: Color,
-    /** 光流渐变（进度圆环、柱状图、进度条）：从主蓝流向青蓝，只用于数据图形，不作底色或文字色。 */
+    /** 数据图形色（改版后纯色）。 */
     val flowStart: Color,
     val flowEnd: Color,
-    /** 冰蓝荧光点缀（实时状态点、光流末端、主卡描边）：少量使用，不作大面积底色；浅色下不作文字。 */
+    /** 眨眼类别：[ice] 图形、[iceInk] 文字与图标、[iceSoft] 浅底。 */
     val ice: Color,
-    /** 图标配色（分类图标块）：冰蓝、薰衣草紫两组，底色为浅 / 深的同色调，图标色对底 ≥ 3:1。 */
     val iceInk: Color,
     val iceSoft: Color,
+    /** AI 爱科类别（紫）。 */
     val violet: Color,
     val violetSoft: Color,
-    /** 玻璃面（卡片、底栏）：半透明填充 + 上亮下淡的描边，透出背后的渐变光。 */
+    /** 用屏类别（靛蓝）。 */
+    val screen: Color,
+    val screenSoft: Color,
+    /** 光照类别（橙）。 */
+    val sun: Color,
+    val sunSoft: Color,
+    /** 卡片面（纯色）；描边令牌改版后透明。 */
     val glassFill: Color,
     val glassEdgeTop: Color,
     val glassEdgeBottom: Color,
+    /** 浮动底栏：半透明面 + 极淡描边。 */
+    val tabBarFill: Color,
+    val tabBarEdge: Color,
+    /** 列表图标块的实心底色（白色图标），两套主题同值。 */
+    val tileBlue: Color,
+    val tileIndigo: Color,
+    val tileTeal: Color,
+    val tileOrange: Color,
+    val tileGreen: Color,
+    val tileRed: Color,
+    val tileGray: Color,
     val success: Color,
     val successSoft: Color,
     val warning: Color,
@@ -80,141 +100,174 @@ data class EyeColors(
     val dangerSoft: Color,
     val neutralSoft: Color,
     val overlayScrim: Color,
-    /** 测距反馈：太近用暖红、太远用冷蓝（色盲友好的红蓝对比，界面上始终配合箭头与文字）。 */
+    /** 测距反馈：太近用红、太远用蓝（色盲友好的红蓝对比，界面上始终配合箭头与文字）。 */
     val tooClose: Color,
     val tooFar: Color,
     /** 状态色块（太近/太远/合适）上的文字与图标色。 */
     val onStatus: Color,
-    /** 柠檬黄「留意」色块上的文字色（深色字，白字在黄底上看不清）。 */
+    /** 琥珀「留意」色块上的文字色（深色字）。 */
     val onWarning: Color,
 ) {
-    /** 品牌线性渐变（左上 → 右下由调用方决定方向时可用 [brandColors]）。 */
     val brandBrush: Brush get() = Brush.linearGradient(brandColors)
     val brandColors: List<Color> get() = listOf(brandStart, brandEnd)
     val buttonBrush: Brush get() = Brush.linearGradient(listOf(buttonStart, buttonEnd))
     val heroBrush: Brush get() = Brush.linearGradient(listOf(heroStart, heroEnd))
-    /** 横向光流渐变（进度条）。 */
+    /** 横向数据图形色（进度条）。 */
     val flowBrush: Brush get() = Brush.horizontalGradient(listOf(flowStart, flowEnd))
     /**
-     * 实心状态色块的底色与字色：「留意」（[warning]）的色块用柠檬黄 [accent] 配深色字 [onWarning]，其余语义色配 [onStatus]。
+     * 实心状态色块的底色与字色：「留意」（[warning]）的色块用琥珀 [accent] 配深色字 [onWarning]，其余语义色配 [onStatus]。
      */
     fun statusFill(color: Color): Pair<Color, Color> = if (color == warning) accent to onWarning else color to onStatus
-    /** 是否画光晕（只有深色主题发光）。 */
+    /** 是否画光晕（改版后恒为 false）。 */
     val hasGlow: Boolean get() = glow.alpha > 0f
 }
 
-/** 浅色「雾白天蓝」：浅灰蓝底 + 略亮的卡片柔和浮起（拟物投影 + 白色上沿），主色天蓝，数据图形蓝 → 青光流并带柔光。 */
+private val TileBlue = Color(0xFF2F7CF6)
+private val TileIndigo = Color(0xFF5E5CE6)
+private val TileTeal = Color(0xFF14A3B3)
+private val TileOrange = Color(0xFFF28C28)
+private val TileGreen = Color(0xFF30B158)
+private val TileRed = Color(0xFFF0454F)
+private val TileGray = Color(0xFF8E8E93)
+
+/** 白天：浅灰底 + 白卡，纯色、无描边无投影。 */
 val LightEyeColors = EyeColors(
     isDark = false,
-    appBackground = Color(0xFFF2F5FA),
+    appBackground = Color(0xFFF2F2F7),
     panelBackground = Color(0xFFFFFFFF),
-    surfaceVariant = Color(0xFFE9EEF7),
+    surfaceVariant = Color(0xFFE9E9EE),
     cameraSurface = Color(0xFF05070C),
-    primary = Color(0xFF2563EB),
-    primaryDark = Color(0xFF1D4ED8),
-    primarySoft = Color(0xFFE6EEFE),
+    primary = Color(0xFF0A66D8),
+    primaryDark = Color(0xFF0852B0),
+    primarySoft = Color(0xFFE8F0FB),
     onPrimary = Color(0xFFFFFFFF),
-    brandStart = Color(0xFF9CC0FF),
-    brandEnd = Color(0xFF2563EB),
-    accent = Color(0xFFF2CB70),
-    accentSoft = Color(0xFFFBF3DE),
-    ink = Color(0xFF0F1B33),
-    textPrimary = Color(0xFF0F1B33),
-    textSecondary = Color(0xFF44506A),
-    textTertiary = Color(0xFF5F6B85),
+    brandStart = Color(0xFF0A66D8),
+    brandEnd = Color(0xFF0A66D8),
+    accent = Color(0xFFF5A524),
+    accentSoft = Color(0xFFFDF1DE),
+    ink = Color(0xFF1C1C1E),
+    textPrimary = Color(0xFF1C1C1E),
+    textSecondary = Color(0xFF636366),
+    textTertiary = Color(0xFF737378),
     textInverse = Color(0xFFFFFFFF),
-    borderSubtle = Color(0xFFDCE3EE),
-    cardBorder = Color(0x1F0F1B33),
+    borderSubtle = Color(0xFFE3E3E8),
+    cardBorder = Color.Transparent,
     heroStart = Color(0xFFFFFFFF),
-    heroEnd = Color(0xFFF4F7FD),
-    heroBorder = Color(0xFFFFFFFF),
-    shadow = Color(0x2E1B2B55),
-    buttonStart = Color(0xFF2563EB),
-    buttonEnd = Color(0xFF3578FF),
-    glow = Color(0x5549D9F5),
-    flowStart = Color(0xFF3578FF),
-    flowEnd = Color(0xFF36C5E8),
-    ice = Color(0xFF36C5E8),
-    iceInk = Color(0xFF0E8FB0),
-    iceSoft = Color(0xFFE3F6FB),
-    violet = Color(0xFF6D5BD0),
-    violetSoft = Color(0xFFEEEBFD),
-    glassFill = Color(0xF5FFFFFF),
-    glassEdgeTop = Color(0xFFFFFFFF),
-    glassEdgeBottom = Color(0x1F0F1B33),
-    success = Color(0xFF15803D),
-    successSoft = Color(0xFFE3F5EA),
-    warning = Color(0xFF8A6200),
-    warningSoft = Color(0xFFFBF3DE),
-    danger = Color(0xFFD92D3A),
-    dangerSoft = Color(0xFFFDE8EA),
-    neutralSoft = Color(0xFFE9EEF7),
-    overlayScrim = Color(0x660A0F1F),
-    tooClose = Color(0xFFD23A3A),
-    tooFar = Color(0xFF2563EB),
+    heroEnd = Color(0xFFFFFFFF),
+    heroBorder = Color.Transparent,
+    shadow = Color(0x1F000000),
+    buttonStart = Color(0xFF0A66D8),
+    buttonEnd = Color(0xFF0A66D8),
+    glow = Color.Transparent,
+    flowStart = Color(0xFF0A66D8),
+    flowEnd = Color(0xFF0A66D8),
+    ice = Color(0xFF14A3B3),
+    iceInk = Color(0xFF08808D),
+    iceSoft = Color(0xFFE3F3F4),
+    violet = Color(0xFF7A4FD8),
+    violetSoft = Color(0xFFF1ECFC),
+    screen = Color(0xFF5856D6),
+    screenSoft = Color(0xFFEEEEFC),
+    sun = Color(0xFFB4500A),
+    sunSoft = Color(0xFFFCEFE3),
+    glassFill = Color(0xFFFFFFFF),
+    glassEdgeTop = Color.Transparent,
+    glassEdgeBottom = Color.Transparent,
+    tabBarFill = Color(0xE6FFFFFF),
+    tabBarEdge = Color(0x0F000000),
+    tileBlue = TileBlue,
+    tileIndigo = TileIndigo,
+    tileTeal = TileTeal,
+    tileOrange = TileOrange,
+    tileGreen = TileGreen,
+    tileRed = TileRed,
+    tileGray = TileGray,
+    success = Color(0xFF1C7F3B),
+    successSoft = Color(0xFFE6F4EA),
+    warning = Color(0xFFA15C00),
+    warningSoft = Color(0xFFFDF1DE),
+    danger = Color(0xFFD70015),
+    dangerSoft = Color(0xFFFDECEE),
+    neutralSoft = Color(0xFFE9E9EE),
+    overlayScrim = Color(0x66000000),
+    tooClose = Color(0xFFD70015),
+    tooFar = Color(0xFF0A66D8),
     onStatus = Color(0xFFFFFFFF),
     onWarning = Color(0xFF2A1F00),
     white = Color.White,
     black = Color.Black,
-    gray = Color(0xFF5F6B85),
-    blue = Color(0xFF2563EB)
+    gray = Color(0xFF737378),
+    blue = Color(0xFF0A66D8)
 )
 
-/** 深色「深海蓝」：主色提亮为电光蓝，主卡深蓝渐变，光晕只给圆环、主按钮与当前项。 */
+/** 夜晚：纯黑底 + #1C1C1E 卡；蓝色文字提亮为 #4C9BFF，按钮底仍是品牌蓝。 */
 val DarkEyeColors = EyeColors(
     isDark = true,
-    appBackground = Color(0xFF081426),
-    panelBackground = Color(0xFF132644),
-    surfaceVariant = Color(0xFF1B3157),
-    cameraSurface = Color(0xFF040A14),
-    primary = Color(0xFF6E9BFF),
-    primaryDark = Color(0xFF9DBBFF),
-    primarySoft = Color(0xFF1C3566),
+    appBackground = Color(0xFF000000),
+    panelBackground = Color(0xFF1C1C1E),
+    surfaceVariant = Color(0xFF2C2C2E),
+    cameraSurface = Color(0xFF000000),
+    primary = Color(0xFF4C9BFF),
+    primaryDark = Color(0xFF8AB8FF),
+    primarySoft = Color(0xFF243042),
     onPrimary = Color(0xFFFFFFFF),
-    brandStart = Color(0xFF9DC4FF),
-    brandEnd = Color(0xFF3578FF),
-    accent = Color(0xFFF2CB70),
-    accentSoft = Color(0xFF2E2814),
-    ink = Color(0xFF0B1324),
-    textPrimary = Color(0xFFF2F6FF),
-    textSecondary = Color(0xFFAFBCD8),
-    textTertiary = Color(0xFF8A9AC0),
+    brandStart = Color(0xFF4C9BFF),
+    brandEnd = Color(0xFF4C9BFF),
+    accent = Color(0xFFFFB340),
+    accentSoft = Color(0x29FFB340),
+    ink = Color(0xFF0B0B0D),
+    textPrimary = Color(0xFFF5F5F7),
+    textSecondary = Color(0xFFAEAEB2),
+    textTertiary = Color(0xFF8E8E93),
     textInverse = Color(0xFFFFFFFF),
-    borderSubtle = Color(0xFF243C66),
-    cardBorder = Color(0x14FFFFFF),
-    heroStart = Color(0xFF1C3868),
-    heroEnd = Color(0xFF132644),
-    heroBorder = Color(0x3349D9F5),
-    shadow = Color(0xCC000000),
-    buttonStart = Color(0xFF2A66F0),
-    buttonEnd = Color(0xFF3578FF),
-    glow = Color(0xFF3578FF),
-    flowStart = Color(0xFF3578FF),
-    flowEnd = Color(0xFF49D9F5),
-    ice = Color(0xFF49D9F5),
-    iceInk = Color(0xFF49D9F5),
-    iceSoft = Color(0xFF12324A),
-    violet = Color(0xFFA99BFF),
-    violetSoft = Color(0xFF29285A),
-    glassFill = Color(0xF2132644),
-    glassEdgeTop = Color(0x2EFFFFFF),
-    glassEdgeBottom = Color(0x0FFFFFFF),
-    success = Color(0xFF5EE3A1),
-    successSoft = Color(0xFF10302A),
-    warning = Color(0xFFF2CB70),
-    warningSoft = Color(0xFF2E2814),
-    danger = Color(0xFFFF7A86),
-    dangerSoft = Color(0xFF3A1A24),
-    neutralSoft = Color(0xFF1B3157),
+    borderSubtle = Color(0xFF38383A),
+    cardBorder = Color.Transparent,
+    heroStart = Color(0xFF1C1C1E),
+    heroEnd = Color(0xFF1C1C1E),
+    heroBorder = Color.Transparent,
+    shadow = Color(0x8C000000),
+    buttonStart = Color(0xFF0A66D8),
+    buttonEnd = Color(0xFF0A66D8),
+    glow = Color.Transparent,
+    flowStart = Color(0xFF4C9BFF),
+    flowEnd = Color(0xFF4C9BFF),
+    ice = Color(0xFF3CC8D6),
+    iceInk = Color(0xFF3CC8D6),
+    iceSoft = Color(0x293CC8D6),
+    violet = Color(0xFFB49CFF),
+    violetSoft = Color(0x29B49CFF),
+    screen = Color(0xFF8E8CFF),
+    screenSoft = Color(0x298E8CFF),
+    sun = Color(0xFFFF9F43),
+    sunSoft = Color(0x29FF9F43),
+    glassFill = Color(0xFF1C1C1E),
+    glassEdgeTop = Color.Transparent,
+    glassEdgeBottom = Color.Transparent,
+    tabBarFill = Color(0xE62C2C2E),
+    tabBarEdge = Color(0x14FFFFFF),
+    tileBlue = TileBlue,
+    tileIndigo = TileIndigo,
+    tileTeal = TileTeal,
+    tileOrange = TileOrange,
+    tileGreen = TileGreen,
+    tileRed = TileRed,
+    tileGray = TileGray,
+    success = Color(0xFF4CD675),
+    successSoft = Color(0x294CD675),
+    warning = Color(0xFFFFB340),
+    warningSoft = Color(0x29FFB340),
+    danger = Color(0xFFFF6B6B),
+    dangerSoft = Color(0x29FF6B6B),
+    neutralSoft = Color(0xFF2C2C2E),
     overlayScrim = Color(0x99000000),
-    tooClose = Color(0xFFFF7A6E),
-    tooFar = Color(0xFF6E9BFF),
-    onStatus = Color(0xFF081426),
+    tooClose = Color(0xFFFF6B6B),
+    tooFar = Color(0xFF4C9BFF),
+    onStatus = Color(0xFF000000),
     onWarning = Color(0xFF1B1608),
     white = Color.White,
     black = Color.Black,
-    gray = Color(0xFF8A9AC0),
-    blue = Color(0xFF6E9BFF)
+    gray = Color(0xFF8E8E93),
+    blue = Color(0xFF4C9BFF)
 )
 
 val LocalEyeColors = staticCompositionLocalOf { LightEyeColors }

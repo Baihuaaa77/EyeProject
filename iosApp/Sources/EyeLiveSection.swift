@@ -18,10 +18,43 @@ struct LiveEyeSection: View {
     static let help = "用前置摄像头实时检测双眼关键点：数眨眼次数、估计眼睛到屏幕的距离和头部姿态，结果计入「视觉行为」。「显示眼部关键点」只决定预览上是否画出眼睑轮廓和虹膜圈，不影响检测。画面只在本机实时处理，不保存、不上传；点「停止检测」或离开首页即停止相机。"
 
     var body: some View {
+        Group {
+            if model.running { expanded } else { idle }
+        }
+        .onAppear { if model.wanted { model.start() } }
+        .onDisappear { model.stop() }
+        .onChange(of: scenePhase) { phase in
+            if phase == .background { model.stop() } else if phase == .active, model.wanted { model.start() }
+        }
+        .onChange(of: startRequests) { _ in model.wanted = true; model.start() }
+    }
+
+    /// 未开始：一行（青色圆形图标 + 名称与一句说明 +「开始」），开始后才展开取景框。与安卓 LiveEyeContent 一致。
+    private var idle: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 14) {
+                EyeGlyphView(glyph: .camera, color: EyeStyle.iceInk).frame(width: 22, height: 22)
+                    .frame(width: 44, height: 44).background(EyeStyle.iceSoft, in: Circle())
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack(spacing: 0) {
+                        Text("实时检测").font(EyeStyle.body.weight(.semibold)).foregroundStyle(EyeStyle.text)
+                        HelpButton(title: "实时检测", text: Self.help)
+                    }
+                    Text("眨眼与距离，仅在本机处理").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
+                }.frame(maxWidth: .infinity, alignment: .leading)
+                PillButton(label: "开始") { model.wanted = true; model.start() }
+            }
+            if let message = model.error ?? model.cameraNote {
+                Text(message).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.warning)
+            }
+        }
+    }
+
+    private var expanded: some View {
         VStack(alignment: .leading, spacing: 12) {
             // 标题行：图标 + 标题 + 问号紧挨着，状态标签靠右
             HStack(spacing: 0) {
-                EyeGlyphView(glyph: .camera, color: TileTone.primary.colors.1).frame(width: 20, height: 20).padding(.trailing, 8)
+                EyeGlyphView(glyph: .camera, color: EyeStyle.iceInk).frame(width: 20, height: 20).padding(.trailing, 8)
                 Text("实时检测").font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text)
                 HelpButton(title: "实时检测", text: Self.help)
                 Spacer(minLength: 8)
@@ -44,12 +77,6 @@ struct LiveEyeSection: View {
                 Text(message).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.warning)
             }
         }
-        .onAppear { if model.wanted { model.start() } }
-        .onDisappear { model.stop() }
-        .onChange(of: scenePhase) { phase in
-            if phase == .background { model.stop() } else if phase == .active, model.wanted { model.start() }
-        }
-        .onChange(of: startRequests) { _ in model.wanted = true; model.start() }
     }
 
     private var live: some View {
@@ -132,7 +159,7 @@ private struct Viewfinder<Live: View>: View {
             .overlay {
                 Canvas { context, size in
                     let inset: CGFloat = 18, arm: CGFloat = 26
-                    let color = running ? EyeStyle.Vivid.on.opacity(0.9) : EyeStyle.primary
+                    let color = running ? Color.white.opacity(0.9) : EyeStyle.primary
                     let corners: [(CGPoint, CGPoint)] = [
                         (CGPoint(x: inset, y: inset), CGPoint(x: 1, y: 1)),
                         (CGPoint(x: size.width - inset, y: inset), CGPoint(x: -1, y: 1)),

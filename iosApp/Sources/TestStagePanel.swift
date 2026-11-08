@@ -1,12 +1,10 @@
 import SwiftUI
 
-/// 测试舞台的细框与轻阴影，视标内部继续保留白色背景。
+/// 测试舞台：纯色卡片（不描边、不投影，2026-11 改版），视标内部继续保留白色背景。与安卓 TestStageCard 一致。
 struct TestStagePanel: ViewModifier {
     @ViewBuilder func body(content: Content) -> some View {
         content.padding(20).frame(maxWidth: .infinity)
             .eyeGlass()
-            .overlay { RoundedRectangle(cornerRadius: EyeStyle.radius, style: .continuous).stroke(EyeStyle.primary.opacity(0.16), lineWidth: 1) }
-            .shadow(color: EyeStyle.primary.opacity(0.08), radius: 3, x: 0, y: 2)
     }
 }
 
@@ -149,20 +147,19 @@ struct CountdownRing: View {
     }
 }
 
-/// 与安卓 OptotypeAnswerPad 同规格的圆键：直径 64、间距 10，按下缩到 90% 并加深底色，不可作答时变淡。
+/// 与安卓 OptotypeAnswerPad 同规格的圆键：直径 68、间距 8，按下缩到 90% 并换浅主色底，不可作答时变淡。
 enum AnswerKey {
-    static let size: CGFloat = 64
-    static let gap: CGFloat = 10
+    static let size: CGFloat = 68
+    static let gap: CGFloat = 8
 }
 
-/// 方向键：主色 10% 底、30% 细边，按下底色加深到 24%。
+/// 方向键：浅填充圆底、不描边，按下换浅主色底（2026-11 改版）。
 struct DirectionKeyStyle: ButtonStyle {
     @Environment(\.isEnabled) private var enabled
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .frame(width: AnswerKey.size, height: AnswerKey.size)
-            .background(EyeStyle.primary.opacity(configuration.isPressed && enabled ? 0.24 : 0.1), in: Circle())
-            .overlay { Circle().stroke(EyeStyle.primary.opacity(0.3), lineWidth: 1) }
+            .background(configuration.isPressed && enabled ? EyeStyle.primarySoft : EyeStyle.surfaceVariant, in: Circle())
             .contentShape(Circle())
             .scaleEffect(configuration.isPressed && enabled ? 0.9 : 1)
             .opacity(enabled ? 1 : 0.35)
@@ -183,14 +180,13 @@ struct ArrowGlyph: Shape {
     }
 }
 
-/// 中央「跳过」：与方向键同尺寸的圆键，浅底区分为次要动作。
+/// 中央「跳过」：与方向键同尺寸、不加底色的文字键，区分为次要动作。
 struct SkipKeyStyle: ButtonStyle {
     @Environment(\.isEnabled) private var enabled
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label.font(EyeStyle.body).foregroundStyle(EyeStyle.text)
+        configuration.label.font(EyeStyle.body.weight(.semibold)).foregroundStyle(EyeStyle.secondary)
             .frame(width: AnswerKey.size, height: AnswerKey.size)
-            .background(configuration.isPressed && enabled ? EyeStyle.primary.opacity(0.12) : EyeStyle.surfaceVariant, in: Circle())
-            .overlay { Circle().stroke(EyeStyle.primary.opacity(0.24), lineWidth: 1) }
+            .background(configuration.isPressed && enabled ? EyeStyle.surfaceVariant : Color.clear, in: Circle())
             .contentShape(Circle())
             .scaleEffect(configuration.isPressed && enabled ? 0.9 : 1)
             .opacity(enabled ? 1 : 0.4)

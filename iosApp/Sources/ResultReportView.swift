@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// 结果页：内容来自共用核心的 ResultReport（快照里的 "report"），与安卓 ReportComponents 同一排版：
-/// 结论卡（等级 + 一句结论 + 风险分段条 + 一句建议）→ 关键指标 2×2 → 判断依据（点开看明细）→ 操作 →
+/// 结果页：内容来自共用核心的 ResultReport（快照里的 "report"），与安卓 ReportComponents 同一排版（2026-11-08 改版）：
+/// 结论卡（浅底等级徽标 + 一句结论 + 风险分段条 + 一句建议）→「指标」列表行 →「判断依据」（点开看明细）→ 数据可靠性小字 → 操作 →
 /// 「查看本次数据」「导出数据」→ 一行说明。首屏不放成段小字，明细都在数据页里。
 struct ResultReportView: View {
     @ObservedObject var runtime: EyeRuntime
@@ -9,28 +9,26 @@ struct ResultReportView: View {
 
     var body: some View {
         if let report = ReportModel(runtime.state["report"] as? [String: Any]) {
-            VStack(spacing: 14) {
+            VStack(alignment: .leading, spacing: 12) {
                 ResultHero(report: report)
-                // 数据无效时原因已在 ProblemCard 列出，这里只为有效结果说明可靠性
-                if report.valid && !report.qualityNotes.isEmpty {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("数据可靠性说明").font(EyeStyle.subtitle)
-                        Text(report.qualityNotes[0]).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
-                        if report.qualityNotes.count > 1 {
-                            DisclosureGroup("查看说明") {
-                                ForEach(Array(report.qualityNotes.dropFirst().enumerated()), id: \.offset) { _, note in
-                                    Text(note).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
-                                }
-                            }
-                        }
-                    }.padding(16).frame(maxWidth: .infinity, alignment: .leading)
-                        .eyeGlass()
-                }
                 if !report.valid {
                     ProblemCard(problems: report.problems)
                 } else {
                     MetricGrid(metrics: report.metrics)
                     if !report.evidence.isEmpty { EvidenceCard(evidence: report.evidence) }
+                }
+                // 数据可靠性：不再单独成卡，作为依据下方的一段小字（数据无效时原因已在 ProblemCard 列出）
+                if report.valid && !report.qualityNotes.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("数据可靠性：" + report.qualityNotes[0]).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
+                        if report.qualityNotes.count > 1 {
+                            DisclosureGroup("查看说明") {
+                                ForEach(Array(report.qualityNotes.dropFirst().enumerated()), id: \.offset) { _, note in
+                                    Text(note).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
+                                }
+                            }.font(EyeStyle.bodySecondary).tint(EyeStyle.primary)
+                        }
+                    }.padding(.horizontal, 4).frame(maxWidth: .infinity, alignment: .leading)
                 }
                 // 解读放在规则结论与依据之后：先看规则判了什么，再看通俗解释
                 if !runtime.string("savedFile").isEmpty { AiExplanationView(fileName: runtime.string("savedFile")) }
@@ -146,9 +144,8 @@ private struct ResultHero: View {
     var body: some View {
         let tone = ReportTone.level(report.level)
         EyeHeroCard(spacing: 14) {
-            let badge = EyeStyle.statusFill(tone.0)
-            Text(report.badge).font(EyeStyle.chip).foregroundStyle(badge.1)
-                .padding(.horizontal, 12).padding(.vertical, 5).background(badge.0, in: EyeStyle.chipShape)
+            Text(report.badge).font(EyeStyle.chip).foregroundStyle(tone.0)
+                .padding(.horizontal, 10).padding(.vertical, 4).background(tone.1, in: EyeStyle.chipShape)
             // 长结论用标题字号，避免大字折成三行；与安卓 LONG_TITLE 一致
             Text(report.title).font(report.title.count > 8 ? EyeStyle.title : EyeStyle.headline).foregroundStyle(EyeStyle.text)
                 .fixedSize(horizontal: false, vertical: true)
@@ -163,22 +160,20 @@ private struct ResultHero: View {
                 .accessibilityElement(children: .combine)
             }
             RiskSegments(level: report.level)
-            Text(report.advice).font(EyeStyle.body).foregroundStyle(EyeStyle.text).fixedSize(horizontal: false, vertical: true)
+            Text(report.advice).font(EyeStyle.body).foregroundStyle(EyeStyle.secondary).fixedSize(horizontal: false, vertical: true)
         }
     }
 }
 
-/// 风险分段条：正常 → 低风险 → 中风险 → 高风险四段，当前等级那段用等级色（深色主题带泛光）；无法评估时全灰。与安卓 RiskSegments 一致。
+/// 风险分段条：正常 → 低风险 → 中风险 → 高风险四段，当前等级那段用等级色；无法评估时全灰。与安卓 RiskSegments 一致。
 private struct RiskSegments: View {
     let level: String
-    @Environment(\.colorScheme) private var scheme
     var body: some View {
         HStack(spacing: 4) {
             ForEach(["LOW", "UNCERTAIN", "MEDIUM", "HIGH"], id: \.self) { step in
                 let on = step == level
                 let color = EyeStyle.statusFill(ReportTone.level(step).0).0
-                EyeStyle.chipShape.fill(on ? color : EyeStyle.borderSubtle).frame(height: 6)
-                    .shadow(color: on && scheme == .dark ? color.opacity(0.7) : .clear, radius: 5)
+                Capsule().fill(on ? color : EyeStyle.surfaceVariant).frame(height: 6)
             }
         }
         .accessibilityHidden(true)
@@ -187,45 +182,55 @@ private struct RiskSegments: View {
 
 // MARK: - 指标与依据
 
-/// 关键指标 2×2：一张卡里细线分隔；名称、大号数值、状态小标签（与安卓 MetricGrid 一致）。
+/// 分区标题（卡片外、20 号半粗）。
+private struct ReportSectionTitle: View {
+    let text: String
+    var body: some View { Text(text).font(EyeStyle.title).foregroundStyle(EyeStyle.text).padding(.top, 16).padding(.leading, 4) }
+}
+
+/// 关键指标：一组列表行，左边名称，右边「大号数值 + 灰色单位」与其下的状态（小圆点 + 状态色文字）。与安卓 MetricGrid 一致。
 private struct MetricGrid: View {
     let metrics: [ReportModel.Metric]
     var body: some View {
-        let rows = stride(from: 0, to: metrics.count, by: 2).map { Array(metrics[$0..<min($0 + 2, metrics.count)]) }
-        EyeCard(spacing: 0) {
-            ForEach(Array(rows.enumerated()), id: \.offset) { i, row in
-                if i > 0 { Rectangle().fill(EyeStyle.borderSubtle).frame(height: 1).padding(.vertical, 14) }
-                HStack(spacing: 0) {
-                    cell(row[0])
-                    VDivider()
-                    if row.count > 1 { cell(row[1]) } else { Color.clear.frame(maxWidth: .infinity) }
-                }.fixedSize(horizontal: false, vertical: true)
-            }
+        if !metrics.isEmpty {
+            ReportSectionTitle(text: "指标")
+            VStack(spacing: 0) {
+                ForEach(Array(metrics.enumerated()), id: \.element.id) { i, m in
+                    row(m)
+                    if i < metrics.count - 1 { Rectangle().fill(EyeStyle.borderSubtle).frame(height: 0.5).padding(.leading, 16) }
+                }
+            }.eyeGlass()
         }
     }
-    private func cell(_ m: ReportModel.Metric) -> some View {
-        let tone = ReportTone.status(m.status)
-        return VStack(alignment: .leading, spacing: 6) {
-            Text(m.label).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary).lineLimit(1)
-            Text(m.value).font(EyeStyle.metricValue).foregroundStyle(m.status == "ABNORMAL" ? EyeStyle.warning : EyeStyle.text)
-                .lineLimit(1).minimumScaleFactor(0.7)
-            Text(m.status == "UNAVAILABLE" ? "参考" : ReportTone.label(m.status)).font(EyeStyle.chip).foregroundStyle(tone.0)
-                .padding(.horizontal, 10).padding(.vertical, 3).background(tone.1, in: EyeStyle.chipShape)
-        }.frame(maxWidth: .infinity, alignment: .leading)
+    private func row(_ m: ReportModel.Metric) -> some View {
+        let strong = m.status == "UNAVAILABLE" ? EyeStyle.secondary : ReportTone.status(m.status).0
+        let dot = m.status == "ABNORMAL" ? EyeStyle.accent : m.status == "UNAVAILABLE" ? EyeStyle.tertiary : strong
+        return HStack(spacing: 12) {
+            Text(m.label).font(EyeStyle.body).foregroundStyle(EyeStyle.text).frame(maxWidth: .infinity, alignment: .leading)
+            VStack(alignment: .trailing, spacing: 2) {
+                EyeStyle.reading(m.value, numberFont: Font.system(size: 17, weight: .semibold, design: .rounded)).lineLimit(1)
+                HStack(spacing: 5) {
+                    Circle().fill(dot).frame(width: 6, height: 6)
+                    Text(m.status == "UNAVAILABLE" ? "参考" : ReportTone.label(m.status)).font(EyeStyle.caption).foregroundStyle(strong)
+                }
+            }
+        }
+        .padding(.horizontal, 16).padding(.vertical, 12)
+        .accessibilityElement(children: .combine)
     }
 }
 
 private struct EvidenceCard: View {
     let evidence: [ReportModel.Evidence]
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("判断依据").font(EyeStyle.subtitle).padding(.bottom, 6)
+        ReportSectionTitle(text: "判断依据")
+        VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(evidence.enumerated()), id: \.element.id) { index, item in
-                if index > 0 { Rectangle().fill(EyeStyle.borderSubtle).frame(height: 1) }
+                if index > 0 { Rectangle().fill(EyeStyle.borderSubtle).frame(height: 0.5) }
                 EvidenceRow(item: item)
             }
         }
-        .padding(.horizontal, 20).padding(.vertical, 16)
+        .padding(.horizontal, 16).padding(.vertical, 4)
         .frame(maxWidth: .infinity, alignment: .leading)
         .eyeGlass()
     }
@@ -240,19 +245,15 @@ private struct EvidenceRow: View {
             Button {
                 withAnimation(.easeInOut(duration: 0.25)) { expanded.toggle() }
             } label: {
-                HStack(spacing: 12) {
-                    ZStack { Circle().fill(tone.1); Circle().fill(tone.0).frame(width: 10, height: 10) }.frame(width: 28, height: 28)
+                HStack(spacing: 10) {
                     VStack(alignment: .leading, spacing: 2) {
-                        HStack(spacing: 8) {
-                            Text(item.title).font(EyeStyle.button).foregroundStyle(EyeStyle.text)
-                            Text(ReportTone.label(item.status)).font(EyeStyle.chip).foregroundStyle(tone.0)
-                        }
-                        Text(item.summary).font(EyeStyle.body).foregroundStyle(EyeStyle.secondary)
+                        Text(item.title).font(EyeStyle.body.weight(.medium)).foregroundStyle(EyeStyle.text)
+                        Text(item.summary).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
                             .multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
-                    }
-                    Spacer(minLength: 4)
+                    }.frame(maxWidth: .infinity, alignment: .leading)
+                    Text(ReportTone.label(item.status)).font(EyeStyle.chip).foregroundStyle(tone.0)
                     if !item.details.isEmpty {
-                        Image(systemName: "chevron.right").foregroundStyle(EyeStyle.primary)
+                        Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(EyeStyle.tertiary)
                             .rotationEffect(.degrees(expanded ? 90 : 0))
                     }
                 }.contentShape(Rectangle())
@@ -264,8 +265,7 @@ private struct EvidenceRow: View {
                     ForEach(item.details, id: \.self) { Text($0).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.text) }
                 }
                 .padding(12).frame(maxWidth: .infinity, alignment: .leading)
-                .background(EyeStyle.surfaceVariant, in: RoundedRectangle(cornerRadius: EyeStyle.radiusMedium))
-                .padding(.leading, 40)
+                .background(EyeStyle.surfaceVariant, in: RoundedRectangle(cornerRadius: EyeStyle.radiusMedium, style: .continuous))
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }.padding(.vertical, 12)

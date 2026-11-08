@@ -63,8 +63,17 @@ import com.zkyjss.eyeproject.core.ui.component.rememberEyeHaptics
 import com.zkyjss.eyeproject.core.ui.component.drawTumblingE
 import com.zkyjss.eyeproject.core.ui.component.leafEyePath
 import kotlin.math.abs
+import com.zkyjss.eyeproject.core.designsystem.theme.EyeSpacing
+import com.zkyjss.eyeproject.core.ui.component.EyeListGroup
+import com.zkyjss.eyeproject.core.ui.component.EyeListRow
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.text.style.TextAlign
 
-/** 服务页：示范主卡 + 四个自测入口。 */
+/**
+ * 服务页（2026-11-08 视觉改版）：「服务」大标题与账户头像 → 示范主卡（轮流演示三项自测的做法）→
+ * 「全部自测」分组列表（实心色块图标 + 名称）→ 免责声明。与苹果端 ServicesPage 同一排版与文案。
+ */
 @Composable
 fun ServicesScreen(
     onDryEyeClick: () -> Unit,
@@ -86,42 +95,25 @@ fun ServicesScreen(
             .eyeBackdrop(colors)
             .padding(top = getTopStatusBarPadding())
             .screenHorizontalPaddingLarge(),
-        verticalArrangement = Arrangement.spacedBy(com.zkyjss.eyeproject.core.designsystem.theme.EyeSpacing.itemGap)
+        verticalArrangement = Arrangement.spacedBy(EyeSpacing.cardGap)
     ) {
         EyePageHeader("服务", onOpenSettings, onOpenAccount = onOpenAccount)
         DemoHero()
-        Spacer(Modifier.height(4.dp))
-        EyeText("选择一项自测", style = typography.subtitle, color = colors.textPrimary)
-
-        EyeSelectCard(
-            content = "干眼自测",
-            leading = { ServiceGlyph(ServiceKind.DRY_EYE, EyeTileTone.BLUE) },
-            leadingTone = EyeTileTone.BLUE,
-            onClick = onDryEyeClick
-        )
-        EyeSelectCard(
-            content = "眼位自测",
-            leading = { ServiceGlyph(ServiceKind.ALIGNMENT, EyeTileTone.VIOLET) },
-            leadingTone = EyeTileTone.VIOLET,
-            onClick = onStrabismusClick,
-        )
-        EyeSelectCard(
-            content = "老视自测",
-            leading = { ServiceGlyph(ServiceKind.PRESBYOPIA, EyeTileTone.PRIMARY) },
-            leadingTone = EyeTileTone.PRIMARY,
-            onClick = onPresbyopiaClick,
-        )
-        EyeSelectCard(
-            content = "色觉自测",
-            leading = { ServiceGlyph(ServiceKind.COLOR, EyeTileTone.ACCENT) },
-            leadingTone = EyeTileTone.ACCENT,
-            onClick = onColorVisionClick,
-        )
+        EyeText("全部自测", Modifier.padding(top = EyeSpacing.sectionGap - EyeSpacing.cardGap, start = 4.dp),
+            style = typography.title, color = colors.textPrimary)
+        EyeListGroup {
+            EyeListRow("干眼自测", onDryEyeClick, tone = EyeTileTone.BLUE, leading = { ServiceGlyph(ServiceKind.DRY_EYE, colors.white) })
+            EyeListRow("眼位自测", onStrabismusClick, tone = EyeTileTone.VIOLET, leading = { ServiceGlyph(ServiceKind.ALIGNMENT, colors.white) })
+            EyeListRow("老视自测", onPresbyopiaClick, tone = EyeTileTone.PRIMARY, leading = { ServiceGlyph(ServiceKind.PRESBYOPIA, colors.white) })
+            EyeListRow("色觉自测", onColorVisionClick, tone = EyeTileTone.ACCENT, divider = false,
+                leading = { ServiceGlyph(ServiceKind.COLOR, colors.white) })
+        }
         EyeText(
             "自测结果仅供参考，不能替代医院检查。",
             style = typography.bodySecondary,
-            color = colors.textSecondary,
-            modifier = Modifier.padding(top = 4.dp, bottom = 24.dp)
+            color = colors.textTertiary,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 24.dp)
         )
     }
 }
@@ -184,12 +176,10 @@ private fun segmentAt(ms: Float, lengths: List<Int>): Pair<Int, Float> {
 
 private enum class ServiceKind { DRY_EYE, ALIGNMENT, PRESBYOPIA, COLOR }
 
-/** 入口卡图标：水滴（干眼，冰蓝）/ 双眼对位（眼位，薰衣草紫）/ 视标 E（老视，电光蓝）/ 色点圆（色觉，香槟金），线性风格。 */
+/** 自测图标：水滴（干眼）/ 双眼对位（眼位）/ 视标 E（老视）/ 色点圆（色觉），线性风格，[ink] 着色。 */
 @Composable
-private fun ServiceGlyph(kind: ServiceKind, tone: EyeTileTone) {
-    val colors = LocalEyeColors.current
-    val ink = tone.colors().second
-    Canvas(Modifier.size(28.dp)) {
+private fun ServiceGlyph(kind: ServiceKind, ink: androidx.compose.ui.graphics.Color, glyphSize: androidx.compose.ui.unit.Dp = 20.dp) {
+    Canvas(Modifier.size(glyphSize)) {
         val s = size.minDimension
         val stroke = Stroke(s * 0.09f, cap = StrokeCap.Round)
         when (kind) {

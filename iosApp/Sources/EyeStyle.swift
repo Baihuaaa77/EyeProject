@@ -1,54 +1,60 @@
 import SwiftUI
 import UIKit
 
-/// 对齐 core/designsystem 的令牌（2026-11 视觉升级「深海蓝」：深海蓝底、深蓝卡片、电光蓝主操作、冰蓝点缀、香槟金「留意」）：每个颜色都随系统深浅色切换，
-/// 浅色取 LightEyeColors、深色取 DarkEyeColors。iOS 绘制器只消费令牌，不定义另一套主题。
+/// 对齐 core/designsystem 的令牌（2026-11-08 视觉改版「澄澈」：白天浅灰底白卡、夜晚纯黑底深灰卡，卡片不描边不投影、不用光晕与大面积渐变，
+/// 品牌蓝按钮 + 类别色只用在小图标与图表上）：每个颜色都随系统深浅色切换，浅色取 LightEyeColors、深色取 DarkEyeColors。
+/// iOS 绘制器只消费令牌，不定义另一套主题。
 enum EyeStyle {
-    static let background = dyn(0xF2F5FA, 0x081426)
-    static let panel = dyn(0xFFFFFF, 0x132644)
-    static let surfaceVariant = dyn(0xE9EEF7, 0x1B3157)
-    static let borderSubtle = dyn(0xDCE3EE, 0x243C66)
-    static let text = dyn(0x0F1B33, 0xF2F6FF)
+    static let background = dyn(0xF2F2F7, 0x000000)
+    static let panel = dyn(0xFFFFFF, 0x1C1C1E)
+    /// 浅填充：次要按钮、分段控件底、输入框、圆环底环。
+    static let surfaceVariant = dyn(0xE9E9EE, 0x2C2C2E)
+    static let borderSubtle = dyn(0xE3E3E8, 0x38383A)
+    static let text = dyn(0x1C1C1E, 0xF5F5F7)
     /// 示意图墨色：深浅主题都保持深色（视标、示意人物五官）。
-    static let ink = dyn(0x0F1B33, 0x0B1324)
-    static let secondary = dyn(0x44506A, 0xAFBCD8)
-    static let tertiary = dyn(0x5F6B85, 0x8A9AC0)
-    static let primary = dyn(0x2563EB, 0x6E9BFF)
-    static let primaryDark = dyn(0x1D4ED8, 0x9DBBFF)
-    static let primarySoft = dyn(0xE6EEFE, 0x1C3566)
+    static let ink = dyn(0x1C1C1E, 0x0B0B0D)
+    static let secondary = dyn(0x636366, 0xAEAEB2)
+    static let tertiary = dyn(0x737378, 0x8E8E93)
+    static let primary = dyn(0x0A66D8, 0x4C9BFF)
+    static let primaryDark = dyn(0x0852B0, 0x8AB8FF)
+    static let primarySoft = dyn(0xE8F0FB, 0x243042)
     static let onPrimary = Color.white
-    static let neutralSoft = dyn(0xE9EEF7, 0x1B3157)
-    static let brandStart = dyn(0x9CC0FF, 0x9DC4FF)
-    static let brandEnd = dyn(0x2563EB, 0x3578FF)
-    /// 标志渐变起点（浅色用天蓝提亮，深色用按钮亮端）。
-    /// 冰蓝荧光点缀（少量使用；白天不作文字）。
-    static let ice = dyn(0x36C5E8, 0x49D9F5)
-    /// 图标配色：冰蓝、薰衣草紫两组（底色为同色调浅 / 深块），与安卓 iceInk / iceSoft / violet / violetSoft 一致。
-    static let iceInk = dyn(0x0E8FB0, 0x49D9F5)
-    static let iceSoft = dyn(0xE3F6FB, 0x12324A)
-    static let violet = dyn(0x6D5BD0, 0xA99BFF)
-    static let violetSoft = dyn(0xEEEBFD, 0x29285A)
-    static let brandMarkStart = dyn(0x3578FF, 0x6E9BFF)
-    static let accent = dyn(0xF2CB70, 0xF2CB70)
-    static let accentSoft = dyn(0xFBF3DE, 0x2E2814)
-    static let gray = dyn(0x5F6B85, 0x8A9AC0)
-    static let blue = dyn(0x2563EB, 0x6E9BFF)
-    static let warning = dyn(0x8A6200, 0xF2CB70)
-    // 测试到位提示与演示插画（短发男孩）；与安卓 Illustration.kt 同值。
-    static let testReady = dyn(0x137538, 0x91C8D3)
-    static let testTooClose = dyn(0xB42332, 0xFF7A86)
-    static let testReadySoft = dyn(0xE3F5EA, 0x1A3547)
-    /// 首页功能色块（护眼操薄荷绿、用眼趋势紫、亮度与蓝光珊瑚红、AI 主动问诊蓝）：左上到右下渐变，上面文字与图标一律白色。
-    /// 深色主题压暗一档；与安卓 Vivid.kt 同值。
-    enum Vivid {
-        static let blue = gradient(dyn(0x4F8DFF, 0x3F7DF5), dyn(0x2B5FEA, 0x2550D2))
-        static let red = gradient(dyn(0xFF7D6B, 0xF0685C), dyn(0xEC4A5C, 0xD33E52))
-        static let violet = gradient(dyn(0x9D7CFF, 0x8C6DF2), dyn(0x6B47E6, 0x5C3ED2))
-        static let mint = gradient(dyn(0x4FE0DF, 0x33C8CC), dyn(0x22BCC6, 0x169FAA))
-        static let on = Color.white
-        private static func gradient(_ top: Color, _ bottom: Color) -> LinearGradient {
-            LinearGradient(colors: [top, bottom], startPoint: .topLeading, endPoint: .bottomTrailing)
-        }
+    static let neutralSoft = dyn(0xE9E9EE, 0x2C2C2E)
+    static let brandStart = dyn(0x0A66D8, 0x4C9BFF)
+    static let brandEnd = dyn(0x0A66D8, 0x4C9BFF)
+    /// 眨眼类别（青）：ice 图形、iceInk 文字与图标、iceSoft 浅底。
+    static let ice = dyn(0x14A3B3, 0x3CC8D6)
+    static let iceInk = dyn(0x08808D, 0x3CC8D6)
+    static let iceSoft = dyn(0xE3F3F4, 0x3CC8D6, lightAlpha: 1, darkAlpha: 0.16)
+    /// AI 爱科类别（紫）。
+    static let violet = dyn(0x7A4FD8, 0xB49CFF)
+    static let violetSoft = dyn(0xF1ECFC, 0xB49CFF, lightAlpha: 1, darkAlpha: 0.16)
+    /// 用屏类别（靛蓝）。
+    static let screen = dyn(0x5856D6, 0x8E8CFF)
+    static let screenSoft = dyn(0xEEEEFC, 0x8E8CFF, lightAlpha: 1, darkAlpha: 0.16)
+    /// 光照类别（橙）。
+    static let sun = dyn(0xB4500A, 0xFF9F43)
+    static let sunSoft = dyn(0xFCEFE3, 0xFF9F43, lightAlpha: 1, darkAlpha: 0.16)
+    static let brandMarkStart = dyn(0x0A66D8, 0x4C9BFF)
+    /// 琥珀「留意」：圆环、状态点与色块底（色块上配深色字 onWarning；浅底上作文字用 warning）。
+    static let accent = dyn(0xF5A524, 0xFFB340)
+    static let accentSoft = dyn(0xFDF1DE, 0xFFB340, lightAlpha: 1, darkAlpha: 0.16)
+    static let gray = dyn(0x737378, 0x8E8E93)
+    static let blue = dyn(0x0A66D8, 0x4C9BFF)
+    static let warning = dyn(0xA15C00, 0xFFB340)
+    // 测试到位提示（与「正常」同一组绿色）与演示插画（短发男孩）；与安卓 Illustration.kt 同值。
+    static let testReady = dyn(0x1C7F3B, 0x4CD675)
+    static let testTooClose = dyn(0xB42332, 0xFF6B6B)
+    static let testReadySoft = dyn(0xE6F4EA, 0x4CD675, lightAlpha: 1, darkAlpha: 0.16)
+    /// 列表图标块的实心底色（白色图标），两套主题同值。与安卓 tileBlue 等一致。
+    enum Tile {
+        static let blue = Color(rgb: 0x2F7CF6)
+        static let indigo = Color(rgb: 0x5E5CE6)
+        static let teal = Color(rgb: 0x14A3B3)
+        static let orange = Color(rgb: 0xF28C28)
+        static let green = Color(rgb: 0x30B158)
+        static let red = Color(rgb: 0xF0454F)
+        static let gray = Color(rgb: 0x8E8E93)
     }
     enum Illustration {
         static let skin = Color(rgb: 0xFFCBA8)
@@ -63,62 +69,65 @@ enum EyeStyle {
         /// 领口滚边
         static let shirtLight = EyeStyle.dyn(0x7599D1, 0x86A6DA)
     }
-    static let success = dyn(0x15803D, 0x5EE3A1)
-    static let successSoft = dyn(0xE3F5EA, 0x10302A)
-    static let warningSoft = dyn(0xFBF3DE, 0x2E2814)
-    static let onStatus = dyn(0xFFFFFF, 0x081426)
-    /// 柠檬黄「留意」色块上的深色字。
+    static let success = dyn(0x1C7F3B, 0x4CD675)
+    static let successSoft = dyn(0xE6F4EA, 0x4CD675, lightAlpha: 1, darkAlpha: 0.16)
+    static let warningSoft = dyn(0xFDF1DE, 0xFFB340, lightAlpha: 1, darkAlpha: 0.16)
+    static let onStatus = dyn(0xFFFFFF, 0x000000)
+    /// 琥珀「留意」色块上的深色字。
     static let onWarning = dyn(0x2A1F00, 0x1B1608)
-    static let danger = dyn(0xD92D3A, 0xFF7A86)
-    static let dangerSoft = dyn(0xFDE8EA, 0x3A1A24)
-    static let tooClose = dyn(0xD23A3A, 0xFF7A6E)
-    static let tooFar = dyn(0x2563EB, 0x6E9BFF)
-    /// 主卡渐变（浅色为白，深色为深蓝渐变）与描边。
-    static let heroStart = dyn(0xFFFFFF, 0x1C3868)
-    static let heroEnd = dyn(0xF4F7FD, 0x132644)
-    static let heroBorder = dyn(0xFFFFFF, 0x49D9F5, lightAlpha: 1, darkAlpha: 0.2)
-    /// 主按钮渐变（浅色起止同色）。
-    static let buttonStart = dyn(0x2563EB, 0x2A66F0)
-    static let buttonEnd = dyn(0x3578FF, 0x3578FF)
-    /// 光流渐变（进度圆环、柱状图、进度条）：主蓝 → 青蓝，只用于数据图形。
-    static let flowStart = dyn(0x3578FF, 0x3578FF)
-    static let flowEnd = dyn(0x36C5E8, 0x49D9F5)
-    /// 光晕（只有深色发光，浅色透明）与投影色。
-    static let glow = dyn(0x49D9F5, 0x3578FF, lightAlpha: 0.33, darkAlpha: 1)
-    static let shadow = dyn(0x1B2B55, 0x000000, lightAlpha: 0.18, darkAlpha: 0.6)
-    /// 玻璃面：半透明填充 + 上亮下淡描边（与安卓 glassFill / glassEdgeTop / glassEdgeBottom 一致）。
-    static let glassFill = dyn(0xFFFFFF, 0x132644, lightAlpha: 0.96, darkAlpha: 0.95)
-    static let glassEdgeTop = dyn(0xFFFFFF, 0xFFFFFF, lightAlpha: 1, darkAlpha: 0.18)
-    static let glassEdgeBottom = dyn(0x0F1B33, 0xFFFFFF, lightAlpha: 0.12, darkAlpha: 0.06)
+    static let danger = dyn(0xD70015, 0xFF6B6B)
+    static let dangerSoft = dyn(0xFDECEE, 0xFF6B6B, lightAlpha: 1, darkAlpha: 0.16)
+    static let tooClose = dyn(0xD70015, 0xFF6B6B)
+    static let tooFar = dyn(0x0A66D8, 0x4C9BFF)
+    /// 主卡底（改版后与普通卡片同色、纯色）；描边令牌透明。
+    static let heroStart = dyn(0xFFFFFF, 0x1C1C1E)
+    static let heroEnd = dyn(0xFFFFFF, 0x1C1C1E)
+    static let heroBorder = Color.clear
+    /// 主按钮底：品牌蓝纯色（两套主题同值，白字 ≥ 5:1）。
+    static let buttonStart = dyn(0x0A66D8, 0x0A66D8)
+    static let buttonEnd = dyn(0x0A66D8, 0x0A66D8)
+    /// 数据图形色（纯色）。
+    static let flowStart = dyn(0x0A66D8, 0x4C9BFF)
+    static let flowEnd = dyn(0x0A66D8, 0x4C9BFF)
+    /// 光晕（改版后透明，不再发光）与投影色（只给浮在内容上的底栏用）。
+    static let glow = Color.clear
+    static let shadow = dyn(0x000000, 0x000000, lightAlpha: 0.12, darkAlpha: 0.55)
+    /// 卡片面（纯色）；描边令牌改版后透明。
+    static let glassFill = dyn(0xFFFFFF, 0x1C1C1E)
+    static let glassEdgeTop = Color.clear
+    static let glassEdgeBottom = Color.clear
 
     /// 固定浅色主色：白底测试画布上的注视目标（深色模式下也保持高对比）。
     static let fixedPrimary = Color(rgb: 0x23367A)
 
-    /// EyeShapes：small 12（图标块）、medium 14（按钮 / 输入）、large 16（内嵌面板）、card / panel 20、hero 24。
-    static let radiusSmall: CGFloat = 8
-    static let radius: CGFloat = 14
-    static let radiusMedium: CGFloat = 10
-    static let radiusLarge: CGFloat = 12
-    static let radiusHero: CGFloat = 16
-    /// 标签、小按钮（不再用整圆胶囊；细进度条高度不足 16 时自然仍是圆头）。与安卓 EyeShapes.chip 一致。
-    static let radiusChip: CGFloat = 8
+    /// EyeShapes（.continuous 平滑圆角）：small 10（图标块）、medium 14（按钮 / 输入）、large 14（内嵌块）、card / panel 18、hero 22、chip 10。
+    static let radiusSmall: CGFloat = 10
+    static let radius: CGFloat = 18
+    static let radiusMedium: CGFloat = 14
+    static let radiusLarge: CGFloat = 14
+    static let radiusHero: CGFloat = 22
+    /// 标签、小按钮。与安卓 EyeShapes.chip 一致。
+    static let radiusChip: CGFloat = 10
     static var chipShape: RoundedRectangle { RoundedRectangle(cornerRadius: radiusChip, style: .continuous) }
     static let spacing: CGFloat = 12
-    /// EyeTypography 阶梯 13 / 14 / 16 / 18 / 22 / 30 / 56：大数字 display 56 → 页标题 headline 30 → 分区标题 title 22 →
-    /// 卡片标题 subtitle 18 → 正文 body 16 → 辅助 bodySecondary 14 → 标签 chip 13（最小）；读数 metricValue 26、按钮 button 16。
-    static let display = Font.system(size: 56, weight: .bold)
-    static let headline = Font.system(size: 30, weight: .bold)
+    /// EyeTypography：页面大标题 headline 32 → 分区标题 title 20 → 卡片标题 subtitle 17 → 正文 body 16 → 辅助 bodySecondary 14 →
+    /// 标签 chip 13 → 最小 caption 11；数字用 SF Pro Rounded：大数字 display 56、读数 metricValue 28，单位 unit 14（次要文字色）；按钮 17。
+    /// 中文最粗用到 semibold，bold 只留给页面大标题。
+    static let display = Font.system(size: 56, weight: .semibold, design: .rounded)
+    static let headline = Font.system(size: 32, weight: .bold)
     static let chip = Font.system(size: 13, weight: .semibold)
-    static let title = Font.system(size: 22, weight: .semibold)
-    static let subtitle = Font.system(size: 18, weight: .semibold)
-    static let button = Font.system(size: 16, weight: .semibold)
+    static let caption = Font.system(size: 11, weight: .semibold)
+    static let title = Font.system(size: 20, weight: .semibold)
+    static let subtitle = Font.system(size: 17, weight: .semibold)
+    static let button = Font.system(size: 17, weight: .semibold)
     static let body = Font.system(size: 16)
     static let bodySecondary = Font.system(size: 14)
-    static let metricValue = Font.system(size: 26, weight: .bold)
+    static let metricValue = Font.system(size: 28, weight: .semibold, design: .rounded)
+    static let unit = Font.system(size: 14, weight: .medium)
     /// EyeMotion.pressSpring：阻尼 0.6、中等刚度。
     static let pressSpring = Animation.spring(response: 0.3, dampingFraction: 0.6)
 
-    /// 实心状态色块的底色与字色：「留意」（warning）用柠檬黄 accent 配深色字，其余语义色配 onStatus（与安卓 statusFill 一致）。
+    /// 实心状态色块的底色与字色：「留意」（warning）用琥珀 accent 配深色字，其余语义色配 onStatus（与安卓 statusFill 一致）。
     static func statusFill(_ color: Color) -> (Color, Color) { color == warning ? (accent, onWarning) : (color, onStatus) }
 
     static var buttonGradient: LinearGradient {
@@ -131,6 +140,32 @@ enum EyeStyle {
         LinearGradient(colors: [heroStart, heroEnd], startPoint: .topLeading, endPoint: .bottomTrailing)
     }
 
+    /// 读数排版：把「6小时25分」「180 lx」「22 次/分」拆成数字与单位——数字用 [numberFont]，单位用 unit 字号、次要文字色。
+    /// 与安卓 eyeReading 一致。
+    static func reading(_ value: String, unit extra: String? = nil, numberFont: Font = EyeStyle.metricValue, color: Color = EyeStyle.text) -> Text {
+        let full = extra.map { "\(value) \($0)" } ?? value
+        func numeric(_ c: Character) -> Bool { c.isNumber || ".,:+−—".contains(c) }
+        var result = Text("")
+        var run = ""
+        var runIsNumber: Bool? = nil
+        var last: Bool? = nil
+        func flush() {
+            guard let isNumber = runIsNumber, !run.isEmpty else { return }
+            if let last, last != isNumber { result = result + Text("\u{2009}") }
+            result = result + (isNumber ? Text(run).font(numberFont).foregroundColor(color) : Text(run).font(unit).foregroundColor(secondary))
+            last = isNumber
+            run = ""
+        }
+        for c in full {
+            if c.isWhitespace { flush(); runIsNumber = nil; result = result + Text(String(c)).font(unit); last = nil; continue }
+            let isNumber = numeric(c)
+            if runIsNumber != isNumber { flush(); runIsNumber = isNumber }
+            run.append(c)
+        }
+        flush()
+        return result
+    }
+
     /// 浅色 / 深色两个取值的动态颜色。
     static func dyn(_ light: UInt32, _ dark: UInt32, lightAlpha: CGFloat = 1, darkAlpha: CGFloat = 1) -> Color {
         Color(UIColor { trait in
@@ -139,7 +174,7 @@ enum EyeStyle {
     }
 }
 
-/// 间距令牌（4 / 8 节奏），与安卓 EyeSpacing 一一对应：元素内 xs / sm → 卡片内 md → 卡片之间 cardGap → 分区之间 xxl；页面左右留白 gutter。
+/// 间距令牌（4 / 8 节奏），与安卓 EyeSpacing 一一对应：元素内 xs / sm → 卡片内 md → 卡片之间 cardGap → 分区之间 sectionGap；页面左右留白 gutter。
 enum EyeSpacing {
     static let xxs: CGFloat = 4
     static let xs: CGFloat = 8
@@ -149,9 +184,10 @@ enum EyeSpacing {
     static let xl: CGFloat = 24
     static let xxl: CGFloat = 32
     static let gutter: CGFloat = 16
-    static let cardPadding: CGFloat = 20
-    static let heroPadding: CGFloat = 24
-    static let cardGap: CGFloat = 16
+    static let cardPadding: CGFloat = 16
+    static let heroPadding: CGFloat = 20
+    static let cardGap: CGFloat = 12
+    static let sectionGap: CGFloat = 28
     static let itemGap: CGFloat = 12
 }
 
@@ -165,13 +201,12 @@ extension UIColor {
     }
 }
 
-/// 与安卓 EyeButton 同规格：最小高 52、圆角 14、按下弹簧缩到 96%，不用系统按压变暗。
-/// 主按钮为按钮渐变底（深色带蓝色泛光）；次要操作（重试、延长、复测）用 `.secondary`，浅底与主按钮区分轻重。
+/// 与安卓 EyeButton 同规格：最小高 50、圆角 14、按下弹簧缩到 96%，不用系统按压变暗。
+/// 主按钮品牌蓝纯色底；次要操作（重试、延长、复测）用 `.secondary` 浅填充底；都不描边、不投影。
 struct EyeButtonStyle: ButtonStyle {
     var role: Role = .primary
     enum Role { case primary, secondary, danger }
     @Environment(\.isEnabled) private var enabled
-    @Environment(\.colorScheme) private var scheme
     func makeBody(configuration: Configuration) -> some View {
         let shape = RoundedRectangle(cornerRadius: EyeStyle.radiusMedium, style: .continuous)
         let content: Color = switch role {
@@ -179,19 +214,15 @@ struct EyeButtonStyle: ButtonStyle {
         case .secondary: EyeStyle.text
         case .danger: EyeStyle.danger
         }
+        let fill: Color = switch role {
+        case .primary: EyeStyle.buttonStart
+        case .secondary: EyeStyle.surfaceVariant
+        case .danger: EyeStyle.dangerSoft
+        }
         return configuration.label.font(EyeStyle.button).multilineTextAlignment(.center)
-            .padding(.horizontal, 16).padding(.vertical, 12).frame(maxWidth: .infinity, minHeight: 52)
+            .padding(.horizontal, 16).padding(.vertical, 12).frame(maxWidth: .infinity, minHeight: 50)
             .foregroundStyle(content)
-            .background {
-                switch role {
-                case .primary: shape.fill(EyeStyle.buttonGradient)
-                    .shadow(color: scheme == .dark ? EyeStyle.glow.opacity(0.45) : EyeStyle.buttonEnd.opacity(0.35), radius: 12, y: 5)
-                case .secondary: shape.fill(EyeStyle.panel)
-                    .overlay { shape.strokeBorder(EyeStyle.glassEdgeBottom, lineWidth: 1) }
-                    .shadow(color: EyeStyle.shadow.opacity(0.6), radius: 3, y: 1)
-                case .danger: shape.fill(EyeStyle.dangerSoft)
-                }
-            }
+            .background(fill, in: shape)
             .contentShape(shape)
             .scaleEffect(configuration.isPressed && enabled ? 0.96 : 1)
             .opacity(enabled ? 1 : 0.5)
@@ -199,7 +230,7 @@ struct EyeButtonStyle: ButtonStyle {
     }
 }
 
-/// 入口卡与选项行：玻璃面圆角，按下轻缩，与安卓 EyeSelectCard 一致，不出现系统的整块变灰。
+/// 入口卡与选项行：纯色圆角面，按下轻缩，与安卓 EyeSelectCard 一致，不出现系统的整块变灰。
 struct EyeCardButtonStyle: ButtonStyle {
     var selected = false
     func makeBody(configuration: Configuration) -> some View {

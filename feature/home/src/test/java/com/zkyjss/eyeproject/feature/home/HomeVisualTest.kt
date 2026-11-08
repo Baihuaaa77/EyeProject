@@ -87,28 +87,27 @@ class HomeVisualTest {
         compose.mainClock.advanceTimeBy(100)
         compose.onNodeWithText("今日").assertExists()
         compose.onNodeWithText("今日用眼").assertDoesNotExist()
-        compose.onNodeWithText("留意", useUnmergedTree = true).assertExists()
+        compose.onAllNodesWithText("留意", useUnmergedTree = true).onFirst().assertExists()
         compose.onNodeWithText("为你推荐").assertDoesNotExist()
         compose.onNodeWithText("个体档案").assertDoesNotExist()
-        // 首页精简：问诊入口改名、不再分小节标题、去掉专业咨询建议与视觉行为读数
-        compose.onNodeWithText(CHAT_TITLE).assertExists()
-        listOf("AI 综合建议", "多源感知", "主动服务", "专业咨询建议", "视觉行为").forEach { compose.onNodeWithText(it).assertDoesNotExist() }
-        // 主卡只有大圆环包住的负荷分，不再放建议与按钮
+        // 2026-11 改版：主卡带一句结论与「做 1 分钟护眼操」；读数分在「今日数据」小卡里；问诊入口是爱科卡
+        compose.onNodeWithText("今日数据").assertExists()
+        compose.onNodeWithText(EYECHO_CARD_LABEL).assertExists()
+        listOf("AI 综合建议", "多源感知", "主动服务", "专业咨询建议", "视觉行为", "基础数据").forEach { compose.onNodeWithText(it).assertDoesNotExist() }
         compose.mainClock.advanceTimeBy(1_400)
         compose.onNodeWithContentDescription("今日眼健康指数", substring = true).assertExists()
-        compose.onNodeWithText("去休息").assertDoesNotExist()
+        compose.onNodeWithText("做 1 分钟护眼操").assertExists()
+        // 右上角只有账户头像，白天 / 夜晚切换移到「我的」
+        compose.onNodeWithContentDescription("切换到夜晚模式").assertDoesNotExist()
+        compose.onNodeWithContentDescription("系统设置").assertDoesNotExist()
         capture("01-首页-首屏", advance = false)
         compose.mainClock.autoAdvance = true
         compose.onNodeWithText("休息提醒").performScrollTo().performClick()
         assertTrue(reminder)
-        // 护眼操与用眼趋势、亮度与蓝光并排成彩色方块，三个方块只有名称，护眼操没有「开始」按钮
-        compose.onNodeWithText("用眼趋势报告").assertDoesNotExist()
-        compose.onNodeWithText("开始").assertDoesNotExist()
         // 休息提醒不再给出建议间隔与「采用」
         compose.onNodeWithText("采用").assertDoesNotExist()
         compose.onNodeWithText("建议每", substring = true).assertDoesNotExist()
-        listOf("约 1 分钟", "近 7 天变化", "夜间模式与护眼").forEach { compose.onNodeWithText(it, substring = true).assertDoesNotExist() }
-        compose.onNodeWithText("日均用屏", substring = true).assertDoesNotExist()
+        compose.onNodeWithText("用眼趋势报告").assertDoesNotExist()
         compose.onNodeWithText("用眼趋势").performScrollTo().performClick()
         assertTrue(trend)
         compose.onNodeWithText("开发者工具").performScrollTo().performClick()
@@ -119,18 +118,7 @@ class HomeVisualTest {
     @Test @Config(qualifiers = "zh-rCN-w390dp-h2600dp-mdpi")
     fun fullHomePage() {
         compose.mainClock.autoAdvance = false
-        var toggled = false
-        compose.setContent {
-            EyeProjectTheme {
-                androidx.compose.runtime.CompositionLocalProvider(com.zkyjss.eyeproject.core.ui.component.LocalEyeThemeToggle provides
-                    com.zkyjss.eyeproject.core.ui.component.EyeThemeToggle(isDark = false) { toggled = true }) {
-                    HomeContent(demoState(), HomeNavigation(), HomeActions())
-                }
-            }
-        }
-        // 右上角有白天 / 夜晚切换：白天显示月亮，点了切到夜晚
-        compose.onNodeWithContentDescription("切换到夜晚模式").performClick()
-        assertTrue(toggled)
+        compose.setContent { EyeProjectTheme { HomeContent(demoState(reminder = true), HomeNavigation(), HomeActions()) { LiveEyeContent(LiveEyeUiState(), null, {}, {}) {} } } }
         compose.mainClock.advanceTimeBy(1_500)
         capture("02-首页-整页", advance = false)
     }
@@ -139,12 +127,12 @@ class HomeVisualTest {
     fun fullHomePageDarkWithoutData() {
         compose.setContent {
             EyeProjectTheme(darkTheme = true) {
-                HomeContent(HomeUiState(report = EyeCareEngine.report(LedgerData(), EyeCareContext(today, 21))), HomeNavigation(), HomeActions())
+                HomeContent(HomeUiState(report = EyeCareEngine.report(LedgerData(), EyeCareContext(today, 21))), HomeNavigation(), HomeActions()) { LiveEyeContent(LiveEyeUiState(), null, {}, {}) {} }
             }
         }
-        // 还没记录：卡片只有一个「记录」按钮，选项收在弹窗里
-        compose.onNodeWithText("今天眼睛感觉怎么样？").assertDoesNotExist()
-        compose.onNodeWithText("记录").assertExists()
+        // 还没记录：爱科卡问「今天眼睛感觉怎么样？」，给几项快捷感受和「更多」
+        compose.onNodeWithText("今天眼睛感觉怎么样？").assertExists()
+        compose.onNodeWithText("更多").assertExists()
         capture("03-首页-深色-还没有数据")
     }
 
@@ -165,17 +153,19 @@ class HomeVisualTest {
     @Test fun checkInRecordsSymptoms() {
         var saved: List<String>? = null
         compose.setContent { EyeProjectTheme { HomeContent(demoState(checkIn = false), HomeNavigation(), HomeActions(checkIn = { saved = it })) } }
-        compose.onNodeWithText("记录").performScrollTo().performClick()
-        // 弹窗里选，没选不能保存；「没有不适」与具体不适互斥
-        compose.onNodeWithText("今天眼睛感觉怎么样？").assertExists()
+        // 爱科卡上点一下快捷感受就记下
+        compose.onNodeWithText("眼睛干涩").performScrollTo().performClick()
+        assertEquals(listOf("眼睛干涩"), saved)
+        // 「更多」弹出完整选择：没选不能保存；「没有不适」与具体不适互斥
+        compose.onNodeWithText("更多").performScrollTo().performClick()
         compose.onNodeWithText("保存").assertIsNotEnabled()
-        compose.onNodeWithText("没有不适").performClick()
-        compose.onNodeWithText("眼睛酸胀").performClick()
+        compose.onAllNodesWithText("没有不适").onLast().performClick()
+        compose.onAllNodesWithText("眼睛酸胀").onLast().performClick()
         compose.onNodeWithText("头痛").performClick()
         capture("04-首页-今日感受")
         compose.onNodeWithText("保存").performClick()
         assertEquals(listOf("眼睛酸胀", "头痛"), saved)
-        compose.onNodeWithText("今天眼睛感觉怎么样？").assertDoesNotExist()
+        compose.onNodeWithText("保存").assertDoesNotExist()
     }
 
     @Test @Config(qualifiers = "zh-rCN-w390dp-h1100dp-mdpi")
@@ -200,9 +190,10 @@ class HomeVisualTest {
             }
         }
         compose.onNodeWithText("打开前置摄像头，看看眨眼和观看距离").assertDoesNotExist()
-        // 始终展开：未检测时取景框是人头虚线占位，只有一个「开始检测」按钮
+        // 未检测时只有一行（名称 +「开始」），开始后才展开取景框与读数
+        compose.onNodeWithText("开始检测").assertDoesNotExist()
         capture("05a-首页-实时检测-未开始")
-        compose.onNodeWithText("开始检测").performClick()
+        compose.onNodeWithText("开始").performClick()
         compose.onNodeWithText("运行正常").assertExists()
         compose.onNodeWithText("睁眼").assertExists()
         compose.onNodeWithText("33 厘米", useUnmergedTree = true).assertExists()
@@ -320,7 +311,7 @@ class HomeVisualTest {
     @Test @Config(qualifiers = "zh-rCN-w390dp-h2600dp-mdpi")
     fun fullHomePageDark() {
         compose.mainClock.autoAdvance = false
-        compose.setContent { EyeProjectTheme(darkTheme = true) { HomeContent(demoState(), HomeNavigation(), HomeActions()) } }
+        compose.setContent { EyeProjectTheme(darkTheme = true) { HomeContent(demoState(), HomeNavigation(), HomeActions()) { LiveEyeContent(LiveEyeUiState(), null, {}, {}) {} } } }
         compose.mainClock.advanceTimeBy(1_500)
         capture("02b-首页-整页-深色", advance = false)
     }

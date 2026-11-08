@@ -43,19 +43,19 @@ private struct CompactPopover: ViewModifier {
 
 // MARK: - 顶层页右上角：账户 + 系统设置
 
-/// 系统设置齿轮（与测试页顶栏同一图标），与安卓 EyeSettingsGear 一致。
+/// 系统设置齿轮（36pt 浅填充圆钮，与测试页顶栏同一图标），与安卓 EyeSettingsGear 一致。
 struct SettingsGear: View {
     let action: () -> Void
     var body: some View {
         Button { EyeHaptics.tap(); action() } label: {
-            Image(systemName: "gearshape.fill").font(.system(size: 22)).foregroundStyle(EyeStyle.primary)
-                .frame(width: 44, height: 44).background(EyeStyle.panel, in: Circle())
-                .overlay { Circle().stroke(EyeStyle.borderSubtle, lineWidth: 1) }
+            Image(systemName: "gearshape.fill").font(.system(size: 18)).foregroundStyle(EyeStyle.primary)
+                .frame(width: 36, height: 36).background(EyeStyle.surfaceVariant, in: Circle())
+                .frame(width: 44, height: 44).contentShape(Rectangle())
         }.buttonStyle(.plain).accessibilityLabel("系统设置")
     }
 }
 
-/// 白天 / 夜晚切换（齿轮左侧）：白天显示月亮（点了进夜晚），夜晚显示太阳（点了回白天）。
+/// 白天 / 夜晚切换按钮（2026-11 改版后顶层页不再放，深色模式开关在「我的 → 通用」，见 MinePage）。
 /// 选择存在 UserDefaults「eye.themeMode」（system / light / dark，默认跟随系统），根视图据此设置 preferredColorScheme。与安卓 EyeThemeButton 一致。
 struct ThemeToggleButton: View {
     @AppStorage("eye.themeMode") private var themeMode = "system"
@@ -70,7 +70,8 @@ struct ThemeToggleButton: View {
     }
 }
 
-/// 账户按钮：未登录画人像轮廓，登录后显示邮箱首字母与在线小绿点；点开完整的账户页。与安卓 EyeAccountButton 一致。
+/// 账户头像（顶层页右上角唯一的按钮）：登录后品牌蓝实心圆 + 白色首字母，未登录为浅填充圆 + 人像线稿；点开完整的账户页。
+/// 与安卓 EyeAccountButton 一致。
 struct AccountButton: View {
     @ObservedObject private var cloud = CloudModel.shared
     let action: () -> Void
@@ -78,40 +79,34 @@ struct AccountButton: View {
         let email = cloud.bool("signedIn") ? cloud.string("email") : ""
         Button { EyeHaptics.tap(); action() } label: {
             ZStack {
-                Circle().fill(email.isEmpty ? EyeStyle.panel : EyeStyle.primarySoft)
-                Circle().stroke(EyeStyle.borderSubtle, lineWidth: 1)
+                Circle().fill(email.isEmpty ? EyeStyle.surfaceVariant : EyeStyle.buttonStart)
                 if email.isEmpty {
-                    EyeGlyphView(glyph: .person, color: EyeStyle.primary).frame(width: 22, height: 22)
+                    EyeGlyphView(glyph: .person, color: EyeStyle.primary).frame(width: 20, height: 20)
                 } else {
-                    Text(String(email.prefix(1)).uppercased()).font(EyeStyle.subtitle).foregroundStyle(EyeStyle.primary)
+                    Text(String(email.prefix(1)).uppercased()).font(EyeStyle.subtitle).foregroundStyle(EyeStyle.onPrimary)
                 }
             }
-            .frame(width: 44, height: 44)
-            .overlay(alignment: .bottomTrailing) {
-                if !email.isEmpty {
-                    Circle().fill(EyeStyle.success).frame(width: 8, height: 8).padding(2).background(EyeStyle.panel, in: Circle()).offset(x: -1, y: -1)
-                }
-            }
+            .frame(width: 36, height: 36)
+            .frame(width: 44, height: 44).contentShape(Rectangle())
         }.buttonStyle(.plain).accessibilityLabel(email.isEmpty ? "账户（未登录）" : "账户（已登录）")
     }
 }
 
-/// 顶层页标题行：大标题（可带一行副标题）+ 右上角账户与系统设置。
+/// 顶层页标题行：小号日期等副标题在上、32 号大标题在下，右上角一个圆钮（有账户入口时为账户头像，否则为齿轮，都没有则不放）。
+/// 与安卓 EyePageHeader 一致。
 struct PageHeader: View {
     let title: String
     var subtitle: String? = nil
-    let openAccount: () -> Void
-    let openSettings: () -> Void
+    var openAccount: (() -> Void)? = nil
+    var openSettings: (() -> Void)? = nil
     var body: some View {
-        HStack(alignment: .center, spacing: 10) {
-            VStack(alignment: .leading, spacing: 2) {
+        HStack(alignment: .bottom, spacing: 10) {
+            VStack(alignment: .leading, spacing: 0) {
+                if let subtitle { Text(subtitle).font(EyeStyle.chip).foregroundStyle(EyeStyle.secondary) }
                 Text(title).font(EyeStyle.headline).foregroundStyle(EyeStyle.text).lineLimit(1).minimumScaleFactor(0.7)
-                if let subtitle { Text(subtitle).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary) }
             }.frame(maxWidth: .infinity, alignment: .leading)
-            AccountButton(action: openAccount)
-            ThemeToggleButton()
-            SettingsGear(action: openSettings)
-        }.padding(.vertical, 16)
+            if let openAccount { AccountButton(action: openAccount) } else if let openSettings { SettingsGear(action: openSettings) }
+        }.padding(.top, 12).padding(.bottom, 4)
     }
 }
 
@@ -246,32 +241,43 @@ enum GlyphPainter {
     }
 }
 
-/// 图标色块的配色：primary 电光蓝 / accent 香槟金 / success 薄荷绿 / blue 冰蓝 / violet 薰衣草紫 / danger 红 / neutral 灰（与安卓 EyeTileTone 一致）。
+/// 图标配色：primary 品牌蓝 / accent 橙 / success 绿 / blue 青 / violet 靛紫 / danger 红 / neutral 灰（与安卓 EyeTileTone 一致）。
+/// 列表图标块用实心底 + 白色图标（[solid]），卡片标题等用浅底 + 彩色图标（[colors]）。
 enum TileTone {
     case primary, accent, success, blue, violet, danger, neutral
     var colors: (Color, Color) {
         switch self {
-        // 分类图标按功能各用一种点缀色（电光蓝 / 香槟金 / 薄荷绿 / 冰蓝 / 薰衣草紫），底色为同色调浅块
         case .primary: return (EyeStyle.primarySoft, EyeStyle.primary)
-        case .accent: return (EyeStyle.accentSoft, EyeStyle.warning)
+        case .accent: return (EyeStyle.sunSoft, EyeStyle.sun)
         case .success: return (EyeStyle.successSoft, EyeStyle.success)
         case .blue: return (EyeStyle.iceSoft, EyeStyle.iceInk)
-        case .violet: return (EyeStyle.violetSoft, EyeStyle.violet)
+        case .violet: return (EyeStyle.screenSoft, EyeStyle.screen)
         case .danger: return (EyeStyle.dangerSoft, EyeStyle.danger)
         case .neutral: return (EyeStyle.surfaceVariant, EyeStyle.secondary)
         }
     }
+    /// 实心图标块底色（两套主题同值，上面放白色图标）。
+    var solid: Color {
+        switch self {
+        case .primary: return EyeStyle.Tile.blue
+        case .accent: return EyeStyle.Tile.orange
+        case .success: return EyeStyle.Tile.green
+        case .blue: return EyeStyle.Tile.teal
+        case .violet: return EyeStyle.Tile.indigo
+        case .danger: return EyeStyle.Tile.red
+        case .neutral: return EyeStyle.Tile.gray
+        }
+    }
 }
 
-/// 圆角色块上的线性图标。
+/// 列表图标块：实心圆角色块 + 白色线性图标（iOS 设置式）。
 struct IconTile: View {
     let glyph: EyeGlyph
     var tone: TileTone = .primary
-    var size: CGFloat = 36
+    var size: CGFloat = 32
     var body: some View {
-        let (background, foreground) = tone.colors
-        EyeGlyphView(glyph: glyph, color: foreground).frame(width: size * 0.58, height: size * 0.58)
-            .frame(width: size, height: size).background(background, in: RoundedRectangle(cornerRadius: EyeStyle.radiusSmall, style: .continuous))
+        EyeGlyphView(glyph: glyph, color: .white).frame(width: size * 0.6, height: size * 0.6)
+            .frame(width: size, height: size).background(tone.solid, in: RoundedRectangle(cornerRadius: size * 0.27, style: .continuous))
     }
 }
 
@@ -283,7 +289,7 @@ struct ListGroup<Content: View>: View {
     @ViewBuilder let content: Content
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if let title { Text(title).font(EyeStyle.chip).foregroundStyle(EyeStyle.secondary).padding(.leading, 4) }
+            if let title { Text(title).font(EyeStyle.chip).foregroundStyle(EyeStyle.secondary).padding(.leading, 16) }
             VStack(spacing: 0) { content }
                 .eyeGlass()
         }.frame(maxWidth: .infinity, alignment: .leading)
@@ -330,12 +336,12 @@ struct ListRow: View {
                 }.frame(maxWidth: .infinity, alignment: .leading)
                 if let value { Text(value).font(EyeStyle.body).foregroundStyle(valueColor).lineLimit(1) }
                 if action != nil {
-                    Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(EyeStyle.secondary.opacity(0.7))
+                    Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(EyeStyle.tertiary)
                 }
             }
-            .padding(.leading, 16 + indent).padding(.trailing, 16).padding(.vertical, 10).frame(minHeight: 60)
+            .padding(.leading, 16 + indent).padding(.trailing, 16).padding(.vertical, 10).frame(minHeight: 52)
             if divider {
-                Rectangle().fill(EyeStyle.borderSubtle).frame(height: 1).padding(.leading, (glyph == nil ? 16 : 66) + indent)
+                Rectangle().fill(EyeStyle.borderSubtle).frame(height: 0.5).padding(.leading, (glyph == nil ? 16 : 62) + indent)
             }
         }.contentShape(Rectangle())
     }
@@ -366,9 +372,9 @@ struct SwitchRow: View {
                 Toggle("", isOn: Binding(get: { isOn }, set: { EyeHaptics.toggle(); isOn = $0 }))
                     .labelsHidden().tint(EyeStyle.primary).disabled(!enabled)
             }
-            .padding(.horizontal, 16).padding(.vertical, 6).frame(minHeight: 60)
+            .padding(.horizontal, 16).padding(.vertical, 6).frame(minHeight: 52)
             if divider {
-                Rectangle().fill(EyeStyle.borderSubtle).frame(height: 1).padding(.leading, glyph == nil ? 16 : 66)
+                Rectangle().fill(EyeStyle.borderSubtle).frame(height: 0.5).padding(.leading, glyph == nil ? 16 : 62)
             }
         }
     }
@@ -390,7 +396,7 @@ struct SubPage<Content: View>: View {
     }
 }
 
-/// 圆角玻璃面板（平铺卡片，同 EyeCard）。
+/// 圆角纯色面板（平铺卡片，同 EyeCard）。
 struct Panel<Content: View>: View {
     var padding: CGFloat = EyeSpacing.cardPadding
     @ViewBuilder let content: Content
@@ -425,9 +431,10 @@ struct PillButton: View {
     let action: () -> Void
     var body: some View {
         Button { EyeHaptics.tap(); action() } label: {
-            Text(label).font(EyeStyle.chip).foregroundStyle(primary ? EyeStyle.onPrimary : EyeStyle.text)
-                .padding(.horizontal, 14).padding(.vertical, 8)
-                .background { if primary { EyeStyle.chipShape.fill(EyeStyle.buttonGradient) } else { EyeStyle.chipShape.fill(EyeStyle.surfaceVariant) } }
+            // 主要：浅主色底 + 主色字；次要：浅填充底 + 正文色（与安卓 PillButton 一致）
+            Text(label).font(EyeStyle.bodySecondary.weight(.semibold)).foregroundStyle(primary ? EyeStyle.primary : EyeStyle.text)
+                .padding(.horizontal, 16).padding(.vertical, 7)
+                .background(primary ? EyeStyle.primarySoft : EyeStyle.surfaceVariant, in: Capsule())
         }.buttonStyle(PressScale())
     }
 }
@@ -508,55 +515,52 @@ struct BarChartView: View {
     var reference: Double? = nil
     var maxValue: Double? = nil
     var height: CGFloat = 140
+    /// 柱子颜色（类别色），默认主色。
+    var tint: Color = EyeStyle.primary
     @State private var grow: CGFloat = 0
-    @Environment(\.colorScheme) private var scheme
-    private var dark: Bool { scheme == .dark }
 
     var body: some View {
         let top = max(maxValue ?? 0, bars.compactMap { $0.value }.max() ?? 0, (reference ?? 0) * 1.15, 1)
         VStack(spacing: 4) {
             HStack(spacing: 0) {
                 ForEach(bars) { bar in
-                    Text(bar.text ?? " ").font(EyeStyle.chip).foregroundStyle(bar.warning ? EyeStyle.warning : bar.highlight ? EyeStyle.text : EyeStyle.tertiary)
+                    Text(bar.highlight || bar.warning ? (bar.text ?? " ") : " ").font(EyeStyle.caption)
+                        .foregroundStyle(bar.warning ? EyeStyle.warning : EyeStyle.text)
                         .lineLimit(1).frame(maxWidth: .infinity)
                 }
             }
             Canvas { context, size in
+                // 横向刻度：顶部与中间虚线、底部实线
+                for f in [0.0, 0.5] {
+                    var grid = Path(); grid.move(to: CGPoint(x: 0, y: size.height * f)); grid.addLine(to: CGPoint(x: size.width, y: size.height * f))
+                    context.stroke(grid, with: .color(EyeStyle.borderSubtle), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                }
+                var base = Path(); base.move(to: CGPoint(x: 0, y: size.height)); base.addLine(to: CGPoint(x: size.width, y: size.height))
+                context.stroke(base, with: .color(EyeStyle.borderSubtle), lineWidth: 1)
                 let slot = size.width / CGFloat(max(bars.count, 1))
-                let barWidth = min(max(slot * 0.3, 6), 12)
+                let barWidth = min(max(slot * 0.5, 10), 24)
+                let radius = min(6, barWidth / 2)
                 for (i, bar) in bars.enumerated() {
-                    let x = slot * CGFloat(i) + (slot - barWidth) / 2
-                    // 每根柱子背后一条满高的暗色胶囊轨道
-                    context.fill(Path(roundedRect: CGRect(x: x, y: 0, width: barWidth, height: size.height), cornerRadius: barWidth / 2),
-                                 with: .color(EyeStyle.surfaceVariant))
                     guard let v = bar.value else { continue }
-                    let h = max(CGFloat(v / top) * size.height * grow, v > 0 ? barWidth : 0)
+                    let x = slot * CGFloat(i) + (slot - barWidth) / 2
+                    let h = max(CGFloat(v / top) * size.height * grow, v > 0 ? radius * 2 : 0)
                     let rect = CGRect(x: x, y: size.height - h, width: barWidth, height: h)
-                    // 光流：底部主蓝 → 顶部青蓝；今天满亮（深色再叠同色泛光），其余稍暗
-                    let flow = GraphicsContext.Shading.linearGradient(Gradient(colors: [EyeStyle.flowEnd, EyeStyle.flowStart]),
-                        startPoint: CGPoint(x: rect.midX, y: rect.minY), endPoint: CGPoint(x: rect.midX, y: size.height))
-                    if bar.highlight {
-                        var halo = context
-                        halo.addFilter(.blur(radius: 6))
-                        halo.opacity = 0.6
-                        halo.fill(Path(roundedRect: rect.insetBy(dx: -3, dy: -3), cornerRadius: barWidth), with: flow)
-                    }
                     var layer = context
-                    layer.opacity = bar.highlight ? 1 : 0.6
-                    layer.fill(Path(roundedRect: rect, cornerRadius: barWidth / 2), with: flow)
+                    layer.opacity = bar.highlight ? 1 : 0.32
+                    layer.fill(Path(roundedRect: rect, cornerRadius: radius), with: .color(tint))
                 }
                 if let reference {
                     let y = size.height - CGFloat(reference / top) * size.height
                     var line = Path(); line.move(to: CGPoint(x: 0, y: y)); line.addLine(to: CGPoint(x: size.width, y: y))
-                    context.stroke(line, with: .color(EyeStyle.tertiary), style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                    context.stroke(line, with: .color(tint.opacity(0.6)), style: StrokeStyle(lineWidth: 1.5, dash: [4, 4]))
                 }
             }.frame(height: height)
             HStack(spacing: 0) {
                 ForEach(bars) { bar in
-                    Text(bar.label).font(EyeStyle.chip).foregroundStyle(bar.highlight ? EyeStyle.text : EyeStyle.tertiary)
+                    Text(bar.label).font(EyeStyle.caption).foregroundStyle(bar.highlight ? EyeStyle.text : EyeStyle.tertiary)
                         .lineLimit(1).frame(maxWidth: .infinity)
                 }
-            }
+            }.padding(.top, 2)
         }
         .onAppear { withAnimation(.easeOut(duration: 0.7)) { grow = 1 } }
     }

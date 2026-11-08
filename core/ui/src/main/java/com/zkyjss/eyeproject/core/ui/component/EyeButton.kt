@@ -31,7 +31,7 @@ enum class EyeButtonRole { PRIMARY, SECONDARY, DANGER }
 
 /**
  * 自定义按钮，三态（primary/secondary/danger），不使用 Material Button。
- * 主按钮用按钮渐变底（深色带泛光）；一屏只放一个主按钮，其余用 SECONDARY 或文字。
+ * 主按钮品牌蓝纯色底、白字；次要按钮浅填充底；都不描边、不投影。一屏只放一个主按钮，其余用 SECONDARY 或文字。
  * 交互：按下以弹簧缩放到 96%，角色切换（如 开始↔停止）时底色平滑过渡。
  */
 @Composable
@@ -50,8 +50,8 @@ fun EyeButton(
     // 全部走设计令牌，不在组件里硬写颜色
     val backgroundColor by animateColorAsState(
         targetValue = when (role) {
-            EyeButtonRole.PRIMARY -> colors.primary
-            EyeButtonRole.SECONDARY -> colors.panelBackground
+            EyeButtonRole.PRIMARY -> colors.buttonStart
+            EyeButtonRole.SECONDARY -> colors.surfaceVariant
             EyeButtonRole.DANGER -> colors.dangerSoft
         },
         animationSpec = tween(EyeMotion.MEDIUM),
@@ -79,24 +79,15 @@ fun EyeButton(
                 scaleY = scale
                 alpha = if (enabled) 1f else 0.5f
             }
-            .then(
-                // 主按钮：深色主题蓝色泛光，浅色主题一道柔和投影
-                if (role == EyeButtonRole.PRIMARY && enabled) Modifier.shadow(if (colors.hasGlow) 14.dp else 10.dp, EyeShapes.medium,
-                    ambientColor = if (colors.hasGlow) colors.glow else colors.primary, spotColor = if (colors.hasGlow) colors.glow else colors.primary)
-                else if (enabled) Modifier.shadow(3.dp, EyeShapes.medium, ambientColor = colors.shadow, spotColor = colors.shadow)
-                else Modifier
-            )
             .clip(EyeShapes.medium)
-            .then(if (role == EyeButtonRole.PRIMARY) Modifier.background(colors.buttonBrush) else Modifier.background(backgroundColor))
-            // 次要按钮：面板底 + 描边，与主按钮区分轻重又不发虚
-            .then(if (role == EyeButtonRole.SECONDARY) Modifier.border(1.dp, colors.cardBorder, EyeShapes.medium) else Modifier)
+            .background(backgroundColor)
             .clickable(
                 enabled = enabled,
                 role = Role.Button,
                 interactionSource = interactionSource,
                 indication = null
             ) { onClick() }
-            .defaultMinSize(minHeight = 52.dp)
+            .defaultMinSize(minHeight = 50.dp)
             .padding(horizontal = 16.dp, vertical = 12.dp),
         contentAlignment = Alignment.Center
     ) {

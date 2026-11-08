@@ -40,8 +40,8 @@ import com.zkyjss.eyeproject.core.ui.component.EyeText
 /** 刺激区固定白底、与深浅主题无关，其上的视标环与校准点统一取亮色主色令牌保证对比。 */
 internal val StageAccent get() = LightEyeColors.primary
 
-private val KeySize = 64.dp
-private val KeyGap = 10.dp
+private val KeySize = 68.dp
+private val KeyGap = 8.dp
 
 /**
  * 视标单独位于上方白色刺激区；下方为十字作答键：「跳过」居中，上下左右四键环绕。
@@ -53,11 +53,11 @@ internal fun OptotypeAnswerPad(direction: Int, size: Dp, visible: Boolean, below
     val colors = LocalEyeColors.current
     Column(Modifier.fillMaxWidth().testTag("answer-pad"), horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        // 白色刺激区吸收内容区剩余高度，视标居中；细边界定出刺激区，浅色主题下也不与卡片混在一起。
+        // 白色刺激区吸收内容区剩余高度，视标居中；不加描边，靠白底与页面底色的明度差界定（2026-11 改版）。
         val extra = rememberStageExtra()
         Box(
-            Modifier.fillMaxWidth().height(maxOf(152.dp, ringDiameter(size) + 24.dp) + extra).clip(EyeShapes.large)
-                .background(colors.white).border(1.dp, colors.borderSubtle, EyeShapes.large),
+            Modifier.fillMaxWidth().height(maxOf(152.dp, ringDiameter(size) + 24.dp) + extra).clip(EyeShapes.hero)
+                .background(colors.white),
             contentAlignment = Alignment.Center,
         ) { FramedOptotype(direction, size, visible) }
         belowStimulus()
@@ -73,21 +73,20 @@ internal fun OptotypeAnswerPad(direction: Int, size: Dp, visible: Boolean, below
     }
 }
 
-/** 圆形方向键：绘制的箭头不依赖字体字形，按下时轻缩并加深底色。 */
+/** 圆形方向键：浅填充圆底 + 正文色箭头（绘制，不依赖字体字形），按下时轻缩并换浅主色底；不描边。 */
 @Composable
 private fun DirectionButton(direction: Int, label: String, enabled: Boolean, onClick: () -> Unit) {
     val colors = LocalEyeColors.current
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(if (pressed && enabled) 0.9f else 1f, EyeMotion.pressSpring(), label = "方向键缩放")
-    val fill by animateColorAsState(colors.primary.copy(alpha = if (pressed && enabled) 0.24f else 0.1f),
+    val fill by animateColorAsState(if (pressed && enabled) colors.primarySoft else colors.surfaceVariant,
         tween(EyeMotion.SHORT), label = "方向键底色")
     val alpha by animateFloatAsState(if (enabled) 1f else 0.35f, tween(EyeMotion.SHORT), label = "方向键可用")
     Box(
         Modifier.size(KeySize)
             .graphicsLayer { scaleX = scale; scaleY = scale; this.alpha = alpha }
             .clip(CircleShape).background(fill)
-            .border(1.dp, colors.primary.copy(alpha = 0.3f), CircleShape)
             .clickable(enabled = enabled, role = Role.Button, interactionSource = interaction, indication = null, onClick = onClick)
             .semantics { contentDescription = label },
         contentAlignment = Alignment.Center,
@@ -100,12 +99,12 @@ private fun DirectionButton(direction: Int, label: String, enabled: Boolean, onC
                 moveTo(w * 0.12f, h * 0.5f); lineTo(w * 0.86f, h * 0.5f)
                 moveTo(w * 0.54f, h * 0.18f); lineTo(w * 0.86f, h * 0.5f); lineTo(w * 0.54f, h * 0.82f)
             }
-            drawPath(path, colors.primary, style = Stroke(w * 0.13f, cap = StrokeCap.Round, join = StrokeJoin.Round))
+            drawPath(path, colors.textPrimary, style = Stroke(w * 0.11f, cap = StrokeCap.Round, join = StrokeJoin.Round))
         }
     }
 }
 
-/** 中央「跳过」：与方向键同尺寸的圆键，浅底区分为次要动作；提交当前题无法辨认（-1）。 */
+/** 中央「跳过」：与方向键同尺寸、不加底色的文字键，区分为次要动作；提交当前题无法辨认（-1）。 */
 @Composable
 private fun SkipButton(enabled: Boolean, onClick: () -> Unit) {
     val colors = LocalEyeColors.current
@@ -117,12 +116,12 @@ private fun SkipButton(enabled: Boolean, onClick: () -> Unit) {
         Modifier.size(KeySize)
             .graphicsLayer { scaleX = scale; scaleY = scale; this.alpha = alpha }
             .clip(CircleShape)
-            .background(if (pressed && enabled) colors.primary.copy(alpha = 0.12f) else colors.surfaceVariant)
-            .border(1.dp, colors.primary.copy(alpha = 0.24f), CircleShape)
+            .background(if (pressed && enabled) colors.surfaceVariant else colors.surfaceVariant.copy(alpha = 0f))
             .clickable(enabled = enabled, role = Role.Button, interactionSource = interaction, indication = null, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        EyeText("跳过", style = LocalEyeTypography.current.body, color = colors.textPrimary, textAlign = TextAlign.Center)
+        EyeText("跳过", style = LocalEyeTypography.current.body, color = colors.textSecondary, textAlign = TextAlign.Center,
+            fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
     }
 }
 

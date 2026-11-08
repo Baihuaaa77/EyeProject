@@ -1,28 +1,7 @@
 import SwiftUI
 
-/// 入口与对话页标题（与安卓 CHAT_TITLE 一致）。
+/// 对话页标题（与安卓 CHAT_TITLE 一致）；首页入口是爱科卡（EyechoCard）。
 let chatTitle = "AI 主动问诊"
-
-/// 首页「AI 主动问诊」入口（功能卡下排整行）：蓝色渐变色块上爱科头像 + 白色标题，点了进入对话页。与安卓 ChatEntryCard 一致。
-struct ChatEntryCard: View {
-    let open: () -> Void
-    var body: some View {
-        Button { EyeHaptics.tap(); open() } label: {
-            HStack(spacing: 12) {
-                EyechoAvatar(size: 46).padding(3).background(EyeStyle.Vivid.on.opacity(0.3), in: Circle())
-                Text(chatTitle).font(EyeStyle.subtitle).foregroundStyle(EyeStyle.Vivid.on).frame(maxWidth: .infinity, alignment: .leading)
-                Image(systemName: "chevron.right").font(.system(size: 15, weight: .semibold)).foregroundStyle(EyeStyle.Vivid.on)
-            }
-            .padding(14)
-            .background(alignment: .trailing) {
-                EyeGlyphView(glyph: .chat, color: EyeStyle.Vivid.on.opacity(0.14)).frame(width: 88, height: 88).offset(x: 14)
-            }
-            .background(EyeStyle.Vivid.blue)
-            .clipShape(RoundedRectangle(cornerRadius: EyeStyle.radiusLarge, style: .continuous))
-            .contentShape(RoundedRectangle(cornerRadius: EyeStyle.radiusLarge))
-        }.buttonStyle(PressScale(scale: 0.97))
-    }
-}
 
 /// 「AI 主动问诊」对话页：由爱尔眼科数字人「爱科 Eyecho」主持。顶部是爱科的自我介绍，接着是今天的综合建议卡片，
 /// 下面和爱科自由对话；记录只存在本机，可清空。
@@ -168,23 +147,18 @@ struct EyechoAvatar: View {
     }
 }
 
-/// 对话页顶部：爱科半身像站在卡片底边上，右侧自我介绍。与安卓 EyechoIntro 同一文案。
+/// 对话页顶部：居中的爱科大头像 + 问候 + 一句介绍，不加卡片。与安卓 EyechoIntro 同一排版与文案。
 private struct EyechoIntro: View {
     var body: some View {
-        // 半身像最高，决定卡片高度并贴住底边；文字竖直居中
-        HStack(alignment: .center, spacing: 14) {
-            Image("EyechoHalf").resizable().scaledToFit().frame(height: 132)
+        VStack(spacing: 6) {
+            Image("EyechoAvatar").resizable().scaledToFill().frame(width: 84, height: 84)
+                .background(EyeStyle.violetSoft).clipShape(Circle())
                 .accessibilityLabel("爱科 Eyecho")
-            VStack(alignment: .leading, spacing: 4) {
-                Text("你好，我是爱科").font(EyeStyle.title).foregroundStyle(EyeStyle.text)
-                Text("爱尔眼科 AI 助手。眼睛不舒服、用眼习惯、测试结果，都可以问我。").font(EyeStyle.body)
-                    .foregroundStyle(EyeStyle.secondary).fixedSize(horizontal: false, vertical: true)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.bottom, 16)
+            Text("你好，我是爱科").font(EyeStyle.title).foregroundStyle(EyeStyle.text).padding(.top, 4)
+            Text("爱尔眼科 AI 助手。眼睛不舒服、用眼习惯、测试结果，都可以问我。").font(EyeStyle.bodySecondary)
+                .foregroundStyle(EyeStyle.secondary).multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.horizontal, 16).padding(.top, 12)
-        .eyeGlass(cornerRadius: EyeStyle.radiusHero)
+        .frame(maxWidth: .infinity).padding(.vertical, 4)
     }
 }
 
@@ -232,7 +206,8 @@ private struct ChatConsentView: View {
     }
 }
 
-/// 一条对话：用户的靠右（浅主色底），爱科的靠左（白底，带参考资料）；提到危险信号时在提问下方醒目提示尽快就医。
+/// 一条对话（信息式气泡）：用户的靠右（品牌蓝底白字、右下角收尖），爱科的靠左（卡片底、左下角收尖，带参考资料）；
+/// 提到危险信号时在提问下方给出「建议尽快就医」提示块。与安卓 ChatBubble 一致。
 private struct ChatBubble: View {
     let message: [String: Any]
     let urgentNotice: String
@@ -243,12 +218,12 @@ private struct ChatBubble: View {
         let urgent = message["urgent"] as? Bool ?? false
         let sources = message["sources"] as? [String] ?? []
         VStack(alignment: mine ? .trailing : .leading, spacing: 8) {
-            HStack(alignment: .top, spacing: 8) {
+            HStack(alignment: .bottom, spacing: 8) {
                 if mine { Spacer(minLength: 48) } else {
-                    EyechoAvatar(size: 34)
+                    EyechoAvatar(size: 28)
                 }
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(message["text"] as? String ?? "").font(EyeStyle.body).foregroundStyle(EyeStyle.text)
+                    Text(message["text"] as? String ?? "").font(EyeStyle.body).foregroundStyle(mine ? EyeStyle.onPrimary : EyeStyle.text)
                         .textSelection(.enabled)
                     if message["inquiryComplete"] as? Bool == true && !urgent {
                         Text("本次问询已总结").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.primary)
@@ -275,13 +250,20 @@ private struct ChatBubble: View {
                     }
                 }
                 .padding(.horizontal, 14).padding(.vertical, 10)
-                .background(mine ? EyeStyle.primarySoft : EyeStyle.panel, in: RoundedRectangle(cornerRadius: EyeStyle.radiusLarge, style: .continuous))
+                // 部署目标 iOS 16：不用 iOS 17 的 UnevenRoundedRectangle，气泡四角同为 18
+                .background(mine ? EyeStyle.buttonStart : EyeStyle.panel, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                 if !mine { Spacer(minLength: 32) }
             }
             if mine && urgent {
-                Text(urgentNotice).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.danger)
-                    .padding(12).frame(maxWidth: .infinity, alignment: .leading)
-                    .background(EyeStyle.dangerSoft, in: RoundedRectangle(cornerRadius: EyeStyle.radiusMedium, style: .continuous))
+                HStack(alignment: .top, spacing: 10) {
+                    EyeGlyphView(glyph: .info, color: EyeStyle.danger).frame(width: 20, height: 20).padding(.top, 1)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("建议尽快就医").font(EyeStyle.body.weight(.semibold)).foregroundStyle(EyeStyle.danger)
+                        Text(urgentNotice).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.text).fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .padding(.horizontal, 14).padding(.vertical, 12).frame(maxWidth: .infinity, alignment: .leading)
+                .background(EyeStyle.dangerSoft, in: RoundedRectangle(cornerRadius: EyeStyle.radius, style: .continuous))
             }
         }
     }

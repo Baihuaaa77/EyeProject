@@ -277,8 +277,7 @@ private struct OptotypeAnswerPad: View {
             TumblingEView(runtime: runtime)
                 .stageHeight(max(152, ringDiameter(CGFloat(runtime.number("optotypePx")) / UIScreen.main.scale) + 24))
                 // 视标恒为白底黑字（与安卓一致，深色模式下不变）
-                .background(Color.white, in: RoundedRectangle(cornerRadius: EyeStyle.radiusLarge, style: .continuous))
-                .overlay { RoundedRectangle(cornerRadius: EyeStyle.radiusLarge).stroke(EyeStyle.borderSubtle, lineWidth: 1) }
+                .background(Color.white, in: RoundedRectangle(cornerRadius: EyeStyle.radiusHero, style: .continuous))
             VStack(spacing: AnswerKey.gap) {
                 arrow("向上", 3)
                 HStack(spacing: AnswerKey.gap) {
@@ -294,7 +293,7 @@ private struct OptotypeAnswerPad: View {
     /// 基准箭头朝右，按视标方向编码旋转：0=右 1=下 2=左 3=上。
     private func arrow(_ label: String, _ direction: Int) -> some View {
         Button { runtime.answer(direction) } label: {
-            ArrowGlyph().stroke(EyeStyle.primary, style: StrokeStyle(lineWidth: 24 * 0.13, lineCap: .round, lineJoin: .round))
+            ArrowGlyph().stroke(EyeStyle.text, style: StrokeStyle(lineWidth: 24 * 0.11, lineCap: .round, lineJoin: .round))
                 .frame(width: 24, height: 24).rotationEffect(.degrees(Double(direction) * 90))
         }.buttonStyle(DirectionKeyStyle()).accessibilityLabel(label)
     }

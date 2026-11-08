@@ -108,6 +108,7 @@ internal fun distanceStatus(distanceCm: Float, faceVisible: Boolean, targetCm: F
 /**
  * 距离状态横幅：柔和语义底色配高对比文字与方向符号，大字结论 + 具体移动量 +
  * 右侧示意标尺（中间加粗带为目标区间，圆点为当前位置）。进入异常区间时轻震一次。
+ * 各状态同一结构、同一高度：横幅高度一变，下方注视画布就会移动，受试者看的位置与记录的位置对不上。
  */
 @Composable
 internal fun DistanceBanner(status: DistanceStatus, modifier: Modifier = Modifier, compact: Boolean = false, singleLine: Boolean = false) {

@@ -51,7 +51,9 @@ class MineWalkthroughCapture {
         var opened = ""
         compose.setContent {
             EyeProjectTheme {
-                androidx.compose.runtime.CompositionLocalProvider(LocalEyeAccountBadge provides EyeAccountBadge(true, "d")) {
+                androidx.compose.runtime.CompositionLocalProvider(LocalEyeAccountBadge provides EyeAccountBadge(true, "d"),
+                    com.zkyjss.eyeproject.core.ui.component.LocalEyeThemeToggle provides
+                        com.zkyjss.eyeproject.core.ui.component.EyeThemeToggle(isDark = false) { opened = "theme" }) {
                     MineContent(MineUiState.Ready(me, 3, 8, "demo@example.com", true, true, 6), MineNavigation(
                         onOpenRecords = { opened = "records" }, onOpenAccount = { opened = "account" }, onOpenSettings = { opened = "settings" }))
                 }
@@ -60,8 +62,13 @@ class MineWalkthroughCapture {
         capture("12-我的-入口页")
         compose.onAllNodesWithText("测试记录").onFirst().performClick()
         assertEquals("records", opened)
-        compose.onNodeWithContentDescription("账户（已登录）").performClick()
+        // 「我的」右上角不再放按钮：账户从个人卡的账号一行进入
+        compose.onNodeWithContentDescription("账户（已登录）").assertDoesNotExist()
+        compose.onNodeWithText("账户").performClick()
         assertEquals("account", opened)
+        // 白天 / 夜晚切换移到「通用 → 深色模式」
+        compose.onNodeWithText("深色模式").performScrollTo().performClick()
+        assertEquals("theme", opened)
         compose.onNodeWithText("系统设置").performScrollTo().performClick()
         assertEquals("settings", opened)
     }

@@ -354,13 +354,19 @@ class ServiceVisualTest {
         assertTrue(resumed)
     }
 
-    /** 服务页：示范主卡轮流演示三项自测，上方是测试名称与一句做法。 */
-    @Test fun servicesHeroPlaysTestDemos() {
+    /** 服务页（2026-11 改版）：示范主卡轮流演示三项自测，下面是「全部自测」分组列表；深浅两套主题。 */
+    @Test fun servicesHeroPlaysTestDemosAboveTheList() {
+        var dark by mutableStateOf(false)
         compose.mainClock.autoAdvance = false
-        compose.setContent { EyeProjectTheme { ServicesScreen({}, {}, {}) } }
+        compose.setContent { EyeProjectTheme(darkTheme = dark) { ServicesScreen({}, {}, {}, onOpenAccount = {}) } }
         compose.mainClock.advanceTimeBy(1_500)
-        compose.onAllNodesWithText("自测", substring = true).onFirst().assertExists()
-        capture("22-服务-示范")
+        compose.onNodeWithText("示范：", substring = true).assertExists()
+        compose.onNodeWithText("全部自测").assertExists()
+        compose.onNodeWithText("推荐").assertDoesNotExist()
+        capture("22-服务")
+        dark = true
+        compose.mainClock.advanceTimeBy(1_500)
+        capture("22b-服务-深色")
     }
 
     @Test fun smallScreenKeepsWarningsAndArrowActionsVisible() {

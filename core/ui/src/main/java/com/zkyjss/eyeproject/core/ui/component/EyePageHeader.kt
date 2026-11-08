@@ -62,47 +62,45 @@ fun EyeThemeButton(modifier: Modifier = Modifier) {
     }
 }
 
-/** 顶层页右上角常驻的「系统设置」齿轮（与测试页顶栏同一图标）；与苹果端 SettingsGear 一致。 */
+/** 「系统设置」齿轮（36dp 浅填充圆钮，与测试页顶栏同一图标）；与苹果端 SettingsGear 一致。 */
 @Composable
 fun EyeSettingsGear(onClick: () -> Unit, modifier: Modifier = Modifier) {
     val colors = LocalEyeColors.current
     val haptics = rememberEyeHaptics()
     Box(
-        modifier.size(44.dp).clip(CircleShape).background(colors.panelBackground)
-            .border(1.dp, colors.borderSubtle, CircleShape)
-            .clickable(role = Role.Button) { haptics.tap(); onClick() }
+        modifier.size(44.dp).clickable(role = Role.Button) { haptics.tap(); onClick() }
             .semantics { contentDescription = "系统设置" },
         contentAlignment = Alignment.Center,
     ) {
-        EyeIcon(painterResource(R.drawable.ic_settings_gear), null, Modifier.size(22.dp), tint = colors.primary)
+        Box(Modifier.size(36.dp).clip(CircleShape).background(colors.surfaceVariant), contentAlignment = Alignment.Center) {
+            EyeIcon(painterResource(R.drawable.ic_settings_gear), null, Modifier.size(20.dp), tint = colors.primary)
+        }
     }
 }
 
-/** 账户按钮（齿轮左侧）：点开完整的账户页（登录、注册、退出、注销）；与苹果端 AccountButton 一致。 */
+/**
+ * 账户头像（顶层页右上角唯一的按钮）：登录后品牌蓝实心圆 + 白色首字母，未登录为浅填充圆 + 人像线稿；
+ * 点开完整的账户页（登录、注册、退出、注销）。与苹果端 AccountButton 一致。
+ */
 @Composable
 fun EyeAccountButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
     val colors = LocalEyeColors.current
     val badge = LocalEyeAccountBadge.current
     val haptics = rememberEyeHaptics()
-    Box(modifier.size(44.dp)) {
-        Box(
-            Modifier.size(44.dp).clip(CircleShape)
-                .background(if (badge.signedIn) colors.primarySoft else colors.panelBackground)
-                .border(1.dp, colors.borderSubtle, CircleShape)
-                .clickable(role = Role.Button) { haptics.tap(); onClick() }
-                .semantics { contentDescription = if (badge.signedIn) "账户（已登录）" else "账户（未登录）" },
-            contentAlignment = Alignment.Center,
-        ) {
-            if (badge.signedIn && badge.initial.isNotBlank()) {
-                EyeText(badge.initial.take(1).uppercase(), style = LocalEyeTypography.current.subtitle, color = colors.primary)
+    val signedIn = badge.signedIn && badge.initial.isNotBlank()
+    Box(
+        modifier.size(44.dp).clickable(role = Role.Button) { haptics.tap(); onClick() }
+            .semantics { contentDescription = if (badge.signedIn) "账户（已登录）" else "账户（未登录）" },
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(Modifier.size(36.dp).clip(CircleShape).background(if (signedIn) colors.buttonStart else colors.surfaceVariant),
+            contentAlignment = Alignment.Center) {
+            if (signedIn) {
+                EyeText(badge.initial.take(1).uppercase(), style = LocalEyeTypography.current.subtitle, color = colors.onPrimary)
             } else {
-                PersonGlyph(Modifier.size(22.dp))
+                PersonGlyph(Modifier.size(20.dp))
             }
         }
-        if (badge.signedIn) Box(
-            Modifier.align(Alignment.BottomEnd).offset((-1).dp, (-1).dp).size(12.dp).clip(CircleShape)
-                .background(colors.panelBackground).padding(2.dp).clip(CircleShape).background(colors.success)
-        )
     }
 }
 
@@ -118,29 +116,33 @@ fun PersonGlyph(modifier: Modifier = Modifier) {
     }
 }
 
-/** 顶层页右上角的一组按钮：账户 + 白天 / 夜晚切换 + 系统设置。 */
+/** 顶层页右上角：有账户入口时只放账户头像，否则放系统设置齿轮（白天 / 夜晚改在「我的 → 深色模式」）。 */
 @Composable
-fun EyeHeaderActions(onOpenAccount: (() -> Unit)?, onOpenSettings: () -> Unit) {
-    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-        if (onOpenAccount != null) EyeAccountButton(onOpenAccount)
-        EyeThemeButton()
-        EyeSettingsGear(onOpenSettings)
+fun EyeHeaderActions(onOpenAccount: (() -> Unit)?, onOpenSettings: (() -> Unit)?) {
+    when {
+        onOpenAccount != null -> EyeAccountButton(onOpenAccount)
+        onOpenSettings != null -> EyeSettingsGear(onOpenSettings)
     }
 }
 
-/** 顶层页标题行：大标题（可带一行副标题）+ 右上角账户与系统设置（「服务」「我的」共用，与苹果端 PageHeader 一致）。 */
+/**
+ * 顶层页标题行：小号日期等副标题在上、32 号大标题在下，右上角一个圆钮（账户头像或齿轮）。
+ * 「今日」「服务」「我的」共用，与苹果端 PageHeader 一致。
+ */
 @Composable
 fun EyePageHeader(
     title: String,
-    onOpenSettings: () -> Unit,
+    onOpenSettings: (() -> Unit)?,
     modifier: Modifier = Modifier,
     onOpenAccount: (() -> Unit)? = null,
     subtitle: String? = null,
 ) {
-    Row(modifier.fillMaxWidth().padding(vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+    val colors = LocalEyeColors.current
+    val typography = LocalEyeTypography.current
+    Row(modifier.fillMaxWidth().padding(top = 12.dp, bottom = 4.dp), verticalAlignment = Alignment.Bottom) {
         Column(Modifier.weight(1f)) {
-            EyeText(title, style = LocalEyeTypography.current.headline, color = LocalEyeColors.current.textPrimary)
-            if (subtitle != null) EyeText(subtitle, style = LocalEyeTypography.current.bodySecondary, color = LocalEyeColors.current.textSecondary)
+            if (subtitle != null) EyeText(subtitle, style = typography.chip, color = colors.textSecondary)
+            EyeText(title, style = typography.headline, color = colors.textPrimary)
         }
         EyeHeaderActions(onOpenAccount, onOpenSettings)
     }

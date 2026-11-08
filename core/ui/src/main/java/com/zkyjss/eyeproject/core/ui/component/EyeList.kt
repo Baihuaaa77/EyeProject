@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -34,41 +35,57 @@ import com.zkyjss.eyeproject.core.designsystem.theme.EyeShapes
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
 
-/** 图标色块的配色：PRIMARY 电光蓝 / ACCENT 香槟金 / SUCCESS 薄荷绿 / BLUE 冰蓝 / VIOLET 薰衣草紫 / DANGER 红 / NEUTRAL 灰。全部取自设计令牌。 */
+/**
+ * 图标配色：PRIMARY 品牌蓝 / ACCENT 橙 / SUCCESS 绿 / BLUE 青 / VIOLET 靛紫 / DANGER 红 / NEUTRAL 灰。全部取自设计令牌。
+ * 列表图标块用实心底 + 白色图标（[solid]），卡片标题等用浅底 + 彩色图标（[colors]）。
+ */
 enum class EyeTileTone { PRIMARY, ACCENT, SUCCESS, BLUE, VIOLET, DANGER, NEUTRAL }
 
-/** 图标块的（底色, 图标色）。 */
+/** 浅底配色：（浅底色, 图标 / 文字色）。 */
 @Composable
 fun EyeTileTone.colors(): Pair<Color, Color> {
     val c = LocalEyeColors.current
     return when (this) {
-        // 分类图标按功能各用一种点缀色（电光蓝 / 香槟金 / 薄荷绿 / 冰蓝 / 薰衣草紫），底色为同色调浅块
         EyeTileTone.PRIMARY -> c.primarySoft to c.primary
-        EyeTileTone.ACCENT -> c.accentSoft to c.warning
+        EyeTileTone.ACCENT -> c.sunSoft to c.sun
         EyeTileTone.SUCCESS -> c.successSoft to c.success
         EyeTileTone.BLUE -> c.iceSoft to c.iceInk
-        EyeTileTone.VIOLET -> c.violetSoft to c.violet
+        EyeTileTone.VIOLET -> c.screenSoft to c.screen
         EyeTileTone.DANGER -> c.dangerSoft to c.danger
         EyeTileTone.NEUTRAL -> c.surfaceVariant to c.textSecondary
     }
 }
 
-/** 圆角色块上的线性图标（列表行、服务入口共用）。 */
+/** 实心图标块底色（两套主题同值，上面放白色图标）。 */
 @Composable
-fun EyeIconTile(glyph: EyeGlyph, tone: EyeTileTone = EyeTileTone.PRIMARY, size: androidx.compose.ui.unit.Dp = 36.dp) {
-    val (background, foreground) = tone.colors()
-    Box(Modifier.size(size).clip(EyeShapes.small).background(background), contentAlignment = Alignment.Center) {
-        EyeGlyphIcon(glyph, Modifier.size(size * 0.58f), foreground)
+fun EyeTileTone.solid(): Color {
+    val c = LocalEyeColors.current
+    return when (this) {
+        EyeTileTone.PRIMARY -> c.tileBlue
+        EyeTileTone.ACCENT -> c.tileOrange
+        EyeTileTone.SUCCESS -> c.tileGreen
+        EyeTileTone.BLUE -> c.tileTeal
+        EyeTileTone.VIOLET -> c.tileIndigo
+        EyeTileTone.DANGER -> c.tileRed
+        EyeTileTone.NEUTRAL -> c.tileGray
     }
 }
 
-/** 分组列表：可选组标题 + 白色圆角面板，行与行之间细分隔线（从图标右侧开始）。 */
+/** 列表图标块：实心圆角色块 + 白色线性图标（iOS 设置式）。列表行、服务入口共用。 */
+@Composable
+fun EyeIconTile(glyph: EyeGlyph, tone: EyeTileTone = EyeTileTone.PRIMARY, size: androidx.compose.ui.unit.Dp = 32.dp) {
+    Box(Modifier.size(size).clip(RoundedCornerShape(size * 0.27f)).background(tone.solid()), contentAlignment = Alignment.Center) {
+        EyeGlyphIcon(glyph, Modifier.size(size * 0.6f), LocalEyeColors.current.white)
+    }
+}
+
+/** 分组列表：可选组标题（小号灰字）+ 纯色圆角面板，行与行之间细分隔线（从图标右侧开始）。 */
 @Composable
 fun EyeListGroup(modifier: Modifier = Modifier, title: String? = null, content: @Composable ColumnScope.() -> Unit) {
     val colors = LocalEyeColors.current
     Column(modifier.fillMaxWidth()) {
         if (title != null) {
-            EyeText(title, Modifier.padding(start = 4.dp, bottom = 8.dp), style = LocalEyeTypography.current.chip, color = colors.textSecondary)
+            EyeText(title, Modifier.padding(start = 16.dp, bottom = 8.dp), style = LocalEyeTypography.current.chip, color = colors.textSecondary)
         }
         Column(Modifier.fillMaxWidth().eyeGlass(colors, EyeShapes.panel), content = content)
     }
@@ -91,6 +108,8 @@ fun EyeListRow(
     divider: Boolean = true,
     titleColor: Color? = null,
     enabled: Boolean = true,
+    /** 自绘的左侧图标（放在 32dp 实心色块里，图标用白色），代替 [glyph]。 */
+    leading: (@Composable () -> Unit)? = null,
     trailing: (@Composable () -> Unit)? = null,
 ) {
     val colors = LocalEyeColors.current
@@ -101,8 +120,11 @@ fun EyeListRow(
     val background by animateColorAsState(if (pressed) colors.surfaceVariant else colors.panelBackground, tween(EyeMotion.SHORT), label = "列表行按压")
     Column(modifier.fillMaxWidth().background(background)
         .then(if (onClick != null) Modifier.clickable(enabled = enabled, interactionSource = interaction, indication = null, role = Role.Button) { haptics.tap(); onClick() } else Modifier)) {
-        Row(Modifier.fillMaxWidth().heightIn(min = 60.dp).padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (glyph != null) {
+        Row(Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (leading != null) {
+                Box(Modifier.size(32.dp).clip(RoundedCornerShape(32.dp * 0.27f)).background(tone.solid()), contentAlignment = Alignment.Center) { leading() }
+                Spacer(Modifier.width(14.dp))
+            } else if (glyph != null) {
                 EyeIconTile(glyph, tone)
                 Spacer(Modifier.width(14.dp))
             }
@@ -112,10 +134,10 @@ fun EyeListRow(
             }
             if (trailing != null) trailing() else {
                 if (value != null) EyeText(value, Modifier.padding(start = 8.dp), style = typography.body, color = valueColor ?: colors.textSecondary, maxLines = 1)
-                if (onClick != null) EyeIcon(painterResource(R.drawable.ic_arrow_right), null, Modifier.padding(start = 6.dp).size(16.dp), tint = colors.gray)
+                if (onClick != null) EyeIcon(painterResource(R.drawable.ic_arrow_right), null, Modifier.padding(start = 6.dp).size(14.dp), tint = colors.textTertiary)
             }
         }
-        if (divider) Box(Modifier.padding(start = if (glyph != null) 66.dp else 16.dp).fillMaxWidth().height(1.dp).background(colors.borderSubtle))
+        if (divider) Box(Modifier.padding(start = if (glyph != null || leading != null) 62.dp else 16.dp).fillMaxWidth().height(0.5.dp).background(colors.borderSubtle))
     }
 }
 
@@ -137,7 +159,7 @@ fun EyeSwitchRow(
     val typography = LocalEyeTypography.current
     val haptics = rememberEyeHaptics()
     Column(modifier.fillMaxWidth().clickable(enabled = enabled, role = Role.Switch) { haptics.toggle(!checked); onChange(!checked) }) {
-        Row(Modifier.fillMaxWidth().heightIn(min = 60.dp).padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             if (glyph != null) {
                 EyeIconTile(glyph, tone)
                 Spacer(Modifier.width(14.dp))
@@ -151,7 +173,17 @@ fun EyeSwitchRow(
             }
             EyeSwitch(checked, null, enabled = enabled)
         }
-        if (divider) Box(Modifier.padding(start = if (glyph != null) 66.dp else 16.dp).fillMaxWidth().height(1.dp).background(colors.borderSubtle))
+        if (divider) Box(Modifier.padding(start = if (glyph != null) 62.dp else 16.dp).fillMaxWidth().height(0.5.dp).background(colors.borderSubtle))
+    }
+}
+
+/** 数据卡上的类别标签：类别色小图标 + 类别色 13 号半粗名称（「用屏时长」「环境光」）。 */
+@Composable
+fun EyeCategoryLabel(title: String, glyph: EyeGlyph, tint: Color, modifier: Modifier = Modifier) {
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+        EyeGlyphIcon(glyph, Modifier.size(16.dp), tint)
+        Spacer(Modifier.width(6.dp))
+        EyeText(title, style = LocalEyeTypography.current.chip, color = tint, maxLines = 1)
     }
 }
 

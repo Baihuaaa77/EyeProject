@@ -1,5 +1,10 @@
 package com.zkyjss.eyeproject.feature.mine
 
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.IntrinsicSize
+import com.zkyjss.eyeproject.core.ui.component.LocalEyeThemeToggle
+import com.zkyjss.eyeproject.core.ui.component.EyeSwitchRow
+import com.zkyjss.eyeproject.core.ui.component.eyeReading
 import androidx.compose.foundation.background
 import com.zkyjss.eyeproject.core.ui.component.eyeBackdrop
 import com.zkyjss.eyeproject.core.ui.component.eyeGlass
@@ -78,7 +83,7 @@ internal fun MineContent(state: MineUiState, navigation: MineNavigation, modifie
             .padding(top = getTopStatusBarPadding()).screenHorizontalPaddingLarge(),
         verticalArrangement = Arrangement.spacedBy(com.zkyjss.eyeproject.core.designsystem.theme.EyeSpacing.cardGap),
     ) {
-        EyePageHeader("我的", navigation.onOpenSettings, onOpenAccount = navigation.onOpenAccount)
+        EyePageHeader("我的", null)
         ProfileCard(ready, navigation)
         StatsRow(ready, navigation)
         EyeListGroup(title = "健康档案") {
@@ -86,14 +91,19 @@ internal fun MineContent(state: MineUiState, navigation: MineNavigation, modifie
                 value = ready?.recordCount?.let { if (it == 0) "暂无" else "$it 条" })
             EyeListRow("家庭成员与资料", navigation.onOpenSubjects, glyph = EyeGlyph.FAMILY, tone = EyeTileTone.VIOLET,
                 value = ready?.memberCount?.let { "$it 人" })
-            EyeListRow("用眼趋势报告", navigation.onOpenTrend, glyph = EyeGlyph.CHART, tone = EyeTileTone.BLUE, divider = false)
+            EyeListRow("用眼趋势", navigation.onOpenTrend, glyph = EyeGlyph.CHART, tone = EyeTileTone.VIOLET, divider = false)
         }
         EyeListGroup(title = "数据与隐私") {
-            EyeListRow("云端同步", navigation.onOpenCloudSync, glyph = EyeGlyph.CLOUD, tone = EyeTileTone.PRIMARY,
+            EyeListRow("云端同步", navigation.onOpenCloudSync, glyph = EyeGlyph.CLOUD, tone = EyeTileTone.BLUE,
                 value = ready?.let { cloudSummary(it.cloudConfigured, it.email, it.healthDataSync) })
             EyeListRow("权限与通知", navigation.onOpenPermissions, glyph = EyeGlyph.SHIELD, tone = EyeTileTone.SUCCESS, divider = false)
         }
         EyeListGroup(title = "通用") {
+            // 白天 / 夜晚切换（原在各顶层页右上角）：由 app 按主题偏好提供，为空时不显示
+            val theme = LocalEyeThemeToggle.current
+            theme.onToggle?.let { toggle ->
+                EyeSwitchRow("深色模式", theme.isDark, { toggle() }, glyph = EyeGlyph.MOON, tone = EyeTileTone.NEUTRAL)
+            }
             EyeListRow("系统设置", navigation.onOpenSettings, glyph = EyeGlyph.GEAR, tone = EyeTileTone.NEUTRAL, divider = false)
         }
         Spacer(Modifier.height(20.dp))
@@ -108,17 +118,13 @@ private fun ProfileCard(state: MineUiState.Ready?, navigation: MineNavigation) {
     val haptics = rememberEyeHaptics()
     val self = state?.self
     val complete = profileCompleteness(self)
-    Column(
-        Modifier.fillMaxWidth().shadow(if (colors.isDark) 24.dp else 16.dp, EyeShapes.hero, clip = false,
-            ambientColor = if (colors.isDark) colors.glow else colors.shadow, spotColor = colors.shadow)
-            .eyeGlass(colors, EyeShapes.hero, colors.heroBrush, elevation = 0.dp)
-    ) {
+    Column(Modifier.fillMaxWidth().eyeGlass(colors, EyeShapes.hero)) {
         Row(
             Modifier.fillMaxWidth().clickable(role = Role.Button) { haptics.tap(); navigation.onEditSubject(self?.id) }
                 .padding(start = 18.dp, end = 16.dp, top = 18.dp, bottom = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(Modifier.size(56.dp).clip(CircleShape).background(colors.buttonBrush), contentAlignment = Alignment.Center) {
+            Box(Modifier.size(56.dp).clip(CircleShape).background(colors.buttonStart), contentAlignment = Alignment.Center) {
                 EyeText((self?.nickname?.ifBlank { null } ?: "我").take(1), style = typography.title, color = colors.onPrimary)
             }
             Spacer(Modifier.width(14.dp))
@@ -128,9 +134,9 @@ private fun ProfileCard(state: MineUiState.Ready?, navigation: MineNavigation) {
                 EyeText(listOfNotNull(age?.let { "$it 岁" }, if (complete >= 5) "档案已完善" else "档案完善 $complete/5").joinToString(" · "),
                     style = typography.body, color = colors.textSecondary)
             }
-            EyeIcon(painterResource(com.zkyjss.eyeproject.core.designsystem.R.drawable.ic_arrow_right), null, Modifier.size(18.dp), tint = colors.gray)
+            EyeIcon(painterResource(com.zkyjss.eyeproject.core.designsystem.R.drawable.ic_arrow_right), null, Modifier.size(14.dp), tint = colors.textTertiary)
         }
-        Box(Modifier.padding(horizontal = 16.dp).fillMaxWidth().height(1.dp).background(colors.borderSubtle))
+        Box(Modifier.padding(start = 16.dp).fillMaxWidth().height(0.5.dp).background(colors.borderSubtle))
         Row(
             Modifier.fillMaxWidth().clickable(role = Role.Button) { haptics.tap(); navigation.onOpenAccount() }
                 .padding(horizontal = 20.dp, vertical = 14.dp),
@@ -144,12 +150,15 @@ private fun ProfileCard(state: MineUiState.Ready?, navigation: MineNavigation) {
     }
 }
 
-/** 三格概览：测试记录、家庭成员、已上传。 */
+/** 三格概览：测试记录、家庭成员、已上传——一张卡里细竖线分隔，数字大、单位灰。 */
 @Composable
 private fun StatsRow(state: MineUiState.Ready?, navigation: MineNavigation) {
-    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+    val colors = LocalEyeColors.current
+    Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).eyeGlass(colors, EyeShapes.panel)) {
         StatTile("测试记录", "${state?.recordCount ?: 0}", "条", Modifier.weight(1f), navigation.onOpenRecords)
+        Box(Modifier.padding(vertical = 14.dp).width(0.5.dp).fillMaxHeight().background(colors.borderSubtle))
         StatTile("家庭成员", "${state?.memberCount ?: 0}", "人", Modifier.weight(1f), navigation.onOpenSubjects)
+        Box(Modifier.padding(vertical = 14.dp).width(0.5.dp).fillMaxHeight().background(colors.borderSubtle))
         StatTile("已上传", "${state?.synced ?: 0}", "条", Modifier.weight(1f), navigation.onOpenCloudSync)
     }
 }
@@ -160,15 +169,10 @@ private fun StatTile(label: String, value: String, unit: String, modifier: Modif
     val typography = LocalEyeTypography.current
     val haptics = rememberEyeHaptics()
     Column(
-        modifier.eyeGlass(colors, EyeShapes.large).clickable(role = Role.Button) { haptics.tap(); onClick() }
-            .padding(horizontal = 14.dp, vertical = 12.dp),
+        modifier.clickable(role = Role.Button) { haptics.tap(); onClick() }.padding(horizontal = 16.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        Row(verticalAlignment = Alignment.Bottom) {
-            EyeText(value, style = typography.title, color = colors.textPrimary)
-            Spacer(Modifier.width(3.dp))
-            EyeText(unit, Modifier.padding(bottom = 3.dp), style = typography.bodySecondary, color = colors.textSecondary)
-        }
+        EyeText(eyeReading(value, unit), style = typography.title, color = colors.textPrimary, maxLines = 1)
         EyeText(label, style = typography.bodySecondary, color = colors.textSecondary)
     }
 }

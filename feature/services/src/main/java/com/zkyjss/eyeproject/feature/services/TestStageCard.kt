@@ -35,16 +35,10 @@ import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
 import com.zkyjss.eyeproject.core.ui.component.EyeSectionCard
 import com.zkyjss.eyeproject.core.ui.component.EyeText
 
-/** 只装饰测试舞台，保留原有内容尺寸与白色刺激背景。 */
+/** 测试舞台：纯色卡片（不描边、不投影），保留原有内容尺寸与白色刺激背景。 */
 @Composable
 internal fun TestStageCard(title: String? = null, content: @Composable ColumnScope.() -> Unit) {
-    val colors = LocalEyeColors.current
-    EyeSectionCard(
-        modifier = Modifier.shadow(3.dp, EyeShapes.panel, ambientColor = colors.primary.copy(alpha = 0.08f),
-            spotColor = colors.primary.copy(alpha = 0.08f))
-            .border(1.dp, colors.primary.copy(alpha = 0.16f), EyeShapes.panel),
-        title = title, content = content,
-    )
+    EyeSectionCard(title = title, content = content)
 }
 
 /** 任务中的质量提醒：浅色胶囊淡入展开，消失时收起，避免文字突然出现挤动舞台。 */

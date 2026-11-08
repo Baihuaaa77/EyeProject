@@ -16,7 +16,7 @@
 
 | 类型 | 说明 |
 |---|---|
-| `ServicesScreen` | 服务首页：标题「服务」+ 右上角账户头像与系统设置齿轮（`EyePageHeader`）、示范主卡、四个 `EyeSelectCard` 入口（只有名称、不加说明小字，名称用 `title` 字号）。示范主卡随机轮流播放干眼（BLINK）/ 眼位（COVER）/ 老视（NEAR）的演示动画（`TestGuide.kt` 的 `GuideFrame`，每种两遍），上方是「示范：干眼」与一句做法；点示范区换下一个 |
+| `ServicesScreen` | 服务首页（2026-11-08 改版）：标题「服务」+ 右上角账户头像（`EyePageHeader`）→ 示范主卡（`DemoHero`：随机轮流播放干眼 BLINK / 眼位 COVER / 老视 NEAR 的演示动画——`TestGuide.kt` 的 `GuideFrame`，每种两遍；上方「示范：干眼」与一句做法，点示范区换下一个）→「全部自测」分组列表（`EyeListGroup` + `EyeListRow` 的自绘 `leading`：实心色块里的白色自测图标 + 名称 + 箭头）→ 免责声明。系统设置从「我的」进入 |
 | `SystemSettings.kt` | 「系统设置」完整页面（不用底部弹窗）：`SystemSettingsScreen`（路由 `SystemSettingsRoute`，顶层页齿轮进入，分组「反馈 / 语音 / 关于」，关于里是应用图标、版本与免责声明）；测试中的 `TestSettingsPage` 盖在测试页上（不离开测试），同一份 `TestSettingsContent`，底部可停止测试。各项说明收进「?」（`FEEDBACK_HELP` / `VOICE_HELP` / `ANSWER_HELP`）。苹果端 `SystemSettingsPage` 同一排版 |
 | `DryEyeScreen` | 干眼自测页（动画引导、距离门控、两阶段记录、折叠结果曲线）。测试中看不到双眼 1 秒或距离超出 40±5 cm 达 1.5 秒即**暂停**（专家确认的方案二）：计时冻结、收起视标、暂停期间的眨眼不计，弹窗 `PauseDialog` 说明原因，恢复正常后点「继续测试」接着计时与作答；记录写入 `pauses` / `pauseCount` / `pausedSeconds`。容差内视标随实测距离实时缩放、保持视角不变 |
 | `ColorVisionScreen` / `ColorVisionViewModel` | 色觉自测（共用 `ColorVisionEngine`）：选人 → 准备（关护眼 / 夜间模式、屏幕调到最亮、约 40 cm）→ 示例图 → 8 张检测图（选数字或「看不出」）→ 结果页（`ResultReportView`）与导出。检测图由共用代码按视锥单独刺激生成（红色觉图只改 L 视锥、绿色觉图只改 M 视锥，亮度随机起伏），8 张错 0–1 未见异常、2–3 可疑、≥4 提示红绿色觉异常，两类错读相差 ≥2 提示倾向类型；示例图读错本次无效。不用相机、不发 AI 解读 |
