@@ -53,6 +53,7 @@ import com.zkyjss.eyeproject.core.data.chat.ChatRepository
 import com.zkyjss.eyeproject.core.data.chat.ChatState
 import com.zkyjss.eyeproject.core.designsystem.R
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeShapes
+import com.zkyjss.eyeproject.core.designsystem.theme.EyeControlSizes
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeMotion
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
@@ -167,12 +168,11 @@ internal fun EyeChatContent(
             ChoiceChip(label, false) { input = if (pending != null) Chats.STOP_INQUIRY else Chats.START_INQUIRY }
         }
         if (state?.sending == true) Row(verticalAlignment = Alignment.CenterVertically) {
-            EyechoAvatar(34.dp)
+            EyechoAvatar(EyeControlSizes.chatAvatar)
             Spacer(Modifier.width(8.dp))
             EyeText("爱科正在想…", style = typography.body, color = colors.textSecondary)
         }
         state?.error?.let { EyeText(it, style = typography.bodySecondary, color = colors.danger) }
-        EyeText(Chats.DISCLAIMER, style = typography.bodySecondary, color = colors.textSecondary)
         if (messages.isNotEmpty()) {
             if (confirmClear) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 EyeButton("清空本机记录", EyeButtonRole.DANGER, { onClear(); confirmClear = false }, Modifier.weight(1f))
@@ -190,23 +190,24 @@ internal fun EyechoAvatar(size: Dp) {
         Modifier.size(size).clip(CircleShape).background(LocalEyeColors.current.violetSoft))
 }
 
-/** 对话页顶部：居中的爱科大头像 + 问候 + 一句介绍，不加卡片。与苹果端 EyechoIntro 一致。 */
+/** 对话页顶部：左侧爱科大头像 + 右侧左对齐问候与介绍，不加卡片。与苹果端 EyechoIntro 一致。 */
 @Composable
 private fun EyechoIntro() {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
-    Column(Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 4.dp), horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         Image(painterResource(R.drawable.eyecho_avatar), contentDescription = "爱科 Eyecho",
-            Modifier.size(84.dp).clip(CircleShape).background(colors.violetSoft))
-        EyeText(EYECHO_HELLO, Modifier.padding(top = 4.dp), style = typography.title, color = colors.textPrimary)
-        EyeText(EYECHO_INTRO, style = typography.bodySecondary, color = colors.textSecondary,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            Modifier.size(EyeControlSizes.chatIntroAvatar).clip(CircleShape).background(colors.violetSoft))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            EyeText(EYECHO_HELLO, style = typography.title, color = colors.textPrimary)
+            EyeText(EYECHO_INTRO, style = typography.chatBody, color = colors.textSecondary)
+        }
     }
 }
 
 internal const val EYECHO_HELLO = "你好，我是爱科"
-internal const val EYECHO_INTRO = "爱尔眼科 AI 助手。眼睛不舒服、用眼习惯、测试结果，都可以问我。"
+internal const val EYECHO_INTRO = "爱尔眼科 AI 助手，陪你聊聊眼睛的不适、用眼习惯和自测结果。"
 
 /** 底部：未登录提示去登录；否则输入框 + 发送。 */
 @Composable
@@ -274,26 +275,19 @@ private fun ChatBubble(entry: ChatEntry, active: Boolean = false, onOption: (Str
         else androidx.compose.foundation.shape.RoundedCornerShape(18.dp, 18.dp, 18.dp, 6.dp)
     Column(Modifier.fillMaxWidth().animateContentSize(), horizontalAlignment = if (mine) Alignment.End else Alignment.Start,
         verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(verticalAlignment = Alignment.Bottom) {
-            if (!mine) { EyechoAvatar(28.dp); Spacer(Modifier.width(8.dp)) }
+        Row(verticalAlignment = Alignment.Top) {
+            if (!mine) { EyechoAvatar(EyeControlSizes.chatAvatar); Spacer(Modifier.width(8.dp)) }
             Column(Modifier.widthIn(max = 290.dp).clip(shape).background(if (mine) colors.chatUserBackground else colors.panelBackground)
                 .padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 EyeText(entry.text, style = typography.chatBody, color = if (mine) colors.chatUserText else colors.textPrimary)
-                if (entry.inquiryComplete && !entry.urgent) EyeText("本次问询已总结", style = typography.bodySecondary, color = colors.primary)
                 entry.question?.let { q ->
                     EyeText(q.prompt, style = typography.subtitle, color = colors.textPrimary)
                     if (active) {
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             q.options.forEach { option -> ChoiceChip(option, false) { onOption(option) } }
                         }
-                        EyeText(if (q.allowFreeText) "选择选项或输入回答，然后点发送；也可以换个话题。" else "选择选项后点发送；也可以换个话题。",
-                            style = typography.bodySecondary, color = colors.textSecondary)
-                    } else if (q.options.isNotEmpty()) {
-                        EyeText(q.options.joinToString(" / "), style = typography.bodySecondary, color = colors.textSecondary)
                     }
                 }
-                if (entry.sources.isNotEmpty()) EyeText("参考：" + entry.sources.joinToString("；") { "${it.title}（${it.publisher}）" },
-                    style = typography.bodySecondary, color = colors.textSecondary)
             }
         }
         if (mine && entry.urgent) Row(Modifier.fillMaxWidth().clip(EyeShapes.card).background(colors.dangerSoft).padding(horizontal = 14.dp, vertical = 12.dp)) {

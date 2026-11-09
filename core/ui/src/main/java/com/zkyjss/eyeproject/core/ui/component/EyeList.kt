@@ -110,6 +110,7 @@ fun EyeListRow(
     divider: Boolean = true,
     titleColor: Color? = null,
     enabled: Boolean = true,
+    glowBorder: Boolean = true,
     /** 自绘的左侧图标（放在 32dp 实心色块里，图标用白色），代替 [glyph]。 */
     leading: (@Composable () -> Unit)? = null,
     trailing: (@Composable () -> Unit)? = null,
@@ -120,7 +121,7 @@ fun EyeListRow(
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val background by animateColorAsState(if (pressed) colors.surfaceVariant else colors.panelBackground, tween(EyeMotion.SHORT), label = "列表行按压")
-    Column(modifier.fillMaxWidth().eyeSoftSurface(colors, EyeShapes.card, pressed = pressed, compact = true).background(background).eyeGlowBorder(colors, EyeShapes.card, EyeGlow.cardBorderSubtle)
+    Column(modifier.fillMaxWidth().eyeSoftSurface(colors, EyeShapes.card, pressed = pressed, compact = true).background(background).then(if (glowBorder) Modifier.eyeGlowBorder(colors, EyeShapes.card, EyeGlow.cardBorderSubtle) else Modifier)
         .then(if (onClick != null) Modifier.clickable(enabled = enabled, interactionSource = interaction, indication = null, role = Role.Button) { haptics.tap(); onClick() } else Modifier)) {
         Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             if (leading != null) {
@@ -155,11 +156,12 @@ fun EyeSwitchRow(
     enabled: Boolean = true,
     divider: Boolean = true,
     help: Pair<String, String>? = null,
+    glowBorder: Boolean = true,
 ) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
     val haptics = rememberEyeHaptics()
-    Column(modifier.fillMaxWidth().eyeSoftSurface(colors, EyeShapes.card, compact = true).eyeGlowBorder(colors, EyeShapes.card, EyeGlow.cardBorderSubtle)
+    Column(modifier.fillMaxWidth().eyeSoftSurface(colors, EyeShapes.card, compact = true).then(if (glowBorder) Modifier.eyeGlowBorder(colors, EyeShapes.card, EyeGlow.cardBorderSubtle) else Modifier)
         .toggleable(value = checked, enabled = enabled, role = Role.Switch) { haptics.toggle(it); onChange(it) }) {
         Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             if (glyph != null) {

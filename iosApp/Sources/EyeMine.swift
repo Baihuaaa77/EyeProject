@@ -34,20 +34,20 @@ struct MinePage: View {
                 stat("已上传", "\(cloud.int("synced"))", "条") { navigate(.cloud) }
             }
             .fixedSize(horizontal: false, vertical: true)
-            .eyeGlass().eyeGlowBorder()
+            .eyeGlass()
             ListGroup(title: "健康档案") {
-                ListRow(title: "测试记录", glyph: .document, value: recordCount == 0 ? "暂无" : "\(recordCount) 条") { navigate(.records) }
-                ListRow(title: "家庭成员与资料", glyph: .family, tone: .violet, value: "\(store.subjects.count) 人") { navigate(.subjects) }
-                ListRow(title: "用眼趋势", glyph: .chart, tone: .violet, divider: false) { navigate(.trend) }
+                ListRow(title: "测试记录", glyph: .document, value: recordCount == 0 ? "暂无" : "\(recordCount) 条", glowBorder: false) { navigate(.records) }
+                ListRow(title: "家庭成员与资料", glyph: .family, tone: .violet, value: "\(store.subjects.count) 人", glowBorder: false) { navigate(.subjects) }
+                ListRow(title: "用眼趋势", glyph: .chart, tone: .violet, divider: false, glowBorder: false) { navigate(.trend) }
             }
             ListGroup(title: "数据与隐私") {
-                ListRow(title: "云端同步", glyph: .cloud, tone: .blue, value: cloudSummary) { navigate(.cloud) }
-                ListRow(title: "权限与通知", glyph: .shield, tone: .success, divider: false) { navigate(.permissions) }
+                ListRow(title: "云端同步", glyph: .cloud, tone: .blue, value: cloudSummary, glowBorder: false) { navigate(.cloud) }
+                ListRow(title: "权限与通知", glyph: .shield, tone: .success, divider: false, glowBorder: false) { navigate(.permissions) }
             }
             ListGroup(title: "通用") {
                 SwitchRow(title: "深色模式", isOn: Binding(get: { scheme == .dark }, set: { themeMode = $0 ? "dark" : "light" }),
-                          glyph: .moon, tone: .neutral)
-                ListRow(title: "系统设置", glyph: .gear, tone: .neutral, divider: false) { navigate(.settings) }
+                          glyph: .moon, tone: .neutral, glowBorder: false)
+                ListRow(title: "系统设置", glyph: .gear, tone: .neutral, divider: false, glowBorder: false) { navigate(.settings) }
             }
         }.onAppear(perform: recount)
     }

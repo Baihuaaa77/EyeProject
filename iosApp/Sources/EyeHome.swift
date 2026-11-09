@@ -36,7 +36,7 @@ struct HomePage: View {
                 HeroCard(report: report, openAccount: { navigate(.account) })
                 TodayData(report: report)
                 SectionTitle(text: "护眼工具")
-                ToolRow(report: report, navigate: navigate) { exerciseOpen = true }
+                ToolRow(navigate: navigate) { exerciseOpen = true }
                 EyechoCard(report: report, openChat: { navigate(.chat) }, checkIn: { store.checkIn($0) }) { feelingEditing = true }
                 Panel { LiveEyeSection(startRequests: liveRequests) }.id("live")
                 ReminderCard(reminder: reminder)
@@ -387,25 +387,21 @@ private struct ReminderCard: View {
     }
 }
 
-/// 护眼工具：三张等高白卡（浅色块图标 + 名称 + 一项数据）。与安卓 ToolRow 一致。
+/// 护眼工具：三个工具入口，只保留图标与单行名称。与安卓 ToolRow 一致。
 private struct ToolRow: View {
-    let report: CareReport
     let navigate: (AppRoute) -> Void
     let openExercise: () -> Void
     var body: some View {
-        let brightness = report.signals("BASIC").first { $0.id == "brightness" }?.value
         HStack(spacing: EyeSpacing.cardGap) {
-            ToolTile(title: "护眼操", meta: "约 1 分钟", glyph: .eye, soft: EyeStyle.successSoft, ink: EyeStyle.success, action: openExercise)
-            ToolTile(title: "用眼趋势", meta: "近 7 天", glyph: .chart, soft: EyeStyle.screenSoft, ink: EyeStyle.screen) { navigate(.trend) }
-            ToolTile(title: "亮度与蓝光", meta: brightness.flatMap { $0 == "—" ? nil : "亮度 \($0)" } ?? "护眼设置",
-                     glyph: .sun, soft: EyeStyle.sunSoft, ink: EyeStyle.sun) { navigate(.brightness) }
+            ToolTile(title: "护眼操", glyph: .eye, soft: EyeStyle.successSoft, ink: EyeStyle.success, action: openExercise)
+            ToolTile(title: "用眼趋势", glyph: .chart, soft: EyeStyle.screenSoft, ink: EyeStyle.screen) { navigate(.trend) }
+            ToolTile(title: "屏幕光", glyph: .sun, soft: EyeStyle.sunSoft, ink: EyeStyle.sun) { navigate(.brightness) }
         }.fixedSize(horizontal: false, vertical: true)
     }
 }
 
 private struct ToolTile: View {
     let title: String
-    let meta: String
     let glyph: EyeGlyph
     let soft: Color
     let ink: Color
@@ -416,8 +412,7 @@ private struct ToolTile: View {
                 EyeGlyphView(glyph: glyph, color: ink).frame(width: 22, height: 22)
                     .frame(width: 40, height: 40).background(soft, in: RoundedRectangle(cornerRadius: EyeStyle.radiusSmall, style: .continuous))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(title).font(EyeStyle.navigationTitle).foregroundStyle(EyeStyle.text).lineLimit(2).minimumScaleFactor(0.8)
-                    Text(meta).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary).lineLimit(1)
+                    Text(title).font(EyeStyle.navigationTitle).foregroundStyle(EyeStyle.text).lineLimit(1).minimumScaleFactor(0.8)
                 }
             }
             .padding(.horizontal, 12).padding(.vertical, 16)

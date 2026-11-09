@@ -185,7 +185,7 @@ class HomeVisualTest {
             }
         }
         compose.onNodeWithText("眼健康指数").assertIsDisplayed()
-        compose.onNodeWithText("亮度与蓝光").performScrollTo().assertIsDisplayed().performClick()
+        compose.onNodeWithText("屏幕光").performScrollTo().assertIsDisplayed().performClick()
         assertTrue(openedBrightness)
         compose.onNodeWithText("休息提醒").performScrollTo().assertIsDisplayed()
         capture("01d-首页-375-大字号")

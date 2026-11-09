@@ -154,7 +154,7 @@ internal fun HomeContent(
         EyeCareHero(report, onOpenAccount = navigation.onOpenAccount)
         TodayData(state, actions, Modifier.bringIntoViewRequester(basic))
         SectionTitle("护眼工具")
-        ToolRow(state, navigation) { exerciseOpen = true }
+        ToolRow(navigation) { exerciseOpen = true }
         EyechoCard(report, navigation.onOpenChat, actions.checkIn)
         LiveCard(Modifier.bringIntoViewRequester(live)) { liveEye(liveRequests) }
         ReminderCard(state, actions)
@@ -364,16 +364,21 @@ internal fun SignalGrid(signals: List<EyeSignal>, columns: Int) {
 
 // region 护眼工具与爱科
 
-/** 护眼工具：三张等高白卡（浅色块图标 + 名称 + 一项数据）。 */
+/** 护眼工具：三个工具入口，只保留图标与单行名称。 */
 @Composable
-private fun ToolRow(state: HomeUiState, navigation: HomeNavigation, onOpenExercise: () -> Unit) {
+private fun ToolRow(navigation: HomeNavigation, onOpenExercise: () -> Unit) {
     val colors = LocalEyeColors.current
-    val brightness = state.report?.signals?.firstOrNull { it.key == "brightness" }?.value?.takeIf { it != "—" }
-    Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(EyeSpacing.cardGap)) {
-        ToolTile("护眼操", "约 1 分钟", EyeGlyph.EYE, colors.successSoft, colors.success, Modifier.weight(1f).fillMaxHeight(), onOpenExercise)
-        ToolTile("用眼趋势", "近 7 天", EyeGlyph.CHART, colors.screenSoft, colors.screen, Modifier.weight(1f).fillMaxHeight(), navigation.onOpenTrend)
-        ToolTile("亮度与蓝光", brightness?.let { "亮度 $it" } ?: "护眼设置", EyeGlyph.SUN, colors.sunSoft, colors.sun,
-            Modifier.weight(1f).fillMaxHeight(), navigation.onOpenBrightness)
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val singleColumn = maxWidth / LocalDensity.current.fontScale < 280.dp
+        if (singleColumn) Column(verticalArrangement = Arrangement.spacedBy(EyeSpacing.cardGap)) {
+            ToolTile("护眼操", EyeGlyph.EYE, colors.successSoft, colors.success, Modifier.fillMaxWidth(), onOpenExercise)
+            ToolTile("用眼趋势", EyeGlyph.CHART, colors.screenSoft, colors.screen, Modifier.fillMaxWidth(), navigation.onOpenTrend)
+            ToolTile("屏幕光", EyeGlyph.SUN, colors.sunSoft, colors.sun, Modifier.fillMaxWidth(), navigation.onOpenBrightness)
+        } else Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(EyeSpacing.cardGap)) {
+            ToolTile("护眼操", EyeGlyph.EYE, colors.successSoft, colors.success, Modifier.weight(1f).fillMaxHeight(), onOpenExercise)
+            ToolTile("用眼趋势", EyeGlyph.CHART, colors.screenSoft, colors.screen, Modifier.weight(1f).fillMaxHeight(), navigation.onOpenTrend)
+            ToolTile("屏幕光", EyeGlyph.SUN, colors.sunSoft, colors.sun, Modifier.weight(1f).fillMaxHeight(), navigation.onOpenBrightness)
+        }
     }
 }
 
@@ -390,7 +395,7 @@ private fun Modifier.pressableCard(shape: androidx.compose.ui.graphics.Shape, on
 }
 
 @Composable
-private fun ToolTile(title: String, meta: String, glyph: EyeGlyph, soft: Color, ink: Color, modifier: Modifier, onClick: () -> Unit) {
+private fun ToolTile(title: String, glyph: EyeGlyph, soft: Color, ink: Color, modifier: Modifier, onClick: () -> Unit) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
     Column(modifier.pressableCard(EyeShapes.card, onClick).padding(horizontal = 12.dp, vertical = 16.dp),
@@ -399,8 +404,7 @@ private fun ToolTile(title: String, meta: String, glyph: EyeGlyph, soft: Color, 
             EyeGlyphIcon(glyph, Modifier.size(22.dp), ink)
         }
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            EyeText(title, style = typography.navigationTitle, color = colors.textPrimary, maxLines = 2)
-            EyeText(meta, style = typography.bodySecondary, color = colors.textSecondary, maxLines = 1)
+            EyeText(title, style = typography.navigationTitle, color = colors.textPrimary, maxLines = 1)
         }
     }
 }

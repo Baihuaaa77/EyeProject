@@ -34,6 +34,11 @@
 
 参考：[Apple Liquid Glass](https://developer.apple.com/design/human-interface-guidelines/materials)、[Android 图形与缓存](https://developer.android.com/develop/ui/compose/graphics/draw/modifiers)。
 
+## 最新简化
+
+问诊页使用 104 的介绍头像和 48 的消息头像，介绍左对齐并放大至 18；消息头像与气泡顶部对齐。移除操作提示、总结小标签、历史选项回显、消息参考小字及底部说明。首页工具去掉说明小字，「亮度与蓝光」入口改名「屏幕光」，保持单行。我的页只保留顶部个人卡的渐变边框。
+iOS 圆环扩大滤镜画布，抵消布局尺寸，保持环体、刻度与中心内容的位置和大小；新增上下左右外晕像素测试，由本次 macOS 云端验证。
+
 ## 对话与操作
 
 - 用户消息改为主蓝色的高对比变体 `#0A6CFF`，配白字；与白字对比度约 4.56:1。

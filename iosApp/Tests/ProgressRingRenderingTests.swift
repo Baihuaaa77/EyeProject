@@ -31,6 +31,26 @@ final class ProgressRingRenderingTests: XCTestCase {
         }
     }
 
+    func testGlowExtendsPastRingBoundsWithoutFourFlatEdges() throws {
+        for dark in [false, true] {
+            let view = ProgressRing(fraction: 1, lineWidth: 12, startAngle: 0, sweepAngle: 360)
+                .frame(width: 260, height: 260).padding(32).background(EyeStyle.background)
+                .environment(\.colorScheme, dark ? .dark : .light)
+                .transaction { $0.disablesAnimations = true }
+            let renderer = ImageRenderer(content: view)
+            renderer.scale = 1
+            let image = try XCTUnwrap(renderer.uiImage)
+            let background = try pixel(image, x: 0, y: 0)
+            // 这四点位于原 260 方形画布之外；被裁切的版本只会留下纯背景。
+            for (x, y) in [(30, 162), (293, 162), (162, 30), (162, 293)] {
+                let halo = try pixel(image, x: x, y: y)
+                XCTAssertGreaterThan(abs(halo.r - background.r) + abs(halo.g - background.g) + abs(halo.b - background.b),
+                    0.03, "上下左右的光晕应延伸到圆环布局边界之外")
+            }
+            attach(image, name: "完整外晕-\(dark ? "深色" : "浅色")")
+        }
+    }
+
     private func render(fraction: Double?, dark: Bool, reduced: Bool) throws -> UIImage {
         let view = ProgressRing(fraction: fraction, lineWidth: 12, ticks: 40, showEndpoint: true,
             startAngle: 130, sweepAngle: 280, uniformTicks: true)

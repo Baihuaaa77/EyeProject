@@ -44,7 +44,6 @@ struct AiChatPage: View {
                         if let error = info["error"] as? String, !error.isEmpty {
                             Text(error).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.readableText(EyeStyle.danger))
                         }
-                        Text(info["disclaimer"] as? String ?? "").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
                         Color.clear.frame(height: 1).id("bottom")
                     }.padding(.horizontal, 16).padding(.top, 4).padding(.bottom, 12)
                 }
@@ -96,7 +95,7 @@ struct AiChatPage: View {
 
     private var typing: some View {
         HStack(spacing: 8) {
-            EyechoAvatar(size: 34)
+            EyechoAvatar(size: EyeStyle.chatAvatarSize)
             Text("爱科正在想…").font(EyeStyle.body).foregroundStyle(EyeStyle.secondary)
         }
     }
@@ -147,18 +146,20 @@ struct EyechoAvatar: View {
     }
 }
 
-/// 对话页顶部：居中的爱科大头像 + 问候 + 一句介绍，不加卡片。与安卓 EyechoIntro 同一排版与文案。
+/// 对话页顶部：左侧爱科大头像 + 右侧左对齐问候与介绍，不加卡片。与安卓 EyechoIntro 同一排版与文案。
 private struct EyechoIntro: View {
     var body: some View {
-        VStack(spacing: 6) {
-            Image("EyechoAvatar").resizable().scaledToFill().frame(width: 84, height: 84)
-                .background(EyeStyle.violetSoft).clipShape(Circle())
-                .accessibilityLabel("爱科 Eyecho")
-            Text("你好，我是爱科").font(EyeStyle.title).foregroundStyle(EyeStyle.text).padding(.top, 4)
-            Text("爱尔眼科 AI 助手。眼睛不舒服、用眼习惯、测试结果，都可以问我。").font(EyeStyle.bodySecondary)
-                .foregroundStyle(EyeStyle.secondary).multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: .infinity).padding(.vertical, 4)
+        HStack(alignment: .top, spacing: 16) {
+            Image("EyechoAvatar").resizable().scaledToFill()
+                .frame(width: EyeStyle.chatIntroAvatarSize, height: EyeStyle.chatIntroAvatarSize)
+                .background(EyeStyle.violetSoft).clipShape(Circle()).accessibilityLabel("爱科 Eyecho")
+            VStack(alignment: .leading, spacing: 8) {
+                Text("你好，我是爱科").font(EyeStyle.title).foregroundStyle(EyeStyle.text)
+                Text("爱尔眼科 AI 助手，陪你聊聊眼睛的不适、用眼习惯和自测结果。")
+                    .font(EyeStyle.chatBody).foregroundStyle(EyeStyle.secondary).lineSpacing(6)
+                    .fixedSize(horizontal: false, vertical: true)
+            }.frame(maxWidth: .infinity, alignment: .leading)
+        }.frame(maxWidth: .infinity).padding(.vertical, 12)
     }
 }
 
@@ -216,19 +217,15 @@ private struct ChatBubble: View {
     var body: some View {
         let mine = message["role"] as? String == "user"
         let urgent = message["urgent"] as? Bool ?? false
-        let sources = message["sources"] as? [String] ?? []
         VStack(alignment: mine ? .trailing : .leading, spacing: 8) {
-            HStack(alignment: .bottom, spacing: 8) {
+            HStack(alignment: .top, spacing: 8) {
                 if mine { Spacer(minLength: 48) } else {
-                    EyechoAvatar(size: 28)
+                    EyechoAvatar(size: EyeStyle.chatAvatarSize)
                 }
                 VStack(alignment: .leading, spacing: 6) {
                     Text(message["text"] as? String ?? "").font(EyeStyle.chatBody).foregroundStyle(mine ? EyeStyle.chatUserText : EyeStyle.text)
                         .lineSpacing(6)
                         .textSelection(.enabled)
-                    if message["inquiryComplete"] as? Bool == true && !urgent {
-                        Text("本次问询已总结").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.readableText(EyeStyle.primary))
-                    }
                     if let q = message["question"] as? [String: Any] {
                         let options = q["options"] as? [String] ?? []
                         Text(q["prompt"] as? String ?? "").font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text)
@@ -238,16 +235,7 @@ private struct ChatBubble: View {
                                     ChoiceChip(label: option, selected: false) { onOption(option) }
                                 }
                             }
-                            Text(q["allowFreeText"] as? Bool ?? true
-                                ? "选择选项或输入回答，然后点发送；也可以换个话题。"
-                                : "选择选项后点发送；也可以换个话题。")
-                                .font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
-                        } else if !options.isEmpty {
-                            Text(options.joined(separator: " / ")).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
                         }
-                    }
-                    if !sources.isEmpty {
-                        Text("参考：" + sources.joined(separator: "；")).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
                     }
                 }
                 .padding(.horizontal, 14).padding(.vertical, 10)

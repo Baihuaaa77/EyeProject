@@ -239,9 +239,10 @@ private struct ProgressRingDrawing: View, Animatable {
         return Color(red: Double(ar + (br - ar) * u), green: Double(ag + (bg - ag) * u), blue: Double(ab + (bb - ab) * u))
     }
     var body: some View {
+        let glowOutset = EyeStyle.ringGlowOutset(lineWidth: lineWidth)
         Canvas { ctx, size in
             let center = CGPoint(x: size.width / 2, y: size.height / 2)
-            let radius = (min(size.width, size.height) - lineWidth) / 2
+            let radius = (min(size.width, size.height) - glowOutset * 2 - lineWidth) / 2
             ctx.stroke(path(center, radius, sweepAngle), with: .color(EyeStyle.ringTrack),
                 style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
             if value > 0 {
@@ -250,7 +251,7 @@ private struct ProgressRingDrawing: View, Animatable {
                     var glow = ctx
                     glow.addFilter(.shadow(color: EyeStyle.primary.opacity(EyeStyle.glowOpacity), radius: EyeStyle.glowRadius))
                     glow.stroke(path(center, radius, sweep), with: .color(EyeStyle.primary.opacity(0.35)),
-                        style: StrokeStyle(lineWidth: lineWidth * 1.7, lineCap: .round))
+                        style: StrokeStyle(lineWidth: lineWidth * EyeStyle.ringGlowStrokeScale, lineCap: .round))
                 }
                 let count = max(1, Int(ceil(sweep / 2)))
                 for i in 0..<count {
@@ -269,7 +270,7 @@ private struct ProgressRingDrawing: View, Animatable {
             if ticks > 0 {
                 for i in 0..<ticks {
                     let a = startAngle + sweepAngle * Double(i) / Double(uniformTicks ? max(1, ticks - 1) : ticks)
-                    let outer = uniformTicks ? min(size.width, size.height) / 2 - lineWidth * 1.7 : radius - lineWidth * 1.6
+                    let outer = uniformTicks ? min(size.width, size.height) / 2 - glowOutset - lineWidth * 1.7 : radius - lineWidth * 1.6
                     let inner = outer - lineWidth * (uniformTicks ? 0.45 : 0.6)
                     var tick = Path(); tick.move(to: point(center, outer, a))
                     tick.addLine(to: point(center, inner, a))
@@ -286,6 +287,8 @@ private struct ProgressRingDrawing: View, Animatable {
                 }
             }
         }
+        // 扩大 Canvas 的滤镜边界，再抵消布局尺寸；圆环、刻度和中心内容的位置保持原样。
+        .padding(-glowOutset)
     }
 }
 

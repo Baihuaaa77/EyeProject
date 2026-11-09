@@ -310,6 +310,7 @@ struct ListRow: View {
     var divider = true
     var enabled = true
     var indent: CGFloat = 0
+    var glowBorder = true
     var action: (() -> Void)? = nil
 
     var body: some View {
@@ -336,7 +337,7 @@ struct ListRow: View {
             }
             .padding(.leading, 16 + indent).padding(.trailing, 16).padding(.vertical, 10).frame(minHeight: 56)
 
-        }.eyeGlass().eyeGlowBorder(strength: EyeStyle.cardBorderSubtle).contentShape(Rectangle())
+        }.eyeGlass().eyeGlowBorder(strength: glowBorder ? EyeStyle.cardBorderSubtle : 0).contentShape(Rectangle())
     }
 }
 
@@ -350,6 +351,7 @@ struct SwitchRow: View {
     var help: String? = nil
     var divider = true
     var enabled = true
+    var glowBorder = true
 
     var body: some View {
         VStack(spacing: 0) {
@@ -366,7 +368,7 @@ struct SwitchRow: View {
                     .labelsHidden().tint(EyeStyle.primary).disabled(!enabled)
             }
             .padding(.horizontal, 16).padding(.vertical, 6).frame(minHeight: 56)
-        }.eyeGlass().eyeGlowBorder(strength: EyeStyle.cardBorderSubtle)
+        }.eyeGlass().eyeGlowBorder(strength: glowBorder ? EyeStyle.cardBorderSubtle : 0)
     }
 }
 

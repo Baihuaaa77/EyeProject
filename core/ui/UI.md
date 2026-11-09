@@ -78,3 +78,5 @@
 `Modifier.eyeGlowBorder` 来自设计系统；EyeHeroCard、EyeCard、列表行和开关行采用整圈渐变光边，列表光边较淡。小图标底、标签、账户头像保持原表面，避免套多层光框。
 
 `EyeNavigationDock` 接收纯展示项、选中下标与事件回调，不持有导航。64dp 玻璃底栏、滑动选中镜片，保留 Tab / selected 语义；系统移除动画时直接定位。`EyeNavigationItem` 的图标资源由 app 提供。
+
+列表与开关行支持 glowBorder 开关；我的页仅个人卡保留渐变光边。

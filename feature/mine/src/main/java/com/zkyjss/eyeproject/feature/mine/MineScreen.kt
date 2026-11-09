@@ -89,24 +89,24 @@ internal fun MineContent(state: MineUiState, navigation: MineNavigation, modifie
         ProfileCard(ready, navigation)
         StatsRow(ready, navigation)
         EyeListGroup(title = "健康档案") {
-            EyeListRow("测试记录", navigation.onOpenRecords, glyph = EyeGlyph.DOCUMENT,
+            EyeListRow("测试记录", navigation.onOpenRecords, glowBorder = false, glyph = EyeGlyph.DOCUMENT,
                 value = ready?.recordCount?.let { if (it == 0) "暂无" else "$it 条" })
-            EyeListRow("家庭成员与资料", navigation.onOpenSubjects, glyph = EyeGlyph.FAMILY, tone = EyeTileTone.VIOLET,
+            EyeListRow("家庭成员与资料", navigation.onOpenSubjects, glowBorder = false, glyph = EyeGlyph.FAMILY, tone = EyeTileTone.VIOLET,
                 value = ready?.memberCount?.let { "$it 人" })
-            EyeListRow("用眼趋势", navigation.onOpenTrend, glyph = EyeGlyph.CHART, tone = EyeTileTone.VIOLET, divider = false)
+            EyeListRow("用眼趋势", navigation.onOpenTrend, glowBorder = false, glyph = EyeGlyph.CHART, tone = EyeTileTone.VIOLET, divider = false)
         }
         EyeListGroup(title = "数据与隐私") {
-            EyeListRow("云端同步", navigation.onOpenCloudSync, glyph = EyeGlyph.CLOUD, tone = EyeTileTone.BLUE,
+            EyeListRow("云端同步", navigation.onOpenCloudSync, glowBorder = false, glyph = EyeGlyph.CLOUD, tone = EyeTileTone.BLUE,
                 value = ready?.let { cloudSummary(it.cloudConfigured, it.email, it.healthDataSync) })
-            EyeListRow("权限与通知", navigation.onOpenPermissions, glyph = EyeGlyph.SHIELD, tone = EyeTileTone.SUCCESS, divider = false)
+            EyeListRow("权限与通知", navigation.onOpenPermissions, glowBorder = false, glyph = EyeGlyph.SHIELD, tone = EyeTileTone.SUCCESS, divider = false)
         }
         EyeListGroup(title = "通用") {
             // 白天 / 夜晚切换（原在各顶层页右上角）：由 app 按主题偏好提供，为空时不显示
             val theme = LocalEyeThemeToggle.current
             theme.onToggle?.let { toggle ->
-                EyeSwitchRow("深色模式", theme.isDark, { toggle() }, glyph = EyeGlyph.MOON, tone = EyeTileTone.NEUTRAL)
+                EyeSwitchRow("深色模式", theme.isDark, { toggle() }, glowBorder = false, glyph = EyeGlyph.MOON, tone = EyeTileTone.NEUTRAL)
             }
-            EyeListRow("系统设置", navigation.onOpenSettings, glyph = EyeGlyph.GEAR, tone = EyeTileTone.NEUTRAL, divider = false)
+            EyeListRow("系统设置", navigation.onOpenSettings, glowBorder = false, glyph = EyeGlyph.GEAR, tone = EyeTileTone.NEUTRAL, divider = false)
         }
         Spacer(Modifier.height(20.dp))
     }
@@ -156,7 +156,7 @@ private fun ProfileCard(state: MineUiState.Ready?, navigation: MineNavigation) {
 @Composable
 private fun StatsRow(state: MineUiState.Ready?, navigation: MineNavigation) {
     val colors = LocalEyeColors.current
-    Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).eyeGlass(colors, EyeShapes.panel).eyeGlowBorder(colors, EyeShapes.panel)) {
+    Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).eyeGlass(colors, EyeShapes.panel)) {
         StatTile("测试记录", "${state?.recordCount ?: 0}", "条", Modifier.weight(1f), navigation.onOpenRecords)
         Box(Modifier.padding(vertical = 14.dp).width(0.5.dp).fillMaxHeight().background(colors.borderSubtle))
         StatTile("家庭成员", "${state?.memberCount ?: 0}", "人", Modifier.weight(1f), navigation.onOpenSubjects)
