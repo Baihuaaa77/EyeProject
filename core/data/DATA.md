@@ -38,3 +38,5 @@ NIA 差异：同步 Worker 暂放本模块 `sync/`，出现第二个同步仓库
 ## 测试
 
 `./gradlew.bat :core:data:testDebugUnitTest`（Robolectric；假网络数据源与明文 SecretBox，不用 mock 库）。
+
+ChatRepository 新增 confirmOptionAnswers 数据流状态与 suspend 写入，默认需要点选确认；本机文件 ai_chat_option_confirmation 保存偏好，清空对话后保留。与 AI 数据处理同意独立，不改变 consent 行为。发送以 busy 原子状态避免点选连点重复提交。

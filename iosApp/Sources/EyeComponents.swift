@@ -113,7 +113,7 @@ struct PageHeader: View {
 
 enum EyeGlyph {
     case document, family, cloud, shield, bell, sun, chart, bulb, eye, clock, person, info, moon, export, sync
-    case logout, trash, server, camera, mic, hourglass, chat, ruler, coffee, gear, heart
+    case logout, trash, server, camera, mic, hourglass, chat, ruler, coffee, gear, heart, edit
 }
 
 /// 24 单位视口、1.8 线宽、圆头圆角；弧线一律按「x 轴正向起、顺时针」的角度取点绘制，与安卓一致。
@@ -203,6 +203,7 @@ enum GlyphPainter {
             ring(12, 12, 3)
         case .clock: ring(12, 12, 8.5); poly([12, 7.5, 12, 12, 15.5, 14])
         case .person: ring(12, 8.5, 3.8); arc(12, 20.5, 7.5, 6.5, 200, 140)
+        case .edit: poly([5, 19, 6, 15, 16, 5, 19, 8, 9, 18, 5, 19]); seg(14, 7, 17, 10)
         case .info: ring(12, 12, 8.5); seg(12, 11, 12, 16.5); dot(12, 7.8, 1.15)
         case .heart:
             curve([12, 20, 5, 15.5, 3, 12, 3, 8.8, 3, 6, 5.2, 4, 7.8, 4, 9.6, 4, 11.1, 5, 12, 6.6,

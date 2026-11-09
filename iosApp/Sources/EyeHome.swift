@@ -162,27 +162,28 @@ private struct EyechoCard: View {
             Button { EyeHaptics.tap(); openChat() } label: {
                 ZStack(alignment: .bottomTrailing) {
                     Color.clear
-                    Image("EyechoHalf").resizable().scaledToFit()
-                        .frame(width: EyeStyle.homePortraitWidth, height: EyeStyle.homePortraitHeight)
+                    Image("EyechoHalf").resizable().scaledToFill()
+                        .frame(width: EyeStyle.homePortraitWidth, height: EyeStyle.homePortraitHeight, alignment: .top).clipped()
                         .padding(.trailing, EyeStyle.homePortraitInset)
                         .accessibilityLabel("爱科")
                 }
-                .frame(maxWidth: .infinity, minHeight: EyeStyle.homePortraitHeight, maxHeight: EyeStyle.homePortraitHeight)
+                .frame(maxWidth: .infinity, minHeight: EyeStyle.homeChatMinHeight, maxHeight: EyeStyle.homeChatMinHeight)
                 .clipShape(RoundedRectangle(cornerRadius: EyeStyle.radiusHero, style: .continuous))
             }.buttonStyle(PressScale(scale: 0.98))
             VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 6) {
-                    EyeGlyphView(glyph: .chat, color: EyeStyle.violet).frame(width: 16, height: 16)
-                    Text(eyechoCardLabel).font(EyeStyle.chip).foregroundStyle(EyeStyle.readableText(EyeStyle.violet))
-                }
-                Text(checked ? "今天的感受已记下" : "今天眼睛感觉怎么样？").font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text)
+                EyeGlyphView(glyph: .chat, color: EyeStyle.violet).frame(width: 24, height: 24)
+                Text(eyechoCardLabel).font(EyeStyle.title).foregroundStyle(EyeStyle.text)
+                Text(checked ? "今天的感受已记下" : "今天眼睛感觉怎么样？").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
                 FlowLayout(spacing: 8) {
                     if checked {
                         ForEach(symptoms.isEmpty ? [noDiscomfort] : symptoms, id: \.self) { label in
                             Text(label).font(EyeStyle.chip).foregroundStyle(EyeStyle.readableText(EyeStyle.primary))
-                                .padding(.horizontal, 10).padding(.vertical, 6).background(EyeStyle.primarySoft, in: EyeStyle.chipShape)
+                                .padding(.horizontal, 10).padding(.vertical, 6).background(EyeStyle.primarySoft, in: EyeStyle.chipShape).frame(minHeight: 48)
                         }
-                        QuickChip(label: "修改", action: edit)
+                        Button(action: edit) {
+                            EyeGlyphView(glyph: .edit, color: EyeStyle.primary).frame(width: 22, height: 22)
+                                .frame(width: 48, height: 48)
+                        }.buttonStyle(.plain).accessibilityLabel("编辑今日感受")
                     } else {
                         ForEach(quick, id: \.self) { label in
                             QuickChip(label: label) { checkIn(label == noDiscomfort ? [] : [label]) }
@@ -191,7 +192,7 @@ private struct EyechoCard: View {
                     }
                 }.padding(.top, 4)
             }
-            .padding(18).frame(width: 210, alignment: .leading)
+            .padding(18).frame(width: 240, alignment: .leading)
         }.eyeLiquidGlass(cornerRadius: EyeStyle.radiusHero)
     }
 }

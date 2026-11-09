@@ -34,6 +34,13 @@
 
 参考：[Apple Liquid Glass](https://developer.apple.com/design/human-interface-guidelines/materials)、[Android 图形与缓存](https://developer.android.com/develop/ui/compose/graphics/draw/modifiers)。
 
+## 点选问询与首页层次
+
+点选答案后显示确认 / 取消，确认即继续；「不再询问」单独持久保存，之后点选直接发送，仍支持自己输入并发送。取消不改草稿，AI 数据处理同意按原规则处理。
+iOS 根视图统一隐藏滚动条。两处形象缩小，从顶部裁掉下摆并保留胸前 logo。首页爱科问诊标题与实时检测同级，图标置于标题上方，修改感受改为铅笔图标。
+
+![回答确认](inquiry-confirm.png)
+
 ## 半身形象与顶栏
 
 问诊顶部采用透明半身像，首页人物取消右移，保留右侧边距；不使用圆形头像框和圆形衬底。三个主页右上角放日夜切换与系统设置；服务页不再放账户按钮，我的页移除通用分组，账户仍从个人卡进入。
@@ -69,7 +76,7 @@ iOS 圆环扩大滤镜画布，抵消布局尺寸，保持环体、刻度与中�
 
 ## 验证
 
-- Android compileDebugKotlin、assembleDebug、125 项测试：通过。
+- Android compileDebugKotlin、assembleDebug、126 项测试：通过。
 - lintDebug：0 错误、33 条警告。
 - 双端令牌、模型、字体资源与授权、工程结构检查：通过。
 - iOS Swift 语法检查：通过；尚未在 macOS 对本次改动进行 Xcode 编译和真机验收。

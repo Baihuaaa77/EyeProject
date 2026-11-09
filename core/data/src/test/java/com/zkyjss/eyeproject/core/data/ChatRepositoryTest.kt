@@ -116,6 +116,20 @@ class ChatRepositoryTest {
     }
 
     @Test
+    fun optionConfirmationPersistsIndependentlyOfConsentAndHistory() = runTest {
+        signIn(ConsentType.AI_CHAT)
+        val repo = repository()
+        assertTrue(repo.state.first().confirmOptionAnswers)
+        repo.setConfirmOptionAnswers(false)
+        assertFalse(repo.state.first().confirmOptionAnswers)
+        assertTrue(repo.state.first().askConsent)
+        repo.clear()
+        assertFalse(repository().state.first().confirmOptionAnswers)
+        repo.setConfirmOptionAnswers(true)
+        assertTrue(repository().state.first().confirmOptionAnswers)
+    }
+
+    @Test
     fun marksRedFlagsAndFallsBackWhenConsentWasWithdrawn() = runTest {
         signIn(ConsentType.AI_CHAT)
         val repo = repository()

@@ -427,17 +427,21 @@ private fun EyechoCard(report: EyeCareReport?, onOpenChat: () -> Unit, onCheckIn
     val checked = report?.checkedInToday == true
     val symptoms = report?.todaySymptoms.orEmpty()
     var editing by rememberSaveable { mutableStateOf(false) }
-    Box(Modifier.fillMaxWidth().heightIn(min = EyeControlSizes.homePortraitHeight).pressableCard(EyeShapes.hero, onOpenChat)) {
-        Image(painterResource(R.drawable.eyecho_half), contentDescription = "爱科", contentScale = ContentScale.Fit,
+    Box(Modifier.fillMaxWidth().heightIn(min = EyeControlSizes.homeChatMinHeight).pressableCard(EyeShapes.hero, onOpenChat)) {
+        Image(painterResource(R.drawable.eyecho_half), contentDescription = "爱科", contentScale = ContentScale.Crop, alignment = Alignment.TopCenter,
             modifier = Modifier.align(Alignment.BottomEnd).padding(end = EyeControlSizes.homePortraitInset)
                 .size(width = EyeControlSizes.homePortraitWidth, height = EyeControlSizes.homePortraitHeight))
-        Column(Modifier.padding(18.dp).fillMaxWidth(0.56f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            EyeCategoryLabel(EYECHO_CARD_LABEL, EyeGlyph.CHAT, colors.violet)
-            EyeText(if (checked) "今天的感受已记下" else "今天眼睛感觉怎么样？", style = typography.subtitle, color = colors.textPrimary)
+        Column(Modifier.padding(18.dp).fillMaxWidth(0.64f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            EyeGlyphIcon(EyeGlyph.CHAT, Modifier.size(24.dp), colors.violet)
+            EyeText(EYECHO_CARD_LABEL, style = typography.title, color = colors.textPrimary)
+            EyeText(if (checked) "今天的感受已记下" else "今天眼睛感觉怎么样？", style = typography.bodySecondary, color = colors.textSecondary)
             FlowRow(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (checked) {
                     symptoms.ifEmpty { listOf(NO_DISCOMFORT) }.forEach { FeelingTag(it) }
-                    QuickChip("修改") { editing = true }
+                    Box(Modifier.size(48.dp).clickable(role = Role.Button) { editing = true }
+                        .semantics { contentDescription = "编辑今日感受" }, contentAlignment = Alignment.Center) {
+                        EyeGlyphIcon(EyeGlyph.EDIT, Modifier.size(22.dp), colors.primary)
+                    }
                 } else {
                     listOf(EyeCareEngine.SYMPTOMS[0], EyeCareEngine.SYMPTOMS[1], NO_DISCOMFORT).forEach { label ->
                         QuickChip(label) { onCheckIn(listOf(label) - NO_DISCOMFORT) }
@@ -468,8 +472,10 @@ private fun QuickChip(label: String, onClick: () -> Unit) {
 @Composable
 private fun FeelingTag(label: String) {
     val colors = LocalEyeColors.current
-    EyeText(label, Modifier.clip(EyeShapes.chip).background(colors.primarySoft).padding(horizontal = 10.dp, vertical = 6.dp),
-        style = LocalEyeTypography.current.chip, color = colors.primary)
+    Box(Modifier.heightIn(min = 48.dp), contentAlignment = Alignment.CenterStart) {
+        EyeText(label, Modifier.clip(EyeShapes.chip).background(colors.primarySoft).padding(horizontal = 10.dp, vertical = 6.dp),
+            style = LocalEyeTypography.current.chip, color = colors.primary)
+    }
 }
 
 /** 选择今天的感受：「没有不适」占一整行，其余等宽两列；选了才能保存。与苹果端 FeelingSheet 一致。 */

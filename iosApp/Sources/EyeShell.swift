@@ -48,6 +48,7 @@ struct EyeRootView: View {
             }
             if splash { SplashView { splash = false; welcome = needsWelcome }.transition(.opacity).zIndex(1) }
         }
+        .scrollIndicators(.hidden)
         // 测试全屏呈现：不用卡片式弹窗，避免顶部留出灵动岛下方的空隙和下滑误关。
         .fullScreenCover(item: Binding(get: { selectedTest.map(TestSelection.init) }, set: { selectedTest = $0?.id })) { test in
             EyeTestView(kind: test.id)

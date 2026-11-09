@@ -327,21 +327,56 @@ class HomeVisualTest {
     }
 
     @Test @Config(qualifiers = "zh-rCN-w390dp-h1200dp-mdpi")
-    fun aiInquiryQuestionCardSelectsThenWaitsForSend() {
+    fun aiInquiryOptionsConfirmCancelAndRememberWithoutLosingDraft() {
         val q = com.zkyjss.eyeproject.core.sync.ChatQuestion("从什么时候开始？", listOf("今天", "几天前"))
         var state by mutableStateOf(com.zkyjss.eyeproject.core.data.chat.ChatState(
             com.zkyjss.eyeproject.core.data.chat.ChatAccess.READY, askConsent = false,
             messages = listOf(com.zkyjss.eyeproject.core.sync.ChatEntry("assistant", "先了解一下", 1, question = q))))
         val sent = mutableListOf<String>()
-        compose.setContent { EyeProjectTheme { EyeChatContent(state, {}, {}, { text, _, _ -> sent += text }, {}) {} } }
-        compose.onNodeWithText("从什么时候开始？").assertExists()
+        compose.setContent { EyeProjectTheme {
+            EyeChatContent(state, {}, {}, { text, _, _ -> sent += text }, {},
+                onConfirmOptionsChange = { state = state.copy(confirmOptionAnswers = it) }) {}
+        } }
+        compose.onNode(hasSetTextAction()).performTextInput("我还有一点补充")
         compose.onNodeWithText("几天前").performClick()
-        assertTrue("选择选项只填入输入框，等待用户确认发送", sent.isEmpty())
+        compose.onNodeWithText("确认这项回答？").assertExists()
+        assertTrue(sent.isEmpty())
         capture("13-AI逐步问询")
-        compose.onNodeWithText("发送").performClick()
+        val dialogBitmap = compose.runOnIdle {
+            val view = org.robolectric.shadows.ShadowDialog.getLatestDialog().window!!.decorView
+            Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888).also { view.draw(Canvas(it)) }
+        }
+        File("build/reports/ui/13a-问询回答确认.png").outputStream().use { dialogBitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        dialogBitmap.recycle()
+        compose.onNodeWithText("取消").performClick()
+        compose.onNode(hasSetTextAction()).assertTextContains("我还有一点补充")
+        compose.onNodeWithText("几天前").performClick()
+        compose.onNodeWithText("不再询问").performClick()
+        compose.onNodeWithText("确认").performClick()
         assertEquals(listOf("几天前"), sent)
-        state = state.copy(messages = state.messages + com.zkyjss.eyeproject.core.sync.ChatEntry("user", "几天前", 2))
-        compose.onNodeWithText("选择选项或输入回答，然后点发送；也可以换个话题。").assertDoesNotExist()
+        state = state.copy(messages = state.messages + com.zkyjss.eyeproject.core.sync.ChatEntry("assistant", "继续了解", 2,
+            question = com.zkyjss.eyeproject.core.sync.ChatQuestion("有没有疼痛？", listOf("没有", "有"))))
+        compose.onNodeWithText("没有").performClick()
+        compose.onNodeWithText("确认这项回答？").assertDoesNotExist()
+        assertEquals(listOf("几天前", "没有"), sent)
+        compose.onNodeWithText("发送").performClick()
+        assertEquals("我还有一点补充", sent.last())
+    }
+
+    @Test @Config(qualifiers = "zh-rCN-w390dp-h1200dp-mdpi")
+    fun inquiryOptionConfirmationDoesNotBypassDataConsent() {
+        val q = com.zkyjss.eyeproject.core.sync.ChatQuestion("持续多久？", listOf("一天"))
+        val state = com.zkyjss.eyeproject.core.data.chat.ChatState(
+            com.zkyjss.eyeproject.core.data.chat.ChatAccess.NEEDS_CONSENT, askConsent = true,
+            messages = listOf(com.zkyjss.eyeproject.core.sync.ChatEntry("assistant", "先了解一下", 1, question = q)))
+        val sent = mutableListOf<Triple<String, Boolean, Boolean>>()
+        compose.setContent { EyeProjectTheme { EyeChatContent(state, {}, {}, { t, a, q -> sent += Triple(t, a, q) }, {}) {} } }
+        compose.onNodeWithText("一天").performClick()
+        compose.onNodeWithText("确认").performClick()
+        assertTrue(sent.isEmpty())
+        compose.onNodeWithText(com.zkyjss.eyeproject.core.sync.Chats.CONSENT_TEXT).assertExists()
+        compose.onNodeWithText("同意").performClick()
+        assertEquals(listOf(Triple("一天", true, false)), sent)
     }
 
     @Test @Config(qualifiers = "zh-rCN-w390dp-h1200dp-mdpi")

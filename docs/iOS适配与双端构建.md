@@ -342,3 +342,5 @@ export IOS_EXPORT_OPTIONS_PLIST="$PWD/iosApp/ExportOptions.local.plist"
 - 首页（`HomePage`）：主卡 → 今日数据 → 护眼工具 → 爱科卡（`EyechoCard`，并入原「今日感受」与 `ChatEntryCard`）→ 实时检测（未开始时一行）→ 休息提醒；服务页为示范主卡 `DemoHeroCard`（保留）+「全部自测」列表（删去 `SelectCard`）；「我的」右上角不放按钮，深色模式开关在「通用」里（写 `eye.themeMode`）
 - 部署目标仍是 iOS 16：不用 iOS 17 起的 API（如 `UnevenRoundedRectangle`），对话气泡四角同为 18
 - 本次改动在 Windows 上只跑了 `check_project.py`，未经 Xcode 编译，需在 Mac 上 `scripts/ios/verify.sh` 验证
+
+界面滚动指示条由 EyeRootView.scrollIndicators(.hidden) 统一关闭。点选回答确认偏好由本机 UserDefaults 的 eye.chat.confirmOptionAnswers 保存；与 CloudClient 的数据同意无关。

@@ -46,6 +46,8 @@ data class ChatState(
     val error: String? = null,
     /** 发送前是否弹同意说明：未同意时总要弹；已同意且勾过「以后不再提示」就不弹 */
     val askConsent: Boolean = true,
+    /** 点选问询答案时是否二次确认，与数据处理同意分开保存。 */
+    val confirmOptionAnswers: Boolean = true,
 )
 
 /**
@@ -61,6 +63,7 @@ interface ChatRepository {
      */
     suspend fun send(text: String, context: AdviceRequest?, agreeFirst: Boolean = false, dontAskAgain: Boolean = false)
     suspend fun clear()
+    suspend fun setConfirmOptionAnswers(enabled: Boolean)
 }
 
 @Singleton
@@ -87,6 +90,8 @@ internal class DefaultChatRepository(
     private val file = File(directory, FILE)
     private val noPromptFile = File(directory, NO_PROMPT_FILE)
     private val noPrompt = MutableStateFlow(false)
+    private val optionConfirmationFile = File(directory, "ai_chat_option_confirmation")
+    private val confirmOptions = MutableStateFlow(true)
     private val lock = Mutex()
     private val history = MutableStateFlow<List<ChatEntry>>(emptyList())
     private var loaded = false
@@ -96,26 +101,27 @@ internal class DefaultChatRepository(
     override val state: Flow<ChatState> = flow {
         load()
         val status = combine(sending, error, noPrompt) { busy, failure, quiet -> Triple(busy, failure, !quiet) }
-        emitAll(combine(history, status, sessions.session, serverAddress) { messages, (busy, failure, ask), session, address ->
+        emitAll(combine(history, status, sessions.session, serverAddress, confirmOptions) { messages, (busy, failure, ask), session, address, confirm ->
             val (access, message) = when {
                 address.isBlank() -> ChatAccess.NEEDS_ACCOUNT to "连接云端服务并登录后，就可以和爱科聊天了"
                 session == null -> ChatAccess.NEEDS_ACCOUNT to "登录账户后，就可以和爱科聊聊今天的用眼感受"
                 session.consents[ConsentType.AI_CHAT] != true -> ChatAccess.NEEDS_CONSENT to null
                 else -> ChatAccess.READY to null
             }
-            ChatState(access, message, messages, busy, failure, ask)
+            ChatState(access, message, messages, busy, failure, ask, confirm)
         })
     }
 
     override suspend fun send(text: String, context: AdviceRequest?, agreeFirst: Boolean, dontAskAgain: Boolean) {
         val question = text.trim().take(Chats.INPUT_LIMIT)
-        if (question.isEmpty() || sending.value) return
+        if (question.isEmpty()) return
         load()
+        if (!sending.compareAndSet(false, true)) return
         if (dontAskAgain && !noPrompt.value) {
             withContext(Dispatchers.IO) { noPromptFile.writeText("1") }
             noPrompt.value = true
         }
-        sending.value = true; error.value = null
+        error.value = null
         append(ChatEntry(Chats.USER, question, clock(), urgent = Chats.redFlag(question)))
         error.value = run {
             if (agreeFirst) {
@@ -145,6 +151,12 @@ internal class DefaultChatRepository(
         sending.value = false
     }
 
+    override suspend fun setConfirmOptionAnswers(enabled: Boolean) {
+        load()
+        withContext(Dispatchers.IO) { optionConfirmationFile.writeText(if (enabled) "1" else "0") }
+        confirmOptions.value = enabled
+    }
+
     override suspend fun clear() = lock.withLock {
         withContext(Dispatchers.IO) { file.delete() }
         history.value = emptyList()
@@ -157,6 +169,9 @@ internal class DefaultChatRepository(
             runCatching { SyncContract.json.decodeFromString(SERIALIZER, file.readText()) }.getOrDefault(emptyList())
         }
         noPrompt.value = withContext(Dispatchers.IO) { noPromptFile.exists() }
+        confirmOptions.value = withContext(Dispatchers.IO) {
+            runCatching { optionConfirmationFile.readText() != "0" }.getOrDefault(true)
+        }
         loaded = true
     }
 

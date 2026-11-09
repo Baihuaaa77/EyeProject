@@ -16,6 +16,9 @@ struct AiChatPage: View {
     /// 本次进入对话页是否已弹过同意说明；还没同意时每次发送都要弹
     @State private var asked = false
     @State private var confirming = false
+    @State private var pendingOption: String?
+    @State private var pendingConsentMessage: String?
+    @AppStorage("eye.chat.confirmOptionAnswers") private var confirmOptionAnswers = true
     @FocusState private var focused: Bool
 
     var body: some View {
@@ -32,12 +35,12 @@ struct AiChatPage: View {
                         ForEach(Array(messages.enumerated()), id: \.offset) { index, m in
                             ChatBubble(message: m, urgentNotice: info["urgentNotice"] as? String ?? "",
                                 active: index == messages.count - 1 && !sending && (info["state"] as? String) != "locked",
-                                onOption: { draft = $0 })
+                                onOption: { selectOption($0, info: info) })
                         }
                         if !sending && !messages.isEmpty {
                             let pending = (messages.last?["question"] as? [String: Any]) != nil
                             ChoiceChip(label: pending ? "结束问询" : "开始新的问询", selected: false) {
-                                draft = pending ? "结束问询" : "帮我一步步梳理眼部不适"
+                                selectOption(pending ? "结束问询" : "帮我一步步梳理眼部不适", info: info)
                             }
                         }
                         if sending { typing }
@@ -55,11 +58,19 @@ struct AiChatPage: View {
             inputArea(info, sending: sending)
         }
         .overlay {
+            if let choice = pendingOption {
+                OptionAnswerConfirmView(choice: choice, confirm: { dontAsk in
+                    pendingOption = nil
+                    if dontAsk { confirmOptionAnswers = false }
+                    requestSend(choice, info: info)
+                }, cancel: { pendingOption = nil })
+            }
             if confirming {
                 ChatConsentView(info: info, agree: { quiet in
                     confirming = false; asked = true
-                    send(agreeFirst: info["state"] as? String == "consent", dontAskAgain: quiet)
-                }, decline: { confirming = false })
+                    send(pendingConsentMessage ?? draft, agreeFirst: info["state"] as? String == "consent", dontAskAgain: quiet)
+                    pendingConsentMessage = nil
+                }, decline: { confirming = false; pendingConsentMessage = nil })
                 .transition(.opacity)
             }
         }
@@ -77,9 +88,24 @@ struct AiChatPage: View {
         .onAppear { store.refresh() }
     }
 
-    private func send(agreeFirst: Bool, dontAskAgain: Bool) {
-        cloud.sendChat(draft, agreeFirst: agreeFirst, dontAskAgain: dontAskAgain)
-        draft = ""
+    private func send(_ text: String, agreeFirst: Bool, dontAskAgain: Bool) {
+        cloud.sendChat(text, agreeFirst: agreeFirst, dontAskAgain: dontAskAgain)
+        if text == draft { draft = "" }
+    }
+
+    private func requestSend(_ text: String, info: [String: Any]) {
+        guard !(info["sending"] as? Bool ?? false), !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        let state = info["state"] as? String ?? "locked"
+        if state == "locked" { openAccount(); return }
+        if state == "consent" || (info["askConsent"] as? Bool ?? true) && !asked {
+            pendingConsentMessage = text
+            confirming = true
+        } else { send(text, agreeFirst: false, dontAskAgain: false) }
+    }
+
+    private func selectOption(_ text: String, info: [String: Any]) {
+        guard !(info["sending"] as? Bool ?? false) else { return }
+        if confirmOptionAnswers { pendingOption = text } else { requestSend(text, info: info) }
     }
 
     private func suggestions(_ info: [String: Any]) -> some View {
@@ -87,7 +113,7 @@ struct AiChatPage: View {
             Text("可以这样问爱科").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
             FlowLayout(spacing: 8) {
                 ForEach(info["suggestions"] as? [String] ?? [], id: \.self) { text in
-                    ChoiceChip(label: text, selected: false) { draft = text; focused = true }
+                    ChoiceChip(label: text, selected: false) { selectOption(text, info: info) }
                 }
             }
         }.padding(.top, 4)
@@ -119,8 +145,7 @@ struct AiChatPage: View {
                     Button {
                         EyeHaptics.tap()
                         focused = false
-                        if state == "consent" || (info["askConsent"] as? Bool ?? true) && !asked { confirming = true }
-                        else { send(agreeFirst: false, dontAskAgain: false) }
+                        requestSend(draft, info: info)
                     } label: {
                         Text("发送").font(EyeStyle.button).foregroundStyle(.white)
                             .padding(.horizontal, 16).frame(minHeight: 44)
@@ -132,6 +157,34 @@ struct AiChatPage: View {
         .padding(.horizontal, 16).padding(.vertical, 10)
         .background(EyeStyle.panel.ignoresSafeArea(edges: .bottom))
         .overlay(alignment: .top) { Rectangle().fill(EyeStyle.borderSubtle).frame(height: 1) }
+    }
+}
+
+/// 点选答案的发送确认；与数据处理同意窗口独立。
+private struct OptionAnswerConfirmView: View {
+    let choice: String
+    let confirm: (Bool) -> Void
+    let cancel: () -> Void
+    @State private var dontAsk = false
+    var body: some View {
+        ZStack {
+            EyeStyle.ink.opacity(0.55).ignoresSafeArea().onTapGesture(perform: cancel)
+            VStack(alignment: .leading, spacing: 16) {
+                Text("确认这项回答？").font(EyeStyle.title).foregroundStyle(EyeStyle.text)
+                Text(choice).font(EyeStyle.chatBody).foregroundStyle(EyeStyle.text)
+                Button { dontAsk.toggle() } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: dontAsk ? "checkmark.square.fill" : "square").font(EyeStyle.subtitle).foregroundStyle(EyeStyle.primary)
+                        Text("不再询问").font(EyeStyle.body).foregroundStyle(EyeStyle.text)
+                        Spacer()
+                    }.frame(minHeight: 48)
+                }.buttonStyle(.plain).accessibilityAddTraits(dontAsk ? [.isSelected] : [])
+                HStack(spacing: 12) {
+                    Button("取消", action: cancel).buttonStyle(EyeButtonStyle(role: .secondary))
+                    Button("确认") { confirm(dontAsk) }.buttonStyle(EyeButtonStyle())
+                }
+            }.padding(24).eyeGlass().padding(24)
+        }
     }
 }
 
@@ -150,8 +203,8 @@ struct EyechoAvatar: View {
 private struct EyechoIntro: View {
     var body: some View {
         HStack(alignment: .top, spacing: 16) {
-            Image("EyechoHalf").resizable().scaledToFit()
-                .frame(width: EyeStyle.chatIntroPortraitWidth, height: EyeStyle.chatIntroPortraitHeight)
+            Image("EyechoHalf").resizable().scaledToFill()
+                .frame(width: EyeStyle.chatIntroPortraitWidth, height: EyeStyle.chatIntroPortraitHeight, alignment: .top).clipped()
                 .accessibilityLabel("爱科 Eyecho")
             VStack(alignment: .leading, spacing: 8) {
                 Text("你好，我是爱科").font(EyeStyle.title).foregroundStyle(EyeStyle.text)

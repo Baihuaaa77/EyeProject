@@ -37,6 +37,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
@@ -86,6 +87,7 @@ class ChatViewModel @Inject constructor(private val chat: ChatRepository) : View
         viewModelScope.launch { chat.send(text, context, agreeFirst, dontAskAgain) }
     }
     fun clear() { viewModelScope.launch { chat.clear() } }
+    fun setConfirmOptionAnswers(enabled: Boolean) { viewModelScope.launch { chat.setConfirmOptionAnswers(enabled) } }
 }
 
 /** 对话页标题（两端一致）；首页入口是爱科卡（见 HomeScreen 的 EyechoCard）。 */
@@ -111,6 +113,7 @@ fun EyeChatScreen(
         onBack = onBack,
         onOpenAccount = onOpenAccount,
         onSend = { text, agree, quiet -> viewModel.send(text, homeState.adviceRequest, agree, quiet) },
+        onConfirmOptionsChange = viewModel::setConfirmOptionAnswers,
         onClear = viewModel::clear,
     ) {
         card?.let { AiExplanationCard(it, onGenerate = { home.generateAdvice() }, onAgree = { home.generateAdvice(agreeFirst = true) },
@@ -127,6 +130,7 @@ internal fun EyeChatContent(
     /** 文字、是否先保存同意、是否勾了「以后不再提示」 */
     onSend: (String, Boolean, Boolean) -> Unit,
     onClear: () -> Unit,
+    onConfirmOptionsChange: (Boolean) -> Unit = {},
     opening: @Composable () -> Unit,
 ) {
     val colors = LocalEyeColors.current
@@ -137,17 +141,42 @@ internal fun EyeChatContent(
     // 本次进入对话页是否已弹过同意说明；还没同意时每次发送都要弹
     var asked by rememberSaveable { mutableStateOf(false) }
     var confirming by rememberSaveable { mutableStateOf(false) }
+    var pendingOption by rememberSaveable { mutableStateOf<String?>(null) }
+    var pendingConsentMessage by rememberSaveable { mutableStateOf<String?>(null) }
+    var skipOptionConfirmation by rememberSaveable { mutableStateOf(false) }
     val needsConsent = state?.access == ChatAccess.NEEDS_CONSENT
     val messages = state?.messages.orEmpty()
-    fun send(agree: Boolean, quiet: Boolean) { onSend(input, agree, quiet); input = "" }
+    fun send(text: String, agree: Boolean, quiet: Boolean) {
+        onSend(text, agree, quiet)
+        if (text == input) input = ""
+    }
+    fun requestSend(text: String) {
+        if (state?.sending == true || text.isBlank()) return
+        if (state?.access == ChatAccess.NEEDS_ACCOUNT) { onOpenAccount(); return }
+        if (needsConsent || (state?.askConsent == true && !asked)) {
+            pendingConsentMessage = text
+            confirming = true
+        } else send(text, agree = false, quiet = false)
+    }
+    fun selectOption(text: String) {
+        if (state?.sending == true) return
+        if (!skipOptionConfirmation && state?.confirmOptionAnswers != false) pendingOption = text else requestSend(text)
+    }
     LaunchedEffect(messages.size, state?.sending) { scroll.animateScrollTo(scroll.maxValue) }
     if (confirming) ChatConsentDialog(
-        onAgree = { quiet -> confirming = false; asked = true; send(needsConsent, quiet) },
-        onDecline = { confirming = false },
+        onAgree = { quiet -> confirming = false; asked = true; send(pendingConsentMessage ?: input, needsConsent, quiet); pendingConsentMessage = null },
+        onDecline = { confirming = false; pendingConsentMessage = null },
     )
+    pendingOption?.let { choice ->
+        OptionAnswerDialog(choice, onConfirm = { dontAsk ->
+            pendingOption = null
+            if (dontAsk) { skipOptionConfirmation = true; onConfirmOptionsChange(false) }
+            requestSend(choice)
+        }, onCancel = { pendingOption = null })
+    }
     EyeSubPage(CHAT_TITLE, onBack, Modifier.imePadding(), scroll = scroll, bottomBar = {
         ChatInputBar(state, input, { input = it.take(Chats.INPUT_LIMIT) }, onOpenAccount) {
-            if (needsConsent || (state?.askConsent == true && !asked)) confirming = true else send(agree = false, quiet = false)
+            requestSend(input)
         }
     }) {
         EyechoIntro()
@@ -155,17 +184,17 @@ internal fun EyeChatContent(
         if (messages.isEmpty()) {
             EyeText("可以这样问爱科", style = typography.bodySecondary, color = colors.textSecondary)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Chats.SUGGESTIONS.forEach { text -> ChoiceChip(text, false) { input = text } }
+                Chats.SUGGESTIONS.forEach { text -> ChoiceChip(text, false) { selectOption(text) } }
             }
         }
         messages.forEachIndexed { index, entry ->
             ChatBubble(entry, active = index == messages.lastIndex && state?.sending != true &&
-                state?.access != ChatAccess.NEEDS_ACCOUNT, onOption = { input = it })
+                state?.access != ChatAccess.NEEDS_ACCOUNT, onOption = { selectOption(it) })
         }
         if (state?.sending != true && messages.isNotEmpty()) {
             val pending = Chats.pendingQuestion(messages)
             val label = if (pending != null) Chats.STOP_INQUIRY else "开始新的问询"
-            ChoiceChip(label, false) { input = if (pending != null) Chats.STOP_INQUIRY else Chats.START_INQUIRY }
+            ChoiceChip(label, false) { selectOption(if (pending != null) Chats.STOP_INQUIRY else Chats.START_INQUIRY) }
         }
         if (state?.sending == true) Row(verticalAlignment = Alignment.CenterVertically) {
             EyechoAvatar(EyeControlSizes.chatAvatar)
@@ -179,6 +208,26 @@ internal fun EyeChatContent(
                 EyeButton("取消", EyeButtonRole.SECONDARY, { confirmClear = false }, Modifier.weight(1f))
             } else EyeText("清空对话", Modifier.clip(EyeShapes.chip).clickable(role = Role.Button) { confirmClear = true }
                 .padding(vertical = 8.dp), style = typography.body, color = colors.primary)
+        }
+    }
+}
+
+/** 点选问询答案后的确认；取消不改动自由输入草稿。 */
+@Composable
+private fun OptionAnswerDialog(choice: String, onConfirm: (Boolean) -> Unit, onCancel: () -> Unit) {
+    val colors = LocalEyeColors.current
+    val typography = LocalEyeTypography.current
+    var dontAsk by rememberSaveable { mutableStateOf(false) }
+    Dialog(onDismissRequest = onCancel) {
+        Column(Modifier.fillMaxWidth().clip(EyeShapes.panel).background(colors.panelBackground).padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            EyeText("确认这项回答？", style = typography.title, color = colors.textPrimary)
+            EyeText(choice, style = typography.chatBody, color = colors.textPrimary)
+            EyeOptionRow("不再询问", null, dontAsk, multiple = true) { dontAsk = !dontAsk }
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                EyeButton("取消", EyeButtonRole.SECONDARY, onCancel, Modifier.weight(1f))
+                EyeButton("确认", EyeButtonRole.PRIMARY, { onConfirm(dontAsk) }, Modifier.weight(1f))
+            }
         }
     }
 }
@@ -197,8 +246,8 @@ private fun EyechoIntro() {
     val typography = LocalEyeTypography.current
     Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.Top,
         horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-        Image(painterResource(R.drawable.eyecho_half), contentDescription = "爱科 Eyecho",
-            Modifier.size(width = EyeControlSizes.chatIntroPortraitWidth, height = EyeControlSizes.chatIntroPortraitHeight))
+        Image(painterResource(R.drawable.eyecho_half), contentDescription = "爱科 Eyecho", contentScale = ContentScale.Crop, alignment = Alignment.TopCenter,
+            modifier = Modifier.size(width = EyeControlSizes.chatIntroPortraitWidth, height = EyeControlSizes.chatIntroPortraitHeight))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             EyeText(EYECHO_HELLO, style = typography.title, color = colors.textPrimary)
             EyeText(EYECHO_INTRO, style = typography.chatBody, color = colors.textSecondary)
