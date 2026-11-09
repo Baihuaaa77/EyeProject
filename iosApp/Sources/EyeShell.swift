@@ -177,7 +177,7 @@ private struct ServicesPage: View {
     let navigate: (AppRoute) -> Void
     var body: some View {
         PageScroll {
-            PageHeader(title: "服务", openAccount: { navigate(.account) })
+            PageHeader(title: "服务", openSettings: { navigate(.settings) })
             DemoHeroCard()
             Text("全部自测").font(EyeStyle.title).foregroundStyle(EyeStyle.text)
                 .padding(.top, EyeSpacing.sectionGap - EyeSpacing.cardGap).padding(.leading, 4)

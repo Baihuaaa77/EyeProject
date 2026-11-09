@@ -95,7 +95,11 @@ enum EyeStyle {
     static let shadowLight = dyn(0xFFFFFF, 0xFFFFFF, lightAlpha: 0.95, darkAlpha: 0.045)
     static let glowRadius: CGFloat = 7
     static let chatAvatarSize: CGFloat = 48
-    static let chatIntroAvatarSize: CGFloat = 104
+    static let chatIntroPortraitWidth: CGFloat = 132
+    static let chatIntroPortraitHeight: CGFloat = 184
+    static let homePortraitWidth: CGFloat = 144
+    static let homePortraitHeight: CGFloat = 200
+    static let homePortraitInset: CGFloat = 8
     static let ringGlowStrokeScale: CGFloat = 1.7
     /// 宽光晕描边超出的半宽，加三倍模糊半径，给滤镜完整的绘制空间。
     static func ringGlowOutset(lineWidth: CGFloat) -> CGFloat {

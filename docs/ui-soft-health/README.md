@@ -34,6 +34,10 @@
 
 参考：[Apple Liquid Glass](https://developer.apple.com/design/human-interface-guidelines/materials)、[Android 图形与缓存](https://developer.android.com/develop/ui/compose/graphics/draw/modifiers)。
 
+## 半身形象与顶栏
+
+问诊顶部采用透明半身像，首页人物取消右移，保留右侧边距；不使用圆形头像框和圆形衬底。三个主页右上角放日夜切换与系统设置；服务页不再放账户按钮，我的页移除通用分组，账户仍从个人卡进入。
+
 ## 最新简化
 
 问诊页使用 104 的介绍头像和 48 的消息头像，介绍左对齐并放大至 18；消息头像与气泡顶部对齐。移除操作提示、总结小标签、历史选项回显、消息参考小字及底部说明。首页工具去掉说明小字，「亮度与蓝光」入口改名「屏幕光」，保持单行。我的页只保留顶部个人卡的渐变边框。

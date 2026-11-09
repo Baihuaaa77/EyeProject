@@ -81,7 +81,7 @@ fun EyeSettingsGear(onClick: () -> Unit, modifier: Modifier = Modifier) {
 }
 
 /**
- * 账户头像（顶层页右上角唯一的按钮）：登录后品牌蓝实心圆 + 白色首字母，未登录为浅填充圆 + 人像线稿；
+ * 账户按钮：登录后品牌蓝实心圆 + 白色首字母，未登录为浅填充圆 + 人像线稿；
  * 点开完整的账户页（登录、注册、退出、注销）。与苹果端 AccountButton 一致。
  */
 @Composable
@@ -118,16 +118,16 @@ fun PersonGlyph(modifier: Modifier = Modifier) {
     }
 }
 
-/** 顶层页右上角：有账户入口时只放账户头像，否则放系统设置齿轮（白天 / 夜晚改在「我的 → 深色模式」）。 */
+/** 顶层页右上角：日夜切换与系统设置；账户由我的页提供。 */
 @Composable
-fun EyeHeaderActions(onOpenAccount: (() -> Unit)?, onOpenSettings: (() -> Unit)?) {
-    when {
-        onOpenAccount != null -> EyeAccountButton(onOpenAccount)
-        onOpenSettings != null -> EyeSettingsGear(onOpenSettings)
+fun EyeHeaderActions(onOpenSettings: (() -> Unit)?) {
+    Row(horizontalArrangement = Arrangement.spacedBy(EyeSpacing.xs), verticalAlignment = Alignment.CenterVertically) {
+        EyeThemeButton()
+        onOpenSettings?.let { EyeSettingsGear(it) }
     }
 }
 
-/** 顶层标题行：22 号标题在上，日期在下，右侧一个浮雕图标按钮。 */
+/** 顶层标题行：标题与日期在左，右侧日夜切换与系统设置。 */
 @Composable
 fun EyePageHeader(
     title: String,
@@ -143,6 +143,6 @@ fun EyePageHeader(
             EyeText(title, style = typography.headline, color = colors.textHeading)
             if (subtitle != null) EyeText(subtitle, Modifier.padding(top = EyeSpacing.xxs), style = typography.label, color = colors.textSecondary)
         }
-        EyeHeaderActions(onOpenAccount, onOpenSettings)
+        EyeHeaderActions(onOpenSettings)
     }
 }

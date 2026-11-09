@@ -150,9 +150,9 @@ struct EyechoAvatar: View {
 private struct EyechoIntro: View {
     var body: some View {
         HStack(alignment: .top, spacing: 16) {
-            Image("EyechoAvatar").resizable().scaledToFill()
-                .frame(width: EyeStyle.chatIntroAvatarSize, height: EyeStyle.chatIntroAvatarSize)
-                .background(EyeStyle.violetSoft).clipShape(Circle()).accessibilityLabel("爱科 Eyecho")
+            Image("EyechoHalf").resizable().scaledToFit()
+                .frame(width: EyeStyle.chatIntroPortraitWidth, height: EyeStyle.chatIntroPortraitHeight)
+                .accessibilityLabel("爱科 Eyecho")
             VStack(alignment: .leading, spacing: 8) {
                 Text("你好，我是爱科").font(EyeStyle.title).foregroundStyle(EyeStyle.text)
                 Text("爱尔眼科 AI 助手，陪你聊聊眼睛的不适、用眼习惯和自测结果。")

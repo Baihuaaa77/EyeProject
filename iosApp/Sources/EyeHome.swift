@@ -32,7 +32,7 @@ struct HomePage: View {
         let report = store.report
         ScrollViewReader { proxy in
             PageScroll {
-                PageHeader(title: "今日", subtitle: today)
+                PageHeader(title: "今日", subtitle: today, openSettings: { navigate(.settings) })
                 HeroCard(report: report, openAccount: { navigate(.account) })
                 TodayData(report: report)
                 SectionTitle(text: "护眼工具")
@@ -160,13 +160,14 @@ private struct EyechoCard: View {
         let quick = Array(EyeCareBridge.shared.symptoms.prefix(2)) + [noDiscomfort]
         ZStack(alignment: .topLeading) {
             Button { EyeHaptics.tap(); openChat() } label: {
-                ZStack(alignment: .topTrailing) {
+                ZStack(alignment: .bottomTrailing) {
                     Color.clear
-                    Circle().fill(EyeStyle.violetSoft).frame(width: 136, height: 136).offset(x: 4, y: 18)
-                    Image("EyechoHalf").resizable().scaledToFit().frame(width: 152, height: 213).offset(x: 14, y: 6)
+                    Image("EyechoHalf").resizable().scaledToFit()
+                        .frame(width: EyeStyle.homePortraitWidth, height: EyeStyle.homePortraitHeight)
+                        .padding(.trailing, EyeStyle.homePortraitInset)
                         .accessibilityLabel("爱科")
                 }
-                .frame(maxWidth: .infinity, minHeight: 180, maxHeight: 180)
+                .frame(maxWidth: .infinity, minHeight: EyeStyle.homePortraitHeight, maxHeight: EyeStyle.homePortraitHeight)
                 .clipShape(RoundedRectangle(cornerRadius: EyeStyle.radiusHero, style: .continuous))
             }.buttonStyle(PressScale(scale: 0.98))
             VStack(alignment: .leading, spacing: 8) {
@@ -190,7 +191,7 @@ private struct EyechoCard: View {
                     }
                 }.padding(.top, 4)
             }
-            .padding(18).frame(width: 230, alignment: .leading)
+            .padding(18).frame(width: 210, alignment: .leading)
         }.eyeLiquidGlass(cornerRadius: EyeStyle.radiusHero)
     }
 }

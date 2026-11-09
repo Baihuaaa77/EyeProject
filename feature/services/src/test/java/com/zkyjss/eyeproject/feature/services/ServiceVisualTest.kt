@@ -72,7 +72,17 @@ class ServiceVisualTest {
 
     @Test fun servicesNavigation() {
         var destination = ""
-        compose.setContent { EyeProjectTheme { ServicesScreen({ destination = "dry" }, { destination = "near" }, { destination = "cover" }) } }
+        compose.setContent { EyeProjectTheme {
+            CompositionLocalProvider(LocalEyeThemeToggle provides EyeThemeToggle(false) { destination = "theme" }) {
+                ServicesScreen({ destination = "dry" }, { destination = "near" }, { destination = "cover" },
+                    onOpenSettings = { destination = "settings" }, onOpenAccount = { destination = "account" })
+            }
+        } }
+        compose.onNodeWithContentDescription("切换到夜晚模式").performClick()
+        assertEquals("theme", destination)
+        compose.onNodeWithContentDescription("账户（未登录）").assertDoesNotExist()
+        compose.onNodeWithContentDescription("系统设置").performClick()
+        assertEquals("settings", destination)
         capture("services-light")
         compose.onNodeWithText("干眼自测").performClick()
         assertEquals("dry", destination)

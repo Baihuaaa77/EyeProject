@@ -63,8 +63,7 @@ struct ThemeToggleButton: View {
         let dark = scheme == .dark
         Button { EyeHaptics.tap(); themeMode = dark ? "light" : "dark" } label: {
             Image(systemName: dark ? "sun.max.fill" : "moon.fill").font(.system(size: 20)).foregroundStyle(EyeStyle.primary)
-                .frame(width: 44, height: 44).background(EyeStyle.panel, in: Circle())
-                .overlay { Circle().stroke(EyeStyle.borderSubtle, lineWidth: 1) }
+                .frame(width: 48, height: 48).eyeGlass(cornerRadius: EyeStyle.radiusMedium)
         }.buttonStyle(.plain).accessibilityLabel(dark ? "切换到白天模式" : "切换到夜晚模式")
     }
 }
@@ -102,7 +101,10 @@ struct PageHeader: View {
                 Text(title).font(EyeStyle.headline).foregroundStyle(EyeStyle.heading).lineLimit(1).minimumScaleFactor(0.7)
                 if let subtitle { Text(subtitle).font(EyeStyle.label).foregroundStyle(EyeStyle.secondary) }
             }.frame(maxWidth: .infinity, alignment: .leading)
-            if let openAccount { AccountButton(action: openAccount) } else if let openSettings { SettingsGear(action: openSettings) }
+            HStack(spacing: EyeSpacing.xs) {
+                ThemeToggleButton()
+                if let openSettings { SettingsGear(action: openSettings) }
+            }
         }.padding(.top, 20).padding(.bottom, 12)
     }
 }

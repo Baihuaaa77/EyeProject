@@ -12,7 +12,7 @@
 
 | 类型 | 说明 |
 |---|---|
-| `EyeProjectTheme` | 默认跟随系统，通过 CompositionLocal 分发；「我的 → 深色模式」可手动选择 |
+| `EyeProjectTheme` | 默认跟随系统，通过 CompositionLocal 分发；主页顶栏日夜按钮可手动选择 |
 | `EyeTheme` | 读取 colors / typography |
 | `EyeColors` | 保留已有字段 API，增加双阴影、标题墨色、蓝青数据令牌；`readableText` 保证数据颜色不直接用作正文 |
 | `EyeTypography` | display 60/66、紧凑分数 48/56、headline 28/36、title 22/30、subtitle 20/28、metricValue 30/36、body 16/24、辅助 14/22、灰色小标题 label 16/24 半粗、列表标题 navigationTitle 18/26 半粗、图表坐标 12、底栏 tab 11/14；中文最多 SemiBold，数字等宽 |
@@ -68,3 +68,5 @@ Liquid Glass 试版：`EyeLiquidGlass` / `eyeLiquidGlass` 为 Android API 26+ �
 仪表空轨道 ringTrack 为浅色 `#D1DDEE` / 深色 `#344458`，提高无数据时的可见度；未知分数仍显示破折号，不绘制虚假进度。
 
 圆环光晕按三倍模糊半径与宽描边增量预留外扩画布，抵消布局尺寸，避免四边裁切；环体、刻度与中心内容大小不变。问诊消息头像 48、介绍头像 104。
+
+人物使用透明半身素材：问诊顶部 132×184，首页卡片内 144×200，右侧留 8 的空间；不加圆形裁切或圆形衬底。三个主页顶栏统一为日夜切换与系统设置齿轮。

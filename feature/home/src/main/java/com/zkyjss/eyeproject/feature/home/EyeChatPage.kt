@@ -197,8 +197,8 @@ private fun EyechoIntro() {
     val typography = LocalEyeTypography.current
     Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.Top,
         horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-        Image(painterResource(R.drawable.eyecho_avatar), contentDescription = "爱科 Eyecho",
-            Modifier.size(EyeControlSizes.chatIntroAvatar).clip(CircleShape).background(colors.violetSoft))
+        Image(painterResource(R.drawable.eyecho_half), contentDescription = "爱科 Eyecho",
+            Modifier.size(width = EyeControlSizes.chatIntroPortraitWidth, height = EyeControlSizes.chatIntroPortraitHeight))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             EyeText(EYECHO_HELLO, style = typography.title, color = colors.textPrimary)
             EyeText(EYECHO_INTRO, style = typography.chatBody, color = colors.textSecondary)

@@ -66,10 +66,11 @@ class MineWalkthroughCapture {
         compose.onNodeWithContentDescription("账户（已登录）").assertDoesNotExist()
         compose.onNodeWithText("账户").performClick()
         assertEquals("account", opened)
-        // 白天 / 夜晚切换移到「通用 → 深色模式」
-        compose.onNodeWithText("深色模式").performScrollTo().performClick()
+        // 日夜切换和系统设置统一放在顶栏；通用分组不再占列表空间。
+        compose.onNodeWithText("通用").assertDoesNotExist()
+        compose.onNodeWithContentDescription("切换到夜晚模式").performClick()
         assertEquals("theme", opened)
-        compose.onNodeWithText("系统设置").performScrollTo().performClick()
+        compose.onNodeWithContentDescription("系统设置").performClick()
         assertEquals("settings", opened)
     }
 

@@ -55,6 +55,7 @@ import com.zkyjss.eyeproject.core.designsystem.R
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeColors
 import com.zkyjss.eyeproject.core.designsystem.theme.eyeSoftSurface
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeMotion
+import com.zkyjss.eyeproject.core.designsystem.theme.EyeControlSizes
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeShapes
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeSpacing
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
@@ -149,7 +150,7 @@ internal fun HomeContent(
             .padding(top = getTopStatusBarPadding()).screenHorizontalPaddingLarge(),
         verticalArrangement = Arrangement.spacedBy(EyeSpacing.cardGap),
     ) {
-        EyePageHeader("今日", null,
+        EyePageHeader("今日", navigation.onOpenSettings,
             subtitle = remember { LocalDate.now().format(DateTimeFormatter.ofPattern("M月d日 EEEE", Locale.CHINA)) })
         EyeCareHero(report, onOpenAccount = navigation.onOpenAccount)
         TodayData(state, actions, Modifier.bringIntoViewRequester(basic))
@@ -426,11 +427,11 @@ private fun EyechoCard(report: EyeCareReport?, onOpenChat: () -> Unit, onCheckIn
     val checked = report?.checkedInToday == true
     val symptoms = report?.todaySymptoms.orEmpty()
     var editing by rememberSaveable { mutableStateOf(false) }
-    Box(Modifier.fillMaxWidth().heightIn(min = 180.dp).pressableCard(EyeShapes.hero, onOpenChat)) {
-        Box(Modifier.align(Alignment.TopEnd).offset(x = 4.dp, y = 18.dp).size(136.dp).clip(CircleShape).background(colors.violetSoft))
+    Box(Modifier.fillMaxWidth().heightIn(min = EyeControlSizes.homePortraitHeight).pressableCard(EyeShapes.hero, onOpenChat)) {
         Image(painterResource(R.drawable.eyecho_half), contentDescription = "爱科", contentScale = ContentScale.Fit,
-            modifier = Modifier.align(Alignment.TopEnd).offset(x = 14.dp, y = 6.dp).size(width = 152.dp, height = 213.dp))
-        Column(Modifier.padding(18.dp).fillMaxWidth(0.62f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            modifier = Modifier.align(Alignment.BottomEnd).padding(end = EyeControlSizes.homePortraitInset)
+                .size(width = EyeControlSizes.homePortraitWidth, height = EyeControlSizes.homePortraitHeight))
+        Column(Modifier.padding(18.dp).fillMaxWidth(0.56f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             EyeCategoryLabel(EYECHO_CARD_LABEL, EyeGlyph.CHAT, colors.violet)
             EyeText(if (checked) "今天的感受已记下" else "今天眼睛感觉怎么样？", style = typography.subtitle, color = colors.textPrimary)
             FlowRow(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

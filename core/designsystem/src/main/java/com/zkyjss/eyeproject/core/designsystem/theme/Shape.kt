@@ -17,7 +17,11 @@ object EyeShapes {
 /** 作答控件在大字号时保留触达空间，尺寸均大于最小触摸范围。 */
 object EyeControlSizes {
     val chatAvatar = 48.dp
-    val chatIntroAvatar = 104.dp
+    val chatIntroPortraitWidth = 132.dp
+    val chatIntroPortraitHeight = 184.dp
+    val homePortraitWidth = 144.dp
+    val homePortraitHeight = 200.dp
+    val homePortraitInset = 8.dp
     val answerKey = 68.dp
     val answerKeyCompact = 56.dp
 }

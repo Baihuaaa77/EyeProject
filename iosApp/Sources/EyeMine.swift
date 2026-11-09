@@ -11,9 +11,6 @@ struct MinePage: View {
     @ObservedObject private var store = SubjectStore.shared
     @ObservedObject private var cloud = CloudModel.shared
     @State private var recordCount = 0
-    @Environment(\.colorScheme) private var scheme
-    /// 白天 / 夜晚（原在各顶层页右上角）：存在 UserDefaults「eye.themeMode」（system / light / dark），根视图据此设置 preferredColorScheme。
-    @AppStorage("eye.themeMode") private var themeMode = "system"
 
     private var me: SubjectProfileItem? { store.subjects.first { $0.relation == "SELF" } }
     private var signedIn: Bool { cloud.bool("signedIn") }
@@ -23,7 +20,7 @@ struct MinePage: View {
 
     var body: some View {
         PageScroll {
-            PageHeader(title: "我的")
+            PageHeader(title: "我的", openSettings: { navigate(.settings) })
             profileCard
             // 三格概览：一张卡里细竖线分隔，数字大、单位灰（与安卓 StatsRow 一致）
             HStack(spacing: 0) {
@@ -44,11 +41,7 @@ struct MinePage: View {
                 ListRow(title: "云端同步", glyph: .cloud, tone: .blue, value: cloudSummary, glowBorder: false) { navigate(.cloud) }
                 ListRow(title: "权限与通知", glyph: .shield, tone: .success, divider: false, glowBorder: false) { navigate(.permissions) }
             }
-            ListGroup(title: "通用") {
-                SwitchRow(title: "深色模式", isOn: Binding(get: { scheme == .dark }, set: { themeMode = $0 ? "dark" : "light" }),
-                          glyph: .moon, tone: .neutral, glowBorder: false)
-                ListRow(title: "系统设置", glyph: .gear, tone: .neutral, divider: false, glowBorder: false) { navigate(.settings) }
-            }
+
         }.onAppear(perform: recount)
     }
 

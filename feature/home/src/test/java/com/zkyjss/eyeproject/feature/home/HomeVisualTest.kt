@@ -101,9 +101,8 @@ class HomeVisualTest {
         compose.onNodeWithContentDescription("今日眼健康指数", substring = true).assertExists()
         compose.onNodeWithText("做 1 分钟护眼操").assertDoesNotExist()
         compose.onNodeWithText("护眼操").assertExists()
-        // 右上角只有账户头像，白天 / 夜晚切换移到「我的」
-        compose.onNodeWithContentDescription("切换到夜晚模式").assertDoesNotExist()
-        compose.onNodeWithContentDescription("系统设置").assertDoesNotExist()
+        // 系统设置移至主页顶栏，账户入口仍在仪表头像。
+        compose.onNodeWithContentDescription("系统设置").assertIsDisplayed()
         capture("01-首页-首屏", advance = false)
         compose.mainClock.autoAdvance = true
         compose.onNodeWithText("休息提醒").performScrollTo().performClick()
@@ -157,7 +156,11 @@ class HomeVisualTest {
         var report by mutableStateOf(initial.report!!.copy(score = 21, level = "LOW", label = "轻松"))
         compose.setContent {
             EyeProjectTheme(darkTheme = dark) {
-                HomeContent(initial.copy(report = report), HomeNavigation(onOpenAccount = { opened = true }), HomeActions())
+                androidx.compose.runtime.CompositionLocalProvider(
+                    com.zkyjss.eyeproject.core.ui.component.LocalEyeThemeToggle provides
+                        com.zkyjss.eyeproject.core.ui.component.EyeThemeToggle(dark) { dark = !dark }) {
+                    HomeContent(initial.copy(report = report), HomeNavigation(onOpenAccount = { opened = true }), HomeActions())
+                }
             }
         }
         compose.onNodeWithText("79").assertIsDisplayed()
@@ -393,6 +396,9 @@ class HomeVisualTest {
         )
         compose.mainClock.autoAdvance = false
         compose.setContent {
+            androidx.compose.runtime.CompositionLocalProvider(
+                com.zkyjss.eyeproject.core.ui.component.LocalEyeThemeToggle provides
+                    com.zkyjss.eyeproject.core.ui.component.EyeThemeToggle(dark) { dark = !dark }) {
             EyeProjectTheme(darkTheme = dark) {
                 val themeIsDark = LocalEyeColors.current.isDark
                 androidx.compose.runtime.SideEffect { renderedDark = themeIsDark }
@@ -404,6 +410,7 @@ class HomeVisualTest {
                     }
                     EyeNavigationDock(items, selected, { selected = it }, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp))
                 }
+            }
             }
         }
         compose.mainClock.advanceTimeBy(1_500)

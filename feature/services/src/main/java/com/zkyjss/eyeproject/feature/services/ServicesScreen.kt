@@ -114,7 +114,7 @@ fun ServicesScreen(
             .screenHorizontalPaddingLarge(),
         verticalArrangement = Arrangement.spacedBy(EyeSpacing.cardGap)
     ) {
-        EyePageHeader("服务", onOpenSettings, onOpenAccount = onOpenAccount)
+        EyePageHeader("服务", onOpenSettings)
         DemoHero()
         EyeText("全部自测", Modifier.padding(top = EyeSpacing.sectionGap - EyeSpacing.cardGap, start = 4.dp),
             style = typography.title, color = colors.textPrimary)

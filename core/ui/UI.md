@@ -80,3 +80,5 @@
 `EyeNavigationDock` 接收纯展示项、选中下标与事件回调，不持有导航。64dp 玻璃底栏、滑动选中镜片，保留 Tab / selected 语义；系统移除动画时直接定位。`EyeNavigationItem` 的图标资源由 app 提供。
 
 列表与开关行支持 glowBorder 开关；我的页仅个人卡保留渐变光边。
+
+顶层页 EyeHeaderActions 统一呈现日夜切换与齿轮，不再优先显示账户；账户通过我的页个人卡进入。

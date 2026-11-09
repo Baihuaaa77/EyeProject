@@ -85,7 +85,7 @@ internal fun MineContent(state: MineUiState, navigation: MineNavigation, modifie
             .padding(top = getTopStatusBarPadding()).screenHorizontalPaddingLarge(),
         verticalArrangement = Arrangement.spacedBy(com.zkyjss.eyeproject.core.designsystem.theme.EyeSpacing.cardGap),
     ) {
-        EyePageHeader("我的", null)
+        EyePageHeader("我的", navigation.onOpenSettings)
         ProfileCard(ready, navigation)
         StatsRow(ready, navigation)
         EyeListGroup(title = "健康档案") {
@@ -99,14 +99,6 @@ internal fun MineContent(state: MineUiState, navigation: MineNavigation, modifie
             EyeListRow("云端同步", navigation.onOpenCloudSync, glowBorder = false, glyph = EyeGlyph.CLOUD, tone = EyeTileTone.BLUE,
                 value = ready?.let { cloudSummary(it.cloudConfigured, it.email, it.healthDataSync) })
             EyeListRow("权限与通知", navigation.onOpenPermissions, glowBorder = false, glyph = EyeGlyph.SHIELD, tone = EyeTileTone.SUCCESS, divider = false)
-        }
-        EyeListGroup(title = "通用") {
-            // 白天 / 夜晚切换（原在各顶层页右上角）：由 app 按主题偏好提供，为空时不显示
-            val theme = LocalEyeThemeToggle.current
-            theme.onToggle?.let { toggle ->
-                EyeSwitchRow("深色模式", theme.isDark, { toggle() }, glowBorder = false, glyph = EyeGlyph.MOON, tone = EyeTileTone.NEUTRAL)
-            }
-            EyeListRow("系统设置", navigation.onOpenSettings, glowBorder = false, glyph = EyeGlyph.GEAR, tone = EyeTileTone.NEUTRAL, divider = false)
         }
         Spacer(Modifier.height(20.dp))
     }
