@@ -56,7 +56,7 @@
 
 ## iOS 圆环修复
 
-首帧直接读取当前分数，后续由 Animatable 层插值；取消默认零值与 onAppear 初始化依赖。无数据时保留更清晰的蓝灰空轨道，不伪造分数与进度。ProgressRingRenderingTests 覆盖首帧弧线、明暗主题、减少动画、无数据与零值，实际执行结果以本次 macOS 云端测试为准。
+首帧直接读取当前分数，后续由 Animatable 层插值；取消默认零值与 onAppear 初始化依赖。无数据时保留更清晰的蓝灰空轨道，不伪造分数与进度。ProgressRingRenderingTests 覆盖首帧弧线、明暗主题、禁用动画事务、无数据与零值，实际执行结果以本次 macOS 云端测试为准。
 
 ## 验证
 

@@ -13,7 +13,7 @@ final class ProgressRingRenderingTests: XCTestCase {
                 let arc = try pixel(image, x: 6, y: 130)
                 // 左侧弧线为蓝青色；空轨道、空白或只有内侧刻度均无法满足。
                 XCTAssertGreaterThan(arc.b - arc.r, 0.25, "首帧必须直接绘出当前分数的进度弧")
-                attach(image, name: "79分-\(dark ? "深色" : "浅色")-减少动画\(reduced)")
+                attach(image, name: "79分-\(dark ? "深色" : "浅色")-禁用动画\(reduced)")
             }
         }
     }
@@ -36,7 +36,7 @@ final class ProgressRingRenderingTests: XCTestCase {
             startAngle: 130, sweepAngle: 280, uniformTicks: true)
             .frame(width: 260, height: 260).background(EyeStyle.background)
             .environment(\.colorScheme, dark ? .dark : .light)
-            .environment(\.accessibilityReduceMotion, reduced)
+            .transaction { $0.disablesAnimations = reduced }
         let renderer = ImageRenderer(content: view)
         renderer.scale = 1
         return try XCTUnwrap(renderer.uiImage)
