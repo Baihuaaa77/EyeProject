@@ -179,7 +179,7 @@ struct VDivider: View {
 
 // MARK: - 圆环与 AI 标识
 
-/// 分段插值的连续色弧：起点和端点使用相邻位置的颜色，消除渐变零点的异色圆帽。
+/// 直接使用当前分数绘制首帧；后续变化由独立的 Animatable 图层插值，不依赖 onAppear 初始化。
 struct ProgressRing: View {
     let fraction: Double?
     var lineWidth: CGFloat = 9
@@ -190,7 +190,29 @@ struct ProgressRing: View {
     var sweepAngle: Double = 360
     var uniformTicks = false
     @Environment(\.accessibilityReduceMotion) private var reduced
-    @State private var shown: Double = 0
+
+    var body: some View {
+        let value = fraction.map { $0.isFinite ? min(1, max(0, $0)) : 0 } ?? 0
+        ProgressRingDrawing(value: value, lineWidth: lineWidth, tint: tint, ticks: ticks,
+            showEndpoint: showEndpoint, startAngle: startAngle, sweepAngle: sweepAngle, uniformTicks: uniformTicks)
+            .animation(reduced ? nil : .easeOut(duration: 0.9), value: value)
+    }
+}
+
+/// 明确的可动画值随 SwiftUI 每帧传入 Canvas，刻度、轨道和进度弧均使用同一坐标系。
+private struct ProgressRingDrawing: View, Animatable {
+    var value: Double
+    let lineWidth: CGFloat
+    let tint: Color?
+    let ticks: Int
+    let showEndpoint: Bool
+    let startAngle: Double
+    let sweepAngle: Double
+    let uniformTicks: Bool
+    var animatableData: Double {
+        get { value }
+        set { value = min(1, max(0, newValue)) }
+    }
 
     private func point(_ center: CGPoint, _ radius: CGFloat, _ degrees: Double) -> CGPoint {
         let a = degrees * .pi / 180
@@ -220,10 +242,9 @@ struct ProgressRing: View {
         Canvas { ctx, size in
             let center = CGPoint(x: size.width / 2, y: size.height / 2)
             let radius = (min(size.width, size.height) - lineWidth) / 2
-            ctx.stroke(path(center, radius, sweepAngle), with: .color(EyeStyle.surfaceVariant),
+            ctx.stroke(path(center, radius, sweepAngle), with: .color(EyeStyle.ringTrack),
                 style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
-            if let fraction, fraction > 0, shown > 0 {
-                let value = min(1, max(0, shown))
+            if value > 0 {
                 let sweep = sweepAngle * value
                 if tint == nil {
                     var glow = ctx
@@ -265,8 +286,6 @@ struct ProgressRing: View {
                 }
             }
         }
-        .onAppear { withAnimation(reduced ? nil : .easeOut(duration: 0.9)) { shown = fraction ?? 0 } }
-        .onChange(of: fraction ?? 0) { value in withAnimation(reduced ? nil : .easeOut(duration: 0.9)) { shown = value } }
     }
 }
 

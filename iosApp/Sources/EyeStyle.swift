@@ -102,9 +102,8 @@ enum EyeStyle {
     static let cardBorderOpacityDark: Double = 0.64
     static let cardGlowOpacity: Double = 0.38
     static let cardBorderSubtle: Double = 0.65
-    static let borderYellow = Color(rgb: 0xFFE34D)
     static var borderGradient: LinearGradient {
-        LinearGradient(colors: [dataCyan, primaryDark, borderYellow], startPoint: .topLeading, endPoint: .bottomTrailing)
+        LinearGradient(colors: [brandStart, dataCyan, dataAqua], startPoint: .topLeading, endPoint: .bottomTrailing)
     }
     static let liquidShadowRadius: CGFloat = 18
     static let liquidShadowOffset: CGFloat = 8
@@ -124,6 +123,7 @@ enum EyeStyle {
     static let glowCoreOpacity: Double = 0.32
     static let dataCyan = Color(rgb: 0x18C2FF)
     static let dataAqua = Color(rgb: 0x00EFE0)
+    static let ringTrack = dyn(0xD1DDEE, 0x344458)
     static let dataMint = Color(rgb: 0x2CF2C8)
     static var dataGradient: LinearGradient {
         LinearGradient(colors: [brandStart, dataCyan, dataAqua], startPoint: .top, endPoint: .bottom)

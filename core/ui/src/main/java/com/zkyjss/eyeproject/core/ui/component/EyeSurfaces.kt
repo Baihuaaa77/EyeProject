@@ -247,7 +247,7 @@ fun DrawScope.drawProgressRing(colors: EyeColors, fraction: Float?, stroke: Floa
     val arcSize = Size(size.minDimension - stroke, size.minDimension - stroke)
     val topLeft = Offset((size.width - arcSize.width) / 2, (size.height - arcSize.height) / 2)
     val totalSweep = sweepAngle.coerceIn(0f, 360f)
-    drawArc(colors.surfaceVariant, startAngle, totalSweep, false, topLeft, arcSize, style = Stroke(stroke, cap = StrokeCap.Round))
+    drawArc(colors.ringTrack, startAngle, totalSweep, false, topLeft, arcSize, style = Stroke(stroke, cap = StrokeCap.Round))
     if (fraction == null) return
     val progress = fraction.coerceIn(0f, 1f)
     val sweep = totalSweep * progress

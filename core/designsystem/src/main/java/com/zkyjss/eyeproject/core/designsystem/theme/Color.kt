@@ -80,8 +80,8 @@ data class EyeColors(
     val shadowLight: Color get() = Color.White.copy(alpha = if (isDark) 0.045f else 0.95f)
     val dataCyan: Color get() = Color(0xFF18C2FF)
     val dataAqua: Color get() = Color(0xFF00EFE0)
-    val borderYellow: Color get() = Color(0xFFFFE34D)
-    val borderColors: List<Color> get() = listOf(dataCyan, primaryDark, borderYellow)
+    val ringTrack: Color get() = if (isDark) Color(0xFF344458) else Color(0xFFD1DDEE)
+    val borderColors: List<Color> get() = listOf(brandStart, dataCyan, dataAqua)
     val borderBrush: Brush get() = Brush.linearGradient(borderColors)
     val dataMint: Color get() = Color(0xFF2CF2C8)
     val chatUserBackground: Color get() = primaryDark
