@@ -10,7 +10,7 @@ private func levelColor(_ level: String) -> Color {
     switch level { case "LOW": return EyeStyle.success; case "MEDIUM": return EyeStyle.warning; case "HIGH": return EyeStyle.danger; default: return EyeStyle.secondary }
 }
 
-/// 首页（2026-11-08 视觉改版）：日期 +「今日」与右上角账户头像 → 主卡（实心圆环包住的眼健康指数、一句结论、「做 1 分钟护眼操」）→
+/// 首页：日期与「今日」→ 开口圆环、眼健康指数及账户头像 → 今日数据与护眼工具 →
 /// 快捷记下今日感受）→ 实时检测（未开始时一行）→ 休息提醒一行。与安卓 HomeContent 一致。
 struct HomePage: View {
     let navigate: (AppRoute) -> Void
@@ -32,8 +32,8 @@ struct HomePage: View {
         let report = store.report
         ScrollViewReader { proxy in
             PageScroll {
-                PageHeader(title: "今日", subtitle: today, openAccount: { navigate(.account) })
-                HeroCard(report: report) { exerciseOpen = true }
+                PageHeader(title: "今日", subtitle: today)
+                HeroCard(report: report, openAccount: { navigate(.account) })
                 TodayData(report: report)
                 SectionTitle(text: "护眼工具")
                 ToolRow(report: report, navigate: navigate) { exerciseOpen = true }
@@ -58,7 +58,7 @@ struct HomePage: View {
     }
 }
 
-/// 分区标题（20 号半粗），与上一块内容拉开 sectionGap。
+/// 分区标题（设计令牌的 22 号半粗），与上一块内容拉开 sectionGap。
 private struct SectionTitle: View {
     let text: String
     var body: some View {
@@ -74,37 +74,43 @@ private func ringColor(_ level: String) -> Color {
     switch level { case "LOW": return EyeStyle.success; case "MEDIUM": return EyeStyle.accent; case "HIGH": return EyeStyle.danger; default: return EyeStyle.tertiary }
 }
 
-/// 下面一句结论和主按钮「做 1 分钟护眼操」。眼健康指数 = 100 − 用眼负荷分。与安卓 EyeCareHero 一致。
+/// 开口圆环与账户头像。眼健康指数 = 100 − 用眼负荷分，与安卓 EyeCareHero 一致。
 private struct HeroCard: View {
     let report: CareReport
-    let openExercise: () -> Void
+    let openAccount: () -> Void
+    @ObservedObject private var cloud = CloudModel.shared
+    private var mood: EyeMood {
+        switch report.level { case "LOW": .happy; case "MEDIUM": .calm; case "HIGH": .tired; default: .waiting }
+    }
     var body: some View {
         let index = report.score.map(healthIndex)
-        EyeHeroCard(spacing: EyeSpacing.lg) {
-            HStack(spacing: EyeSpacing.md) {
-                VStack(alignment: .leading, spacing: EyeSpacing.xs) {
-                    Text("眼健康指数").font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text)
-                    HStack(alignment: .firstTextBaseline, spacing: EyeSpacing.xxs) {
-                        Text(index.map { "\($0)" } ?? "—").font(EyeStyle.display).foregroundStyle(EyeStyle.text)
-                            .monospacedDigit().lineLimit(1).minimumScaleFactor(0.75)
-                        Text("/100").font(EyeStyle.body).foregroundStyle(EyeStyle.secondary)
-                    }
-                    HStack(spacing: EyeSpacing.xs) {
-                        Circle().fill(ringColor(report.level)).frame(width: 7, height: 7)
-                        Text(report.label).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.text)
-                    }.padding(.horizontal, EyeSpacing.sm).padding(.vertical, EyeSpacing.xxs)
-                        .background(EyeStyle.surfaceVariant, in: EyeStyle.chipShape)
-                }.frame(maxWidth: .infinity, alignment: .leading)
-                ProgressRing(fraction: index.map { Double($0) / 100 }, lineWidth: 9, showEndpoint: true)
-                    .frame(width: 112, height: 112)
+        VStack(alignment: .leading, spacing: EyeSpacing.md) {
+            Text("眼健康指数").font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text)
+            ZStack(alignment: .bottom) {
+                ZStack {
+                    ProgressRing(fraction: index.map { Double($0) / 100 }, lineWidth: 12, ticks: 40, showEndpoint: true, startAngle: 130, sweepAngle: 280, uniformTicks: true)
+                    VStack(spacing: EyeSpacing.xxs) {
+                        MoodFace(mood: mood).frame(width: 44, height: 44)
+                        HStack(alignment: .firstTextBaseline, spacing: EyeSpacing.xxs) {
+                            Text(index.map { "\($0)" } ?? "—").font(EyeStyle.healthScore).foregroundStyle(EyeStyle.heading)
+                                .monospacedDigit().lineLimit(1).minimumScaleFactor(0.7)
+                            Text("/100").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
+                        }
+                        Text(report.label).font(EyeStyle.label).foregroundStyle(EyeStyle.secondary)
+                    }.padding(.bottom, EyeSpacing.md)
+                }.aspectRatio(1, contentMode: .fit).padding(.bottom, 24)
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel(index.map { "今日眼健康指数 \($0) 分，\(report.label)" } ?? "今日眼健康指数暂无数据")
-            }
-            if !report.headline.isEmpty {
-                Text(report.headline).font(EyeStyle.body.weight(.medium)).foregroundStyle(EyeStyle.text)
-                    .multilineTextAlignment(.leading).frame(maxWidth: .infinity).fixedSize(horizontal: false, vertical: true)
-            }
-            Button("做 1 分钟护眼操", action: openExercise).buttonStyle(EyeButtonStyle())
+                Button(action: openAccount) {
+                    let initial = cloud.bool("signedIn") ? String(cloud.string("email").prefix(1)).uppercased() : ""
+                    ZStack {
+                        if initial.isEmpty { EyeGlyphView(glyph: .person, color: EyeStyle.primary).frame(width: 26, height: 26) }
+                        else { Text(initial).font(EyeStyle.title).foregroundStyle(EyeStyle.text) }
+                    }.frame(width: 56, height: 56).background(EyeStyle.panel, in: Circle())
+                        .shadow(color: EyeStyle.shadowLight, radius: 8, x: -3, y: -3)
+                        .shadow(color: EyeStyle.shadow, radius: 12, x: 4, y: 4)
+                }.buttonStyle(.plain).accessibilityLabel("账户头像")
+            }.frame(maxWidth: 260).frame(maxWidth: .infinity)
         }
     }
 }
@@ -155,7 +161,7 @@ private struct EyechoCard: View {
         ZStack(alignment: .topLeading) {
             Button { EyeHaptics.tap(); openChat() } label: {
                 ZStack(alignment: .topTrailing) {
-                    EyeStyle.panel
+                    Color.clear
                     Circle().fill(EyeStyle.violetSoft).frame(width: 136, height: 136).offset(x: 4, y: 18)
                     Image("EyechoHalf").resizable().scaledToFit().frame(width: 152, height: 213).offset(x: 14, y: 6)
                         .accessibilityLabel("爱科")
@@ -185,7 +191,7 @@ private struct EyechoCard: View {
                 }.padding(.top, 4)
             }
             .padding(18).frame(width: 230, alignment: .leading)
-        }
+        }.eyeLiquidGlass(cornerRadius: EyeStyle.radiusHero)
     }
 }
 
@@ -342,7 +348,7 @@ private struct SignalCard: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 6) {
                 EyeGlyphView(glyph: category.0, color: category.1).frame(width: 16, height: 16)
-                Text(signal.label).font(EyeStyle.chip).foregroundStyle(category.1).lineLimit(1)
+                Text(signal.label).font(EyeStyle.label).foregroundStyle(EyeStyle.secondary).lineLimit(1)
                 Spacer(minLength: 4)
                 if signal.status == "ATTENTION" { Text("留意").font(EyeStyle.chip).foregroundStyle(EyeStyle.readableText(EyeStyle.warning)) }
             }
@@ -350,7 +356,7 @@ private struct SignalCard: View {
                 .lineLimit(1).minimumScaleFactor(0.7)
         }
         .padding(EyeSpacing.cardPadding).frame(maxWidth: .infinity, alignment: .leading)
-        .eyeGlass()
+        .eyeGlass().eyeGlowBorder()
         .accessibilityElement(children: .combine)
     }
 }
@@ -365,7 +371,7 @@ private struct ReminderCard: View {
             HStack(spacing: 14) {
                 EyeGlyphView(glyph: .bell, color: EyeStyle.success).frame(width: 18, height: 18)
                     .frame(width: 32, height: 32).background(EyeStyle.successSoft, in: RoundedRectangle(cornerRadius: EyeStyle.radiusSmall, style: .continuous))
-                Text("休息提醒").font(EyeStyle.body.weight(.medium)).foregroundStyle(EyeStyle.text).frame(maxWidth: .infinity, alignment: .leading)
+                Text("休息提醒").font(EyeStyle.navigationTitle).foregroundStyle(EyeStyle.text).frame(maxWidth: .infinity, alignment: .leading)
                 if reminder.enabled { Text("每 \(reminder.intervalMinutes) 分钟").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary) }
                 Toggle("", isOn: Binding(get: { reminder.enabled }, set: { EyeHaptics.toggle(); reminder.setEnabled($0) }))
                     .labelsHidden().tint(EyeStyle.primary)
@@ -376,7 +382,7 @@ private struct ReminderCard: View {
             if let notice = reminder.notice { Text(notice).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.readableText(EyeStyle.warning)) }
         }
         .padding(.horizontal, 16).padding(.vertical, 12).frame(maxWidth: .infinity, alignment: .leading)
-        .eyeGlass()
+        .eyeGlass().eyeGlowBorder()
         .animation(.easeOut(duration: 0.2), value: reminder.enabled)
     }
 }
@@ -410,13 +416,13 @@ private struct ToolTile: View {
                 EyeGlyphView(glyph: glyph, color: ink).frame(width: 22, height: 22)
                     .frame(width: 40, height: 40).background(soft, in: RoundedRectangle(cornerRadius: EyeStyle.radiusSmall, style: .continuous))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(title).font(EyeStyle.body.weight(.semibold)).foregroundStyle(EyeStyle.text).lineLimit(1).minimumScaleFactor(0.8)
+                    Text(title).font(EyeStyle.navigationTitle).foregroundStyle(EyeStyle.text).lineLimit(2).minimumScaleFactor(0.8)
                     Text(meta).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary).lineLimit(1)
                 }
             }
             .padding(.horizontal, 12).padding(.vertical, 16)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .eyeGlass()
+            .eyeLiquidGlass()
             .contentShape(RoundedRectangle(cornerRadius: EyeStyle.radius))
         }.buttonStyle(PressScale(scale: 0.97))
     }

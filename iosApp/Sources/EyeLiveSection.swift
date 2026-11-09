@@ -37,10 +37,9 @@ struct LiveEyeSection: View {
                     .frame(width: 44, height: 44).background(EyeStyle.iceSoft, in: Circle())
                 VStack(alignment: .leading, spacing: 0) {
                     HStack(spacing: 0) {
-                        Text("实时检测").font(EyeStyle.body.weight(.semibold)).foregroundStyle(EyeStyle.text)
+                        Text("实时检测").font(EyeStyle.title).foregroundStyle(EyeStyle.text)
                         HelpButton(title: "实时检测", text: Self.help)
                     }
-                    Text("眨眼与距离，仅在本机处理").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
                 }.frame(maxWidth: .infinity, alignment: .leading)
                 PillButton(label: "开始") { model.wanted = true; model.start() }
             }
@@ -55,7 +54,7 @@ struct LiveEyeSection: View {
             // 标题行：图标 + 标题 + 问号紧挨着，状态标签靠右
             HStack(spacing: 0) {
                 EyeGlyphView(glyph: .camera, color: EyeStyle.iceInk).frame(width: 20, height: 20).padding(.trailing, 8)
-                Text("实时检测").font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text)
+                Text("实时检测").font(EyeStyle.title).foregroundStyle(EyeStyle.text)
                 HelpButton(title: "实时检测", text: Self.help)
                 Spacer(minLength: 8)
                 if model.running { statusChip }

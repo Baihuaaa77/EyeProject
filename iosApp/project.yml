@@ -19,6 +19,10 @@ targets:
       - Sources
       - path: ../core/camera/src/main/assets/face_landmarker.task
         buildPhase: resources
+      - path: ../core/designsystem/src/main/res/font/nunito_black.ttf
+        buildPhase: resources
+      - path: ../core/designsystem/src/main/assets/fonts/OFL-Nunito.txt
+        buildPhase: resources
       - path: ../shared/feedback/res/raw
         buildPhase: resources
     info:
@@ -39,6 +43,7 @@ targets:
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
           NSAllowsArbitraryLoads: true
+        UIAppFonts: [nunito_black.ttf]
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
         ITSAppUsesNonExemptEncryption: false

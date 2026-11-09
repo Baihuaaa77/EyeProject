@@ -99,11 +99,11 @@ private struct EyeBottomBar: View {
                 Button { if !active { EyeHaptics.tap() }; selected = tab } label: {
                     VStack(spacing: 2) {
                         NavIconView(icon: tab.icon, selected: active).frame(width: 24, height: 24).scaleEffect(active ? 1.06 : 1)
-                        Text(tab.label).font(EyeStyle.tab)
+                        Text(tab.label).font(EyeStyle.tab).foregroundStyle(EyeStyle.text)
                     }
                     .foregroundStyle(active ? EyeStyle.primary : EyeStyle.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color.clear, in: Capsule())
+                    .background(active ? EyeStyle.primary.opacity(EyeStyle.liquidSelectedOpacity) : .clear, in: Capsule())
                     .contentShape(Capsule())
                 }.buttonStyle(.plain)
                     .accessibilityLabel(tab.label)
@@ -112,17 +112,8 @@ private struct EyeBottomBar: View {
             }
         }
         .padding(6).frame(height: 64)
-        .background { TabBarGlass() }
+        .eyeLiquidGlass(cornerRadius: EyeStyle.liquidDockRadius)
         .padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 12)
-    }
-}
-
-private struct TabBarGlass: View {
-    var body: some View {
-        RoundedRectangle(cornerRadius: EyeStyle.radius, style: .continuous).fill(EyeStyle.panel)
-            .shadow(color: EyeStyle.shadowLight, radius: 16, x: -6, y: -6)
-            .shadow(color: EyeStyle.shadow, radius: 22, x: 8, y: 8)
-            .overlay { RoundedRectangle(cornerRadius: EyeStyle.radius).stroke(EyeStyle.glassEdgeTop, lineWidth: 1) }
     }
 }
 
@@ -289,7 +280,7 @@ private struct ServiceRow: View {
                     Spacer(minLength: 4)
                     Image(systemName: "chevron.right").foregroundStyle(EyeStyle.primary)
                 }
-            }.padding(EyeSpacing.lg).frame(maxWidth: .infinity, alignment: .leading).eyeGlass()
+            }.padding(EyeSpacing.lg).frame(maxWidth: .infinity, alignment: .leading).eyeLiquidGlass()
         }.buttonStyle(PressScale(scale: 0.98))
     }
 }

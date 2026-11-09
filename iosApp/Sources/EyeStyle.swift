@@ -3,10 +3,10 @@ import UIKit
 
 /// DESIGN.md 的双端主题令牌：同色浮雕表面、中性文字与蓝青渐变数据。
 enum EyeStyle {
-    static let background = dyn(0xF1F3FA, 0x1E2023)
-    static let panel = dyn(0xF4F7FD, 0x26282B)
+    static let background = dyn(0xF5F6F8, 0x1E2023)
+    static let panel = dyn(0xFFFFFF, 0x26282B)
     /// 浅填充：次要按钮、分段控件底、输入框、圆环底环。
-    static let surfaceVariant = dyn(0xE8EDF7, 0x1B1D20)
+    static let surfaceVariant = dyn(0xE9EDF3, 0x1B1D20)
     static let borderSubtle = dyn(0x5D6280, 0xFFFFFF, lightAlpha: 0.1216, darkAlpha: 0.0706)
     static let text = dyn(0x313949, 0xE3E5E8)
     /// 示意图墨色：深浅主题都保持深色（视标、示意人物五官）。
@@ -15,7 +15,7 @@ enum EyeStyle {
     static let tertiary = dyn(0x878EA3, 0x73767C)
     static let primary = dyn(0x2F7BFF, 0x2F7BFF)
     static let primaryDark = dyn(0x0A6CFF, 0x0A6CFF)
-    static let primarySoft = dyn(0xE8EDF7, 0x1B1D20)
+    static let primarySoft = dyn(0xE9EDF3, 0x1B1D20)
     static let onPrimary = dyn(0x313949, 0xE3E5E8)
     static let neutralSoft = dyn(0xE8EDF7, 0x1B1D20)
     static let brandStart = dyn(0x2F7BFF, 0x2F7BFF)
@@ -76,24 +76,50 @@ enum EyeStyle {
     static let dangerSoft = dyn(0xE8EDF7, 0x1B1D20)
     static let tooClose = dyn(0xFF5A6E, 0xFF5A6E)
     static let tooFar = dyn(0x2F7BFF, 0x2F7BFF)
-    static let heroStart = dyn(0xF4F7FD, 0x26282B)
-    static let heroEnd = dyn(0xF4F7FD, 0x26282B)
+    static let heroStart = dyn(0xFFFFFF, 0x26282B)
+    static let heroEnd = dyn(0xFFFFFF, 0x26282B)
     static let heroBorder = Color.clear
     /// 同色浮雕按钮表面，渐变短线标记主操作。
-    static let buttonStart = dyn(0xF4F7FD, 0x26282B)
-    static let buttonEnd = dyn(0xF4F7FD, 0x26282B)
+    static let buttonStart = dyn(0xEAF2FF, 0x303844)
+    static let buttonEnd = dyn(0xEAF2FF, 0x303844)
     /// 蓝 → 水绿的数据图形渐变。
     static let flowStart = dyn(0x2F7BFF, 0x2F7BFF)
     static let flowEnd = dyn(0x00EFE0, 0x00EFE0)
     static let glow = dyn(0x00EFE0, 0x00EFE0, lightAlpha: 0.55, darkAlpha: 0.7)
     static let shadow = dyn(0xA3B1CD, 0x000000, lightAlpha: 0.4510, darkAlpha: 0.5490)
-    static let glassFill = dyn(0xF4F7FD, 0x26282B)
+    static let glassFill = dyn(0xFFFFFF, 0x26282B)
     static let glassEdgeTop = dyn(0xFFFFFF, 0xFFFFFF, lightAlpha: 0, darkAlpha: 0.035)
     static let glassEdgeBottom = Color.clear
 
     static let heading = dyn(0x141A2B, 0xF2F3F5)
     static let shadowLight = dyn(0xFFFFFF, 0xFFFFFF, lightAlpha: 0.95, darkAlpha: 0.045)
     static let glowRadius: CGFloat = 7
+    static let tickGlowRadius: CGFloat = 2
+    static let cardBorderWidth: CGFloat = 1.2
+    static let cardBorderInset: CGFloat = 1.5
+    static let cardGlowRadius: CGFloat = 3
+    static let cardBorderOpacityLight: Double = 0.72
+    static let cardBorderOpacityDark: Double = 0.64
+    static let cardGlowOpacity: Double = 0.38
+    static let cardBorderSubtle: Double = 0.65
+    static let borderYellow = Color(rgb: 0xFFE34D)
+    static var borderGradient: LinearGradient {
+        LinearGradient(colors: [dataCyan, primaryDark, borderYellow], startPoint: .topLeading, endPoint: .bottomTrailing)
+    }
+    static let liquidShadowRadius: CGFloat = 18
+    static let liquidShadowOffset: CGFloat = 8
+    static let liquidShadowOpacity: Double = 0.65
+    static let liquidReflectionRadius: CGFloat = 220
+    static let liquidDockRadius: CGFloat = 32
+    static let liquidSelectedOpacity: Double = 0.10
+    static let liquidRimWidth: CGFloat = 1.2
+    static let liquidInnerInset: CGFloat = 3
+    static let liquidTintLight: Double = 0.045
+    static let liquidTintDark: Double = 0.11
+    static let liquidReflectionLight: Double = 0.72
+    static let liquidReflectionDark: Double = 0.23
+    static let liquidEdgeLight: Double = 0.92
+    static let liquidEdgeDark: Double = 0.50
     static let glowOpacity: Double = 0.9
     static let glowCoreOpacity: Double = 0.32
     static let dataCyan = Color(rgb: 0x18C2FF)
@@ -126,14 +152,24 @@ enum EyeStyle {
     static let spacing: CGFloat = 12
     /// DESIGN.md 字阶：主数字 48、页面标题 22、卡片读数 26、正文 15、辅助 13。
     /// 中文标题最多使用 semibold。
+    static let healthScore = Font.custom("Nunito-Black", size: 60, relativeTo: .largeTitle)
+    static let healthScoreCompact = Font.custom("Nunito-Black", size: 48, relativeTo: .largeTitle)
+    static let moodGold = Color(rgb: 0xFFCE65)
+    static let moodWarm = Color(rgb: 0xE8BE7C)
+    static let moodSilver = Color(rgb: 0xCAD0DA)
+    static let chatBody = Font.system(size: 18)
+    static let chatUserBackground = primaryDark
+    static let chatUserText = Color.white
     static let display = Font.system(size: 60, weight: .semibold)
     static let displayCompact = Font.system(size: 48, weight: .semibold)
-    static let headline = Font.system(size: 26, weight: .semibold)
+    static let headline = Font.system(size: 28, weight: .semibold)
     static let chip = Font.system(size: 13, weight: .semibold)
     static let caption = Font.system(size: 12, weight: .semibold)
     static let tab = Font.system(size: 11, weight: .medium)
-    static let title = Font.system(size: 20, weight: .semibold)
-    static let subtitle = Font.system(size: 18, weight: .semibold)
+    static let title = Font.system(size: 22, weight: .semibold)
+    static let subtitle = Font.system(size: 20, weight: .semibold)
+    static let label = Font.system(size: 16, weight: .semibold)
+    static let navigationTitle = Font.system(size: 18, weight: .semibold)
     static let button = Font.system(size: 17, weight: .semibold)
     static let body = Font.system(size: 16)
     static let bodySecondary = Font.system(size: 14)
@@ -237,10 +273,11 @@ struct EyeButtonStyle: ButtonStyle {
             .padding(.horizontal, 16).padding(.vertical, 12).frame(maxWidth: .infinity, minHeight: 52)
             .foregroundStyle(content)
             .eyeGlass(cornerRadius: EyeStyle.radiusMedium, fill: AnyShapeStyle(fill), pressed: configuration.isPressed)
-            .overlay(alignment: .bottom) {
-                if role == .primary {
-                    Capsule().fill(EyeStyle.flowGradient).frame(width: 56, height: 3)
-                        .shadow(color: EyeStyle.primary.opacity(EyeStyle.glowOpacity), radius: EyeStyle.glowRadius).padding(.bottom, 5)
+            .overlay {
+                if role != .danger && enabled {
+                    shape.inset(by: 1.8).stroke(EyeStyle.borderGradient, lineWidth: 1.2).opacity(role == .primary ? 1 : 0.55)
+                        .shadow(color: EyeStyle.primary.opacity(0.65), radius: EyeStyle.glowRadius * 0.5)
+                        .allowsHitTesting(false)
                 }
             }
             .contentShape(shape)

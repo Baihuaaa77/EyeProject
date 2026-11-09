@@ -25,3 +25,7 @@
 依赖 core:designsystem、core:ui、core:data；由 app 导航接入。云端设计见 `docs/后端与智能评估设计-2026-10-15.md`。
 
 本地 Compose 测试：`./gradlew.bat :feature:mine:testDebugUnitTest`；截图在 `feature/mine/build/reports/ui/` 并同步到 `docs/界面截图-2026-10-23/安卓/`。
+
+标题层次：页标题 28、分区 22、个人卡 22；列表标题 18 号半粗，概览灰色标签 16 号半粗，Android / iOS 同步。
+
+光边试版：个人卡与三格概览增加渐变细光边，列表与开关行使用较淡版本。内容、导航与账号和同步行为保持。

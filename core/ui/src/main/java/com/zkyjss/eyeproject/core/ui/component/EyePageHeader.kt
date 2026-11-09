@@ -141,7 +141,7 @@ fun EyePageHeader(
     Row(modifier.fillMaxWidth().padding(top = EyeSpacing.lg, bottom = EyeSpacing.sm), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             EyeText(title, style = typography.headline, color = colors.textHeading)
-            if (subtitle != null) EyeText(subtitle, Modifier.padding(top = EyeSpacing.xxs), style = typography.bodySecondary, color = colors.textSecondary)
+            if (subtitle != null) EyeText(subtitle, Modifier.padding(top = EyeSpacing.xxs), style = typography.label, color = colors.textSecondary)
         }
         EyeHeaderActions(onOpenAccount, onOpenSettings)
     }

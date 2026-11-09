@@ -1,5 +1,6 @@
 package com.zkyjss.eyeproject.feature.mine
 
+import com.zkyjss.eyeproject.core.designsystem.theme.eyeGlowBorder
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.IntrinsicSize
 import com.zkyjss.eyeproject.core.ui.component.LocalEyeThemeToggle
@@ -119,7 +120,7 @@ private fun ProfileCard(state: MineUiState.Ready?, navigation: MineNavigation) {
     val haptics = rememberEyeHaptics()
     val self = state?.self
     val complete = profileCompleteness(self)
-    Column(Modifier.fillMaxWidth().eyeGlass(colors, EyeShapes.hero)) {
+    Column(Modifier.fillMaxWidth().eyeGlass(colors, EyeShapes.hero).eyeGlowBorder(colors, EyeShapes.hero)) {
         Row(
             Modifier.fillMaxWidth().clickable(role = Role.Button) { haptics.tap(); navigation.onEditSubject(self?.id) }
                 .padding(start = 18.dp, end = 16.dp, top = 18.dp, bottom = 14.dp),
@@ -155,7 +156,7 @@ private fun ProfileCard(state: MineUiState.Ready?, navigation: MineNavigation) {
 @Composable
 private fun StatsRow(state: MineUiState.Ready?, navigation: MineNavigation) {
     val colors = LocalEyeColors.current
-    Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).eyeGlass(colors, EyeShapes.panel)) {
+    Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).eyeGlass(colors, EyeShapes.panel).eyeGlowBorder(colors, EyeShapes.panel)) {
         StatTile("测试记录", "${state?.recordCount ?: 0}", "条", Modifier.weight(1f), navigation.onOpenRecords)
         Box(Modifier.padding(vertical = 14.dp).width(0.5.dp).fillMaxHeight().background(colors.borderSubtle))
         StatTile("家庭成员", "${state?.memberCount ?: 0}", "人", Modifier.weight(1f), navigation.onOpenSubjects)
@@ -174,6 +175,6 @@ private fun StatTile(label: String, value: String, unit: String, modifier: Modif
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         EyeText(eyeReading(value, unit), style = typography.title, color = colors.textPrimary, maxLines = 1)
-        EyeText(label, style = typography.bodySecondary, color = colors.textSecondary)
+        EyeText(label, style = typography.label, color = colors.textSecondary)
     }
 }

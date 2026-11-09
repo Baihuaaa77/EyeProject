@@ -276,9 +276,9 @@ private fun ChatBubble(entry: ChatEntry, active: Boolean = false, onOption: (Str
         verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.Bottom) {
             if (!mine) { EyechoAvatar(28.dp); Spacer(Modifier.width(8.dp)) }
-            Column(Modifier.widthIn(max = 290.dp).clip(shape).background(if (mine) colors.buttonStart else colors.panelBackground)
+            Column(Modifier.widthIn(max = 290.dp).clip(shape).background(if (mine) colors.chatUserBackground else colors.panelBackground)
                 .padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                EyeText(entry.text, style = typography.body, color = if (mine) colors.onPrimary else colors.textPrimary)
+                EyeText(entry.text, style = typography.chatBody, color = if (mine) colors.chatUserText else colors.textPrimary)
                 if (entry.inquiryComplete && !entry.urgent) EyeText("本次问询已总结", style = typography.bodySecondary, color = colors.primary)
                 entry.question?.let { q ->
                     EyeText(q.prompt, style = typography.subtitle, color = colors.textPrimary)

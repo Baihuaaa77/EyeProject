@@ -113,7 +113,7 @@ internal fun LiveEyeContent(
     val haptics = rememberEyeHaptics()
     val s = state.snapshot
     if (!state.running) {
-        // 未开始：一行（青色圆形图标 + 名称与一句说明 +「开始」），开始后才展开取景框
+        // 未开始：一行（青色圆形图标 + 放大名称 +「开始」），开始后才展开取景框
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(44.dp).clip(CircleShape).background(colors.iceSoft), contentAlignment = Alignment.Center) {
@@ -122,10 +122,9 @@ internal fun LiveEyeContent(
                 Spacer(Modifier.width(14.dp))
                 Column(Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        EyeText("实时检测", style = typography.body, fontWeight = FontWeight.SemiBold, color = colors.textPrimary)
+                        EyeText("实时检测", style = typography.title, color = colors.textPrimary)
                         EyeHelpButton("实时检测", LIVE_HELP)
                     }
-                    EyeText("眨眼与距离，仅在本机处理", style = typography.bodySecondary, color = colors.textSecondary)
                 }
                 PillButton("开始") { haptics.toggle(true); onStart() }
             }
@@ -138,7 +137,7 @@ internal fun LiveEyeContent(
         Row(Modifier.fillMaxWidth().heightIn(min = 40.dp), verticalAlignment = Alignment.CenterVertically) {
             EyeGlyphIcon(EyeGlyph.CAMERA, Modifier.size(20.dp), colors.iceInk)
             Spacer(Modifier.width(8.dp))
-            EyeText("实时检测", style = typography.subtitle, color = colors.textPrimary)
+            EyeText("实时检测", style = typography.title, color = colors.textPrimary)
             EyeHelpButton("实时检测", LIVE_HELP)
             Spacer(Modifier.weight(1f))
             if (state.running) {

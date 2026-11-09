@@ -100,7 +100,7 @@ struct PageHeader: View {
         HStack(alignment: .center, spacing: 10) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(title).font(EyeStyle.headline).foregroundStyle(EyeStyle.heading).lineLimit(1).minimumScaleFactor(0.7)
-                if let subtitle { Text(subtitle).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary) }
+                if let subtitle { Text(subtitle).font(EyeStyle.label).foregroundStyle(EyeStyle.secondary) }
             }.frame(maxWidth: .infinity, alignment: .leading)
             if let openAccount { AccountButton(action: openAccount) } else if let openSettings { SettingsGear(action: openSettings) }
         }.padding(.top, 20).padding(.bottom, 12)
@@ -326,7 +326,7 @@ struct ListRow: View {
             HStack(spacing: 14) {
                 if let glyph { IconTile(glyph: glyph, tone: tone) }
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(title).font(EyeStyle.body).foregroundStyle(enabled ? EyeStyle.readableText(titleColor) : EyeStyle.secondary)
+                    Text(title).font(EyeStyle.navigationTitle).foregroundStyle(enabled ? EyeStyle.readableText(titleColor) : EyeStyle.secondary)
                     if let subtitle { Text(subtitle).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary).multilineTextAlignment(.leading) }
                 }.frame(maxWidth: .infinity, alignment: .leading)
                 if let value { Text(value).font(EyeStyle.body).foregroundStyle(EyeStyle.readableText(valueColor)).lineLimit(1) }
@@ -336,7 +336,7 @@ struct ListRow: View {
             }
             .padding(.leading, 16 + indent).padding(.trailing, 16).padding(.vertical, 10).frame(minHeight: 56)
 
-        }.eyeGlass().contentShape(Rectangle())
+        }.eyeGlass().eyeGlowBorder(strength: EyeStyle.cardBorderSubtle).contentShape(Rectangle())
     }
 }
 
@@ -357,7 +357,7 @@ struct SwitchRow: View {
                 if let glyph { IconTile(glyph: glyph, tone: tone) }
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 0) {
-                        Text(title).font(EyeStyle.body).foregroundStyle(EyeStyle.text)
+                        Text(title).font(EyeStyle.navigationTitle).foregroundStyle(EyeStyle.text)
                         if let help { HelpButton(title: title, text: help) }
                     }
                     if let subtitle { Text(subtitle).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary) }
@@ -366,7 +366,7 @@ struct SwitchRow: View {
                     .labelsHidden().tint(EyeStyle.primary).disabled(!enabled)
             }
             .padding(.horizontal, 16).padding(.vertical, 6).frame(minHeight: 56)
-        }.eyeGlass()
+        }.eyeGlass().eyeGlowBorder(strength: EyeStyle.cardBorderSubtle)
     }
 }
 
@@ -393,7 +393,7 @@ struct Panel<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: EyeSpacing.itemGap) { content }
             .padding(padding).frame(maxWidth: .infinity, alignment: .leading)
-            .eyeGlass()
+            .eyeGlass().eyeGlowBorder()
     }
 }
 

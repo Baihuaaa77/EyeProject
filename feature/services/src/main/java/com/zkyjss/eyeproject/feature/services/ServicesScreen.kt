@@ -1,5 +1,6 @@
 package com.zkyjss.eyeproject.feature.services
 
+import com.zkyjss.eyeproject.core.designsystem.theme.eyeLiquidGlass
 import androidx.compose.animation.core.LinearEasing
 import com.zkyjss.eyeproject.core.ui.component.eyeBackdrop
 import androidx.compose.animation.core.Spring
@@ -12,6 +13,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.ui.platform.LocalDensity
@@ -151,7 +154,9 @@ private fun ServiceTile(title: String, kind: ServiceKind, modifier: Modifier, on
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
     val haptics = rememberEyeHaptics()
-    Column(modifier.eyeGlass(colors, EyeShapes.card).clickable(role = Role.Button) { haptics.tap(); onClick() }
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    Column(modifier.eyeLiquidGlass(colors, EyeShapes.card, pressed = pressed).clickable(interactionSource = interaction, indication = null, role = Role.Button) { haptics.tap(); onClick() }
         .padding(EyeSpacing.lg), verticalArrangement = Arrangement.spacedBy(EyeSpacing.lg)) {
         Box(Modifier.size(48.dp).eyeSoftSurface(colors, EyeShapes.medium, compact = true), contentAlignment = Alignment.Center) {
             ServiceGlyph(kind, when (kind) {

@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.getValue
@@ -34,6 +35,8 @@ import com.zkyjss.eyeproject.core.model.FaceMetrics
 import com.zkyjss.eyeproject.core.model.Point2f
 import com.zkyjss.eyeproject.core.ui.component.EyeSplash
 import com.zkyjss.eyeproject.core.ui.component.EyeText
+import com.zkyjss.eyeproject.core.ui.component.EyeNavigationDock
+import com.zkyjss.eyeproject.core.ui.component.EyeNavigationItem
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -96,7 +99,8 @@ class HomeVisualTest {
         listOf("AI 综合建议", "多源感知", "主动服务", "专业咨询建议", "视觉行为", "基础数据").forEach { compose.onNodeWithText(it).assertDoesNotExist() }
         compose.mainClock.advanceTimeBy(1_400)
         compose.onNodeWithContentDescription("今日眼健康指数", substring = true).assertExists()
-        compose.onNodeWithText("做 1 分钟护眼操").assertExists()
+        compose.onNodeWithText("做 1 分钟护眼操").assertDoesNotExist()
+        compose.onNodeWithText("护眼操").assertExists()
         // 右上角只有账户头像，白天 / 夜晚切换移到「我的」
         compose.onNodeWithContentDescription("切换到夜晚模式").assertDoesNotExist()
         compose.onNodeWithContentDescription("系统设置").assertDoesNotExist()
@@ -140,8 +144,31 @@ class HomeVisualTest {
     @Test fun homeDarkWithData() {
         compose.setContent { EyeProjectTheme(darkTheme = true) { HomeContent(demoState(), HomeNavigation(), HomeActions()) } }
         compose.onNodeWithText("眼健康指数").assertIsDisplayed()
-        compose.onNodeWithText("做 1 分钟护眼操").assertIsDisplayed()
+        compose.onNodeWithText("做 1 分钟护眼操").assertDoesNotExist()
+        compose.onNodeWithContentDescription("账户头像").assertIsDisplayed()
         capture("01c-首页-深色-首屏")
+    }
+
+    /** 仪表头像替代原顶栏入口后，账户仍可打开；用不同状态检查表情、充能和圆润数字。 */
+    @Test fun gaugeKeepsAccountReachableAndReflectsEvaluation() {
+        var opened = false
+        var dark by mutableStateOf(false)
+        val initial = demoState()
+        var report by mutableStateOf(initial.report!!.copy(score = 21, level = "LOW", label = "轻松"))
+        compose.setContent {
+            EyeProjectTheme(darkTheme = dark) {
+                HomeContent(initial.copy(report = report), HomeNavigation(onOpenAccount = { opened = true }), HomeActions())
+            }
+        }
+        compose.onNodeWithText("79").assertIsDisplayed()
+        compose.onNodeWithContentDescription("账户头像").performClick()
+        assertTrue(opened)
+        capture("01e-首页-79-暖金")
+        dark = true
+        capture("01f-首页-79-深色暖金")
+        report = report.copy(score = 80, level = "HIGH", label = "偏累")
+        compose.onNodeWithText("20").assertIsDisplayed()
+        capture("01g-首页-20-银色")
     }
 
     /** 375dp 小屏放大字号后，所有护眼工具仍能滚动触达并正常派发事件。 */
@@ -218,6 +245,7 @@ class HomeVisualTest {
             }
         }
         compose.onNodeWithText("打开前置摄像头，看看眨眼和观看距离").assertDoesNotExist()
+        compose.onNodeWithText("眨眼与距离，仅在本机处理").assertDoesNotExist()
         // 未检测时只有一行（名称 +「开始」），开始后才展开取景框与读数
         compose.onNodeWithText("开始检测").assertDoesNotExist()
         capture("05a-首页-实时检测-未开始")
@@ -351,6 +379,79 @@ class HomeVisualTest {
             Point2f(cx + 50f, 600f), Point2f(cx + 20f, 600f + ear * 50f), Point2f(cx - 20f, 600f + ear * 50f)),
             listOf(Point2f(cx, 600f)), 32f)
         return FaceMetrics(BoundingBox(150f, 400f, 570f, 900f), eye(470f, "LEFT"), eye(250f, "RIGHT"))
+    }
+
+    /** 与 app 同一底栏组件：验证 Tab 事件与选中状态，并输出明暗主题及真实滑动帧。 */
+    @Test fun liquidGlassDockKeepsTabSemanticsAndRendersInBothThemes() {
+        var dark by mutableStateOf(false)
+        var renderedDark = false
+        var selected by mutableStateOf(0)
+        val items = listOf(
+            EyeNavigationItem("首页", com.zkyjss.eyeproject.core.designsystem.R.drawable.ic_nav_home, com.zkyjss.eyeproject.core.designsystem.R.drawable.ic_nav_home_filled),
+            EyeNavigationItem("服务", com.zkyjss.eyeproject.core.designsystem.R.drawable.ic_nav_services, com.zkyjss.eyeproject.core.designsystem.R.drawable.ic_nav_services_filled),
+            EyeNavigationItem("我的", com.zkyjss.eyeproject.core.designsystem.R.drawable.ic_nav_mine, com.zkyjss.eyeproject.core.designsystem.R.drawable.ic_nav_mine_filled),
+        )
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            EyeProjectTheme(darkTheme = dark) {
+                val themeIsDark = LocalEyeColors.current.isDark
+                androidx.compose.runtime.SideEffect { renderedDark = themeIsDark }
+                Column(Modifier.fillMaxSize().background(LocalEyeColors.current.appBackground)) {
+                    Box(Modifier.weight(1f)) {
+                        HomeContent(demoState(), HomeNavigation(), HomeActions()) {
+                            LiveEyeContent(LiveEyeUiState(), null, {}, {}) {}
+                        }
+                    }
+                    EyeNavigationDock(items, selected, { selected = it }, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp))
+                }
+            }
+        }
+        compose.mainClock.advanceTimeBy(1_500)
+        compose.onNodeWithText("首页").assertIsSelected()
+        capture("01h-首页-玻璃底栏", advance = false)
+        compose.onAllNodes(hasScrollAction()).onFirst().performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.ScrollBy) { it(0f, 820f) }
+        compose.runOnIdle { androidx.compose.runtime.snapshots.Snapshot.sendApplyNotifications() }
+        compose.mainClock.advanceTimeBy(400)
+        compose.waitForIdle()
+        capture("01i-首页-玻璃工具", advance = false)
+        compose.runOnIdle {
+            dark = true
+            androidx.compose.runtime.snapshots.Snapshot.sendApplyNotifications()
+        }
+        compose.mainClock.advanceTimeBy(400)
+        compose.waitForIdle()
+        compose.runOnIdle { assertTrue(renderedDark) }
+        capture("01j-首页-深色玻璃工具", advance = false)
+        compose.runOnIdle {
+            dark = false
+            androidx.compose.runtime.snapshots.Snapshot.sendApplyNotifications()
+        }
+        compose.mainClock.advanceTimeBy(400)
+        compose.waitForIdle()
+        compose.runOnIdle { assertFalse(renderedDark) }
+        val folder = File("build/reports/glass-dock-motion").apply { mkdirs() }
+        var frame = 0
+        for (label in listOf("服务", "我的", "首页")) {
+            compose.onNodeWithText(label).performClick()
+            compose.runOnIdle {
+                assertEquals(items.indexOfFirst { it.label == label }, selected)
+                androidx.compose.runtime.snapshots.Snapshot.sendApplyNotifications()
+            }
+            compose.mainClock.advanceTimeBy(32)
+            compose.waitForIdle()
+            compose.onNodeWithText(label).assertIsSelected()
+            repeat(24) {
+                compose.mainClock.advanceTimeBy(16)
+                val bitmap = compose.runOnIdle {
+                    val view = compose.activity.window.decorView
+                    Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888).also { view.draw(Canvas(it)) }
+                }
+                val dock = Bitmap.createBitmap(bitmap, 0, bitmap.height - 108, bitmap.width, 108)
+                File(folder, "frame-%03d.png".format(frame++)).outputStream().use { dock.compress(Bitmap.CompressFormat.PNG, 100, it) }
+                dock.recycle(); bitmap.recycle()
+            }
+        }
+        assertEquals(0, selected)
     }
 
     private fun capture(name: String, advance: Boolean = true) {

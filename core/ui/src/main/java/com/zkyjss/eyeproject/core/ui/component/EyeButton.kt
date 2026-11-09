@@ -23,6 +23,8 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.StrokeCap
 import com.zkyjss.eyeproject.core.designsystem.theme.eyeSoftSurface
 import com.zkyjss.eyeproject.core.designsystem.theme.rememberReducedMotion
@@ -36,7 +38,7 @@ import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
 
 enum class EyeButtonRole { PRIMARY, SECONDARY, DANGER }
 
-/** 浮雕按钮：主操作下方带渐变短线，按下呈内凹，保留角色与禁用语义。 */
+/** 浮雕按钮：主要与次要操作使用整圈渐变边缘光，按下呈内凹，保留角色与禁用语义。 */
 @Composable
 fun EyeButton(
     text: String,
@@ -85,10 +87,12 @@ fun EyeButton(
             }
             .eyeSoftSurface(colors, EyeShapes.medium, SolidColor(backgroundColor), pressed = pressed && enabled, compact = true)
             .drawBehind {
-                if (role == EyeButtonRole.PRIMARY && enabled) {
-                    val y = size.height - 5.dp.toPx()
-                    drawDataGlowBar(colors, Offset(size.width * 0.38f, y - 1.5.dp.toPx()), Size(size.width * 0.24f, 3.dp.toPx()))
-                    drawLine(colors.flowBrush, Offset(size.width * 0.38f, y), Offset(size.width * 0.62f, y), 3.dp.toPx(), StrokeCap.Round)
+                if (role != EyeButtonRole.DANGER && enabled) {
+                    val stroke = 1.2.dp.toPx()
+                    val inset = stroke * 1.5f
+                    drawDataGlowBorder(colors, 14.dp.toPx(), stroke)
+                    drawRoundRect(colors.borderBrush, Offset(inset, inset), Size(size.width - inset * 2, size.height - inset * 2),
+                        CornerRadius(14.dp.toPx()), alpha = if (role == EyeButtonRole.PRIMARY) 1f else 0.55f, style = Stroke(stroke))
                 }
             }
             .clickable(

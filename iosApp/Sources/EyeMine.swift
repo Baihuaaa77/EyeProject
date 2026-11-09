@@ -34,7 +34,7 @@ struct MinePage: View {
                 stat("已上传", "\(cloud.int("synced"))", "条") { navigate(.cloud) }
             }
             .fixedSize(horizontal: false, vertical: true)
-            .eyeGlass()
+            .eyeGlass().eyeGlowBorder()
             ListGroup(title: "健康档案") {
                 ListRow(title: "测试记录", glyph: .document, value: recordCount == 0 ? "暂无" : "\(recordCount) 条") { navigate(.records) }
                 ListRow(title: "家庭成员与资料", glyph: .family, tone: .violet, value: "\(store.subjects.count) 人") { navigate(.subjects) }
@@ -78,14 +78,14 @@ struct MinePage: View {
                 }.padding(.horizontal, 20).padding(.vertical, 14).contentShape(Rectangle())
             }.buttonStyle(RowPressStyle())
         }
-        .eyeGlass(cornerRadius: EyeStyle.radiusHero)
+        .eyeGlass(cornerRadius: EyeStyle.radiusHero).eyeGlowBorder(cornerRadius: EyeStyle.radiusHero)
     }
 
     private func stat(_ label: String, _ value: String, _ unit: String, _ action: @escaping () -> Void) -> some View {
         Button { EyeHaptics.tap(); action() } label: {
             VStack(alignment: .leading, spacing: 2) {
-                EyeStyle.reading(value, unit: unit, numberFont: Font.system(size: 20, weight: .semibold, design: .rounded)).lineLimit(1)
-                Text(label).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
+                EyeStyle.reading(value, unit: unit, numberFont: EyeStyle.title).lineLimit(1)
+                Text(label).font(EyeStyle.label).foregroundStyle(EyeStyle.secondary)
             }.padding(.horizontal, 16).padding(.vertical, 14).frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
         }.buttonStyle(PressScale(scale: 0.97))

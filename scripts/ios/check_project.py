@@ -25,6 +25,15 @@ for key, value in mapping.items():
         errors.append(f'iOS theme token drift: {key}')
 
 model = root / 'core/camera/src/main/assets/face_landmarker.task'
+# 数字字体由安卓资源目录与 iOS 工程共同引用，防止一端漏包后悄悄回退到系统字。
+score_font = root / 'core/designsystem/src/main/res/font/nunito_black.ttf'
+ios_project = (root / 'iosApp/project.yml').read_text(encoding='utf-8')
+if not score_font.exists() or score_font.read_bytes()[:4] != b'\x00\x01\x00\x00':
+    errors.append('Missing or invalid bundled score font')
+if '../core/designsystem/src/main/res/font/nunito_black.ttf' not in ios_project or 'UIAppFonts: [nunito_black.ttf]' not in ios_project:
+    errors.append('iOS must bundle and register the shared score font')
+if not (root / 'core/designsystem/src/main/assets/fonts/OFL-Nunito.txt').exists() or '../core/designsystem/src/main/assets/fonts/OFL-Nunito.txt' not in ios_project:
+    errors.append('Both platforms must bundle the score font license')
 expected = '64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff'
 if hashlib.sha256(model.read_bytes()).hexdigest() != expected:
     errors.append('MediaPipe model changed: review both platform fixtures and update model manifest')

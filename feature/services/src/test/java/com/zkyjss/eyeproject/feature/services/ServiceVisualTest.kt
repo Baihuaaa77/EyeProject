@@ -302,13 +302,14 @@ class ServiceVisualTest {
         vibration.setHasVibrator(true)
         compose.onNodeWithText("试一下反馈").performClick()
         assertEquals(android.os.VibrationEffect.EFFECT_CLICK, vibration.effectId)
-        compose.onNodeWithText("音效反馈").performClick()
-        compose.onNodeWithText("震动反馈").performClick()
+        // 调用开关行的语义操作，避免字号变化后行中心落到独立的帮助按钮。
+        compose.onNodeWithText("音效反馈").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) { it() }
+        compose.onNodeWithText("震动反馈").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) { it() }
         assertEquals(false, TestSettings(preferences).soundEnabled)
         assertEquals(false, TestSettings(preferences).hapticsEnabled)
         compose.onNodeWithText("试一下反馈").assertIsNotEnabled()
-        compose.onNodeWithText("语音播报").performClick()
-        compose.onNodeWithText("语音作答").performClick()
+        compose.onNodeWithText("语音播报").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) { it() }
+        compose.onNodeWithText("语音作答").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) { it() }
         assertEquals(false, TestSettings(preferences).speechEnabled)
         assertEquals(false, TestSettings(preferences).answersEnabled)
         capture("test-settings")

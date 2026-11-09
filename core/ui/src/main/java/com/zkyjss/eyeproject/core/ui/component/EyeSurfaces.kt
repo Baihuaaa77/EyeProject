@@ -1,5 +1,6 @@
 package com.zkyjss.eyeproject.core.ui.component
 
+import com.zkyjss.eyeproject.core.designsystem.theme.eyeGlowBorder
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
@@ -75,7 +76,7 @@ fun EyeHeroCard(
     val colors = LocalEyeColors.current
     Column(
         modifier.fillMaxWidth()
-            .eyeGlass(colors, EyeShapes.hero, SolidColor(colors.heroStart))
+            .eyeGlass(colors, EyeShapes.hero, SolidColor(colors.heroStart)).eyeGlowBorder(colors, EyeShapes.hero)
             .padding(contentPadding),
         verticalArrangement = verticalArrangement,
         content = content,
@@ -129,7 +130,7 @@ fun EyeCard(
     val colors = LocalEyeColors.current
     Column(
         modifier.fillMaxWidth()
-            .eyeGlass(colors, EyeShapes.panel, SolidColor(if (tinted) colors.surfaceVariant else colors.glassFill))
+            .eyeGlass(colors, EyeShapes.panel, SolidColor(if (tinted) colors.surfaceVariant else colors.glassFill)).eyeGlowBorder(colors, EyeShapes.panel)
             .padding(contentPadding),
         verticalArrangement = verticalArrangement,
         content = content,
@@ -150,7 +151,7 @@ fun EyeMetric(
     val typography = LocalEyeTypography.current
     Column(modifier.semantics(mergeDescendants = true) {}, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            EyeText(label, style = typography.bodySecondary, color = colors.textSecondary, maxLines = 1)
+            EyeText(label, style = typography.label, color = colors.textSecondary, maxLines = 1)
             if (attention) Box(Modifier.padding(start = 6.dp).size(6.dp).clip(CircleShape).background(colors.accent))
         }
         EyeText(eyeReading(value, unit), style = typography.metricValue, color = valueColor, maxLines = 1)
@@ -181,6 +182,9 @@ fun EyeProgressRing(
     ticks: Int = 0,
     /** 在进度末端加一个亮点，供小尺寸首页圆环使用。 */
     showEndpoint: Boolean = false,
+    startAngle: Float = -90f,
+    sweepAngle: Float = 360f,
+    uniformTicks: Boolean = false,
     center: @Composable () -> Unit = {},
 ) {
     val colors = LocalEyeColors.current
@@ -189,15 +193,31 @@ fun EyeProgressRing(
     Box(modifier.semantics { if (description.isNotEmpty()) contentDescription = description }, contentAlignment = Alignment.Center) {
         Canvas(Modifier.fillMaxSize()) {
             val progress = if (fraction == null) null else animated
-            if (ticks > 0) drawRingTicks(colors, progress, strokeWidth.toPx(), ticks)
-            drawProgressRing(colors, progress, strokeWidth.toPx(), tint, showEndpoint)
+            if (ticks > 0) drawRingTicks(colors, progress, strokeWidth.toPx(), ticks, startAngle, sweepAngle, uniformTicks)
+            drawProgressRing(colors, progress, strokeWidth.toPx(), tint, showEndpoint, startAngle, sweepAngle)
         }
         center()
     }
 }
 
-/** 圆环内侧的刻度装饰：[count] 根放射短线，每 5 根一根长刻度；进度内的刻度用光流色（主蓝 → 冰蓝）点亮。 */
-fun DrawScope.drawRingTicks(colors: EyeColors, fraction: Float?, stroke: Float, count: Int) {
+/** 圆环内侧刻度：等长模式按弧线位置取蓝青渐变色并发光；旧式模式保留长短刻度。 */
+fun DrawScope.drawRingTicks(colors: EyeColors, fraction: Float?, stroke: Float, count: Int,
+    startAngle: Float = -90f, sweepAngle: Float = 360f, uniform: Boolean = false) {
+    if (uniform) {
+        val outer = size.minDimension / 2 - stroke * 1.7f
+        val inner = outer - stroke * 0.45f
+        for (i in 0 until count) {
+            val t = i.toFloat() / (count - 1).coerceAtLeast(1)
+            val a = Math.toRadians((startAngle + sweepAngle * t).toDouble())
+            val c = cos(a).toFloat(); val s = sin(a).toFloat()
+            val color = ringTone(colors, t)
+            val from = Offset(center.x + c * inner, center.y + s * inner)
+            val to = Offset(center.x + c * outer, center.y + s * outer)
+            drawDataGlowTick(colors, color, from, to, stroke * 0.12f)
+            drawLine(color, from, to, stroke * 0.12f, StrokeCap.Round)
+        }
+        return
+    }
     val ringRadius = (size.minDimension - stroke * 3.2f) / 2
     val outer = ringRadius - stroke / 2 - stroke * 0.9f
     for (i in 0 until count) {
@@ -216,38 +236,38 @@ fun DrawScope.drawRingTicks(colors: EyeColors, fraction: Float?, stroke: Float, 
     }
 }
 
-fun DrawScope.drawProgressRing(colors: EyeColors, fraction: Float?, stroke: Float, tint: Color? = null, showEndpoint: Boolean = false) {
+private fun ringTone(colors: EyeColors, position: Float): Color = if (position < 0.5f) {
+    lerp(colors.brandStart, colors.dataCyan, position * 2f)
+} else {
+    lerp(colors.dataCyan, colors.dataAqua, (position - 0.5f) * 2f)
+}
+
+fun DrawScope.drawProgressRing(colors: EyeColors, fraction: Float?, stroke: Float, tint: Color? = null,
+    showEndpoint: Boolean = false, startAngle: Float = -90f, sweepAngle: Float = 360f) {
     val arcSize = Size(size.minDimension - stroke, size.minDimension - stroke)
     val topLeft = Offset((size.width - arcSize.width) / 2, (size.height - arcSize.height) / 2)
-    drawArc(colors.surfaceVariant, 0f, 360f, false, topLeft, arcSize, style = Stroke(stroke))
+    val totalSweep = sweepAngle.coerceIn(0f, 360f)
+    drawArc(colors.surfaceVariant, startAngle, totalSweep, false, topLeft, arcSize, style = Stroke(stroke, cap = StrokeCap.Round))
     if (fraction == null) return
-    val sweep = 360f * fraction.coerceIn(0f, 1f)
+    val progress = fraction.coerceIn(0f, 1f)
+    val sweep = totalSweep * progress
     if (sweep <= 0f) return
     val brush = if (tint != null) SolidColor(tint) else Brush.sweepGradient(
-        0f to colors.brandStart, 0.39f to colors.dataCyan, 0.72f to colors.dataAqua, 1f to colors.dataAqua,
+        0f to colors.brandStart, (totalSweep / 720f) to colors.dataCyan, (totalSweep / 360f) to colors.dataAqua, 1f to colors.dataAqua,
         center = center,
     )
     // 发光只落在数据弧的副本，主图形与文字保持清晰。
-    rotate(-90f) {
+    rotate(startAngle) {
         if (tint == null) {
             drawDataGlowArc(colors, topLeft, arcSize, sweep, stroke)
-            drawArc(brush, 0f, sweep, false, topLeft, arcSize, alpha = 0.06f, style = Stroke(stroke * 2.1f, cap = StrokeCap.Round))
-            drawArc(brush, 0f, sweep, false, topLeft, arcSize, alpha = 0.12f, style = Stroke(stroke * 1.5f, cap = StrokeCap.Round))
         }
         drawArc(brush, 0f, sweep, false, topLeft, arcSize, style = Stroke(stroke))
         val radius = arcSize.width / 2
         val end = Math.toRadians(sweep.toDouble())
-        val fractionOfCircle = sweep / 360f
-        val endColor = tint ?: when {
-            fractionOfCircle < 0.39f -> lerp(colors.brandStart, colors.dataCyan, fractionOfCircle / 0.39f)
-            fractionOfCircle < 0.72f -> lerp(colors.dataCyan, colors.dataAqua, (fractionOfCircle - 0.39f) / 0.33f)
-            else -> colors.dataAqua
-        }
+        val endColor = tint ?: ringTone(colors, progress)
         // 独立圆帽避免角度零点处把渐变尾色混入起点。
         drawCircle(tint ?: colors.brandStart, stroke / 2, Offset(center.x + radius, center.y))
         drawCircle(endColor, stroke / 2, Offset(center.x + radius * cos(end).toFloat(), center.y + radius * sin(end).toFloat()))
-        if (tint == null) drawArc(colors.white, 0f, sweep, false, topLeft, arcSize,
-            alpha = EyeGlow.coreOpacity, style = Stroke(stroke * 0.18f, cap = StrokeCap.Round))
         if (showEndpoint) drawCircle(colors.white, stroke * 0.28f,
             Offset(center.x + radius * cos(end).toFloat(), center.y + radius * sin(end).toFloat()))
     }

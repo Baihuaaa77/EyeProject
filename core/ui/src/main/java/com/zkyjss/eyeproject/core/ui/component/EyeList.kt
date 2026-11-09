@@ -1,5 +1,7 @@
 package com.zkyjss.eyeproject.core.ui.component
 
+import com.zkyjss.eyeproject.core.designsystem.theme.eyeGlowBorder
+import com.zkyjss.eyeproject.core.designsystem.theme.EyeGlow
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -118,7 +120,7 @@ fun EyeListRow(
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val background by animateColorAsState(if (pressed) colors.surfaceVariant else colors.panelBackground, tween(EyeMotion.SHORT), label = "列表行按压")
-    Column(modifier.fillMaxWidth().eyeSoftSurface(colors, EyeShapes.card, pressed = pressed, compact = true).background(background)
+    Column(modifier.fillMaxWidth().eyeSoftSurface(colors, EyeShapes.card, pressed = pressed, compact = true).background(background).eyeGlowBorder(colors, EyeShapes.card, EyeGlow.cardBorderSubtle)
         .then(if (onClick != null) Modifier.clickable(enabled = enabled, interactionSource = interaction, indication = null, role = Role.Button) { haptics.tap(); onClick() } else Modifier)) {
         Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             if (leading != null) {
@@ -129,7 +131,7 @@ fun EyeListRow(
                 Spacer(Modifier.width(14.dp))
             }
             Column(Modifier.weight(1f)) {
-                EyeText(title, style = typography.body, color = if (enabled) titleColor ?: colors.textPrimary else colors.textSecondary)
+                EyeText(title, style = typography.navigationTitle, color = if (enabled) titleColor ?: colors.textPrimary else colors.textSecondary)
                 if (subtitle != null) EyeText(subtitle, style = typography.bodySecondary, color = colors.textSecondary)
             }
             if (trailing != null) trailing() else {
@@ -157,7 +159,7 @@ fun EyeSwitchRow(
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
     val haptics = rememberEyeHaptics()
-    Column(modifier.fillMaxWidth().eyeSoftSurface(colors, EyeShapes.card, compact = true)
+    Column(modifier.fillMaxWidth().eyeSoftSurface(colors, EyeShapes.card, compact = true).eyeGlowBorder(colors, EyeShapes.card, EyeGlow.cardBorderSubtle)
         .toggleable(value = checked, enabled = enabled, role = Role.Switch) { haptics.toggle(it); onChange(it) }) {
         Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             if (glyph != null) {
@@ -166,7 +168,7 @@ fun EyeSwitchRow(
             }
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    EyeText(title, style = typography.body, color = colors.textPrimary)
+                    EyeText(title, style = typography.navigationTitle, color = colors.textPrimary)
                     if (help != null) EyeHelpButton(help.first, help.second)
                 }
                 if (subtitle != null) EyeText(subtitle, style = typography.bodySecondary, color = colors.textSecondary)
@@ -176,13 +178,13 @@ fun EyeSwitchRow(
     }
 }
 
-/** 数据卡上的类别标签：类别色小图标 + 类别色 13 号半粗名称（「用屏时长」「环境光」）。 */
+/** 数据卡类别标签：彩色图标 + 灰色 16 号半粗名称（「用屏时长」「环境光」）。 */
 @Composable
 fun EyeCategoryLabel(title: String, glyph: EyeGlyph, tint: Color, modifier: Modifier = Modifier) {
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         EyeGlyphIcon(glyph, Modifier.size(16.dp), tint)
         Spacer(Modifier.width(6.dp))
-        EyeText(title, style = LocalEyeTypography.current.chip, color = LocalEyeColors.current.textSecondary, maxLines = 1)
+        EyeText(title, style = LocalEyeTypography.current.label, color = LocalEyeColors.current.textSecondary, maxLines = 1)
     }
 }
 

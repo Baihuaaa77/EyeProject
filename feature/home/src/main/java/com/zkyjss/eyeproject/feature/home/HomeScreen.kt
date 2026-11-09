@@ -1,5 +1,6 @@
 package com.zkyjss.eyeproject.feature.home
 
+import com.zkyjss.eyeproject.core.designsystem.theme.eyeLiquidGlass
 import android.Manifest
 import android.content.Intent
 import android.net.Uri
@@ -36,6 +37,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -146,9 +149,9 @@ internal fun HomeContent(
             .padding(top = getTopStatusBarPadding()).screenHorizontalPaddingLarge(),
         verticalArrangement = Arrangement.spacedBy(EyeSpacing.cardGap),
     ) {
-        EyePageHeader("今日", null, onOpenAccount = navigation.onOpenAccount,
+        EyePageHeader("今日", null,
             subtitle = remember { LocalDate.now().format(DateTimeFormatter.ofPattern("M月d日 EEEE", Locale.CHINA)) })
-        EyeCareHero(report) { exerciseOpen = true }
+        EyeCareHero(report, onOpenAccount = navigation.onOpenAccount)
         TodayData(state, actions, Modifier.bringIntoViewRequester(basic))
         SectionTitle("护眼工具")
         ToolRow(state, navigation) { exerciseOpen = true }
@@ -190,47 +193,50 @@ internal fun EyeColors.ringTone(level: String?): Color = when (level) {
     else -> textTertiary
 }
 
-/** 首页主卡：左侧大分数与状态，右侧小圆环，下方为建议与护眼操入口。 */
+/** 底部开口仪表：左下起充能，经过顶部到右下；账户头像占据开口，表情随评估等级切换。 */
 @Composable
-private fun EyeCareHero(report: EyeCareReport?, onExercise: () -> Unit) {
+private fun EyeCareHero(report: EyeCareReport?, onOpenAccount: () -> Unit) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
+    val badge = LocalEyeAccountBadge.current
     val index = report?.score?.let(::healthIndex)
-    EyeHeroCard(verticalArrangement = Arrangement.spacedBy(EyeSpacing.lg)) {
-        BoxWithConstraints(Modifier.fillMaxWidth()) {
-            val readableWidth = maxWidth / LocalDensity.current.fontScale
-            val compact = readableWidth < 250.dp
-            val scoreStyle = when {
-                readableWidth < 180.dp -> typography.metricValue
-                compact -> typography.displayCompact
-                else -> typography.display
-            }
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(EyeSpacing.md)) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(EyeSpacing.xs)) {
-                    EyeText("眼健康指数", style = typography.subtitle, color = colors.textPrimary)
-                    Row(horizontalArrangement = Arrangement.spacedBy(EyeSpacing.xxs)) {
-                        EyeText(index?.toString() ?: "—", Modifier.alignByBaseline(),
-                            style = scoreStyle,
-                            color = colors.textPrimary, maxLines = 1)
-                        EyeText("/100", Modifier.alignByBaseline(), style = typography.body, color = colors.textSecondary, maxLines = 1)
-                    }
-                    Row(Modifier.clip(EyeShapes.chip).background(colors.surfaceVariant)
-                        .padding(horizontal = EyeSpacing.sm, vertical = EyeSpacing.xxs), verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(7.dp).clip(CircleShape).background(colors.ringTone(report?.level)))
-                        Spacer(Modifier.width(EyeSpacing.xs))
-                        EyeText(report?.label ?: "读取中", style = typography.bodySecondary, color = colors.textPrimary)
+    val mood = when (report?.level) {
+        "LOW" -> EyeMood.HAPPY
+        "MEDIUM" -> EyeMood.CALM
+        "HIGH" -> EyeMood.TIRED
+        else -> EyeMood.WAITING
+    }
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(EyeSpacing.md)) {
+        EyeText("眼健康指数", style = typography.subtitle, color = colors.textPrimary)
+        BoxWithConstraints(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            val diameter = maxWidth.coerceAtMost(260.dp)
+            val compact = maxWidth / LocalDensity.current.fontScale < 240.dp
+            Box(Modifier.width(diameter).height(diameter + 24.dp)) {
+                EyeProgressRing(index?.let { it / 100f }, Modifier.size(diameter).align(Alignment.TopCenter),
+                    strokeWidth = 12.dp, showEndpoint = true, startAngle = 130f, sweepAngle = 280f, ticks = 40, uniformTicks = true,
+                    description = index?.let { "今日眼健康指数 $it 分，${report.label}" } ?: "今日眼健康指数暂无数据") {
+                    Column(Modifier.padding(bottom = EyeSpacing.md), horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(EyeSpacing.xxs)) {
+                        EyeMoodFace(mood, Modifier.size(if (compact) 36.dp else 44.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(EyeSpacing.xxs), verticalAlignment = Alignment.Bottom) {
+                            EyeText(index?.toString() ?: "—", Modifier.alignByBaseline(),
+                                style = if (compact) typography.healthScoreCompact else typography.healthScore,
+                                color = colors.textHeading, maxLines = 1)
+                            EyeText("/100", Modifier.alignByBaseline(), style = typography.bodySecondary, color = colors.textSecondary)
+                        }
+                        EyeText(report?.label ?: "读取中", style = typography.label, color = colors.textSecondary)
                     }
                 }
-                EyeProgressRing(index?.let { it / 100f }, Modifier.size(if (compact) 88.dp else 112.dp),
-                    strokeWidth = 9.dp, showEndpoint = true,
-                    description = index?.let { "今日眼健康指数 $it 分，${report.label}" } ?: "今日眼健康指数暂无数据")
+                Box(Modifier.align(Alignment.BottomCenter).size(56.dp)
+                    .eyeSoftSurface(colors, CircleShape)
+                    .clickable(role = Role.Button, onClickLabel = "打开账户", onClick = onOpenAccount)
+                    .semantics { contentDescription = "账户头像" }, contentAlignment = Alignment.Center) {
+                    if (badge.signedIn && badge.initial.isNotBlank())
+                        EyeText(badge.initial.take(1).uppercase(), style = typography.title, color = colors.textPrimary)
+                    else PersonGlyph(Modifier.size(26.dp))
+                }
             }
         }
-        report?.headline?.takeIf { it.isNotBlank() }?.let {
-            EyeText(it, Modifier.fillMaxWidth(), style = typography.body, fontWeight = FontWeight.Medium, color = colors.textPrimary)
-        }
-        EyeButton("做 1 分钟护眼操", EyeButtonRole.PRIMARY, onExercise, Modifier.fillMaxWidth())
     }
 }
 
@@ -379,7 +385,7 @@ private fun Modifier.pressableCard(shape: androidx.compose.ui.graphics.Shape, on
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(if (pressed) 0.97f else 1f, EyeMotion.pressSpring(), label = "卡片按压")
-    return graphicsLayer { scaleX = scale; scaleY = scale }.eyeSoftSurface(colors, shape, pressed = pressed)
+    return graphicsLayer { scaleX = scale; scaleY = scale }.eyeLiquidGlass(colors, shape, pressed = pressed)
         .clickable(interactionSource = interaction, indication = null, role = Role.Button) { haptics.tap(); onClick() }
 }
 
@@ -393,7 +399,7 @@ private fun ToolTile(title: String, meta: String, glyph: EyeGlyph, soft: Color, 
             EyeGlyphIcon(glyph, Modifier.size(22.dp), ink)
         }
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            EyeText(title, style = typography.body, fontWeight = FontWeight.Medium, color = colors.textPrimary, maxLines = 2)
+            EyeText(title, style = typography.navigationTitle, color = colors.textPrimary, maxLines = 2)
             EyeText(meta, style = typography.bodySecondary, color = colors.textSecondary, maxLines = 1)
         }
     }
@@ -586,7 +592,7 @@ private fun ReminderCard(state: HomeUiState, actions: HomeActions) {
                 EyeGlyphIcon(EyeGlyph.BELL, Modifier.size(18.dp), colors.success)
             }
             Spacer(Modifier.width(14.dp))
-            EyeText("休息提醒", Modifier.weight(1f), style = typography.body, fontWeight = FontWeight.Medium, color = colors.textPrimary)
+            EyeText("休息提醒", Modifier.weight(1f), style = typography.navigationTitle, color = colors.textPrimary)
             if (state.reminderEnabled) EyeText(
                 if (state.reminderNextTimeText.isNotEmpty()) "下次 ${state.reminderNextTimeText}" else "每 ${state.reminderIntervalMinutes} 分钟",
                 Modifier.padding(end = 10.dp), style = typography.bodySecondary, color = colors.textSecondary)

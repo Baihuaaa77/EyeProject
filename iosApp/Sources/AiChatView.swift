@@ -223,7 +223,8 @@ private struct ChatBubble: View {
                     EyechoAvatar(size: 28)
                 }
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(message["text"] as? String ?? "").font(EyeStyle.body).foregroundStyle(mine ? EyeStyle.onPrimary : EyeStyle.text)
+                    Text(message["text"] as? String ?? "").font(EyeStyle.chatBody).foregroundStyle(mine ? EyeStyle.chatUserText : EyeStyle.text)
+                        .lineSpacing(6)
                         .textSelection(.enabled)
                     if message["inquiryComplete"] as? Bool == true && !urgent {
                         Text("本次问询已总结").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.readableText(EyeStyle.primary))
@@ -251,7 +252,7 @@ private struct ChatBubble: View {
                 }
                 .padding(.horizontal, 14).padding(.vertical, 10)
                 // 部署目标 iOS 16：不用 iOS 17 的 UnevenRoundedRectangle，气泡四角同为 18
-                .background(mine ? EyeStyle.buttonStart : EyeStyle.panel, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .background(mine ? EyeStyle.chatUserBackground : EyeStyle.panel, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                 if !mine { Spacer(minLength: 32) }
             }
             if mine && urgent {

@@ -1,53 +1,22 @@
 package com.zkyjss.eyeproject.ui
 
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.ui.draw.shadow
-import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
-import com.zkyjss.eyeproject.core.ui.component.EyeText
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.runtime.remember
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.res.painterResource
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeMotion
-import com.zkyjss.eyeproject.core.ui.component.EyeIcon
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.layout.Box
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.draw.clip
-import com.zkyjss.eyeproject.core.designsystem.theme.EyeShapes
-import com.zkyjss.eyeproject.core.designsystem.theme.eyeSoftSurface
-import com.zkyjss.eyeproject.core.designsystem.theme.EyeSpacing
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Row
+import com.zkyjss.eyeproject.core.ui.component.EyeNavigationDock
+import com.zkyjss.eyeproject.core.ui.component.EyeNavigationItem
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hierarchy
@@ -58,7 +27,6 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navOptions
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
-import com.zkyjss.eyeproject.core.designsystem.util.borderTop
 import com.zkyjss.eyeproject.feature.agent.navigation.agentScreen
 import com.zkyjss.eyeproject.feature.home.HomeNavigation
 import com.zkyjss.eyeproject.feature.home.navigation.HomeRoute
@@ -203,62 +171,13 @@ private fun EyeProjectBottomBar(
     navController: NavHostController,
     currentDestination: NavDestination?,
 ) {
-    val colors = LocalEyeColors.current
+    val destinations = TopLevelDestination.entries
     Box(Modifier.fillMaxWidth().navigationBarsPadding().padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 12.dp)) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(64.dp)
-                .eyeSoftSurface(colors, EyeShapes.card)
-                .padding(6.dp)
-                .selectableGroup(),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            TopLevelDestination.entries.forEach { destination ->
-                val selected = currentDestination.isInHierarchy(destination)
-                BottomBarItem(
-                    destination = destination,
-                    selected = selected,
-                    onClick = { navController.navigateToTopLevelDestination(destination) },
-                    modifier = Modifier.weight(1f).fillMaxHeight(),
-                )
-            }
-        }
-    }
-}
-
-/** 一项：选中时后方浅填充胶囊淡入，图标与名称变品牌色并轻微放大。 */
-@Composable
-private fun BottomBarItem(
-    destination: TopLevelDestination,
-    selected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val colors = LocalEyeColors.current
-    val tint by animateColorAsState(if (selected) colors.primary else colors.textSecondary, tween(EyeMotion.MEDIUM), label = "导航色")
-    val iconScale by animateFloatAsState(if (selected) 1.06f else 1f, EyeMotion.settleSpring(), label = "导航图标")
-    Column(
-        modifier = modifier
-            .clip(CircleShape)
-            .selectable(
-                selected = selected,
-                role = Role.Tab,
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick,
-            ),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        EyeIcon(
-            painter = painterResource(if (selected) destination.selectedIconRes else destination.iconRes),
-            contentDescription = null,
-            tint = tint,
-            modifier = Modifier.size(24.dp).graphicsLayer { scaleX = iconScale; scaleY = iconScale },
+        EyeNavigationDock(
+            items = destinations.map { EyeNavigationItem(it.label, it.iconRes, it.selectedIconRes) },
+            selectedIndex = destinations.indexOfFirst { currentDestination.isInHierarchy(it) },
+            onSelect = { navController.navigateToTopLevelDestination(destinations[it]) },
         )
-        EyeText(destination.label, style = LocalEyeTypography.current.tab, color = tint)
     }
 }
 

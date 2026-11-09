@@ -1,5 +1,6 @@
 import AVFoundation
 import SwiftUI
+import UIKit
 
 // DESIGN.md：阴影只作用于表面形状，前景文字与图标保持清晰。
 struct EyeGlassModifier: ViewModifier {
@@ -28,9 +29,70 @@ struct EyeGlassModifier: ViewModifier {
 }
 
 extension View {
+    func eyeLiquidGlass(cornerRadius: CGFloat = EyeStyle.radius) -> some View {
+        modifier(EyeLiquidGlassModifier(cornerRadius: cornerRadius))
+    }
+    /// 与安卓同色同强度的卡片细光边，装饰层不拦截操作。
+    func eyeGlowBorder(cornerRadius: CGFloat = EyeStyle.radius, strength: Double = 1) -> some View {
+        modifier(EyeGlowBorderModifier(cornerRadius: cornerRadius, strength: strength))
+    }
+
     func eyeGlass(cornerRadius: CGFloat = EyeStyle.radius, fill: AnyShapeStyle? = nil, edgeTop: Color = EyeStyle.glassEdgeTop,
                   shadow: Bool = true, pressed: Bool = false) -> some View {
         modifier(EyeGlassModifier(cornerRadius: cornerRadius, fill: fill, edgeTop: edgeTop, shadow: shadow, pressed: pressed))
+    }
+}
+
+/// iOS 26 接入原生 Liquid Glass；早期系统使用系统材质与镜片高光兼容样式。
+private struct EyeLiquidGlassModifier: ViewModifier {
+    let cornerRadius: CGFloat
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.accessibilityReduceTransparency) private var reducedTransparency
+    @Environment(\.accessibilityReduceMotion) private var reducedMotion
+    @ViewBuilder func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        if reducedTransparency {
+            content.background(EyeStyle.panel, in: shape)
+                .overlay { shape.stroke(EyeStyle.borderSubtle, lineWidth: EyeStyle.liquidRimWidth).allowsHitTesting(false) }
+        } else if #available(iOS 26.0, *) {
+            content.glassEffect(.regular.tint(EyeStyle.primary.opacity(EyeStyle.liquidTintLight)).interactive(!reducedMotion), in: shape)
+        } else {
+            let reflection = scheme == .dark ? EyeStyle.liquidReflectionDark : EyeStyle.liquidReflectionLight
+            let edge = scheme == .dark ? EyeStyle.liquidEdgeDark : EyeStyle.liquidEdgeLight
+            content.background {
+                shape.fill(.ultraThinMaterial)
+                    .overlay { shape.fill(EyeStyle.primary.opacity(scheme == .dark ? EyeStyle.liquidTintDark : EyeStyle.liquidTintLight)) }
+                    .overlay { shape.fill(RadialGradient(colors: [.white.opacity(reflection), .clear],
+                        center: .topLeading, startRadius: 0, endRadius: EyeStyle.liquidReflectionRadius)) }
+            }
+            .overlay {
+                shape.inset(by: EyeStyle.liquidRimWidth / 2).stroke(LinearGradient(colors: [
+                    .white.opacity(edge), EyeStyle.primary.opacity(edge * 0.22), .white.opacity(edge * 0.75)
+                ], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: EyeStyle.liquidRimWidth)
+                    .allowsHitTesting(false).accessibilityHidden(true)
+            }
+            .clipShape(shape)
+            .shadow(color: EyeStyle.shadow.opacity(EyeStyle.liquidShadowOpacity), radius: EyeStyle.liquidShadowRadius, x: 0, y: EyeStyle.liquidShadowOffset)
+        }
+    }
+}
+
+private struct EyeGlowBorderModifier: ViewModifier {
+    let cornerRadius: CGFloat
+    let strength: Double
+    @Environment(\.colorScheme) private var scheme
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous).inset(by: EyeStyle.cardBorderInset)
+        let gradient = EyeStyle.borderGradient
+        let opacity = (scheme == .dark ? EyeStyle.cardBorderOpacityDark : EyeStyle.cardBorderOpacityLight) * strength
+        content.overlay {
+            ZStack {
+                shape.stroke(gradient, lineWidth: EyeStyle.cardBorderWidth * 2)
+                    .opacity(opacity * EyeStyle.cardGlowOpacity).blur(radius: EyeStyle.cardGlowRadius)
+                shape.stroke(gradient, lineWidth: EyeStyle.cardBorderWidth).opacity(opacity)
+            }.clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+                .allowsHitTesting(false).accessibilityHidden(true)
+        }
     }
 }
 
@@ -49,6 +111,7 @@ struct EyeHeroCard<Content: View>: View {
         VStack(alignment: .leading, spacing: spacing) { content }
             .padding(padding).frame(maxWidth: .infinity, alignment: .leading)
             .eyeGlass(cornerRadius: EyeStyle.radiusHero, fill: AnyShapeStyle(EyeStyle.heroStart))
+            .eyeGlowBorder(cornerRadius: EyeStyle.radiusHero)
     }
 }
 
@@ -62,6 +125,7 @@ struct EyeCard<Content: View>: View {
         VStack(alignment: .leading, spacing: spacing) { content }
             .padding(padding).frame(maxWidth: .infinity, alignment: .leading)
             .eyeGlass(fill: tinted ? AnyShapeStyle(EyeStyle.surfaceVariant) : nil)
+            .eyeGlowBorder()
     }
 }
 
@@ -98,7 +162,7 @@ struct MetricView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
-                Text(label).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary).lineLimit(1)
+                Text(label).font(EyeStyle.label).foregroundStyle(EyeStyle.secondary).lineLimit(1)
                 if attention { Circle().fill(EyeStyle.accent).frame(width: 6, height: 6) }
             }
             EyeStyle.reading(value, unit: unit, color: valueColor).lineLimit(1).minimumScaleFactor(0.7)
@@ -115,68 +179,147 @@ struct VDivider: View {
 
 // MARK: - 圆环与 AI 标识
 
+/// 分段插值的连续色弧：起点和端点使用相邻位置的颜色，消除渐变零点的异色圆帽。
 struct ProgressRing: View {
     let fraction: Double?
     var lineWidth: CGFloat = 9
     var tint: Color? = nil
-    /// 圆环内侧的刻度数（0 不画）：每 5 根一根长刻度，进度内的刻度用光流色点亮（与安卓 drawRingTicks 一致）。
     var ticks: Int = 0
     var showEndpoint = false
-    @Environment(\.colorScheme) private var scheme
+    var startAngle: Double = -90
+    var sweepAngle: Double = 360
+    var uniformTicks = false
     @Environment(\.accessibilityReduceMotion) private var reduced
     @State private var shown: Double = 0
+
+    private func point(_ center: CGPoint, _ radius: CGFloat, _ degrees: Double) -> CGPoint {
+        let a = degrees * .pi / 180
+        return CGPoint(x: center.x + CGFloat(cos(a)) * radius, y: center.y + CGFloat(sin(a)) * radius)
+    }
+    private func path(_ center: CGPoint, _ radius: CGFloat, _ sweep: Double) -> Path {
+        var result = Path()
+        let count = max(1, Int(ceil(sweep / 2)))
+        for i in 0...count {
+            let p = point(center, radius, startAngle + sweep * Double(i) / Double(count))
+            if i == 0 { result.move(to: p) } else { result.addLine(to: p) }
+        }
+        return result
+    }
+    private func tone(_ t: Double) -> Color {
+        if let tint { return tint }
+        let a = UIColor(t < 0.5 ? EyeStyle.brandStart : EyeStyle.dataCyan)
+        let b = UIColor(t < 0.5 ? EyeStyle.dataCyan : EyeStyle.dataAqua)
+        let u = CGFloat(t < 0.5 ? t * 2 : (t - 0.5) * 2)
+        var ar: CGFloat = 0, ag: CGFloat = 0, ab: CGFloat = 0, aa: CGFloat = 0
+        var br: CGFloat = 0, bg: CGFloat = 0, bb: CGFloat = 0, ba: CGFloat = 0
+        a.getRed(&ar, green: &ag, blue: &ab, alpha: &aa)
+        b.getRed(&br, green: &bg, blue: &bb, alpha: &ba)
+        return Color(red: Double(ar + (br - ar) * u), green: Double(ag + (bg - ag) * u), blue: Double(ab + (bb - ab) * u))
+    }
     var body: some View {
-        let f = max(0, min(1, shown))
-        ZStack {
-            Circle().stroke(EyeStyle.surfaceVariant, lineWidth: lineWidth)
-            if fraction != nil {
-                Circle().trim(from: 0, to: f)
-                    .stroke(tint.map { AnyShapeStyle($0) } ?? AnyShapeStyle(EyeStyle.ringGradient), style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
-                    .overlay {
-                        if tint == nil {
-                            Circle().trim(from: 0, to: f).stroke(Color.white.opacity(EyeStyle.glowCoreOpacity),
-                                style: StrokeStyle(lineWidth: lineWidth * 0.18, lineCap: .round))
-                        }
-                    }
-                    .shadow(color: tint == nil ? EyeStyle.primary.opacity(EyeStyle.glowOpacity) : .clear, radius: EyeStyle.glowRadius)
-                    .shadow(color: tint == nil ? EyeStyle.glow : .clear, radius: 3)
-                if showEndpoint && f > 0 {
-                    GeometryReader { geometry in
-                        let radius = min(geometry.size.width, geometry.size.height) / 2
-                        Circle().fill(Color.white).frame(width: lineWidth * 0.56, height: lineWidth * 0.56)
-                            .position(x: geometry.size.width / 2 + cos(f * 2 * .pi) * radius,
-                                      y: geometry.size.height / 2 + sin(f * 2 * .pi) * radius)
-                    }.allowsHitTesting(false).accessibilityHidden(true)
+        Canvas { ctx, size in
+            let center = CGPoint(x: size.width / 2, y: size.height / 2)
+            let radius = (min(size.width, size.height) - lineWidth) / 2
+            ctx.stroke(path(center, radius, sweepAngle), with: .color(EyeStyle.surfaceVariant),
+                style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+            if let fraction, fraction > 0, shown > 0 {
+                let value = min(1, max(0, shown))
+                let sweep = sweepAngle * value
+                if tint == nil {
+                    var glow = ctx
+                    glow.addFilter(.shadow(color: EyeStyle.primary.opacity(EyeStyle.glowOpacity), radius: EyeStyle.glowRadius))
+                    glow.stroke(path(center, radius, sweep), with: .color(EyeStyle.primary.opacity(0.35)),
+                        style: StrokeStyle(lineWidth: lineWidth * 1.7, lineCap: .round))
+                }
+                let count = max(1, Int(ceil(sweep / 2)))
+                for i in 0..<count {
+                    var segment = Path()
+                    segment.move(to: point(center, radius, startAngle + sweep * Double(i) / Double(count)))
+                    segment.addLine(to: point(center, radius, startAngle + sweep * Double(i + 1) / Double(count)))
+                    ctx.stroke(segment, with: .color(tone(value * Double(i) / Double(count))),
+                        style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                }
+                if showEndpoint {
+                    let p = point(center, radius, startAngle + sweep)
+                    ctx.fill(Path(ellipseIn: CGRect(x: p.x - lineWidth * 0.28, y: p.y - lineWidth * 0.28,
+                        width: lineWidth * 0.56, height: lineWidth * 0.56)), with: .color(.white))
                 }
             }
-        }
-        .rotationEffect(.degrees(-90))
-        .padding(lineWidth / 2)
-        .background {
             if ticks > 0 {
-                Canvas { ctx, size in
-                    let side = min(size.width, size.height)
-                    let c = CGPoint(x: size.width / 2, y: size.height / 2)
-                    let ringRadius = (side - lineWidth * 3.2) / 2 + lineWidth * 0.8
-                    let outer = ringRadius - lineWidth / 2 - lineWidth * 0.9
-                    for i in 0..<ticks {
-                        let major = i % 5 == 0
-                        let inner = outer - (major ? lineWidth * 1.1 : lineWidth * 0.6)
-                        let t = Double(i) / Double(ticks)
-                        let angle = (t * 360 - 90) * .pi / 180
-                        let lit = fraction != nil && t <= shown
-                        var line = Path()
-                        line.move(to: CGPoint(x: c.x + cos(angle) * inner, y: c.y + sin(angle) * inner))
-                        line.addLine(to: CGPoint(x: c.x + cos(angle) * outer, y: c.y + sin(angle) * outer))
-                        let color = lit ? (t / max(shown, 0.01) < 0.5 ? EyeStyle.flowStart : EyeStyle.flowEnd)
-                            : EyeStyle.tertiary.opacity(major ? 0.55 : 0.28)
-                        ctx.stroke(line, with: .color(color), style: StrokeStyle(lineWidth: major ? lineWidth * 0.2 : lineWidth * 0.13, lineCap: .round))
+                for i in 0..<ticks {
+                    let a = startAngle + sweepAngle * Double(i) / Double(uniformTicks ? max(1, ticks - 1) : ticks)
+                    let outer = uniformTicks ? min(size.width, size.height) / 2 - lineWidth * 1.7 : radius - lineWidth * 1.6
+                    let inner = outer - lineWidth * (uniformTicks ? 0.45 : 0.6)
+                    var tick = Path(); tick.move(to: point(center, outer, a))
+                    tick.addLine(to: point(center, inner, a))
+                    if uniformTicks {
+                        let color = tone(Double(i) / Double(max(1, ticks - 1)))
+                        let style = StrokeStyle(lineWidth: lineWidth * 0.12, lineCap: .round)
+                        var glow = ctx
+                        glow.addFilter(.shadow(color: color.opacity(EyeStyle.glowOpacity), radius: EyeStyle.tickGlowRadius))
+                        glow.stroke(tick, with: .color(color), style: style)
+                        ctx.stroke(tick, with: .color(color), style: style)
+                    } else {
+                        ctx.stroke(tick, with: .color(EyeStyle.tertiary.opacity(0.55)), lineWidth: lineWidth * 0.12)
                     }
                 }
             }
         }
-        .onAppear { withAnimation(reduced ? nil : .timingCurve(0.22, 1, 0.36, 1, duration: 0.9)) { shown = fraction ?? 0 } }
-        .onChange(of: fraction ?? 0) { value in withAnimation(reduced ? nil : .timingCurve(0.22, 1, 0.36, 1, duration: 0.9)) { shown = value } }
+        .onAppear { withAnimation(reduced ? nil : .easeOut(duration: 0.9)) { shown = fraction ?? 0 } }
+        .onChange(of: fraction ?? 0) { value in withAnimation(reduced ? nil : .easeOut(duration: 0.9)) { shown = value } }
+    }
+}
+
+enum EyeMood { case happy, calm, tired, waiting }
+
+/// 与安卓同一组原生矢量表情，颜色及等级映射均来自已有评估结果。
+struct MoodFace: View {
+    let mood: EyeMood
+    var body: some View {
+        Canvas { ctx, size in
+            let s = min(size.width, size.height)
+            let c = CGPoint(x: size.width / 2, y: size.height / 2)
+            let base: Color = switch mood {
+            case .happy: EyeStyle.moodGold
+            case .calm: EyeStyle.moodWarm
+            case .tired: EyeStyle.moodSilver
+            case .waiting: EyeStyle.moodSilver
+            }
+            var rays = Path()
+            for i in 0...160 {
+                let a = Double(i) * 2 * .pi / 160
+                let r = s * (0.44 + 0.035 * CGFloat(cos(a * 10)))
+                let p = CGPoint(x: c.x + r * CGFloat(cos(a)), y: c.y + r * CGFloat(sin(a)))
+                if i == 0 { rays.move(to: p) } else { rays.addLine(to: p) }
+            }
+            rays.closeSubpath(); ctx.fill(rays, with: .color(base.opacity(0.52)))
+            ctx.fill(Path(ellipseIn: CGRect(x: c.x - s * 0.36, y: c.y - s * 0.36, width: s * 0.72, height: s * 0.72)),
+                with: .radialGradient(Gradient(colors: [.white.opacity(0.9), base]), center: CGPoint(x: c.x - s * 0.1, y: c.y - s * 0.14),
+                    startRadius: 0, endRadius: s * 0.62))
+            for side: CGFloat in [-1, 1] {
+                let x = c.x + side * s * 0.12, y = c.y - s * 0.04
+                if mood == .tired {
+                    var eye = Path(); eye.move(to: CGPoint(x: x - s * 0.045, y: y)); eye.addLine(to: CGPoint(x: x + s * 0.045, y: y))
+                    ctx.stroke(eye, with: .color(EyeStyle.ink), style: StrokeStyle(lineWidth: s * 0.045, lineCap: .round))
+                } else {
+                    ctx.fill(Path(ellipseIn: CGRect(x: x - s * 0.033, y: y - s * 0.033, width: s * 0.066, height: s * 0.066)), with: .color(EyeStyle.ink))
+                }
+            }
+            var mouth = Path()
+            if mood == .tired {
+                mouth.addEllipse(in: CGRect(x: c.x - s * 0.045, y: c.y + s * 0.095, width: s * 0.09, height: s * 0.09))
+            } else if mood == .waiting {
+                mouth.move(to: CGPoint(x: c.x - s * 0.08, y: c.y + s * 0.14)); mouth.addLine(to: CGPoint(x: c.x + s * 0.08, y: c.y + s * 0.14))
+            } else {
+                let width = s * (mood == .happy ? 0.15 : 0.1)
+                for i in 0...24 {
+                    let a = Double(i) * .pi / 24
+                    let p = CGPoint(x: c.x + width * CGFloat(cos(a)), y: c.y + s * 0.12 + s * (mood == .happy ? 0.08 : 0.04) * CGFloat(sin(a)))
+                    if i == 0 { mouth.move(to: p) } else { mouth.addLine(to: p) }
+                }
+            }
+            ctx.stroke(mouth, with: .color(EyeStyle.ink), style: StrokeStyle(lineWidth: s * 0.04, lineCap: .round))
+        }.accessibilityHidden(true)
     }
 }
 

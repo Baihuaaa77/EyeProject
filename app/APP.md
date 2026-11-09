@@ -48,3 +48,5 @@
 - app 层只做「装配 + 系统组件 + 导航」，业务逻辑一律下沉 feature/core；新页面通过 feature 的 navigation 扩展接入 NavHost
 - `buildTypes.release` 关闭了优化（optimization.enable = false），混淆规则目录 `src/main/keepRules` 暂未启用
 - `abiFilters arm64-v8a`：tasks-vision / LiteRT 预编译 `.so` 限制
+
+底部导航由 core:ui 的 EyeNavigationDock 呈现玻璃底与滑动选中镜片，app 继续持有 TopLevelDestination 与 NavController。顶层页面可见性、saveState / restoreState 和系统手势区处理保持。
