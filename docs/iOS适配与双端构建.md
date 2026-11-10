@@ -117,7 +117,7 @@ chmod +x gradlew scripts/ios/*.sh
 ## 首页实时视窗、系统设置齿轮与退出卡死（2026-10-23）
 
 真机对比结论：EAR 与 OCEC 都能可靠检测眨眼，保留 EAR，OCEC 全部删除（苹果端对比页、手写推理与权重、导出脚本；
-共用 `BlinkDetector.ocecOpenProbability`；安卓「模型测试 → 全替换眨眼检测」页与 `ocec_p.tflite`）。研究记录留在 `results/`。
+共用 `BlinkDetector.ocecOpenProbability`；安卓「模型测试 → 全替换眨眼检测」页与 `ocec_p.tflite`）。研究记录已归档到仓库外（`EyeProject-归档/results`，2026-11-10）。
 
 - 首页「实时眼部检测」视窗（两端同一排版）：镜像预览（下方「显示眼部关键点」开关默认关闭、持久保存，打开才叠加眼睑 6 点轮廓 + 虹膜圈，闭眼变红；只影响画面），眨眼次数、
   近 1 分钟次数、睁眼 / 闭眼状态、EAR 与阈值、帧率，下方最近 8 秒 EAR 曲线（眨眼处绿线），右上角状态「运行正常 / 未检测到人脸 / 画面中断」。

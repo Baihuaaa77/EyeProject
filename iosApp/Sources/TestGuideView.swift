@@ -82,22 +82,18 @@ struct TestGuideView: View {
     }
 }
 
-/// 演示舞台：向内凹的浅色圆角底（与进度槽同一种「凹陷」表面），人偶在里面浮起；场景按 320×200 等比缩放居中。
+/// 演示舞台：浅主色圆角底，场景按 320×200 等比缩放居中；按圆角裁切，人物与手臂不会画出舞台。
 private struct GuideStage: View {
     let scene: GuideScene
     let phase: Double
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: EyeStyle.radiusLarge, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: EyeStyle.radiusLarge)
         Canvas { context, size in
             let unit = min(size.width / 320, size.height / 200)
             let origin = CGPoint(x: (size.width - 320 * unit) / 2, y: (size.height - 200 * unit) / 2)
             scene.draw(GuidePainter(ctx: context, unit: unit, origin: origin), phase)
         }.frame(height: 200).frame(maxWidth: .infinity)
-            .background {
-                shape.fill(EyeStyle.primarySoft
-                    .shadow(.inner(color: EyeStyle.shadow, radius: 5, x: 2, y: 2))
-                    .shadow(.inner(color: EyeStyle.shadowLight, radius: 5, x: -2, y: -2)))
-            }
+            .background(EyeStyle.primarySoft, in: shape)
             .clipShape(shape)
     }
 }
@@ -200,7 +196,7 @@ struct GuidePainter {
         ctx.fill(Path(roundedRect: CGRect(x: tl.x + screen.width * 0.12, y: tl.y + screen.height * 0.67,
             width: screen.width * 0.76, height: screen.height * 0.13), cornerRadius: screen.width * 0.06), with: .color(EyeStyle.borderSubtle))
     }
-    /// 演示人物（浮雕人偶）：上身一直画到舞台底边。[arms] 为 true 时两臂垂在身侧；
+    /// 演示人物（短发男孩）：上身一直画到舞台底边。[arms] 为 true 时两臂垂在身侧；
     /// 要抬手的场景传 false，自己用 restArm / raisedArm 画手臂。
     func figure(_ x: CGFloat, _ y: CGFloat, _ size: CGFloat, gaze: CGPoint = .zero, lid: CGFloat = 0, wide: CGFloat = 1,
                 arms: Bool = true) {

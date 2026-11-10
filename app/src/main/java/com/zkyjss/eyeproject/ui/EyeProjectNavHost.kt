@@ -27,7 +27,6 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navOptions
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
-import com.zkyjss.eyeproject.feature.agent.navigation.agentScreen
 import com.zkyjss.eyeproject.feature.home.HomeNavigation
 import com.zkyjss.eyeproject.feature.home.navigation.HomeRoute
 import com.zkyjss.eyeproject.feature.home.navigation.eyeCareScreens
@@ -148,7 +147,6 @@ fun EyeProjectNavHost(
                 onEditSubject = { navController.navigateToSubjectEdit(it) })
             systemSettingsScreen(onBack = back)
             subjectEditScreen(onBack = { navController.navigateUp() })
-            agentScreen(onBack = { navController.navigateUp() })
             testModelScreen(
                 onBack = { navController.navigateUp() },
                 onGazeClick = { navController.navigateToGaze() },

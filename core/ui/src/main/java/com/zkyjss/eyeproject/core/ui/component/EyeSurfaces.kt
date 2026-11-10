@@ -273,15 +273,6 @@ fun DrawScope.drawProgressRing(colors: EyeColors, fraction: Float?, stroke: Floa
     }
 }
 
-/** AI 入口标识：浮雕图标底与主色声波线，不创建无意义的循环动画。 */
-@Composable
-fun EyeAiMark(size: Dp, modifier: Modifier = Modifier) {
-    val colors = LocalEyeColors.current
-    Box(modifier.size(size).eyeSoftSurface(colors, EyeShapes.medium, compact = true), contentAlignment = Alignment.Center) {
-        Canvas(Modifier.size(size * 0.56f)) { drawWaveGlyph(colors.primary) }
-    }
-}
-
 /** 声波线：五根竖线，中间最高。 */
 fun DrawScope.drawWaveGlyph(color: Color) {
     val w = size.width
@@ -291,18 +282,6 @@ fun DrawScope.drawWaveGlyph(color: Color) {
     heights.forEachIndexed { i, k ->
         val x = w * (0.1f + i * 0.2f)
         drawLine(color, Offset(x, h / 2 - h * k / 2), Offset(x, h / 2 + h * k / 2), stroke, StrokeCap.Round)
-    }
-}
-
-/** 说明框（替代旧的吉祥物对话气泡）：浅色块底的一段正文，可带标题。 */
-@Composable
-fun EyeCallout(text: String, modifier: Modifier = Modifier, title: String? = null) {
-    val colors = LocalEyeColors.current
-    val typography = LocalEyeTypography.current
-    Column(modifier.fillMaxWidth().clip(EyeShapes.large).background(colors.surfaceVariant).padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        if (title != null) EyeText(title, style = typography.subtitle, color = colors.textPrimary)
-        EyeText(text, style = typography.body, color = colors.textPrimary)
     }
 }
 

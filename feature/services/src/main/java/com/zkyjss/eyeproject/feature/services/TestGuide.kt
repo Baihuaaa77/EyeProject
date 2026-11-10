@@ -35,7 +35,6 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -58,7 +57,6 @@ import com.zkyjss.eyeproject.core.designsystem.theme.EyeMotion
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeShapes
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
-import com.zkyjss.eyeproject.core.designsystem.theme.eyeSoftSurface
 import com.zkyjss.eyeproject.core.designsystem.theme.rememberReducedMotion
 import com.zkyjss.eyeproject.core.ui.component.EyeButton
 import com.zkyjss.eyeproject.core.ui.component.EyeButtonRole
@@ -209,13 +207,13 @@ private fun BeatRow(label: String, active: Boolean, done: Boolean) {
     )
 }
 
-/** 演示舞台：向内凹的浅色圆角底（与进度槽同一种「凹陷」表面），人偶在里面浮起；场景按 320×200 等比缩放居中。 */
+/** 演示舞台：浅主色圆角底，场景按 320×200 等比缩放居中。 */
 @Composable
 private fun GuideStage(scene: GuideScene, phase: () -> Float, description: String, modifier: Modifier = Modifier) {
     val colors = LocalEyeColors.current
     val measurer = rememberTextMeasurer()
     val labelStyle = LocalEyeTypography.current.chip
-    Box(modifier.eyeSoftSurface(colors, EyeShapes.large, SolidColor(colors.primarySoft), pressed = true)) {
+    Box(modifier.clip(EyeShapes.large).background(colors.primarySoft)) {
         Canvas(Modifier.fillMaxSize().semantics { contentDescription = description }) {
             val unit = minOf(size.width / 320f, size.height / 200f)
             val origin = Offset((size.width - 320f * unit) / 2f, (size.height - 200f * unit) / 2f)
@@ -289,7 +287,7 @@ private fun sceneFor(motion: GuideMotion): GuideScene = when (motion) {
 }
 
 /**
- * 演示人物（浮雕人偶）：上身一直画到舞台底边，像坐在画框前。
+ * 演示人物（短发男孩）：上身一直画到舞台底边，像坐在画框前。
  * [arms] 为 true 时两臂垂在身侧；要抬手的场景传 false，自己用 [restArm] / [raisedArm] 画手臂。
  */
 private fun SceneScope.person(

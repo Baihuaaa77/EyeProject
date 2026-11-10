@@ -408,7 +408,7 @@ private struct FarFixationPanel: View {
         VStack(spacing: 10) {
             Canvas { ctx, size in
                 Cartoon.figure(ctx, center: CGPoint(x: size.width / 2, y: size.height * 0.5), size: min(size.width, size.height) * 0.86,
-                    gaze: CGPoint(x: 0, y: -0.6), relief: false)
+                    gaze: CGPoint(x: 0, y: -0.6))
             }.frame(width: 64, height: 64)
             if waiting {
                 Text("看着 \(meters) 米外的目标").font(EyeStyle.title).foregroundStyle(.white).multilineTextAlignment(.center)

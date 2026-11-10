@@ -17,8 +17,8 @@
 | `EyeIcon` | 图标（Image + ColorFilter.tint），装饰性图标 `contentDescription = null` |
 | `Button.kt` | 通用基础按钮（形状/背景/边框/内边距可配，默认矩形） |
 | `EyeButton` | 三种角色保留；浅色分区表面、整圈渐变边缘光、按下内凹；最小高 52、圆角 14，禁用不可点。 |
-| `EyeBrand.kt` | 品牌与示意图绘制：`EyeBrandMark` / `EyeBrandLockup`、`leafEyePath`、`drawPhone`（机身带柔和投影）、注视准星 `drawFixationTarget`、应用图标展示 `EyeAppIcon`（与桌面图标同一张图）、`drawTumblingE` |
-| `EyeFigure.kt` | 方法演示的示意人物：柔和浮雕人偶 `drawFigure`（中性色头 / 身体靠成对阴影浮起，眼窝里是渐变荧光虹膜；`figureEyeCenter`，视线 / 闭眼 / 睁大，`bottom` 控制上衣下沿，`relief = false` 关掉阴影用于深色底小图标）；人物自己的手臂 `drawFigureArm`（肩 → 肘 → 腕 + 手，肘由手腕位置三维反解；`figureArmRest` / `figureArmCover` 给出垂在身侧与遮眼时的手腕位置）；`softRelief` 为成对阴影的画法。苹果端 `EyeCartoon.swift` 逐项对应 |
+| `EyeBrand.kt` | 品牌与示意图绘制：`EyeBrandMark` / `EyeBrandLockup`、`leafEyePath`、`drawPhone`、注视准星 `drawFixationTarget`、应用图标展示 `EyeAppIcon`（与桌面图标同一张图）、`drawTumblingE` |
+| `EyeFigure.kt` | 方法演示的示意人物：平面上半身短发男孩 `drawFigure`（纯色平涂；`figureEyeCenter`，视线 / 闭眼 / 睁大，`bottom` 控制上衣下沿）；人物自己的手臂 `drawFigureArm`（肩 → 肘 → 腕两段袖子 + 肤色手掌，肘由手腕位置三维反解；`figureArmRest` / `figureArmCover` 给出垂在身侧与遮眼时的手腕位置）。苹果端 `EyeCartoon.swift` 逐项对应 |
 | `EyeGlyph.kt` | 线性小图标（`EyeGlyph`，Canvas 自绘，跟随 tint），列表行与服务入口用 |
 
 ### 容器与卡片
@@ -45,7 +45,7 @@
 | `EyeTextField` | 单行输入框：标签 + 内凹表面 + 占位文字，保留密码、键盘类型与禁用行为。 |
 | `AiExplanationCard` | AI 解读 / AI 综合建议卡片（文案由 `AiCardText` 给出，`AiCardText.ADVICE` 为综合建议），状态 `AiCardState`（Locked / Idle（可带同意说明，卡内展开）/ Loading（骨架 + 轮换进度语）/ Done（一句话总结、这说明、可以这样做、何时就医、参考资料、免责说明）/ Failed）；`embedded` 用于嵌在记录行里。苹果端 `AiExplanationView.swift` 同一排版 |
 | `EyeStatusChip` | 状态徽标，`StatusTone(NEUTRAL/SUCCESS/DANGER/WARNING)` 语义色；`live` 时带呼吸圆点 |
-| `EyeHelp.kt` | `EyeHelpButton`：灰色圆形「?」，点开气泡说明（替代括号小字）；`EyeTitleWithHelp` 标题 + 问号。苹果端 `HelpButton` 同一样式 |
+| `EyeHelp.kt` | `EyeHelpButton`：灰色圆形「?」，点开气泡说明（替代括号小字）。苹果端 `HelpButton` 同一样式 |
 | `EyeCharts.kt` | 凹槽内的细胶囊渐变柱，空值只画轨道、零值不伪造柱高；薄荷色虚线参考，文字读数与无障碍描述保留；移除动画时直接到终态。 |
 
 ### 启动与提示音
@@ -59,15 +59,14 @@
 
 | 组件 | 说明 |
 |---|---|
-| `EyeTopBar` | 顶栏：可选前置标志 + 标题/副标题 + 右侧状态徽标或自定义内容（`trailing`，首页放系统设置齿轮） |
-| `EyePageHeader` / `EyeHeaderActions` / `EyeAccountButton` / `EyeThemeButton` / `EyeSettingsGear` | 顶层页标题行：小号副标题（日期）在上、32 号大标题在下，右上角一个圆钮——有账户入口时为账户头像（登录后品牌蓝实心圆 + 白色首字母，`LocalEyeAccountBadge` 由 app 提供），否则为「系统设置」齿轮，都没有则不放（首页、服务放头像，「我的」不放）。白天 / 夜晚切换（`LocalEyeThemeToggle`，由 app 按主题偏好提供）改在「我的 → 通用 → 深色模式」，`EyeThemeButton` 保留未用。与苹果端 PageHeader / AccountButton / SettingsGear 一致 |
+| `EyePageHeader` / `EyeHeaderActions` / `EyeThemeButton` / `EyeSettingsGear` | 顶层页标题行：小号副标题（日期）在上、32 号大标题在下，右上角一个圆钮——有账户入口时为账户头像（登录后品牌蓝实心圆 + 白色首字母，`LocalEyeAccountBadge` 由 app 提供），否则为「系统设置」齿轮，都没有则不放（首页、服务放头像，「我的」不放）。白天 / 夜晚切换（`LocalEyeThemeToggle`，由 app 按主题偏好提供）改在「我的 → 通用 → 深色模式」，`EyeThemeButton` 保留未用。与苹果端 PageHeader / AccountButton / SettingsGear 一致 |
 | `TopAppBar` | 通用顶栏（含状态栏 padding 处理） |
 | `TopBackBar` | 返回顶栏（背景覆盖状态栏，支持渐变/标题/无文字模式） |
 
 ## 依赖关系
 
 - **依赖**：`core:designsystem`；Compose BOM；音效资源目录 `shared/feedback/res`
-- **被依赖**：全部 5 个 feature 模块（home / testmodel / services / mine / agent）
+- **被依赖**：全部 4 个 feature 模块（home / testmodel / services / mine）
 
 ## 注意事项
 

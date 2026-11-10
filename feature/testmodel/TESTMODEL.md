@@ -1,7 +1,7 @@
 # feature:testmodel
 
 > 模型测试页（实验性质）：MediaPipe FaceDetector + LiteRT 双路线（C++ SDK / Android API）跑 L2CS-Net 注视估计；另有 FaceLandmarker 眨眼检测独立测试页。
-> 原「全替换眨眼检测」（BlazeFace + OCEC）页面已随 EAR / OCEC 对比结束删除（2026-10-23），眨眼统一用 EAR；研究记录见 `results/`。
+> 原「全替换眨眼检测」（BlazeFace + OCEC）页面已随 EAR / OCEC 对比结束删除（2026-10-23），眨眼统一用 EAR；研究记录已归档到仓库外（`EyeProject-归档/results`，2026-11-10）。
 
 ## 职责
 

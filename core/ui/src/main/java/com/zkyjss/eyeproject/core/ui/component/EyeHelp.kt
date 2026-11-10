@@ -115,14 +115,3 @@ private class HelpPositionProvider(private val margin: Int, private val gap: Int
         return IntOffset(x, y)
     }
 }
-
-/** 标题 + 问号的一行（分区标题常用）。 */
-@Composable
-fun EyeTitleWithHelp(title: String, help: String?, modifier: Modifier = Modifier, helpTitle: String = title) {
-    val colors = LocalEyeColors.current
-    val typography = LocalEyeTypography.current
-    androidx.compose.foundation.layout.Row(modifier, verticalAlignment = Alignment.CenterVertically) {
-        EyeText(title, style = typography.subtitle, color = colors.textPrimary)
-        if (help != null) EyeHelpButton(helpTitle, help)
-    }
-}

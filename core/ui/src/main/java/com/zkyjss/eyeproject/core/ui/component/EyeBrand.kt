@@ -31,13 +31,12 @@ import androidx.compose.ui.unit.dp
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeColors
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
-import com.zkyjss.eyeproject.core.designsystem.theme.illustration
 
 /*
  * 品牌与示意图绘制（2026-11 视觉改版，去卡通化；苹果端 EyeCartoon.swift 逐项对应）：
  * - 标志：主色渐变圆角底 + 白色同心「虹膜」环与中心点，克制、几何，不再用吉祥物
- * - 方法演示里的人物与手臂见 EyeFigure.kt（柔和浮雕人偶，2026-11-10 起）
- * - 手机用扁平机身带一层柔和投影；斜视注视目标用准星（同心环 + 十字 + 中心点）
+ * - 方法演示里的人物（平面上半身短发男孩）与他自己的手臂见 EyeFigure.kt
+ * - 手机用扁平面；斜视注视目标用准星（同心环 + 十字 + 中心点）
  * 启动图标（app/src/main/res/mipmap-* 与 iOS AppIcon）为爱科真人头像 + 浅灰蓝圆盘，由 scripts/generate_eyecho_icon.py 生成。
  */
 
@@ -106,10 +105,7 @@ fun DrawScope.drawBrandMark(colors: EyeColors, s: Float, origin: Offset = Offset
 fun DrawScope.drawPhone(colors: EyeColors, center: Offset, height: Float): Pair<Offset, Size> {
     val w = height * 0.5f
     val topLeft = Offset(center.x - w / 2, center.y - height / 2)
-    softRelief(colors, w * 0.06f) { canvas, paint ->
-        canvas.drawRoundRect(topLeft.x, topLeft.y, topLeft.x + w, topLeft.y + height, w * 0.18f, w * 0.18f, paint)
-    }
-    drawRoundRect(colors.illustration.device, topLeft, Size(w, height), CornerRadius(w * 0.18f))
+    drawRoundRect(colors.ink, topLeft, Size(w, height), CornerRadius(w * 0.18f))
     val inset = w * 0.05f
     val screenTl = Offset(topLeft.x + inset, topLeft.y + inset)
     val screen = Size(w - inset * 2, height - inset * 2)

@@ -189,24 +189,3 @@ fun EyeCategoryLabel(title: String, glyph: EyeGlyph, tint: Color, modifier: Modi
         EyeText(title, style = LocalEyeTypography.current.label, color = LocalEyeColors.current.textSecondary, maxLines = 1)
     }
 }
-
-/**
- * 卡片分类头：主色小图标 + 卡片标题（[subtitle] 字号、主文字色），右侧可放操作（胶囊按钮、开关等）。
- */
-@Composable
-fun EyeCategoryHeader(
-    title: String,
-    glyph: EyeGlyph,
-    tone: EyeTileTone = EyeTileTone.PRIMARY,
-    modifier: Modifier = Modifier,
-    trailing: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {},
-) {
-    val (_, foreground) = tone.colors()
-    Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        // 卡片标题：主色小图标 + 标题字号（18）的主文字，与正文、辅助信息拉开层级
-        EyeGlyphIcon(glyph, Modifier.size(20.dp), foreground)
-        Spacer(Modifier.width(8.dp))
-        EyeText(title, Modifier.weight(1f), style = LocalEyeTypography.current.subtitle, color = LocalEyeColors.current.textPrimary)
-        trailing()
-    }
-}

@@ -80,32 +80,6 @@ fun EyeSettingsGear(onClick: () -> Unit, modifier: Modifier = Modifier) {
     }
 }
 
-/**
- * 账户按钮：登录后品牌蓝实心圆 + 白色首字母，未登录为浅填充圆 + 人像线稿；
- * 点开完整的账户页（登录、注册、退出、注销）。与苹果端 AccountButton 一致。
- */
-@Composable
-fun EyeAccountButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
-    val colors = LocalEyeColors.current
-    val badge = LocalEyeAccountBadge.current
-    val haptics = rememberEyeHaptics()
-    val signedIn = badge.signedIn && badge.initial.isNotBlank()
-    Box(
-        modifier.size(48.dp).eyeSoftSurface(colors, EyeShapes.medium, compact = true).clickable(role = Role.Button) { haptics.tap(); onClick() }
-            .semantics { contentDescription = if (badge.signedIn) "账户（已登录）" else "账户（未登录）" },
-        contentAlignment = Alignment.Center,
-    ) {
-        Box(Modifier.size(36.dp),
-            contentAlignment = Alignment.Center) {
-            if (signedIn) {
-                EyeText(badge.initial.take(1).uppercase(), style = LocalEyeTypography.current.subtitle, color = colors.onPrimary)
-            } else {
-                PersonGlyph(Modifier.size(20.dp))
-            }
-        }
-    }
-}
-
 /** 人像线稿（与底部导航「我的」同一笔画）。 */
 @Composable
 fun PersonGlyph(modifier: Modifier = Modifier) {

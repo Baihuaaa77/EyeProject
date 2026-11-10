@@ -46,7 +46,6 @@ dependencies {
     implementation(project(":feature:testmodel"))
     implementation(project(":feature:services"))
     implementation(project(":feature:mine"))
-    implementation(project(":feature:agent"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)

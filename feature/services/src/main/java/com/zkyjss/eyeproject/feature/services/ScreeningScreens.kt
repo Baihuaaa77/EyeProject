@@ -366,7 +366,7 @@ internal fun FarFixationContent(s: ScreeningState, onStart: () -> Unit) {
             Column(Modifier.fillMaxWidth().height(240.dp + rememberStageExtra()).clip(EyeShapes.medium).background(colors.ink).padding(20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterVertically)) {
                 Canvas(Modifier.size(64.dp)) {
-                    drawFigure(colors, Offset(size.width / 2, size.height * 0.5f), size.minDimension * 0.86f, gaze = Offset(0f, -0.6f), relief = false)
+                    drawFigure(colors, Offset(size.width / 2, size.height * 0.5f), size.minDimension * 0.86f, gaze = Offset(0f, -0.6f))
                 }
                 if (s.farWaiting) {
                     BaseEyeText("看着 ${StrabismusProtocol.FAR_TARGET_M} 米外的目标", style = typography.title, color = colors.white, textAlign = center)
