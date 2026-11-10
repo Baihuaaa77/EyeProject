@@ -192,22 +192,25 @@ internal class StrabismusStateMachine(private val host: ScreeningEngine) {
         with(host) {
             timer?.cancel()
             timer = scope.launch {
-                repeat(seconds * 20) { index ->
-                    delay(50)
-                    val elapsed = (index + 1) / 20f
-                    // 追踪：目标位置以视角（度）表示；注视：targetX>0 表示闪烁的「亮」相（1.5 Hz）
+                while (isActive) {
+                    val elapsed = ((platform.nowMs() - stepStartMs).coerceAtLeast(0L) / 1_000f).coerceAtMost(seconds.toFloat())
                     val target = if (_state.value.step == ScreeningStep.PURSUIT) StrabismusProtocol.pursuitTarget(elapsed).let { it.first to it.second }
                         else (if ((elapsed * StrabismusProtocol.FLASH_HZ * 2f).toInt() % 2 == 0) 1f else -1f) to 0f
-                    _state.update { it.copy(secondsLeft = (seconds - elapsed).toInt().coerceAtLeast(0), targetX = target.first, targetY = target.second) }
+                    _state.update { it.copy(secondsLeft = kotlin.math.ceil(seconds - elapsed).toInt().coerceAtLeast(0), targetX = target.first, targetY = target.second) }
+                    if (elapsed >= seconds) break
+                    delay(50)
                 }
-                after()
+                if (isActive) after()
             }
         }
     }
 
     fun reportPursuitCapacity(maxXDeg: Float, maxYDeg: Float) {
         with(host) {
-            if (_state.value.pursuitMaxDeg == null) _state.update { it.copy(pursuitMaxDeg = maxXDeg to maxYDeg) }
+            if (!maxXDeg.isFinite() || !maxYDeg.isFinite() || maxXDeg <= 0f || maxYDeg <= 0f) return
+            val previous = _state.value.pursuitMaxDeg
+            if (previous == null || abs(previous.first - maxXDeg) > 0.1f || abs(previous.second - maxYDeg) > 0.1f)
+                _state.update { it.copy(pursuitMaxDeg = maxXDeg to maxYDeg) }
         }
     }
 

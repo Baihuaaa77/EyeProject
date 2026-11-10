@@ -37,8 +37,9 @@ import com.zkyjss.eyeproject.core.ui.component.EyeText
 
 /** 测试舞台：纯色卡片（不描边、不投影），保留原有内容尺寸与白色刺激背景。 */
 @Composable
-internal fun TestStageCard(title: String? = null, content: @Composable ColumnScope.() -> Unit) {
-    EyeSectionCard(title = title, content = content)
+internal fun TestStageCard(title: String? = null, expanded: Boolean = false, content: @Composable ColumnScope.() -> Unit) {
+    EyeSectionCard(title = title, contentPadding = if (expanded) com.zkyjss.eyeproject.core.designsystem.theme.EyeSpacing.xs
+        else com.zkyjss.eyeproject.core.designsystem.theme.EyeSpacing.cardPadding, content = content)
 }
 
 /** 任务中的质量提醒：浅色胶囊淡入展开，消失时收起，避免文字突然出现挤动舞台。 */

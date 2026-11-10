@@ -12,6 +12,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
+import com.zkyjss.eyeproject.core.designsystem.theme.EyeSpacing
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeShapes
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
@@ -21,6 +23,7 @@ import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
 fun EyeSectionCard(
     modifier: Modifier = Modifier,
     title: String? = null,
+    contentPadding: Dp = EyeSpacing.cardPadding,
     content: @Composable ColumnScope.() -> Unit
 ) {
     val colors = LocalEyeColors.current
@@ -29,7 +32,7 @@ fun EyeSectionCard(
         modifier = modifier
             .fillMaxWidth()
             .eyeGlass(colors, EyeShapes.panel)
-            .padding(20.dp)
+            .padding(contentPadding)
     ) {
         if (title != null) {
             EyeText(

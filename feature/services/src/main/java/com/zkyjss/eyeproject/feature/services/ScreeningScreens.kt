@@ -26,6 +26,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import android.os.SystemClock
+import kotlinx.coroutines.isActive
+import androidx.compose.animation.core.withInfiniteAnimationFrameNanos
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -38,6 +42,9 @@ import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.unit.Dp
+import com.zkyjss.eyeproject.core.designsystem.theme.EyeControlSizes
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Color
@@ -429,10 +436,10 @@ internal fun GazeCalibrationContent(s: ScreeningState, vm: ScreeningTestViewMode
             halo.animateTo(1f, com.zkyjss.eyeproject.core.designsystem.theme.EyeMotion.settleSpring())
         }
     }
-    TestStageCard {
+    TestStageCard(expanded = true) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             // 与追踪画布同高（两屏卡片结构相同，伸展量也相同）：校准点覆盖追踪目标会到达的整个范围，避免边缘外推。
-            Canvas(Modifier.fillMaxWidth().height(PURSUIT_CANVAS_HEIGHT + rememberStageExtra()).clip(EyeShapes.medium).background(colors.white)
+            Canvas(Modifier.fillMaxWidth().height(gazeCanvasBaseHeight(LocalConfiguration.current.screenHeightDp.dp) + rememberStageExtra()).clip(EyeShapes.medium).background(colors.white)
                 .onGloballyPositioned { origin = it.positionInWindow() }) {
                 val target = StrabismusGaze.calibrationTargets[s.gazeCalibrationIndex]
                 val point = Offset(size.width * target.x, size.height * target.y)
@@ -510,9 +517,13 @@ private fun PursuitContent(s: ScreeningState, vm: ScreeningTestViewModel) {
     val distanceMm = (if (s.distanceCm > 0f) s.distanceCm else StrabismusProtocol.DISTANCE_CM) * 10f
     val radiusPx = 10f / 2f * pxPerMm // 保持原有 1 cm 目标包络和轨迹边界。
     var origin by remember { mutableStateOf(Offset.Zero) }
-    TestStageCard {
+    var renderTime by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
+    LaunchedEffect(vm) {
+        while (isActive) withInfiniteAnimationFrameNanos { renderTime = SystemClock.elapsedRealtime() }
+    }
+    TestStageCard(expanded = true) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Canvas(Modifier.fillMaxWidth().height(PURSUIT_CANVAS_HEIGHT + rememberStageExtra()).clip(EyeShapes.medium).background(colors.white)
+            Canvas(Modifier.fillMaxWidth().height(gazeCanvasBaseHeight(LocalConfiguration.current.screenHeightDp.dp) + rememberStageExtra()).clip(EyeShapes.medium).background(colors.white)
                 .onGloballyPositioned { origin = it.positionInWindow() }) {
                 val halfW = size.width / 2f - radiusPx
                 val halfH = size.height / 2f - radiusPx
@@ -522,8 +533,9 @@ private fun PursuitContent(s: ScreeningState, vm: ScreeningTestViewModel) {
                 val maxY = Math.toDegrees(kotlin.math.atan((halfH / pxPerMm / distanceMm).toDouble())).toFloat()
                 vm.reportPursuitCapacity(maxX, maxY)
                 val scale = minOf(1f, maxX / StrabismusProtocol.PURSUIT_AMPLITUDE_DEG, maxY / StrabismusProtocol.PURSUIT_AMPLITUDE_DEG)
-                val x = size.width / 2f + degToPx(s.targetX * scale)
-                val y = size.height / 2f - degToPx(s.targetY * scale)
+                val target = vm.engine.pursuitTargetAt(renderTime)
+                val x = size.width / 2f + degToPx(target.x * scale)
+                val y = size.height / 2f - degToPx(target.y * scale)
                 // 准星外环即原 1 cm 目标包络，不改变轨迹或注视位置上报。
                 drawFixationTarget(LightEyeColors, Offset(x, y), radiusPx * 2f)
                 vm.reportGazeTarget(origin.x + x, origin.y + y)
@@ -552,7 +564,8 @@ internal fun ScreeningResultContent(s: ScreeningState, vm: ScreeningTestViewMode
 }
 
 /** 追踪与注视校准共用的画布高度。 */
-private val PURSUIT_CANVAS_HEIGHT = 360.dp
+internal fun gazeCanvasBaseHeight(screenHeight: Dp): Dp =
+    minOf(EyeControlSizes.gazeCanvasHeight, screenHeight * if (screenHeight < EyeControlSizes.gazeCanvasHeight) 0.38f else 0.58f).coerceAtLeast(EyeControlSizes.gazeCanvasMinHeight)
 
 @Composable
 private fun EyeText(text: String, style: TextStyle, color: Color) {
@@ -563,7 +576,7 @@ private fun EyeText(text: String, style: TextStyle, color: Color) {
 @Composable
 internal fun OptotypeSurface(direction: Int, size: androidx.compose.ui.unit.Dp) {
     Box(Modifier.fillMaxWidth().height(ringDiameter(size) + 48.dp + rememberStageExtra()).clip(EyeShapes.large)
-        .background(LocalEyeColors.current.white), contentAlignment = Alignment.Center) {
+        .background(LocalEyeColors.current.optotypeSurround), contentAlignment = Alignment.Center) {
         FramedOptotype(direction, size)
     }
 }

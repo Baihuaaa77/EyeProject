@@ -346,3 +346,5 @@ export IOS_EXPORT_OPTIONS_PLIST="$PWD/iosApp/ExportOptions.local.plist"
 界面滚动指示条由 EyeRootView.scrollIndicators(.hidden) 统一关闭。点选回答确认偏好由本机 UserDefaults 的 eye.chat.confirmOptionAnswers 保存；与 CloudClient 的数据同意无关。
 
 2026-11-10：共用引擎按老视、眼位工作流拆分；落盘任务使用应用级独立作用域，页面销毁后继续保存。前台首页用整分钟定时器更新日期。遮盖演示根据本次协助者答案切换，自遮与协助遮盖均无需点屏幕计时；新眼位记录版本 7、再注视窗口 500 ms，历史文档中的点按与 0.8 秒策略已被此实现替代。
+
+2026-11-10 测试显示调整：深色模式仅视标圆内保留白底，外层继承所在卡片底色；测试方法演示移除暂停/继续按钮并保留系统减少动画的关键帧。标定与追踪扩大为同一自适应舞台，卡内边距 8。iOS 追踪用 60 Hz TimelineView 调用共用轨迹计算，逐显示帧回报屏幕坐标，避免依赖 20 Hz 业务状态快照绘制；真实设备帧率仍需真机采样验证。

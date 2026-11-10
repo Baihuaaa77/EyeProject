@@ -84,3 +84,5 @@
 顶层页 EyeHeaderActions 统一呈现日夜切换与齿轮，不再优先显示账户；账户通过我的页个人卡进入。
 
 EyeGlyph 新增 EDIT 铅笔图标，用于首页感受编辑；不再用文字修改胶囊。
+
+EyeSectionCard 增加可选 contentPadding（默认仍为 cardPadding）；测试标定与追踪卡片使用 xs 内边距，让目标区域更宽。

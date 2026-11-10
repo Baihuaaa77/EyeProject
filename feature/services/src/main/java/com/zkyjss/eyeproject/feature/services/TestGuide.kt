@@ -8,7 +8,6 @@ import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,12 +18,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -38,7 +33,6 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -49,7 +43,6 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Constraints
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeColors
@@ -119,7 +112,7 @@ private class SceneScope(
 /**
  * 测试前的方法演示卡：示意人物演示动作 + 与动画同步高亮的分镜步骤 + 文字提示。
  * 示范画布只出现在准备阶段，不参与正式刺激呈现或计时。
- * 点按舞台可暂停/继续；系统「移除动画」时停在关键帧并展示全部步骤。
+ * 演示自动播放；系统「移除动画」时停在关键帧并展示全部步骤。
  */
 @Composable
 internal fun TestGuide(motion: GuideMotion, title: String, cue: String, onReady: (() -> Unit)? = null) {
@@ -127,8 +120,6 @@ internal fun TestGuide(motion: GuideMotion, title: String, cue: String, onReady:
     val type = LocalEyeTypography.current
     val scene = remember(motion) { sceneFor(motion) }
     val reduced = rememberReducedMotion()
-    var playing by rememberSaveable(motion) { mutableStateOf(true) }
-    var frozen by remember(motion) { mutableFloatStateOf(scene.keyframe) }
     // 无限过渡：测试时钟能正确处理；进度只在绘制阶段读取，整卡不会每帧重组
     val live = rememberInfiniteTransition(label = "方法演示").animateFloat(
         initialValue = 0f,
@@ -136,13 +127,7 @@ internal fun TestGuide(motion: GuideMotion, title: String, cue: String, onReady:
         animationSpec = infiniteRepeatable(tween(scene.cycleMs, easing = LinearEasing)),
         label = "演示进度"
     )
-    val phaseProvider: () -> Float = {
-        when {
-            reduced -> scene.keyframe
-            playing -> live.value
-            else -> frozen
-        }
-    }
+    val phaseProvider: () -> Float = { if (reduced) scene.keyframe else live.value }
     val activeBeat by remember(scene, reduced) {
         derivedStateOf { scene.beats.indexOfLast { phaseProvider() >= it.start }.coerceAtLeast(0) }
     }
@@ -151,21 +136,7 @@ internal fun TestGuide(motion: GuideMotion, title: String, cue: String, onReady:
         Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 EyeText(title, style = type.title, color = colors.textPrimary)
-                EyeText(
-                    text = if (reduced) "示意" else if (playing) "暂停演示" else "继续演示",
-                    style = type.chip,
-                    color = colors.primary,
-                    modifier = Modifier
-                        .align(Alignment.End)
-                        .heightIn(min = 48.dp)
-                        .clip(EyeShapes.chip)
-                        .background(colors.primarySoft)
-                        .clickable(enabled = !reduced, role = Role.Button) {
-                            if (playing) frozen = live.value
-                            playing = !playing
-                        }
-                        .padding(horizontal = 12.dp, vertical = 8.dp)
-                )
+
             }
             GuideStage(scene, phaseProvider, cue, Modifier.fillMaxWidth().height(200.dp))
             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {

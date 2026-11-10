@@ -75,6 +75,8 @@ data class EyeColors(
     val onStatus: Color,
     val onWarning: Color,
 ) {
+    /** 字母视标圆圈外的底色；白天保持白底，深色继承所在表面的底色。 */
+    val optotypeSurround: Color get() = if (isDark) Color.Transparent else white
     val canvasBackground: Color get() = if (isDark) Color(0xFF373B40) else Color(0xFFE3E8F3)
     val textHeading: Color get() = if (isDark) Color(0xFFF2F3F5) else Color(0xFF141A2B)
     val shadowLight: Color get() = Color.White.copy(alpha = if (isDark) 0.045f else 0.95f)

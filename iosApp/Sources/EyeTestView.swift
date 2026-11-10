@@ -106,7 +106,7 @@ struct EyeTestView: View {
                 if !isGazeTask && !isOpticTask { TestNotice(text: noticeText) }
                 if isProfile { SubjectPickerView(runtime: runtime) }
                 else if runtime.kind == "COLOR_VISION" { ColorVisionContent(runtime: runtime) }
-                else if isRunning { VStack(spacing: EyeStyle.spacing) { testContent }.modifier(TestStagePanel()) }
+                else if isRunning { VStack(spacing: EyeStyle.spacing) { testContent }.modifier(TestStagePanel(expanded: ["GAZE_CALIBRATION", "PURSUIT"].contains(phase))) }
                 else { testContent }
                 if isGazeTask { TestNoticeSlot(text: noticeText) }
             }
@@ -242,7 +242,7 @@ struct EyeTestView: View {
                 if phase == "PUSH_UP" {
                     Text("缓慢移近，每秒一两厘米")
                     TumblingEView(runtime: runtime).stageHeight(max(180, ringDiameter(CGFloat(runtime.number("optotypePx")) / UIScreen.main.scale) + 24))
-                        .background(Color.white, in: RoundedRectangle(cornerRadius: EyeStyle.radiusLarge, style: .continuous))
+                        .background(EyeStyle.optotypeSurround, in: RoundedRectangle(cornerRadius: EyeStyle.radiusLarge, style: .continuous))
                     Button("开始持续模糊了") { runtime.act("blur") }.buttonStyle(EyeButtonStyle())
                 } else {
                     OptotypeAnswerPad(runtime: runtime)
@@ -277,7 +277,7 @@ private struct OptotypeAnswerPad: View {
             TumblingEView(runtime: runtime)
                 .stageHeight(max(152, ringDiameter(CGFloat(runtime.number("optotypePx")) / UIScreen.main.scale) + 24))
                 // 视标恒为白底黑字（与安卓一致，深色模式下不变）
-                .background(Color.white, in: RoundedRectangle(cornerRadius: EyeStyle.radiusHero, style: .continuous))
+                .background(EyeStyle.optotypeSurround, in: RoundedRectangle(cornerRadius: EyeStyle.radiusHero, style: .continuous))
             VStack(spacing: AnswerKey.gap) {
                 arrow("向上", 3)
                 HStack(spacing: AnswerKey.gap) {
@@ -303,9 +303,11 @@ private struct TumblingEView: View {
     @ObservedObject var runtime: EyeRuntime
     var body: some View {
         Canvas { context, size in
-            guard runtime.bool("trialVisible") else { return }
-            let edge = CGFloat(runtime.number("optotypePx")) / UIScreen.main.scale
-            guard edge > 0 else { return }
+            let edge = max(0, CGFloat(runtime.number("optotypePx")) / UIScreen.main.scale)
+            let diameter = ringDiameter(edge)
+            context.fill(Path(ellipseIn: CGRect(x: (size.width - diameter) / 2, y: (size.height - diameter) / 2,
+                width: diameter, height: diameter)), with: .color(EyeStyle.optotypeField))
+            guard runtime.bool("trialVisible"), edge > 0 else { return }
             context.translateBy(x: size.width / 2, y: size.height / 2)
             context.rotate(by: .degrees(Double(runtime.number("direction")) * 90))
             let bar = edge / 5
@@ -465,31 +467,36 @@ private struct GazeTargetView: View {
     var body: some View {
         GeometryReader { geometry in
             let size = geometry.size
-            let point = target(in: size)
             let phase = runtime.string("phase")
-            ZStack(alignment: .topLeading) {
-                // 测试画布恒为白底（与安卓一致，深色模式下也保持高对比）
-                Color.white
-                if phase == "GAZE_CALIBRATION" {
-                    // 补测轮重看同一点时编号变化，外圈动效重播。
-                    CalibrationDot(index: Int(runtime.number("gazeCalibrationIndex") + runtime.number("gazeCalibrationRound") * 100))
-                        // 暂停时圆点变淡：位置不变，提示受试者校准在等待
-                        .opacity(runtime.bool("calibrationPaused") ? 0.35 : 1).position(point)
-                } else {
-                    let width = phase == "PURSUIT" ? CGFloat(10 * pixelsPerMm) / UIScreen.main.scale : CGFloat(runtime.number("targetDiameterMm") * Double(pixelsPerMm)) / UIScreen.main.scale
-                    // 与安卓一致：准星外环即目标包络（跟随为原 1 cm），中心即上报的目标位置；固定深蓝保证白底对比。
-                    Canvas { ctx, size in
-                        Cartoon.fixationTarget(ctx, center: CGPoint(x: size.width / 2, y: size.height / 2), size: min(size.width, size.height), color: EyeStyle.fixedPrimary)
-                    }.frame(width: width, height: width)
-                        .opacity(phase == "FIXATION" && runtime.number("targetX") <= 0 ? 0.3 : 1).position(point)
-                }
-            }.clipShape(RoundedRectangle(cornerRadius: EyeStyle.radius))
-                .onAppear { report(geometry, point) }
-                .onChange(of: runtime.stateKeyForTarget) { _ in report(geometry, point) }
-                .onChange(of: geometry.frame(in: .global).origin) { _ in report(geometry, point) }
-        }.stageHeight(["PURSUIT", "GAZE_CALIBRATION"].contains(runtime.string("phase")) ? 360 : 240)
+            TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: phase != "PURSUIT")) { _ in
+                let trajectory = runtime.controller.pursuitTargetNow()
+                let point = target(in: size, trajectory: CGPoint(x: CGFloat(trajectory.x), y: CGFloat(trajectory.y)))
+                ZStack(alignment: .topLeading) {
+                    // 测试画布恒为白底（与安卓一致，深色模式下也保持高对比）
+                    Color.white
+                    if phase == "GAZE_CALIBRATION" {
+                        // 补测轮重看同一点时编号变化，外圈动效重播。
+                        CalibrationDot(index: Int(runtime.number("gazeCalibrationIndex") + runtime.number("gazeCalibrationRound") * 100))
+                            // 暂停时圆点变淡：位置不变，提示受试者校准在等待
+                            .opacity(runtime.bool("calibrationPaused") ? 0.35 : 1).position(point)
+                    } else {
+                        let width = phase == "PURSUIT" ? CGFloat(10 * pixelsPerMm) / UIScreen.main.scale : CGFloat(runtime.number("targetDiameterMm") * Double(pixelsPerMm)) / UIScreen.main.scale
+                        // 与安卓一致：准星外环即目标包络（跟随为原 1 cm），中心即上报的目标位置；固定深蓝保证白底对比。
+                        Canvas { ctx, size in
+                            Cartoon.fixationTarget(ctx, center: CGPoint(x: size.width / 2, y: size.height / 2), size: min(size.width, size.height), color: EyeStyle.fixedPrimary)
+                        }.frame(width: width, height: width)
+                            .opacity(phase == "FIXATION" && runtime.number("targetX") <= 0 ? 0.3 : 1).position(point)
+                    }
+                }.clipShape(RoundedRectangle(cornerRadius: EyeStyle.radius))
+                    .onAppear { report(geometry, point) }
+                    .onChange(of: point) { value in report(geometry, value) }
+                    .onChange(of: runtime.stateKeyForTarget) { _ in report(geometry, point) }
+                    .onChange(of: geometry.frame(in: .global).origin) { _ in report(geometry, point) }
+                    .onChange(of: geometry.size) { _ in report(geometry, point) }
+            }
+        }.stageHeight(["PURSUIT", "GAZE_CALIBRATION"].contains(runtime.string("phase")) ? EyeStyle.gazeCanvasBaseHeight(UIScreen.main.bounds.height) : 240)
     }
-    private func target(in size: CGSize) -> CGPoint {
+    private func target(in size: CGSize, trajectory: CGPoint) -> CGPoint {
         if runtime.string("phase") == "GAZE_CALIBRATION" {
             // 点位由共用核心给出，两端一致。
             return CGPoint(x: size.width * runtime.number("calibrationX"), y: size.height * runtime.number("calibrationY"))
@@ -501,8 +508,8 @@ private struct GazeTargetView: View {
             let xMax = atan(max(0,(size.width / 2 - radius)) / (distance * ppm)) * 180 / .pi
             let yMax = atan(max(0,(size.height / 2 - radius)) / (distance * ppm)) * 180 / .pi
             let scale = min(1,min(xMax / 10,yMax / 10))
-            return CGPoint(x: size.width / 2 + tan(runtime.number("targetX") * scale * .pi / 180) * distance * ppm,
-                y: size.height / 2 - tan(runtime.number("targetY") * scale * .pi / 180) * distance * ppm)
+            return CGPoint(x: size.width / 2 + tan(Double(trajectory.x) * scale * .pi / 180) * distance * ppm,
+                y: size.height / 2 - tan(Double(trajectory.y) * scale * .pi / 180) * distance * ppm)
         }
         // 注视、遮盖：目标放在画布顶部、尽量靠近顶部的映光点（专家建议），头顶嫩芽也留在画布内
         let width = CGFloat(runtime.number("targetDiameterMm") * Double(pixelsPerMm)) / UIScreen.main.scale

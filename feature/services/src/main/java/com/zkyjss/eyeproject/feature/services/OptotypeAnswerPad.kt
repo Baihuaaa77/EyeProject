@@ -57,8 +57,8 @@ internal fun OptotypeAnswerPad(direction: Int, size: Dp, visible: Boolean, below
         // 白色刺激区吸收内容区剩余高度，视标居中；不加描边，靠白底与页面底色的明度差界定（2026-11 改版）。
         val extra = rememberStageExtra()
         Box(
-            Modifier.fillMaxWidth().height(maxOf(152.dp, ringDiameter(size) + 24.dp) + extra).clip(EyeShapes.hero)
-                .background(colors.white),
+            Modifier.testTag("optotype-surround").fillMaxWidth().height(maxOf(152.dp, ringDiameter(size) + 24.dp) + extra).clip(EyeShapes.hero)
+                .background(colors.optotypeSurround),
             contentAlignment = Alignment.Center,
         ) { FramedOptotype(direction, size, visible) }
         belowStimulus()
@@ -137,7 +137,7 @@ internal fun FramedOptotype(direction: Int, size: Dp, visible: Boolean = true) {
     val colors = LocalEyeColors.current
     val ring by animateColorAsState(StageAccent.copy(alpha = if (visible) 0.72f else 0.2f),
         tween(EyeMotion.SHORT), label = "视标环")
-    Box(Modifier.size(ringDiameter(size)).border(2.dp, ring, CircleShape),
+    Box(Modifier.testTag("optotype-field").size(ringDiameter(size)).background(colors.white, CircleShape).border(2.dp, ring, CircleShape),
         contentAlignment = Alignment.Center) {
         if (visible) TumblingE(direction, size, colors.black, Modifier.testTag("answer-optotype"))
     }

@@ -316,6 +316,16 @@ class ScreeningEngine(internal val platform: ScreeningPlatform, internal val sco
 
     internal fun resetGazeWindow() = strabismus.resetGazeWindow()
 
+    /** 按实际显示时刻计算追踪轨迹；界面逐帧绘制，不依赖 50 ms 的状态快照。 */
+    fun pursuitTargetAt(timeMs: Long): GazePoint {
+        val current = _state.value
+        if (current.step != ScreeningStep.PURSUIT || current.guidePending || stepStartMs <= 0L)
+            return GazePoint(current.targetX, current.targetY)
+        val elapsed = (timeMs - stepStartMs).coerceIn(0L, StrabismusProtocol.PURSUIT_SECONDS * 1_000L) / 1_000f
+        val target = StrabismusProtocol.pursuitTarget(elapsed)
+        return GazePoint(target.first, target.second)
+    }
+
     internal fun runTimedStep(seconds: Int, after: () -> Unit) = strabismus.runTimedStep(seconds, after)
 
     internal fun finish() = resultWriter.finish()

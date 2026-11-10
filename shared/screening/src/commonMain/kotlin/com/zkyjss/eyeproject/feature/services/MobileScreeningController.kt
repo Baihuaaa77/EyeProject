@@ -197,6 +197,7 @@ class MobileScreeningController(
     fun speechText(text: String) = screeningSpeechText(text)
     fun distancePrompt(zone: Int, count: Int): String? = SpokenPrompts.distance(zone, count)
     val distanceOkPrompt: String get() = SpokenPrompts.DISTANCE_OK
+    fun pursuitTargetNow(): GazePoint = screening.pursuitTargetAt(platform.nowMs())
     fun reportTarget(xPx: Float,yPx: Float) = screening.reportGazeTarget(xPx,yPx)
     fun reportPursuitCapacity(xDeg: Float,yDeg: Float) = screening.reportPursuitCapacity(xDeg,yDeg)
     /** 与安卓一致：问卷和结果页切后台不丢内容，只有进行中的任务回到准备页。 */

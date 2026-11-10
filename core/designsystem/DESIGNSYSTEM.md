@@ -72,3 +72,5 @@ Liquid Glass 试版：`EyeLiquidGlass` / `eyeLiquidGlass` 为 Android API 26+ �
 人物使用透明半身素材：问诊顶部 132×184，首页卡片内 144×200，右侧留 8 的空间；不加圆形裁切或圆形衬底。三个主页顶栏统一为日夜切换与系统设置齿轮。
 
 人物尺寸：问诊 112×144，首页 124×160；顶端对齐裁切，保留胸前 logo，首页卡片最小高 180。首页问诊标题使用 title，与实时检测同级。
+
+测试令牌：EyeColors.optotypeSurround 为视标圆外底色（浅色白、深色页面底色），圆形场内仍用固定 white / black。EyeControlSizes.gazeCanvasHeight=480、gazeCanvasMinHeight=160，标定与追踪共用自适应高度，紧凑横屏降低基础高度避免目标出屏；iOS EyeStyle 对应。

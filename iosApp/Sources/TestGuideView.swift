@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 测试前的方法演示：逐项移植安卓 TestGuide.kt（13 个场景、320×200 舞台单位、与动画同步高亮的分镜、暂停 / 继续）。
+/// 测试前的方法演示：逐项移植安卓 TestGuide.kt（13 个场景、320×200 舞台单位、与动画同步高亮的分镜）。
 /// 只出现在准备阶段，不参与正式刺激呈现或计时；系统减弱动态效果时停在关键帧并展示全部步骤。
 enum GuideMotion { case posture, acuity, fva, blink, open, near, move, curve, flip, fixate, far, cover, coverSelf, follow
     /// 与安卓 guideMotion(step) 相同的映射。
@@ -26,8 +26,6 @@ struct TestGuideView: View {
     let readyTitle: String
     let onReady: (() -> Void)?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var playing = true
-    @State private var frozen: Double?
     @State private var start = Date()
 
     init(motion: GuideMotion, title: String, cue: String, readyTitle: String = "准备好了", onReady: (() -> Void)? = nil) {
@@ -36,35 +34,25 @@ struct TestGuideView: View {
 
     var body: some View {
         let scene = GuideScene.scene(motion)
-        TimelineView(.animation(paused: reduceMotion || !playing)) { timeline in
+        TimelineView(.animation(paused: reduceMotion)) { timeline in
             content(scene, phase: phase(scene, at: timeline.date))
         }
         .padding(16).frame(maxWidth: .infinity)
         .eyeGlass()
-        .onChange(of: motion) { _ in start = Date(); frozen = nil; playing = true }
+        .onChange(of: motion) { _ in start = Date() }
     }
 
     private func phase(_ scene: GuideScene, at date: Date) -> Double {
         if reduceMotion { return scene.keyframe }
-        return playing ? progress(scene, at: date) : (frozen ?? scene.keyframe)
-    }
-
-    private func toggle(_ scene: GuideScene) {
-        if playing { frozen = progress(scene, at: Date()) }
-        else { start = Date().addingTimeInterval(-(frozen ?? 0) * scene.cycle) }
-        playing.toggle()
+        return progress(scene, at: date)
     }
 
     private func content(_ scene: GuideScene, phase: Double) -> some View {
         let active = scene.beats.lastIndex(where: { phase >= $0.start }) ?? 0
-        let chip: String = reduceMotion ? "示意" : (playing ? "暂停演示" : "继续演示")
         return VStack(spacing: 14) {
             VStack(alignment: .trailing, spacing: 8) {
                 Text(title).font(EyeStyle.title).foregroundStyle(EyeStyle.text).frame(maxWidth: .infinity, alignment: .leading)
-                Button(chip) { toggle(scene) }
-                    .font(EyeStyle.chip).foregroundStyle(EyeStyle.text)
-                    .frame(minHeight: 44).padding(.horizontal, 12).padding(.vertical, 8).background(EyeStyle.primarySoft, in: EyeStyle.chipShape)
-                    .disabled(reduceMotion)
+
             }
             GuideStage(scene: scene, phase: phase).accessibilityLabel(cue)
             VStack(spacing: 6) {

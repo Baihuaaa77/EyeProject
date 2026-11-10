@@ -468,6 +468,30 @@ class ServiceVisualTest {
         capture("direction-pad")
     }
 
+    @Test fun darkOptotypeHasWhiteCircleAndDarkSurround() {
+        compose.setContent {
+            EyeProjectTheme(darkTheme = true) {
+                Column(Modifier.fillMaxSize().background(com.zkyjss.eyeproject.core.designsystem.theme.DarkEyeColors.appBackground).padding(20.dp)) {
+                    TestStageCard { OptotypeAnswerPad(0, 24.dp, true) {} }
+                }
+            }
+        }
+        capture("optotype-dark-circle")
+        val field = compose.onNodeWithTag("optotype-field").fetchSemanticsNode().boundsInRoot
+        val surround = compose.onNodeWithTag("optotype-surround").fetchSemanticsNode().boundsInRoot
+        val bitmap = compose.runOnIdle {
+            val view = compose.activity.window.decorView
+            android.graphics.Bitmap.createBitmap(view.width, view.height, android.graphics.Bitmap.Config.ARGB_8888)
+                .also { view.draw(android.graphics.Canvas(it)) }
+        }
+        assertEquals(android.graphics.Color.WHITE, bitmap.getPixel((field.center.x + field.width * 0.3f).toInt(), field.center.y.toInt()))
+        val outer = bitmap.getPixel((surround.left + 8).toInt(), (surround.top + 8).toInt())
+        val parent = bitmap.getPixel((surround.left - 4).toInt(), (surround.top + 8).toInt())
+        assertEquals(parent, outer)
+        assertTrue(outer != android.graphics.Color.WHITE)
+        bitmap.recycle()
+    }
+
     @Test fun invisibleOptotypeDisablesAllFiveAnswerOptions() {
         compose.setContent {
             EyeProjectTheme {

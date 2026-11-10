@@ -2,8 +2,9 @@ import SwiftUI
 
 /// 测试舞台：纯色卡片（不描边、不投影，2026-11 改版），视标内部继续保留白色背景。与安卓 TestStageCard 一致。
 struct TestStagePanel: ViewModifier {
+    var expanded = false
     @ViewBuilder func body(content: Content) -> some View {
-        content.padding(20).frame(maxWidth: .infinity)
+        content.padding(expanded ? EyeSpacing.xs : EyeSpacing.cardPadding).frame(maxWidth: .infinity)
             .eyeGlass()
     }
 }
