@@ -211,7 +211,7 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, onEditSubje
             if (s.guidePending && s.glassesCheckPending) {
                 GlassesCheckContent(PresbyopiaIntake.glassesCheck(s.fields), viewModel::confirmGlasses)
             } else if (s.guidePending) {
-                TestGuide(guideMotion(s.step), stepTitle(s.step), guideCue(s.step), viewModel::confirmGuide)
+                TestGuide(guideMotion(s.step, s.fields), stepTitle(s.step), screeningGuideText(s), viewModel::confirmGuide)
                 // 远近切换是可选的探索性检查
                 if (s.step == ScreeningStep.FLIPPER) EyeButton("跳过，查看结果", EyeButtonRole.SECONDARY, viewModel::skipFlipper, Modifier.fillMaxWidth())
             } else when (s.step) {
@@ -461,20 +461,20 @@ internal fun CoverContent(s: ScreeningState, vm: ScreeningTestViewModel) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             FixationTarget(StrabismusProtocol.targetDiameterMm(s.fields["年龄"]?.toIntOrNull()), bright = true, vm = vm)
             StageCaption("交替遮盖 · ${done}/${sequence.size}")
-            if (current != null && current.holdMs > 0) HoldTimer(done, current.holdMs, "保持：${current.label}")
-            EyeText(next?.let { "下一步：${it.label}" } ?: "遮盖完成", typography.title, colors.textPrimary)
+            if (s.coverHolding && current != null && current.holdMs > 0) HoldTimer(done, current.holdMs, "保持：${current.label}", vm.engine.coverRemainingMs())
+            if (!s.coverHolding) EyeText(next?.let { "下一步：${it.label}" } ?: "遮盖完成", typography.title, colors.textPrimary)
             CoverSequenceStrip(done)
         }
     }
-    EyeButton(next?.let { "执行「${it.label}」时点按" } ?: "已完成", EyeButtonRole.PRIMARY, vm::markCover, Modifier.fillMaxWidth(), enabled = next != null)
+    EyeText(if (s.coverHolding) "相机已识别，请保持当前动作" else next?.let { "等待相机识别：${it.label}" } ?: "遮盖完成", typography.body, colors.textSecondary)
 }
 
 /** 当前动作需保持的时长（原文 2 秒 / 1 秒），到点后再进行下一动作。 */
 @Composable
-private fun HoldTimer(key: Int, holdMs: Long, text: String) {
+private fun HoldTimer(key: Int, holdMs: Long, text: String, remainingMs: Long = holdMs) {
     val colors = LocalEyeColors.current
-    val progress = remember(key) { androidx.compose.animation.core.Animatable(0f) }
-    LaunchedEffect(key) { progress.animateTo(1f, androidx.compose.animation.core.tween(holdMs.toInt(), easing = androidx.compose.animation.core.LinearEasing)) }
+    val progress = remember(key) { androidx.compose.animation.core.Animatable((1f - remainingMs.toFloat() / holdMs).coerceIn(0f, 1f)) }
+    LaunchedEffect(key) { progress.animateTo(1f, androidx.compose.animation.core.tween(remainingMs.coerceAtLeast(0L).toInt(), easing = androidx.compose.animation.core.LinearEasing)) }
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         EyeText(if (progress.value >= 1f) "可以进行下一步" else text, LocalEyeTypography.current.body,
             if (progress.value >= 1f) colors.testReady else colors.textSecondary)

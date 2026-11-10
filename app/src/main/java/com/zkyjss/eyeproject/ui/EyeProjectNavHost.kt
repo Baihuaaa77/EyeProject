@@ -61,12 +61,6 @@ import com.zkyjss.eyeproject.feature.services.navigation.colorVisionScreen
 import com.zkyjss.eyeproject.feature.services.navigation.presbyopiaScreen
 import com.zkyjss.eyeproject.feature.services.navigation.servicesScreen
 import com.zkyjss.eyeproject.feature.services.navigation.strabismusScreen
-import com.zkyjss.eyeproject.feature.testmodel.navigation.blinkTestScreen
-import com.zkyjss.eyeproject.feature.testmodel.navigation.gazeScreen
-import com.zkyjss.eyeproject.feature.testmodel.navigation.navigateToBlinkTest
-import com.zkyjss.eyeproject.feature.testmodel.navigation.navigateToGaze
-import com.zkyjss.eyeproject.feature.testmodel.navigation.navigateToTestModel
-import com.zkyjss.eyeproject.feature.testmodel.navigation.testModelScreen
 
 /** 对标 NIA 的 NiaNavHost：持有 NavHost 与底部导航栏。 */
 @Composable
@@ -77,8 +71,6 @@ fun EyeProjectNavHost(
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = backStackEntry?.destination
     val colors = LocalEyeColors.current
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val debuggable = remember { (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0 }
     // 顶层页右上角：账户头像；系统设置在「我的」里，都是完整页面
     val openSettings = { navController.navigateToSystemSettings() }
     val openAccount = { navController.navigateToAccount() }
@@ -116,7 +108,7 @@ fun EyeProjectNavHost(
                 onOpenAccount = openAccount,
                 onOpenSettings = openSettings,
                 // 开发者工具（模型测试）只在可调试包里出现
-                onNavigateToTestModel = if (debuggable) { { navController.navigateToTestModel() } } else null,
+                onNavigateToTestModel = developerToolsAction(navController),
                 onOpenTest = openTest,
                 onEditProfile = { navController.navigateToSubjectEdit(it) },
                 onOpenTrend = { navController.navigateToEyeTrend() },
@@ -147,13 +139,7 @@ fun EyeProjectNavHost(
                 onEditSubject = { navController.navigateToSubjectEdit(it) })
             systemSettingsScreen(onBack = back)
             subjectEditScreen(onBack = { navController.navigateUp() })
-            testModelScreen(
-                onBack = { navController.navigateUp() },
-                onGazeClick = { navController.navigateToGaze() },
-                onBlinkTestClick = { navController.navigateToBlinkTest() },
-            )
-            gazeScreen(onBack = { navController.navigateUp() })
-            blinkTestScreen(onBack = { navController.navigateUp() })
+            developerToolsScreens(navController)
             // 测试开始页缺资料时去「我的」的资料编辑页，保存后返回测试
             dryEyeScreen(onBack = { navController.navigateUp() }, onEditSubject = { navController.navigateToSubjectEdit(it) })
             presbyopiaScreen(onBack = { navController.navigateUp() }, onEditSubject = { navController.navigateToSubjectEdit(it) })

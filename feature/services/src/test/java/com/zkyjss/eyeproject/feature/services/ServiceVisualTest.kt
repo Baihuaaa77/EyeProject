@@ -758,7 +758,7 @@ class ServiceVisualTest {
                 view.draw(android.graphics.Canvas(it))
             }
         }
-        val dirs = listOf("build/reports/ui") + if (name.first().isDigit()) listOf("../../docs/界面截图-2026-10-23/安卓") else emptyList()
+        val dirs = listOf("build/reports/ui")
         for (dir in dirs) {
             val output = File("$dir/$name.png")
             output.parentFile?.mkdirs()

@@ -133,11 +133,8 @@ object StrabismusProtocol {
     /** 原文：遮盖解除后再注视偏移 ≥ 6Δ → 可疑阳性。 */
     const val REFIX_PRISM = 6.0
     const val REFIX_WINDOW_MS = 500L
-    /**
-     * 实际计算窗口（rules-2）：遮盖时刻由协助者点按，通常比真实动作晚 0.2–0.5 秒，
-     * 原文 0.5 秒窗口会错过再注视运动；放宽到点按后 0.8 秒，并用同长度的无遮盖窗口估计噪声底。
-     */
-    const val REFIX_SEARCH_MS = 800L
+    /** 相机检测的解除遮盖首帧为起点；多帧确认延迟不平移事件时间。 */
+    const val REFIX_SEARCH_MS = REFIX_WINDOW_MS
     /** 原文 BSI 初版界值。 */
     const val BSI_SUSPECT = 0.7
     const val BSI_ABNORMAL = 0.5

@@ -92,6 +92,7 @@ final class EyeCareStore: ObservableObject {
     }()
     private let work = DispatchQueue(label: "eye.care.report", qos: .userInitiated)
     private var activeSince: Date?
+    private var refreshTimer: Timer?
     /// 本人测试结论的缓存：记录文件不变就不重新解析
     private var testsSignature = ""
     private var testsCache: [[String: Any]] = []
@@ -119,9 +120,17 @@ final class EyeCareStore: ObservableObject {
     }
 
     /// 回到前台开始计时；退到后台时把这段使用时长记入当天。
-    func appBecameActive() { activeSince = Date(); refresh() }
+    func appBecameActive() {
+        activeSince = Date(); refresh()
+        refreshTimer?.invalidate()
+        let nextMinute = Date(timeIntervalSince1970: (floor(Date().timeIntervalSince1970 / 60) + 1) * 60)
+        let timer = Timer(fire: nextMinute, interval: 60, repeats: true) { [weak self] _ in self?.refresh() }
+        RunLoop.main.add(timer, forMode: .common)
+        refreshTimer = timer
+    }
 
     func appResignedActive() {
+        refreshTimer?.invalidate(); refreshTimer = nil
         guard let start = activeSince else { return }
         activeSince = nil
         let seconds = Int64(Date().timeIntervalSince(start))

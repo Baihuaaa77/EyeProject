@@ -502,7 +502,7 @@ class HomeVisualTest {
             val view = compose.activity.window.decorView
             Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888).also { view.draw(Canvas(it)) }
         }
-        for (dir in listOf("build/reports/ui", "../../docs/界面截图-2026-10-23/安卓")) {
+        for (dir in listOf("build/reports/ui")) {
             val output = File("$dir/$name.png")
             output.parentFile?.mkdirs()
             // Windows 上截图可能正被预览程序映射占用，稍等重试几次

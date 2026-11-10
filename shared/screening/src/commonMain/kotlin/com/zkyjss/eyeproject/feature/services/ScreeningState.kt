@@ -83,7 +83,8 @@ data class NearPoint(
 
 /** 距离—视觉表现曲线上的一点：该距离下双眼通过的最高小数视力。 */
 data class CurvePoint(val distanceCm: Float, val thresholdDecimal: Float?, val resolutionLimited: Boolean = false)
-data class CoverMark(val label: String, val timeMs: Long, val uncovered: VisionEye? = null, val covered: VisionEye? = null)
+data class CoverMark(val label: String, val timeMs: Long, val uncovered: VisionEye? = null, val covered: VisionEye? = null,
+    val source: String = "MANUAL", val confirmedAtMs: Long = timeMs)
 
 data class ScreeningState(
     val kind: ScreeningKind = ScreeningKind.PRESBYOPIA,

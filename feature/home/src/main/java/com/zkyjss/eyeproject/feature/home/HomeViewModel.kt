@@ -65,6 +65,12 @@ class HomeViewModel @Inject constructor(
     val permissionEvents: SharedFlow<HomePermissionEvent> = _permissionEvents.asSharedFlow()
     private var pendingExactAlarm = false
     private var pendingMinutes: Int? = null
+    private var clockDay: String? = null
+    private val clock = homeClockTicks().onEach { now ->
+        val offset = TimeZone.getDefault().getOffset(now) / 60_000
+        val day = EyeCareDays.dayOf(now, offset)
+        if (clockDay != day) { clockDay = day; eyeCare.refreshUsage() }
+    }
 
     /** 环境光按档次去抖：传感器每秒多次读数，档次与亮度不变就不重算报告。 */
     private val environment: Flow<EnvironmentReading?> = eyeCare.environment().map<EnvironmentReading, EnvironmentReading?> { it }
@@ -76,8 +82,8 @@ class HomeViewModel @Inject constructor(
             EyeInputs(ledger, usage, env, people.firstOrNull { it.relation == "SELF" }, list)
         },
         reminder,
-    ) { inputs, part ->
-        val now = System.currentTimeMillis()
+        clock,
+    ) { inputs, part, now ->
         val offset = TimeZone.getDefault().getOffset(now) / 60_000
         val today = EyeCareDays.dayOf(now, offset)
         val self = inputs.self

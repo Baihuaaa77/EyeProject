@@ -20,7 +20,8 @@ const val FAR_WAIT_PROMPT = "请看着 6 米外的目标。看好以后，协助
 
 /** 当前引导页要说的话：戴镜确认优先于步骤示范。 */
 fun screeningGuideText(s: ScreeningState): String =
-    if (s.glassesCheckPending) PresbyopiaIntake.glassesCheck(s.fields).prompt else guideCue(s.step)
+    if (s.glassesCheckPending) PresbyopiaIntake.glassesCheck(s.fields).prompt
+    else if (s.step == ScreeningStep.COVER) coverGuideCue(s.fields) else guideCue(s.step)
 
 fun guideCue(step: ScreeningStep) = when (step) {
     ScreeningStep.NEAR_VISION -> "先遮左眼，用右眼看 E，点选开口方向"
@@ -30,7 +31,13 @@ fun guideCue(step: ScreeningStep) = when (step) {
     ScreeningStep.FIXATION -> "先依次看着九个圆点完成约 18 秒注视校准，再看屏幕上方闪烁的圆点 12 秒，头和手机保持不动"
     ScreeningStep.FAR_FIXATION -> "在 6 米外找一个目标（门、窗或墙上的画）。手机留在眼前约 33 cm、略低于视线，" +
         "眼睛越过手机看着目标约 10 秒，头和手机不动；协助者确认一直看着远处"
-    ScreeningStep.COVER -> "协助者按提示遮右眼、移开、遮左眼、移开，再左右交替；不压眼球、不挡摄像头，每次动作同时点按"
+    ScreeningStep.COVER -> "按提示遮右眼、移开、遮左眼、移开，再左右交替；不压眼球、不挡摄像头，相机自动识别动作，无需点屏幕"
     ScreeningStep.PURSUIT -> "只用眼睛跟随移动的圆点：水平、垂直、斜向各一段，头保持不动"
     else -> "正对屏幕，保持光线均匀"
 }
+
+/** 未填写时采用协助者演示；选择自己完成时与本人遮盖动作一致。 */
+fun usesSelfCover(fields: Map<String, String>): Boolean = fields["协助测试者"] == "自己完成"
+fun coverGuideCue(fields: Map<String, String>): String =
+    (if (usesSelfCover(fields)) "请自己按提示遮盖单眼" else "请协助者按提示真实遮盖单眼") +
+        "：遮右、移开、遮左、移开，再左右交替；不压眼球、不挡摄像头，相机自动识别，无需点屏幕。"

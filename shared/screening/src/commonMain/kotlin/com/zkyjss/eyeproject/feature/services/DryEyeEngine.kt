@@ -11,7 +11,9 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
 
 /** 干眼共用流程。相机帧串行进入流程协程，眨眼仍按到达的逐帧序列判断。 */
-class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: CoroutineScope) {
+class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: CoroutineScope,
+    private val recordScope: CoroutineScope = ScreeningPersistence.scope,
+    private val recordDispatcher: CoroutineDispatcher = Dispatchers.IO) {
     private val _uiState = MutableStateFlow(DryEyeTestUiState())
     val uiState: StateFlow<DryEyeTestUiState> = _uiState.asStateFlow()
 
@@ -538,7 +540,7 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
         val fields = snapshot.fields
         val savedReport = ResultReports.dryEye(snapshot)?.toRecordObject()
         val trace = earTrace.toList()
-        scope.launch(Dispatchers.IO) {
+        recordScope.launch(recordDispatcher) {
             runCatching {
                 val data = RecordObject().apply {
                     put("protocolVersion", 1)
@@ -590,11 +592,11 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
                 }
                 val name = "dryeye_${platform.epochMs()}.json"
                 val json = data.toString()
-                lastRecordJson = json
+                if (_uiState.value.report === snapshot.report) lastRecordJson = json
                 platform.saveRecord(name, json)
                 name
-            }.onSuccess { name -> _uiState.update { it.copy(savedFile = name) } }
-                .onFailure { error -> _uiState.update { it.copy(saveError = saveFailureText(error)) } }
+            }.onSuccess { name -> _uiState.update { if (it.report === snapshot.report) it.copy(savedFile = name) else it } }
+                .onFailure { error -> _uiState.update { if (it.report === snapshot.report) it.copy(saveError = saveFailureText(error)) else it } }
         }
     }
 

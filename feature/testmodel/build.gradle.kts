@@ -31,6 +31,8 @@ android {
 
 dependencies {
     implementation(project(":core:model"))
+    // 复用唯一的 face_landmarker.task 资产；实验分析器仍独立。
+    implementation(project(":core:camera"))
     implementation(project(":core:designsystem"))
     implementation(project(":core:ui"))
 

@@ -8,7 +8,7 @@
 
 iOS 已提供本机记录保存与分享，但尚未接入安卓已有的历史记录趋势对比；这项能力仍需补齐后才能验收为完全一致。
 
-交替遮盖仍保持原有点按标记动作时刻的交互，未实现此前讨论后取消的自动遮挡确认方案。
+交替遮盖现由共用 CoverDetector 自动确认相机遮盖时刻，不再以点按标记动作。事件首帧与确认时间分开保存；真机识别率仍需带标注视频验证。
 
 ## 工程位置
 
@@ -344,3 +344,5 @@ export IOS_EXPORT_OPTIONS_PLIST="$PWD/iosApp/ExportOptions.local.plist"
 - 本次改动在 Windows 上只跑了 `check_project.py`，未经 Xcode 编译，需在 Mac 上 `scripts/ios/verify.sh` 验证
 
 界面滚动指示条由 EyeRootView.scrollIndicators(.hidden) 统一关闭。点选回答确认偏好由本机 UserDefaults 的 eye.chat.confirmOptionAnswers 保存；与 CloudClient 的数据同意无关。
+
+2026-11-10：共用引擎按老视、眼位工作流拆分；落盘任务使用应用级独立作用域，页面销毁后继续保存。前台首页用整分钟定时器更新日期。遮盖演示根据本次协助者答案切换，自遮与协助遮盖均无需点屏幕计时；新眼位记录版本 7、再注视窗口 500 ms，历史文档中的点按与 0.8 秒策略已被此实现替代。

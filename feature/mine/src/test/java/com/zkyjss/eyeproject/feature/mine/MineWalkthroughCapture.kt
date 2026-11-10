@@ -158,7 +158,7 @@ class MineWalkthroughCapture {
     private fun capture(name: String, modal: Boolean = false) {
         compose.mainClock.advanceTimeBy(700)
         val bitmap = compose.runOnIdle { snapshot(compose.activity, modal) }
-        for (dir in listOf("build/reports/ui", "../../docs/界面截图-2026-10-23/安卓")) {
+        for (dir in listOf("build/reports/ui")) {
             val file = File("$dir/$name.png")
             file.parentFile?.mkdirs()
             file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }

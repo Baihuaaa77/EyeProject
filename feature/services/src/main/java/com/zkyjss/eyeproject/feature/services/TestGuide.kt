@@ -75,7 +75,7 @@ import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sin
 
-internal enum class GuideMotion { POSTURE, ACUITY, FVA, BLINK, OPEN, NEAR, MOVE, CURVE, SWITCH, FIXATE, FAR, COVER, FOLLOW }
+internal enum class GuideMotion { POSTURE, ACUITY, FVA, BLINK, OPEN, NEAR, MOVE, CURVE, SWITCH, FIXATE, FAR, COVER, COVER_SELF, FOLLOW }
 
 /** 演示里的一个「分镜」：从循环进度 [start] 起高亮该步骤文字。 */
 private data class GuideBeat(val start: Float, val label: String)
@@ -282,7 +282,8 @@ private fun sceneFor(motion: GuideMotion): GuideScene = when (motion) {
     GuideMotion.SWITCH -> switchScene
     GuideMotion.FIXATE -> fixateScene
     GuideMotion.FAR -> farScene
-    GuideMotion.COVER -> coverScene
+    GuideMotion.COVER -> coverHelperScene
+    GuideMotion.COVER_SELF -> coverScene
     GuideMotion.FOLLOW -> followScene
 }
 
@@ -632,6 +633,52 @@ private val coverScene = GuideScene(
     label(text, 68f, 26f, if (text.startsWith("遮")) colors.primary else colors.textSecondary)
 }
 
+/** 协助者从侧面伸手遮盖，受试者的双臂保持放下。 */
+private val coverHelperScene = GuideScene(
+    cycleMs = 11000,
+    beats = listOf(
+        GuideBeat(0f, "① 遮右眼 2 秒 → 移开，双眼注视 2 秒"),
+        GuideBeat(0.33f, "② 遮左眼 2 秒 → 移开，双眼注视 2 秒"),
+        GuideBeat(0.66f, "③ 右眼、左眼各遮 1 秒，快速交替两轮"),
+    ),
+    keyframe = 0.12f,
+) { phase ->
+    val head = p(160f, 88f)
+    val size = u(100f)
+    val arm = -1
+    // 抬手程度：① 抬起 → 停 → 放下；② 同；③ 抬起后一直停在脸前，结束时放下
+    val raise = keyframes(
+        phase,
+        0f to 0f, 0.015f to 0f, 0.065f to 1f, 0.205f to 1f, 0.255f to 0f,
+        0.345f to 0f, 0.395f to 1f, 0.535f to 1f, 0.585f to 0f,
+        0.675f to 0f, 0.72f to 1f, 0.962f to 1f, 1f to 0f,
+    )
+    // 遮哪只眼：0 右眼（人物面向我们，在画面左侧）.. 1 左眼。手放下时换目标，画面上看不出跳变
+    val toLeft = keyframes(
+        phase,
+        0f to 0f, 0.27f to 0f, 0.32f to 1f, 0.6f to 1f, 0.65f to 0f,
+        0.765f to 0f, 0.79f to 1f, 0.84f to 1f, 0.865f to 0f, 0.915f to 0f, 0.94f to 1f, 1f to 1f,
+    )
+    val participant = p(110f, 88f)
+    val participantSize = u(94f)
+    val assistant = p(252f, 98f)
+    val assistantSize = u(104f)
+    person(participant, participantSize, lid = idleBlink(phase, 11000, 0.3f, 0.63f))
+    person(assistant, assistantSize, arms = false)
+    restArm(assistant, assistantSize, 1)
+    val targetX = lerp(participant.x - participantSize * 0.19f, participant.x + participantSize * 0.19f, toLeft)
+    val wrist = Offset((targetX + participantSize * 0.18f - assistant.x) / assistantSize,
+        (participant.y + participantSize * 0.18f - assistant.y) / assistantSize)
+    raisedArm(assistant, assistantSize, -1, wrist, raise)
+    val text = when {
+        raise < 0.8f -> "移开 · 双眼注视"
+        toLeft < 0.5f -> "遮右眼"
+        else -> "遮左眼"
+    }
+    scope.drawRoundRect(colors.panelBackground, p(12f, 12f), Size(u(112f), u(28f)), CornerRadius(u(14f)))
+    label(text, 68f, 26f, if (text.startsWith("遮")) colors.primary else colors.textSecondary)
+}
+
 /** 水平正弦 → 垂直正弦 → 45° 斜向直线往复，与正式追踪任务的顺序一致。 */
 private val followScene = GuideScene(
     cycleMs = 7200,
@@ -743,14 +790,14 @@ private val curveScene = GuideScene(
 
 // endregion
 
-internal fun guideMotion(step: ScreeningStep) = when (step) {
+internal fun guideMotion(step: ScreeningStep, fields: Map<String, String> = emptyMap()) = when (step) {
     ScreeningStep.NEAR_VISION -> GuideMotion.NEAR
     ScreeningStep.PUSH_UP -> GuideMotion.MOVE
     ScreeningStep.DISTANCE_CURVE -> GuideMotion.CURVE
     ScreeningStep.FLIPPER -> GuideMotion.SWITCH
     ScreeningStep.FIXATION -> GuideMotion.FIXATE
     ScreeningStep.FAR_FIXATION -> GuideMotion.FAR
-    ScreeningStep.COVER -> GuideMotion.COVER
+    ScreeningStep.COVER -> if (usesSelfCover(fields)) GuideMotion.COVER_SELF else GuideMotion.COVER
     ScreeningStep.PURSUIT -> GuideMotion.FOLLOW
     else -> GuideMotion.POSTURE
 }

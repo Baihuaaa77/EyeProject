@@ -79,14 +79,14 @@ latency 与 fps 统计；`--plot` 生成 EAR（含阈值线）/耗时/帧率三�
 
 ## 依赖关系
 
-- **依赖**：`core:model`、`core:designsystem`、`core:ui`；CameraX、MediaPipe tasks-vision、`com.google.ai.edge.litert:litert:2.1.1`
-- **被依赖**：`app`（NavHost 挂 testModelScreen）
-- 资产：`l2cs_net.tflite`、`blaze_face_short_range.tflite`、`face_landmarker.task`、`shaders/`；`jniLibs/arm64-v8a` 内嵌 LiteRT `.so`
+- **依赖**：`core:model`、`core:camera`（复用模型资产）、`core:designsystem`、`core:ui`；CameraX、MediaPipe tasks-vision、`com.google.ai.edge.litert:litert:2.1.1`
+- **被依赖**：`app` 的 debugImplementation（仅调试变体挂实验路由）
+- 资产：`l2cs_net.tflite`、`blaze_face_short_range.tflite`、`shaders/`；`face_landmarker.task` 仅从 core:camera 合并一次；`jniLibs/arm64-v8a` 内嵌 LiteRT `.so`
 
 ## 注意事项
 
 - 与 `core:camera` 各有一套相机分析器（本模块用 FaceDetector 而非 FaceLandmarker），属实验页独立实现，合并前先明确收敛策略
-- **模块约定（2026-09-09 用户明确）**：不依赖 core 算法/相机模块（`core:domain` / `core:camera`），即使重复实现也保持独立——眨眼测试页自带 `face_landmarker.task` 与独立 FaceLandmarker 实例，`BlinkDetector` 为本地副本
-- `face_landmarker.task` 与 `core:camera` 的同名资产当前字节相同（assembleDebug 资产合并通过）；若日后只更新其中一份会冲突，届时重命名本模块资产或同步更新
+- 按 2026-11-10 最新要求，复用 core:camera 的唯一 face_landmarker.task，不再保存本模块副本；独立分析器与 EAR 实现保留，不影响实验对照。
+- 正式变体不依赖本模块，L2CS-Net、实验 LiteRT 与 gaze_native 不进入 release。
 - Android API 路线的 GPU 版曾有数据处理问题（git 历史），当前 `Accelerator.GPU`；`GazeNativeModelAndroidApiTest`（app androidTest）覆盖该路线
 - 本页为实验/演示用途，不属于生产监测链路；README 的技术文档（L2CS-Net、LiteRT）在 `docs/`

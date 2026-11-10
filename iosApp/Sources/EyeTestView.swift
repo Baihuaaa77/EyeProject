@@ -183,7 +183,7 @@ struct EyeTestView: View {
             GlassesCheckView(title: runtime.string("glassesTitle"), prompt: runtime.string("guideText"),
                 button: runtime.string("glassesButton")) { runtime.act("glassesConfirmed") }
         } else if runtime.bool("guidePending") {
-            TestGuideView(motion: .forStep(phase), title: runtime.string("stepTitle"),
+            TestGuideView(motion: .forStep(phase, selfCover: runtime.state["coverSelf"] as? Bool ?? false), title: runtime.string("stepTitle"),
                 cue: runtime.string("guideText").isEmpty ? runtime.string("instruction") : runtime.string("guideText")) {
                 runtime.act("guide")
             }
@@ -333,13 +333,12 @@ private struct CoverPanel: View {
         let done = Int(runtime.number("coverDone"))
         let next = runtime.string("coverNext")
         VStack(alignment: .leading, spacing: 10) {
-            if done > 0, runtime.number("coverHoldMs") > 0 {
-                HoldProgress(key: done, holdMs: runtime.number("coverHoldMs"), label: "保持：\(runtime.string("coverCurrent"))")
+            if runtime.state["coverHolding"] as? Bool == true, done > 0, runtime.number("coverHoldMs") > 0 {
+                HoldProgress(key: done, holdMs: runtime.number("coverHoldMs"), remainingMs: runtime.number("coverRemainingMs"), label: "保持：\(runtime.string("coverCurrent"))")
             }
-            Text(next.isEmpty ? "遮盖完成" : "下一步：\(next)").font(EyeStyle.title)
+            if runtime.state["coverHolding"] as? Bool != true { Text(next.isEmpty ? "遮盖完成" : "下一步：\(next)").font(EyeStyle.title) }
             CoverSequenceStrip(done: done)
-            Button(next.isEmpty ? "已完成" : "执行「\(next)」时点按") { runtime.act("cover") }
-                .buttonStyle(EyeButtonStyle()).disabled(next.isEmpty)
+            Text(next.isEmpty ? "遮盖完成" : runtime.state["coverHolding"] as? Bool == true ? "相机已识别，请保持当前动作" : "等待相机识别：\(next)").font(EyeStyle.body).foregroundStyle(EyeStyle.secondary)
         }
     }
 }
@@ -348,6 +347,7 @@ private struct CoverPanel: View {
 private struct HoldProgress: View {
     let key: Int
     let holdMs: Double
+    let remainingMs: Double
     let label: String
     @State private var progress = 0.0
     @State private var finished = false
@@ -368,13 +368,13 @@ private struct HoldProgress: View {
     }
     private func restart() {
         var snap = Transaction(); snap.disablesAnimations = true
-        withTransaction(snap) { progress = 0; finished = false }
+        withTransaction(snap) { progress = min(max(1 - remainingMs / max(holdMs, 1), 0), 1); finished = false }
         generation += 1
         let token = generation
         DispatchQueue.main.async {
-            withAnimation(.linear(duration: holdMs / 1000)) { progress = 1 }
+            withAnimation(.linear(duration: max(remainingMs, 0) / 1000)) { progress = 1 }
             // 动画数值不会触发文字切换，到点后单独标记完成；期间换到下一动作则作废。
-            DispatchQueue.main.asyncAfter(deadline: .now() + holdMs / 1000) { if token == generation { finished = true } }
+            DispatchQueue.main.asyncAfter(deadline: .now() + max(remainingMs, 0) / 1000) { if token == generation { finished = true } }
         }
     }
 }

@@ -114,3 +114,5 @@ Note over H: 列表现在为空
 - `toArgbBitmap` 会处理 `rowStride ≠ pixelStride × width` 的行填充；旋转在送入 MediaPipe 前完成
 - `CameraIntrinsicsProvider` 假设分析图长边覆盖传感器横向全视野，主点近似图像中心；CameraX 裁切和机型差异必须经过实物校正，不能仅靠 Camera2 元数据换算斜视棱镜度
 - tasks-vision 预编译 `.so` 仅 `arm64-v8a`，模块需保持 `abiFilters` 一致
+
+模型资产仅在本模块保留 face_landmarker.task 一份，调试实验页通过依赖本模块复用。共用 EyeOpticalAlgorithm 额外返回虹膜与眼白的局部灰度对比度供遮盖可见性检测，反光点不可测时仍可返回此观测；不保存原始眼区图像。

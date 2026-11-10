@@ -44,6 +44,7 @@ class ColorVisionEngine(
     private val platform: ScreeningPlatform,
     private val scope: CoroutineScope,
     private val io: CoroutineDispatcher = Dispatchers.IO,
+    private val recordScope: CoroutineScope = ScreeningPersistence.scope,
 ) {
     private val _uiState = MutableStateFlow(ColorVisionUiState())
     val uiState: StateFlow<ColorVisionUiState> = _uiState.asStateFlow()
@@ -110,7 +111,7 @@ class ColorVisionEngine(
     private fun save(snapshot: ColorVisionUiState) {
         val report = snapshot.report ?: return
         val result = snapshot.result ?: return
-        scope.launch(io) {
+        recordScope.launch(io) {
             runCatching {
                 val data = RecordObject().apply {
                     put("protocolVersion", 1)
@@ -144,11 +145,11 @@ class ColorVisionEngine(
                 }
                 val name = "color_${platform.epochMs()}.json"
                 val json = data.toString()
-                lastRecordJson = json
+                if (_uiState.value.report === snapshot.report) lastRecordJson = json
                 platform.saveRecord(name, json)
                 name
-            }.onSuccess { name -> _uiState.update { it.copy(savedFile = name) } }
-                .onFailure { error -> _uiState.update { it.copy(saveError = saveFailureText(error)) } }
+            }.onSuccess { name -> _uiState.update { if (it.report === snapshot.report) it.copy(savedFile = name) else it } }
+                .onFailure { error -> _uiState.update { if (it.report === snapshot.report) it.copy(saveError = saveFailureText(error)) else it } }
         }
     }
 }

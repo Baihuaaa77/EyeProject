@@ -50,7 +50,7 @@ object ScreeningAssessmentModel {
     /**
      * 斜视 rules-2：眼位按中位数误差判定、再注视扣除噪声底、双眼协调受屏幕幅度限制时不评估；新增「结果不确定」。
      */
-    const val VERSION = "protocol-9.18-rules-2"
+    const val VERSION = "protocol-9.18-rules-3-camera-cover"
 
     /**
      * 老视 rules-3（专家 2026-11-02）：按测前戴镜问卷分 A1 / A2 / B / C 检查路径；只有 A1 / A2 做单眼移近法

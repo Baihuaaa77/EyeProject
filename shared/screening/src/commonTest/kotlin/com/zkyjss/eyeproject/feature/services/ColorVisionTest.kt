@@ -79,7 +79,7 @@ class ColorVisionTest {
 
     @Test fun fullFlowSavesARecordTheCatalogCanRead() = runTest {
         val platform = Platform()
-        val engine = ColorVisionEngine(platform, this, StandardTestDispatcher(testScheduler))
+        val engine = ColorVisionEngine(platform, this, StandardTestDispatcher(testScheduler), recordScope = this)
         engine.skipProfile(); engine.start()
         assertEquals(ColorVisionPhase.Demo, engine.uiState.value.phase)
         engine.answer("12")

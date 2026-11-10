@@ -54,3 +54,11 @@ python scripts/ios/check_project.py
 ```
 
 macOS 上增加 `./gradlew -p shared :screening:iosSimulatorArm64Test` 和 `./scripts/ios/verify.sh`。Windows 不具备 iOS 链接与真机签名环境；JVM 通过不能替代苹果编译通过。
+
+## 2026-11-10 工程修正
+
+- ScreeningEngine 作为统一入口与会话上下文；PresbyopiaStateMachine / StrabismusStateMachine 分别处理病种转移，ScreeningFrameProcessor 负责相机观测，ScreeningResultWriter 负责结果快照与写入。
+- 干眼、老视、眼位、色觉结果写入使用进程级 ScreeningPersistence.scope，与页面采集作用域分离；重测后旧保存回调不覆盖新状态。
+- 遮盖以连续多帧的单眼虹膜像素可见性变化自动记录。遮盖前建立双眼局部对比基线，单眼显著下降且另一眼保持可见、距离与头姿合格才接受；闭眼、双眼不可见和断流拒绝推进。持续至少 350 ms、4 帧后确认，事件时间回溯到证据首帧；同时记录 CAMERA 来源与确认时刻。保持期间不稳定则重做当前动作，不用点按代替遮盖。
+- 新眼位记录 protocolVersion=7，规则版本 protocol-9.18-rules-3-camera-cover；解除遮盖后分析窗口恢复为 500 ms，移除原 800 ms 注视豁免。像素可见性独立于反光点可测性；这仍是待真机标注验证的启发式检测，不能将合成测试通过当作真实识别率。
+- 测前快问选择自己完成时显示自遮演示；其余选择及未填写时显示协助遮盖演示。两端同用 usesSelfCover 与 coverGuideCue。

@@ -2,9 +2,9 @@ import SwiftUI
 
 /// 测试前的方法演示：逐项移植安卓 TestGuide.kt（13 个场景、320×200 舞台单位、与动画同步高亮的分镜、暂停 / 继续）。
 /// 只出现在准备阶段，不参与正式刺激呈现或计时；系统减弱动态效果时停在关键帧并展示全部步骤。
-enum GuideMotion { case posture, acuity, fva, blink, open, near, move, curve, flip, fixate, far, cover, follow
+enum GuideMotion { case posture, acuity, fva, blink, open, near, move, curve, flip, fixate, far, cover, coverSelf, follow
     /// 与安卓 guideMotion(step) 相同的映射。
-    static func forStep(_ step: String) -> GuideMotion {
+    static func forStep(_ step: String, selfCover: Bool = false) -> GuideMotion {
         switch step {
         case "NEAR_VISION": .near
         case "PUSH_UP": .move
@@ -12,7 +12,7 @@ enum GuideMotion { case posture, acuity, fva, blink, open, near, move, curve, fl
         case "FLIPPER": .flip
         case "FIXATION", "GAZE_CALIBRATION": .fixate
         case "FAR_FIXATION": .far
-        case "COVER": .cover
+        case "COVER": selfCover ? .coverSelf : .cover
         case "PURSUIT": .follow
         default: .posture
         }
@@ -282,6 +282,7 @@ struct GuideScene {
         case .fixate: fixate
         case .far: far
         case .cover: cover
+        case .coverSelf: coverSelf
         case .follow: follow
         }
     }
@@ -440,6 +441,28 @@ struct GuideScene {
     /// 交替遮盖：人物用自己的右手（画面左侧）。同侧的右眼直接抬手遮住；遮左眼时手越过鼻梁伸过去；
     /// 快速交替时手不放下，贴着脸在两眼之间平移——和真实的交替遮盖手法一致，手始终连着身体。
     static let cover = GuideScene(cycle: 11.0, beats: [.init(start: 0, label: "① 遮右眼 2 秒 → 移开，双眼注视 2 秒"),
+        .init(start: 0.33, label: "② 遮左眼 2 秒 → 移开，双眼注视 2 秒"), .init(start: 0.66, label: "③ 右眼、左眼各遮 1 秒，快速交替两轮")], keyframe: 0.12) { g, phase in
+        let arm: CGFloat = -1
+        // 抬手程度：① 抬起 → 停 → 放下；② 同；③ 抬起后一直停在脸前，结束时放下
+        let raise = CGFloat(keyframes(phase, [(0, 0), (0.015, 0), (0.065, 1), (0.205, 1), (0.255, 0),
+            (0.345, 0), (0.395, 1), (0.535, 1), (0.585, 0),
+            (0.675, 0), (0.72, 1), (0.962, 1), (1, 0)]))
+        // 遮哪只眼：0 右眼（人物面向我们，在画面左侧）…1 左眼。手放下时换目标，画面上看不出跳变
+        let toLeft = CGFloat(keyframes(phase, [(0, 0), (0.27, 0), (0.32, 1), (0.6, 1), (0.65, 0),
+            (0.765, 0), (0.79, 1), (0.84, 1), (0.865, 0), (0.915, 0), (0.94, 1), (1, 1)]))
+        g.figure(110, 88, 94, lid: idleBlink(phase, 11.0, [0.3, 0.63]))
+        g.figure(252, 98, 104, arms: false)
+        g.restArm(252, 98, 104, side: 1)
+        let targetX: CGFloat = 110 - 94 * 0.19 + 94 * 0.38 * toLeft
+        let wrist = CGPoint(x: (targetX + 94 * 0.18 - 252) / 104, y: (88 + 94 * 0.18 - 98) / 104)
+        g.raisedArm(252, 98, 104, side: -1, to: wrist, raise: raise)
+        let text = raise < 0.8 ? "移开 · 双眼注视" : toLeft < 0.5 ? "遮右眼" : "遮左眼"
+        g.pill(12, 12, 112, 28, EyeStyle.panel)
+        g.label(text, 68, 26, text.hasPrefix("遮") ? EyeStyle.primary : EyeStyle.secondary)
+    }
+
+
+    static let coverSelf = GuideScene(cycle: 11.0, beats: [.init(start: 0, label: "① 遮右眼 2 秒 → 移开，双眼注视 2 秒"),
         .init(start: 0.33, label: "② 遮左眼 2 秒 → 移开，双眼注视 2 秒"), .init(start: 0.66, label: "③ 右眼、左眼各遮 1 秒，快速交替两轮")], keyframe: 0.12) { g, phase in
         let arm: CGFloat = -1
         // 抬手程度：① 抬起 → 停 → 放下；② 同；③ 抬起后一直停在脸前，结束时放下

@@ -43,7 +43,7 @@ dependencies {
     implementation(project(":core:ui"))
     implementation(project(":core:camera"))
     implementation(project(":feature:home"))
-    implementation(project(":feature:testmodel"))
+    debugImplementation(project(":feature:testmodel"))
     implementation(project(":feature:services"))
     implementation(project(":feature:mine"))
 

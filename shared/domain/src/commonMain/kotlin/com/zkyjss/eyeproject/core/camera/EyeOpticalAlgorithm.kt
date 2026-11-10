@@ -89,7 +89,25 @@ object EyeOpticalAlgorithm {
         }
         val reason = if (glint == null) "未识别到可靠角膜反光点" else null
         return OpticalEyeMeasurement(pupil ?: iris, glint, diameter, pupilContrast, glintContrast, reason,
-            referenceFromIris = pupil == null)
+            referenceFromIris = pupil == null, irisVisibilityContrast = visibilityContrast(bitmap, eye, dark))
+    }
+
+    /** 只比较同一帧的局部灰度，不保存眼区图像；反光点缺失不等于被遮盖。 */
+    private fun visibilityContrast(bitmap: GrayImage, eye: EyeLandmarks, irisDark: Int): Float? {
+        val iris = eye.irisPoints.firstOrNull() ?: return null
+        val a = eye.earPoints.getOrNull(0) ?: return null
+        val b = eye.earPoints.getOrNull(3) ?: return null
+        val radius = eye.irisDiameterPx * 0.5f
+        val x0 = minOf(a.x, b.x).roundToInt().coerceIn(0, bitmap.width - 1)
+        val x1 = maxOf(a.x, b.x).roundToInt().coerceIn(0, bitmap.width - 1)
+        val y0 = (iris.y - radius * 0.25f).roundToInt().coerceIn(0, bitmap.height - 1)
+        val y1 = (iris.y + radius * 0.25f).roundToInt().coerceIn(0, bitmap.height - 1)
+        if (x1 <= x0 || y1 <= y0) return null
+        val width = x1 - x0 + 1
+        val gray = bitmap.grayRegion(x0, y0, width, y1 - y0 + 1)
+        val sides = gray.indices.filter { kotlin.math.abs(it % width + x0 - iris.x) > radius * 1.1f }.map { gray[it] }.sorted()
+        if (sides.size < 12) return null
+        return (sides[sides.size / 2] - irisDark).coerceAtLeast(0).toFloat()
     }
 
     private fun rejected(diameter: Float, reason: String) =

@@ -47,7 +47,7 @@
 清单声明 `FOREGROUND_SERVICE` / `FOREGROUND_SERVICE_CAMERA` 与 `LiveEyeService`（`foregroundServiceType="camera"`）。导航回调由 app 装配。
 评分阈值为工程默认值（见 `shared/SHARED.md`「主动护眼」），待眼科专家确认。
 
-本地界面检查：`./gradlew.bat :feature:home:testDebugUnitTest`，截图在 `feature/home/build/reports/ui/` 并同步到 `docs/界面截图-2026-10-23/安卓/`。
+本地界面检查：`./gradlew.bat :feature:home:testDebugUnitTest`，截图仅在 `feature/home/build/reports/ui/`，CI 上传为产物。
 - AI 综合建议对话（`EyeChatPage.kt`）：由爱尔眼科数字人「爱科 Eyecho」主持（真人形象，入口为玻璃卡 + 头像 + 「聊聊今天的用眼感受」）。
   图片在 `core:designsystem` 的 `drawable-nodpi/eyecho_avatar.png`（256 圆形头像）与 `eyecho_half.png`（半身、底边平切），
   苹果端同名素材 `EyechoAvatar` / `EyechoHalf`；`EyechoAvatar(size)` 用在入口、对话气泡、「正在想」与同意弹窗。
@@ -77,3 +77,5 @@ iOS 圆环首帧直接读取当前分数；独立 Animatable 绘制层负责后�
 最新布局：问诊顶部改用完整透明半身像；首页半身像取消外移、取消背后圆形衬底，右侧留白，完整展示上半身。首页右上角统一放日夜切换与系统设置。
 
 最新交互：点选问询选项后弹出回答确认，确认即发送、取消保留草稿；勾选「不再询问」后点选直接发送，仍保留自由输入与发送按钮。选项确认偏好独立于 AI 数据处理同意。首页问诊卡采用紫色图标在上、22 号主标题在下，感受状态降为辅助信息，编辑使用铅笔图标。形象缩小并顶部对齐裁去下摆，保留胸前 logo。
+
+首页订阅期间由 HomeClock 每个本地整分钟触发重算，跨午夜无需等待其他数据变化；取消订阅后停止，重新订阅立即读时钟。iOS EyeCareStore 在前台注册同样的整分钟 Timer，退后台释放，回前台立即刷新。

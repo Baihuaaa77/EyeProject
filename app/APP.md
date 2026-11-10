@@ -40,7 +40,7 @@
 
 ## 依赖关系
 
-- **依赖**：全部 5 个 feature 模块 + core（model/domain/data/notifications/designsystem/camera/ui 间接）；navigation-compose、material3（Scaffold/Text）、vico 由自测模块使用
+- **依赖**：正式包仅包含 home / services / mine；testmodel 为 debugImplementation，导航由 src/debug 的 DeveloperToolsNavigation 接线，src/release 不注册实验路由。其余依赖为 core（model/domain/data/notifications/designsystem/camera/ui 间接）；navigation-compose、material3（Scaffold/Text）、vico 由自测模块使用
 - **被依赖**：无（顶层模块，feature 层不得反向依赖本模块）
 
 ## 注意事项
