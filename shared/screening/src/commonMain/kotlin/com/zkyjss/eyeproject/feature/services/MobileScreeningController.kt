@@ -238,7 +238,7 @@ class MobileScreeningController(
                 put("phase",s.phase.name); put("title","色觉自测"); put("subjectName",s.subject?.name)
                 s.plate?.let { plate -> put("plateId",plate.id); put("options",RecordArray(plate.options)) }
                 put("demo",s.phase == ColorVisionPhase.Demo); put("plateNumber",s.answers.size + 1); put("plateCount",s.plateCount)
-                put("savedFile",s.savedFile)
+                put("savedFile",s.savedFile); put("saveError",s.saveError)
                 if (s.phase == ColorVisionPhase.Plates) {
                     val p = TestProgress(s.progress, (s.plateCount - s.answers.size) * 5)
                     put("overallProgress",p.fraction); put("remainingText",p.remainingText)
@@ -262,7 +262,7 @@ class MobileScreeningController(
                 put("targetDistanceCm",if (distanceVisible) DryEyeProtocol.TARGET_DISTANCE_CM else null)
                 put("distanceToleranceCm",if (distanceVisible) DryEyeProtocol.DISTANCE_TOLERANCE_CM else null)
                 put("secondsLeft",s.remainingSeconds); put("trialVisible",s.trialVisible); put("trialId",s.trialId)
-                put("direction",s.direction); put("optotypePx",s.optotypePx); put("savedFile",s.savedFile)
+                put("direction",s.direction); put("optotypePx",s.optotypePx); put("savedFile",s.savedFile); put("saveError",s.saveError)
                 put("risk",s.report?.riskLevel?.name); put("findings",RecordArray(s.report?.indicators.orEmpty() + s.report?.abnormal.orEmpty()))
                 put("advice",s.report?.advice)
                 // 干眼视标每 2 秒一题：整个作答阶段持续收听，只在视标显示时开关会来不及启动识别
@@ -291,7 +291,7 @@ class MobileScreeningController(
                 put("distanceToleranceCm",screeningDistanceTarget(s)?.second)
                 put("direction",s.direction); put("optotypePx",s.trialOptotypePx); put("eye",s.visionEye.name)
                 put("nearAwaitingEyeReady",s.nearAwaitingEyeReady); put("pushStage",s.pushStage.name)
-                put("targetX",s.targetX); put("targetY",s.targetY); put("savedFile",s.savedFile)
+                put("targetX",s.targetX); put("targetY",s.targetY); put("savedFile",s.savedFile); put("saveError",s.saveError)
                 put("gazeCalibrationIndex",s.gazeCalibrationIndex); put("gazeCalibrationRound",s.gazeCalibrationRound)
                 put("gazeCalibrationFailed",s.gazeCalibrationFailed)
                 put("targetDiameterMm",StrabismusProtocol.targetDiameterMm(s.fields["年龄"]?.toIntOrNull()))

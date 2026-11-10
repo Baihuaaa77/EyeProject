@@ -40,7 +40,7 @@ enum EyeStyle {
     static let gray = dyn(0x878EA3, 0x73767C)
     static let blue = dyn(0x2F7BFF, 0x2F7BFF)
     static let warning = dyn(0xFFB020, 0xFFB020)
-    // 测试到位提示（与「正常」同一组绿色）与演示插画（短发男孩）；与安卓 Illustration.kt 同值。
+    // 测试到位提示（与「正常」同一组绿色）与演示插画（浮雕人偶）；与安卓 Illustration.kt 同值。
     static let testReady = dyn(0x12B886, 0x12B886)
     static let testTooClose = dyn(0xFF5A6E, 0xFF5A6E)
     static let testReadySoft = dyn(0xE8EDF7, 0x1B1D20)
@@ -53,18 +53,26 @@ enum EyeStyle {
         static let red = Color(rgb: 0xFF5A6E)
         static let gray = Color(rgb: 0x878EA3)
     }
+    /// 演示插画（浮雕人偶）：全部取自中性表面与墨色阶，饱和色只留给虹膜；深色主题人偶比舞台亮一档。
     enum Illustration {
-        static let skin = Color(rgb: 0xFFCBA8)
-        /// 脖子、耳内、领口阴影
-        static let skinShade = Color(rgb: 0xEBA884)
-        /// 鼻子、手的轮廓与指缝
-        static let skinLine = Color(rgb: 0xC98463)
-        static let blush = Color(rgb: 0xF4A58A)
-        static let hair = Color(rgb: 0x3D4956)
-        static let mouth = Color(rgb: 0x8E4F42)
-        static let shirt = EyeStyle.dyn(0x557FC1, 0x648BC8)
-        /// 领口滚边
-        static let shirtLight = EyeStyle.dyn(0x7599D1, 0x86A6DA)
+        /// 头与手：受光面 → 本色（径向渐变）
+        static let clayLight = EyeStyle.dyn(0xFFFFFF, 0x9A9DA3)
+        static let clay = EyeStyle.dyn(0xE8EDF7, 0x73767C)
+        /// 脖子、耳内
+        static let clayShade = EyeStyle.dyn(0xD1DDEE, 0x56595E)
+        /// 上衣与袖子：受光面 → 本色（线性渐变）
+        static let garmentLight = EyeStyle.dyn(0xE1EBFB, 0x3F4F66)
+        static let garment = EyeStyle.dyn(0xB4C6E6, 0x303844)
+        static let hairLight = EyeStyle.dyn(0xAAB1BE, 0x373B40)
+        static let hair = EyeStyle.dyn(0x878EA3, 0x26282B)
+        /// 鼻子、手的描边与指缝
+        static let line = EyeStyle.dyn(0xAAB1BE, 0x373B40)
+        /// 上眼睑、闭眼弧线、嘴
+        static let lineStrong = EyeStyle.dyn(0x5D6280, 0x1B1D20)
+        /// 眼窝（凹槽），里面是发光的渐变虹膜
+        static let eyeWell = EyeStyle.dyn(0xD1DDEE, 0x1B1D20)
+        /// 示意手机的机身
+        static let device = EyeStyle.dyn(0x141A2B, 0x373B40)
     }
     static let success = dyn(0x12B886, 0x12B886)
     static let successSoft = dyn(0xE8EDF7, 0x1B1D20)

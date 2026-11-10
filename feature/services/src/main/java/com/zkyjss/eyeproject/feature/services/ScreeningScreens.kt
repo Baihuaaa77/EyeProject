@@ -366,7 +366,7 @@ internal fun FarFixationContent(s: ScreeningState, onStart: () -> Unit) {
             Column(Modifier.fillMaxWidth().height(240.dp + rememberStageExtra()).clip(EyeShapes.medium).background(colors.ink).padding(20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterVertically)) {
                 Canvas(Modifier.size(64.dp)) {
-                    drawFigure(colors, Offset(size.width / 2, size.height * 0.5f), size.minDimension * 0.86f, gaze = Offset(0f, -0.6f))
+                    drawFigure(colors, Offset(size.width / 2, size.height * 0.5f), size.minDimension * 0.86f, gaze = Offset(0f, -0.6f), relief = false)
                 }
                 if (s.farWaiting) {
                     BaseEyeText("看着 ${StrabismusProtocol.FAR_TARGET_M} 米外的目标", style = typography.title, color = colors.white, textAlign = center)
@@ -538,7 +538,7 @@ internal fun ScreeningResultContent(s: ScreeningState, vm: ScreeningTestViewMode
     val report = ResultReports.screening(s) ?: return
     val export = rememberRecordExport(s.savedFile) { vm.engine.lastRecordJson }
     val aiCard by vm.explanation.collectAsStateWithLifecycle()
-    ResultReportView(report, export, aiCard = aiCard, onExplain = vm::explain, actions = {
+    ResultReportView(report, export, aiCard = aiCard, onExplain = vm::explain, saveError = s.saveError, actions = {
         EyeButton("重新测试", if (report.level == ScreeningRiskLevel.UNCERTAIN || !report.valid) EyeButtonRole.PRIMARY else EyeButtonRole.SECONDARY,
             vm::restart, Modifier.fillMaxWidth())
         // 老视：允许换一种戴镜状态重复检查，各次独立记录、分别解释

@@ -51,6 +51,8 @@ data class DryEyeTestUiState(
     val report: DryEyeReport? = null,
     val previousReport: DryEyeReport? = null,
     val savedFile: String? = null,
+    /** 记录没能写入本机时的说明；结果页据此提示。 */
+    val saveError: String? = null,
     val error: String? = null,
 ) {
     /** 临界或中风险的标准时长结果才可延长自然眨眼；两端按钮与引擎共用同一判定。 */

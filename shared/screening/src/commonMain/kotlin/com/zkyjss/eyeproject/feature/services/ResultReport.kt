@@ -1,5 +1,9 @@
 package com.zkyjss.eyeproject.feature.services
 
+/** 三项测试共用：记录没能写入本机时结果页显示的一句话。 */
+internal fun saveFailureText(error: Throwable): String =
+    "这次的记录没有保存成功" + (error.message?.takeIf { it.isNotBlank() }?.let { "（$it）" } ?: "") + "，历史里不会出现这次结果。"
+
 /*
  * 结果页的展示模型：安卓 Compose 与苹果 SwiftUI 渲染同一份内容，文案与判定只在这里写一次。
  *

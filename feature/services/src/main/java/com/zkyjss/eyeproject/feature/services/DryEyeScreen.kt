@@ -382,7 +382,7 @@ private fun ResultContent(
 ) {
     val colors = LocalEyeColors.current
     val report = ResultReports.dryEye(state) ?: return
-    ResultReportView(report, onExport, aiCard = aiCard, onExplain = onExplain, actions = {
+    ResultReportView(report, onExport, aiCard = aiCard, onExplain = onExplain, saveError = state.saveError, actions = {
         if (state.canExtend) {
             EyeButton("延长测试（3 分钟）", EyeButtonRole.PRIMARY, onExtend, Modifier.fillMaxWidth())
         }

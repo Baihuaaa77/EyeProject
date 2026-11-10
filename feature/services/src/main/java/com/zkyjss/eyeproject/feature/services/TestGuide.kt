@@ -35,6 +35,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -57,6 +58,7 @@ import com.zkyjss.eyeproject.core.designsystem.theme.EyeMotion
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeShapes
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
+import com.zkyjss.eyeproject.core.designsystem.theme.eyeSoftSurface
 import com.zkyjss.eyeproject.core.designsystem.theme.rememberReducedMotion
 import com.zkyjss.eyeproject.core.ui.component.EyeButton
 import com.zkyjss.eyeproject.core.ui.component.EyeButtonRole
@@ -65,8 +67,10 @@ import com.zkyjss.eyeproject.core.ui.component.EyeText
 import com.zkyjss.eyeproject.core.ui.component.drawPhone
 import com.zkyjss.eyeproject.core.ui.component.drawFixationTarget
 import com.zkyjss.eyeproject.core.ui.component.drawFigure
-import com.zkyjss.eyeproject.core.ui.component.drawHand
+import com.zkyjss.eyeproject.core.ui.component.drawFigureArm
 import com.zkyjss.eyeproject.core.ui.component.drawTumblingE
+import com.zkyjss.eyeproject.core.ui.component.figureArmCover
+import com.zkyjss.eyeproject.core.ui.component.figureArmRest
 import com.zkyjss.eyeproject.core.ui.component.figureEyeCenter
 import kotlin.math.PI
 import kotlin.math.abs
@@ -205,13 +209,13 @@ private fun BeatRow(label: String, active: Boolean, done: Boolean) {
     )
 }
 
-/** 演示舞台：浅主色圆角底 + 地面阴影，场景按 320×200 等比缩放居中。 */
+/** 演示舞台：向内凹的浅色圆角底（与进度槽同一种「凹陷」表面），人偶在里面浮起；场景按 320×200 等比缩放居中。 */
 @Composable
 private fun GuideStage(scene: GuideScene, phase: () -> Float, description: String, modifier: Modifier = Modifier) {
     val colors = LocalEyeColors.current
     val measurer = rememberTextMeasurer()
     val labelStyle = LocalEyeTypography.current.chip
-    Box(modifier.clip(EyeShapes.large).background(colors.primarySoft)) {
+    Box(modifier.eyeSoftSurface(colors, EyeShapes.large, SolidColor(colors.primarySoft), pressed = true)) {
         Canvas(Modifier.fillMaxSize().semantics { contentDescription = description }) {
             val unit = minOf(size.width / 320f, size.height / 200f)
             val origin = Offset((size.width - 320f * unit) / 2f, (size.height - 200f * unit) / 2f)
@@ -284,9 +288,38 @@ private fun sceneFor(motion: GuideMotion): GuideScene = when (motion) {
     GuideMotion.FOLLOW -> followScene
 }
 
-/** 演示人物（短发男孩）：上身一直画到舞台底边，像坐在画框前。 */
-private fun SceneScope.person(center: Offset, size: Float, gaze: Offset = Offset.Zero, lid: Float = 0f, wide: Float = 1f) =
+/**
+ * 演示人物（浮雕人偶）：上身一直画到舞台底边，像坐在画框前。
+ * [arms] 为 true 时两臂垂在身侧；要抬手的场景传 false，自己用 [restArm] / [raisedArm] 画手臂。
+ */
+private fun SceneScope.person(
+    center: Offset, size: Float, gaze: Offset = Offset.Zero, lid: Float = 0f, wide: Float = 1f, arms: Boolean = true,
+) {
     scope.drawFigure(colors, center, size, gaze, lid, wide, bottom = p(0f, 200f).y)
+    if (arms) for (side in listOf(-1, 1)) restArm(center, size, side)
+}
+
+/** 垂在身侧的手臂（side = -1 人物右臂，在画面左侧）。 */
+private fun SceneScope.restArm(head: Offset, size: Float, side: Int) =
+    scope.drawFigureArm(colors, head, size, side, figureArmRest(side), ARM_DEPTH_REST)
+
+/** 人物自己的手臂从身侧抬到手腕位置 [to]（[raise] 0 垂下 .. 1 到位）：中途略向外、向前，肘先出后收。 */
+private fun SceneScope.raisedArm(head: Offset, size: Float, side: Int, to: Offset, raise: Float) {
+    val rest = figureArmRest(side)
+    val arc = sin(PI.toFloat() * raise)
+    scope.drawFigureArm(
+        colors, head, size, side,
+        Offset(lerp(rest.x, to.x, raise) + side * 0.08f * arc, lerp(rest.y, to.y, raise)),
+        ARM_DEPTH_REST + (ARM_DEPTH_FACE - ARM_DEPTH_REST) * raise + 0.15f * arc,
+    )
+}
+
+/** 手腕离身体平面的前伸量（头宽的倍数）：垂在身侧 / 抬到脸前。 */
+private const val ARM_DEPTH_REST = 0.05f
+private const val ARM_DEPTH_FACE = 0.45f
+
+/** 平时偶尔眨一下眼，人物不呆板：在循环进度 [at] 各处眨一次，半宽固定约 130 毫秒。 */
+private fun idleBlink(phase: Float, cycleMs: Int, vararg at: Float) = at.maxOf { tri(phase, it, 130f / cycleMs) }
 
 /** 头部固定的四角取景框：表达「头保持不动」。 */
 private fun SceneScope.headLock(cx: Float, cy: Float, half: Float) {
@@ -305,7 +338,7 @@ private val postureScene = GuideScene(
     beats = listOf(GuideBeat(0f, "① 正对屏幕，露出双眼"), GuideBeat(0.25f, "② 前后微调到提示的距离"), GuideBeat(0.6f, "③ 光线均匀，避免逆光")),
     keyframe = 0.7f,
 ) { phase ->
-    person(p(82f, 112f), u(100f), gaze = Offset(0.9f, 0f))
+    person(p(82f, 112f), u(100f), gaze = Offset(0.9f, 0f), lid = idleBlink(phase, 5200, 0.45f, 0.88f))
     val x = keyframes(phase, 0f to 290f, 0.15f to 290f, 0.3f to 215f, 0.4f to 250f, 0.5f to 238f, 1f to 238f)
     val (tl, screen) = scope.drawPhone(colors, p(x, 104f), u(128f))
     // 屏幕里的取景框：到位后变成对勾
@@ -413,13 +446,12 @@ private val nearScene = GuideScene(
     beats = listOf(GuideBeat(0f, "① 用手掌遮住左眼（不压眼球）"), GuideBeat(0.2f, "② 用右眼看 E 的开口方向"), GuideBeat(0.28f, "③ 点选对应方向；之后换眼再做")),
     keyframe = 0.35f,
 ) { phase ->
-    val head = p(95f, 110f)
-    person(head, u(108f), gaze = Offset(0.8f, 0f))
-    // 手掌从下方抬起，遮住人物的左眼（画面右侧那只）
-    val eye = figureEyeCenter(head, u(108f), 1)
-    val rise = seg(phase, 0.02f, 0.16f)
-    val hand = Offset(eye.x + u(2f), lerp(eye.y + u(90f), eye.y + u(3f), rise))
-    scope.drawHand(colors, hand, u(46f), angle = -12f, armFrom = Offset(hand.x + u(18f), p(0f, 210f).y))
+    val head = p(95f, 98f)
+    val size = u(100f)
+    person(head, size, gaze = Offset(0.8f, 0f), lid = idleBlink(phase, 5600, 0.62f), arms = false)
+    // 人物抬起自己的左手（画面右侧），手掌盖住左眼；一遍演示结束前放下，循环首尾相接
+    restArm(head, size, -1)
+    raisedArm(head, size, 1, figureArmCover(1, 1), keyframes(phase, 0f to 0f, 0.02f to 0f, 0.16f to 1f, 0.94f to 1f, 1f to 0f))
     val (tl, screen) = scope.drawPhone(colors, p(242f, 100f), u(160f))
     val segment = ((phase - 0.2f) / 0.2f).toInt().coerceIn(0, 3)
     val dir = nearDirections[segment]
@@ -455,7 +487,7 @@ private val moveScene = GuideScene(
     beats = listOf(GuideBeat(0f, "① 从 45 cm 外开始，看着 E"), GuideBeat(0.15f, "② 慢慢移近（每秒不超过 5 cm）"), GuideBeat(0.6f, "③ E 一开始持续模糊就点按，记录近点")),
     keyframe = 0.66f,
 ) { phase ->
-    person(p(62f, 112f), u(96f), gaze = Offset(1f, 0f))
+    person(p(62f, 112f), u(96f), gaze = Offset(1f, 0f), lid = idleBlink(phase, 7600, 0.3f, 0.88f))
     ruler(120f, 300f, 188f)
     // 连续、匀速地由远向近，记录近点后再移回远处
     val x = keyframes(phase, 0f to 290f, 0.15f to 290f, 0.68f to 150f, 0.76f to 150f, 0.9f to 290f, 1f to 290f)
@@ -481,7 +513,7 @@ private val switchScene = GuideScene(
     beats = listOf(GuideBeat(0f, "① 远处停稳，点选 E 的开口"), GuideBeat(0.15f, "② 移近停稳，再点选一次"), GuideBeat(0.55f, "③ 移远，远近交替进行")),
     keyframe = 0.45f,
 ) { phase ->
-    person(p(62f, 112f), u(96f), gaze = Offset(1f, 0f))
+    person(p(62f, 112f), u(96f), gaze = Offset(1f, 0f), lid = idleBlink(phase, 6400, 0.36f, 0.78f))
     ruler(120f, 300f, 188f)
     val x = keyframes(phase, 0f to 268f, 0.15f to 268f, 0.3f to 170f, 0.55f to 170f, 0.7f to 268f, 1f to 268f)
     val (tl, screen) = scope.drawPhone(colors, p(x, 102f), u(150f))
@@ -509,7 +541,7 @@ private val fixateScene = GuideScene(
     keyframe = 0.5f,
 ) { phase ->
     val head = p(95f, 110f)
-    person(head, u(108f), gaze = Offset(0.9f, -0.1f))
+    person(head, u(108f), gaze = Offset(0.9f, -0.1f), lid = idleBlink(phase, 4000, 0.3f))
     if (phase >= 0.45f) headLock(95f, 106f, 66f)
     val (tl, screen) = scope.drawPhone(colors, p(242f, 100f), u(160f))
     val dot = Offset(tl.x + screen.width / 2, tl.y + screen.height * 0.2f)
@@ -538,7 +570,7 @@ private val farScene = GuideScene(
 ) { phase ->
     val head = p(62f, 104f)
     val look = seg(phase, 0.3f, 0.4f)
-    person(head, u(92f), gaze = Offset(0.9f, -0.15f * look))
+    person(head, u(92f), gaze = Offset(0.9f, -0.15f * look), lid = idleBlink(phase, 5200, 0.2f))
     if (phase >= 0.65f) headLock(62f, 100f, 56f)
     scope.drawPhone(colors, p(142f, 128f), u(78f))
     // 远处的目标：一扇门，旁边标注距离
@@ -557,35 +589,46 @@ private val farScene = GuideScene(
     }
 }
 
+/**
+ * 交替遮盖：人物用自己的右手（画面左侧）。同侧的右眼直接抬手遮住；遮左眼时手越过鼻梁伸过去；
+ * 快速交替时手不放下，贴着脸在两眼之间平移——和真实的交替遮盖手法一致，手始终连着身体。
+ */
 private val coverScene = GuideScene(
-    cycleMs = 9600,
+    cycleMs = 11000,
     beats = listOf(
         GuideBeat(0f, "① 遮右眼 2 秒 → 移开，双眼注视 2 秒"),
-        GuideBeat(0.36f, "② 遮左眼 2 秒 → 移开，双眼注视 2 秒"),
-        GuideBeat(0.7f, "③ 右眼、左眼各遮 1 秒，快速交替两轮"),
+        GuideBeat(0.33f, "② 遮左眼 2 秒 → 移开，双眼注视 2 秒"),
+        GuideBeat(0.66f, "③ 右眼、左眼各遮 1 秒，快速交替两轮"),
     ),
     keyframe = 0.12f,
 ) { phase ->
-    val head = p(160f, 112f)
-    person(head, u(118f))
-    // 人物面向我们：它的右眼在画面左侧（side=-1），左眼在画面右侧（side=+1）
-    val rEye = figureEyeCenter(head, u(118f), -1).x
-    val lEye = figureEyeCenter(head, u(118f), 1).x
-    val away = lEye + u(150f)
-    val hx = keyframes(
+    val head = p(160f, 88f)
+    val size = u(100f)
+    val arm = -1
+    // 抬手程度：① 抬起 → 停 → 放下；② 同；③ 抬起后一直停在脸前，结束时放下
+    val raise = keyframes(
         phase,
-        0f to away, 0.05f to rEye, 0.2f to rEye, 0.25f to away, 0.36f to away,
-        0.42f to lEye, 0.56f to lEye, 0.61f to away, 0.7f to away,
-        0.74f to rEye, 0.78f to rEye, 0.81f to lEye, 0.85f to lEye,
-        0.88f to rEye, 0.91f to rEye, 0.94f to lEye, 0.97f to lEye, 1f to away,
+        0f to 0f, 0.015f to 0f, 0.065f to 1f, 0.205f to 1f, 0.255f to 0f,
+        0.345f to 0f, 0.395f to 1f, 0.535f to 1f, 0.585f to 0f,
+        0.675f to 0f, 0.72f to 1f, 0.962f to 1f, 1f to 0f,
     )
-    val eyeY = figureEyeCenter(head, u(118f), 1).y
-    scope.drawHand(colors, Offset(hx, eyeY + u(3f)), u(52f), angle = -14f, armFrom = Offset(hx + u(20f), p(0f, 215f).y))
+    // 遮哪只眼：0 右眼（人物面向我们，在画面左侧）.. 1 左眼。手放下时换目标，画面上看不出跳变
+    val toLeft = keyframes(
+        phase,
+        0f to 0f, 0.27f to 0f, 0.32f to 1f, 0.6f to 1f, 0.65f to 0f,
+        0.765f to 0f, 0.79f to 1f, 0.84f to 1f, 0.865f to 0f, 0.915f to 0f, 0.94f to 1f, 1f to 1f,
+    )
+    person(head, size, lid = idleBlink(phase, 11000, 0.3f, 0.63f), arms = false)
+    restArm(head, size, -arm)
+    val right = figureArmCover(arm, -1)
+    val left = figureArmCover(arm, 1)
+    // 换眼时手略抬离鼻梁
+    val cover = Offset(lerp(right.x, left.x, toLeft), lerp(right.y, left.y, toLeft) - 0.03f * sin(PI.toFloat() * toLeft))
+    raisedArm(head, size, arm, cover, raise)
     val text = when {
-        abs(hx - rEye) < u(6f) -> "遮右眼"
-        abs(hx - lEye) < u(6f) -> "遮左眼"
-        hx > lEye + u(100f) -> "移开 · 双眼注视"
-        else -> "换眼"
+        raise < 0.8f -> "移开 · 双眼注视"
+        toLeft < 0.5f -> "遮右眼"
+        else -> "遮左眼"
     }
     scope.drawRoundRect(colors.panelBackground, p(12f, 12f), Size(u(112f), u(28f)), CornerRadius(u(14f)))
     label(text, 68f, 26f, if (text.startsWith("遮")) colors.primary else colors.textSecondary)
@@ -632,7 +675,7 @@ private val acuityScene = GuideScene(
     beats = listOf(GuideBeat(0f, "① 看 E 的开口方向"), GuideBeat(0.1f, "② 2 秒内点选对应方向"), GuideBeat(0.4f, "③ 连对两次变小，答错或超时变大")),
     keyframe = 0.12f,
 ) { phase ->
-    person(p(66f, 118f), u(84f), gaze = Offset(1f, -0.2f))
+    person(p(66f, 118f), u(84f), gaze = Offset(1f, -0.2f), lid = idleBlink(phase, 6000, 0.5f))
     val segment = (phase / 0.2f).toInt().coerceIn(0, 4)
     val t = (phase - segment * 0.2f) / 0.2f
     val sizes = listOf(1f, 1f, 0.78f, 1f, 1f)
@@ -679,7 +722,7 @@ private val curveScene = GuideScene(
     beats = listOf(GuideBeat(0f, "① 移到提示的距离并停稳"), GuideBeat(0.12f, "② 点选 E 的开口方向"), GuideBeat(0.36f, "③ 依次换到下一个距离")),
     keyframe = 0.2f,
 ) { phase ->
-    person(p(62f, 112f), u(96f), gaze = Offset(1f, 0f))
+    person(p(62f, 112f), u(96f), gaze = Offset(1f, 0f), lid = idleBlink(phase, 6600, 0.33f, 0.7f))
     ruler(120f, 300f, 188f)
     val x = keyframes(phase, 0f to 290f, 0.3f to 290f, 0.38f to 200f, 0.64f to 200f, 0.72f to 165f, 1f to 165f)
     val (tl, screen) = scope.drawPhone(colors, p(x, 102f), u(140f))

@@ -100,6 +100,7 @@ internal fun ResultReportView(
     actions: @Composable ColumnScope.() -> Unit,
     aiCard: AiCardState? = null,
     onExplain: (agreeFirst: Boolean) -> Unit = {},
+    saveError: String? = null,
     extraData: @Composable ColumnScope.() -> Unit = {},
 ) {
     var dataOpen by rememberSaveable { mutableStateOf(false) }
@@ -130,6 +131,9 @@ internal fun ResultReportView(
         // 解读放在规则结论与依据之后：先看规则判了什么，再看通俗解释
         if (aiCard != null) AiExplanationCard(aiCard, onGenerate = { onExplain(false) }, onAgree = { onExplain(true) })
         actions()
+        // 记录没写进本机：明确告诉用户，免得以为已经存进历史
+        if (saveError != null) EyeText(saveError, Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+            style = LocalEyeTypography.current.bodySecondary, color = LocalEyeColors.current.danger)
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             EyeButton("查看本次数据", EyeButtonRole.SECONDARY, { dataOpen = true }, Modifier.weight(1f))
             if (onExport != null) EyeButton("导出数据", EyeButtonRole.SECONDARY, onExport, Modifier.weight(1f))

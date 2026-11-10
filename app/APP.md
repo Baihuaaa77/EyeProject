@@ -29,9 +29,9 @@
 
 | 类型 | 说明 |
 |---|---|
-| `reminder/EyeCareReminderScheduler` | object：`AlarmManager` 精确闹钟调度 + SharedPreferences 状态（开关/间隔/下次触发） |
+| `reminder/EyeCareReminderScheduler` | object：`AlarmManager` 精确闹钟调度 + SharedPreferences 状态（开关/间隔/下次触发）。首次开启需「闹钟和提醒」权限；已开启的提醒续排（到点续下一次、改间隔、开机或升级后恢复）在权限被收回时退回非精确闹钟，提醒链不会悄悄断掉 |
 | `reminder/EyeCareReminderReceiver` | 闹钟触发：发提醒通知 + 重排下一次 |
-| `reminder/BootCompletedReceiver` | 开机恢复提醒调度 |
+| `reminder/BootCompletedReceiver` | 开机、应用升级后恢复提醒调度（两种情况系统都会清掉已排的闹钟） |
 | `EyeProtectApplication` | `@HiltAndroidApp` |
 
 ## AndroidManifest

@@ -25,6 +25,8 @@ data class ColorVisionUiState(
     val report: ColorVisionReport? = null,
     val result: ResultReport? = null,
     val savedFile: String? = null,
+    /** 记录没能写入本机时的说明；结果页据此提示。 */
+    val saveError: String? = null,
     val error: String? = null,
 ) {
     /** 当前要看的图（示例或检测图）。 */
@@ -146,6 +148,7 @@ class ColorVisionEngine(
                 platform.saveRecord(name, json)
                 name
             }.onSuccess { name -> _uiState.update { it.copy(savedFile = name) } }
+                .onFailure { error -> _uiState.update { it.copy(saveError = saveFailureText(error)) } }
         }
     }
 }

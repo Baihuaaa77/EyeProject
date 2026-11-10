@@ -21,7 +21,7 @@ class EyeCareReminderReceiver : BroadcastReceiver() {
         notifier.postReminderNotification(openAppIntent)
 
         if (EyeCareReminderScheduler.isEnabled(context)) {
-            EyeCareReminderScheduler.schedule(context)
+            EyeCareReminderScheduler.schedule(context, allowInexact = true)
         }
     }
 }

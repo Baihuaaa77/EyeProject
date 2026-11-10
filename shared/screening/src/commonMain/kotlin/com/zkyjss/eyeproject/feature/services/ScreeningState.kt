@@ -182,4 +182,6 @@ data class ScreeningState(
     /** 判定依据（证据族），见 [Evidence]。 */
     val evidence: List<Evidence> = emptyList(),
     val savedFile: String? = null,
+    /** 记录没能写入本机时的说明；结果页据此提示，避免用户以为已经存好。 */
+    val saveError: String? = null,
 )

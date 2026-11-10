@@ -594,6 +594,7 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
                 platform.saveRecord(name, json)
                 name
             }.onSuccess { name -> _uiState.update { it.copy(savedFile = name) } }
+                .onFailure { error -> _uiState.update { it.copy(saveError = saveFailureText(error)) } }
         }
     }
 

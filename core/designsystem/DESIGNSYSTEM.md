@@ -49,7 +49,7 @@
 
 ## 测试与插画边界
 
-视标、色觉图、相机采集与计算保持原有实现。测试刺激不随应用主题变化。`Illustration.kt` 集中维护原版平面人物的肤色、头发和服装令牌；已还原原版人物与动作。眼位与遮盖锚点保持不变。
+视标、色觉图、相机采集与计算保持原有实现。测试刺激不随应用主题变化。`Illustration.kt` 集中维护演示人偶的令牌（`clayLight` / `clay` / `clayShade`、`garmentLight` / `garment`、`hairLight` / `hair`、`line` / `lineStrong`、`eyeWell`、`device`）：全部取自中性表面与墨色阶，深色主题人偶比舞台亮一档；饱和色只留给虹膜（品牌渐变）。眼位与遮盖锚点保持不变。
 
 ## 工具与依赖
 

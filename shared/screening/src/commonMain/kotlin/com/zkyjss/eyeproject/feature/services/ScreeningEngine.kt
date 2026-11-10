@@ -755,6 +755,11 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
         val capturedValid = validFrames
         val capturedQualityEligible = qualityEligibleFrames
         val capturedQualityValid = qualityEligibleValidFrames
+        // 下面在后台线程写记录：相机停下前排队的帧仍会在主线程往这些列表里追加，必须先拷贝，
+        // 否则遍历时被修改会抛异常、整条记录保存失败
+        val capturedContrasts = opticalContrasts.map(Float::toDouble)
+        val capturedIrisPx = opticalIrisPx.map(Float::toDouble)
+        val capturedIrisReferenceFrames = opticalIrisReferenceFrames
         _state.update { it.copy(step = ScreeningStep.RESULT, result = result,
             riskLevel = assessment.riskLevel, riskScope = assessment.riskScope, secondsLeft = 0,
             category = assessment.category, findings = assessment.findings, limitations = assessment.limitations,
@@ -799,11 +804,11 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
                     put("cameraBrightness", s.cameraBrightness?.toDouble() ?: RecordObject.NULL)
                     put("cameraFrames", s.cameraFrames)
                     put("opticalValidFrames", s.opticalValidFrames)
-                    put("opticalIrisReferenceFrames", opticalIrisReferenceFrames)
+                    put("opticalIrisReferenceFrames", capturedIrisReferenceFrames)
                     put("opticalRejectionCounts", RecordObject(s.opticalRejectionCounts))
                     // 排查用：瞳孔对比度门槛为 12（灰度级），虹膜直径不足 12 像素时直接拒绝。
-                    put("opticalPupilContrastMedian", ScreeningAssessmentModel.median(opticalContrasts.map(Float::toDouble)) ?: RecordObject.NULL)
-                    put("opticalIrisDiameterMedianPx", ScreeningAssessmentModel.median(opticalIrisPx.map(Float::toDouble)) ?: RecordObject.NULL)
+                    put("opticalPupilContrastMedian", ScreeningAssessmentModel.median(capturedContrasts) ?: RecordObject.NULL)
+                    put("opticalIrisDiameterMedianPx", ScreeningAssessmentModel.median(capturedIrisPx) ?: RecordObject.NULL)
                     put("nearResolutionLimitedEyes", RecordArray(s.nearResolutionLimitedEyes.map { it.name }))
                     put("invalidTrialCount", s.invalidTrialCount)
                     put("lastDistanceCm", s.distanceCm.toDouble())
@@ -892,7 +897,7 @@ class ScreeningEngine(private val platform: ScreeningPlatform, private val scope
                 platform.saveRecord(name, json)
                 name
             }.onSuccess { name -> _state.update { it.copy(savedFile = name) } }
-                .onFailure { error -> _state.update { it.copy(warning = "保存测试记录失败：${error.message}") } }
+                .onFailure { error -> _state.update { it.copy(saveError = saveFailureText(error)) } }
         }
     }
 

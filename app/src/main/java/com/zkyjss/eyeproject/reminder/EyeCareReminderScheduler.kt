@@ -25,7 +25,7 @@ object EyeCareReminderScheduler {
         require(minutes > 0)
         ReminderPreferences.setIntervalMinutes(context, minutes)
         if (isEnabled(context)) {
-            schedule(context, minutes)
+            schedule(context, minutes, allowInexact = true)
         }
     }
 
@@ -36,17 +36,24 @@ object EyeCareReminderScheduler {
         return context.getSystemService(AlarmManager::class.java).canScheduleExactAlarms()
     }
 
-    fun schedule(context: Context, minutes: Int = getIntervalMinutes(context)): Boolean {
-        if (!canScheduleExactAlarms(context)) {
+    /**
+     * 排下一次提醒。有「闹钟和提醒」权限时用精确闹钟；没有权限时：
+     * - 首次开启（[allowInexact] 为 false）返回 false，由界面先引导授权；
+     * - 已开启的提醒续排（到点续下一次、改间隔、开机或升级后恢复）退回非精确闹钟，系统可能推迟几分钟，
+     *   但提醒链不会在界面仍显示「已开启」时悄悄断掉。
+     */
+    fun schedule(context: Context, minutes: Int = getIntervalMinutes(context), allowInexact: Boolean = false): Boolean {
+        val exact = canScheduleExactAlarms(context)
+        if (!exact && !allowInexact) {
             return false
         }
         val alarmManager = context.getSystemService(AlarmManager::class.java)
         val triggerAt = SystemClock.elapsedRealtime() + minutes * 60_000L
-        alarmManager.setExactAndAllowWhileIdle(
-            AlarmManager.ELAPSED_REALTIME_WAKEUP,
-            triggerAt,
-            reminderPendingIntent(context)
-        )
+        if (exact) {
+            alarmManager.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, reminderPendingIntent(context))
+        } else {
+            alarmManager.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, reminderPendingIntent(context))
+        }
         ReminderPreferences.setScheduled(context, nextTriggerElapsed = triggerAt, minutes = minutes)
         return true
     }
@@ -57,9 +64,10 @@ object EyeCareReminderScheduler {
         ReminderPreferences.setCancelled(context)
     }
 
+    /** 开机或应用升级后系统会清掉闹钟（开机后已存的触发时刻也失效）：已开启的提醒重新排一次。 */
     fun restoreAfterBoot(context: Context) {
         if (isEnabled(context)) {
-            schedule(context)
+            schedule(context, allowInexact = true)
         }
     }
 

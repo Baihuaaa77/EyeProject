@@ -17,7 +17,8 @@
 | `EyeIcon` | 图标（Image + ColorFilter.tint），装饰性图标 `contentDescription = null` |
 | `Button.kt` | 通用基础按钮（形状/背景/边框/内边距可配，默认矩形） |
 | `EyeButton` | 三种角色保留；浅色分区表面、整圈渐变边缘光、按下内凹；最小高 52、圆角 14，禁用不可点。 |
-| `EyeBrand.kt` | 品牌与示意图绘制：`EyeBrandMark` / `EyeBrandLockup`、`leafEyePath`、示意人物 `drawFigure`（平面上半身短发男孩，`figureEyeCenter`，视线 / 闭眼 / 睁大，`bottom` 控制上衣下沿）、`drawHand`（肤色手掌 + 袖子）、`drawPhone`、注视准星 `drawFixationTarget`、应用图标展示 `EyeAppIcon`（与桌面图标同一张图）、`drawTumblingE` |
+| `EyeBrand.kt` | 品牌与示意图绘制：`EyeBrandMark` / `EyeBrandLockup`、`leafEyePath`、`drawPhone`（机身带柔和投影）、注视准星 `drawFixationTarget`、应用图标展示 `EyeAppIcon`（与桌面图标同一张图）、`drawTumblingE` |
+| `EyeFigure.kt` | 方法演示的示意人物：柔和浮雕人偶 `drawFigure`（中性色头 / 身体靠成对阴影浮起，眼窝里是渐变荧光虹膜；`figureEyeCenter`，视线 / 闭眼 / 睁大，`bottom` 控制上衣下沿，`relief = false` 关掉阴影用于深色底小图标）；人物自己的手臂 `drawFigureArm`（肩 → 肘 → 腕 + 手，肘由手腕位置三维反解；`figureArmRest` / `figureArmCover` 给出垂在身侧与遮眼时的手腕位置）；`softRelief` 为成对阴影的画法。苹果端 `EyeCartoon.swift` 逐项对应 |
 | `EyeGlyph.kt` | 线性小图标（`EyeGlyph`，Canvas 自绘，跟随 tint），列表行与服务入口用 |
 
 ### 容器与卡片

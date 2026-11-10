@@ -33,6 +33,11 @@ struct ResultReportView: View {
                 // 解读放在规则结论与依据之后：先看规则判了什么，再看通俗解释
                 if !runtime.string("savedFile").isEmpty { AiExplanationView(fileName: runtime.string("savedFile")) }
                 actions(report)
+                // 记录没写进本机：明确告诉用户，免得以为已经存进历史（与安卓一致）
+                if !runtime.string("saveError").isEmpty {
+                    Text(runtime.string("saveError")).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.readableText(EyeStyle.danger))
+                        .padding(.horizontal, 4).frame(maxWidth: .infinity, alignment: .leading)
+                }
                 HStack(spacing: 10) {
                     Button("查看本次数据") { dataOpen = true }.buttonStyle(EyeButtonStyle(role: .secondary))
                     if let file = exportURL {

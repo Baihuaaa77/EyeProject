@@ -122,7 +122,7 @@ fun ColorVisionScreen(
                         viewModel::markPlateShown, viewModel::answer)
                 }
                 ColorVisionPhase.Result -> state.result?.let { report ->
-                    ResultReportView(report, rememberRecordExport(state.savedFile) { viewModel.engine.lastRecordJson }, actions = {
+                    ResultReportView(report, rememberRecordExport(state.savedFile) { viewModel.engine.lastRecordJson }, saveError = state.saveError, actions = {
                         EyeButton("重新检测", EyeButtonRole.PRIMARY, viewModel::restart, Modifier.fillMaxWidth())
                     })
                 }
