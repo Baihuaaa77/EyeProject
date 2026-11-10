@@ -66,8 +66,8 @@ class EyeCareEngineTest {
             .withCheckIn(today, listOf("眼睛干涩"), 3L)
         val report = EyeCareEngine.report(ledger, EyeCareContext(today, 23, systemUsage = listOf(usage),
             usageAccess = EyeCareEngine.ACCESS_GRANTED, ambientLux = 20f, ambientSupported = true, screenBrightness = 0.8f, age = 30))
-        // 18 用屏 + 20 连续 + 8 休息少 + 10 夜间 + 15 眨眼少 + 12 太近 + 6 不适 + 6 暗处过亮 = 95
-        assertEquals(95, report.score)
+        // 18 用屏 + 20 连续 + 8 休息少 + 10 夜间 + 15 眨眼少 + 12 太近 + 10 不适 + 6 暗处过亮 = 99
+        assertEquals(99, report.score)
         assertEquals("HIGH", report.level)
         assertEquals("TIRED", report.mood)
         assertEquals("眼睛累坏啦，闭上眼歇一会儿吧", report.tips.first().text)
@@ -107,6 +107,50 @@ class EyeCareEngineTest {
         assertEquals(10, report.factors.first { it.key == "dry-test" }.points)
     }
 
+    @Test fun checkInSymptomsHaveSeverityWeightsAndKeepUrgentConsults() {
+        val cases = listOf("眼睛干涩" to 10, "眼睛酸胀" to 10, "看东西模糊" to 20,
+            "头痛" to 10, "眼睛疼痛" to 25, "突然重影或看不清" to 30)
+        for ((symptom, points) in cases) {
+            val report = EyeCareEngine.report(LedgerData().withCheckIn(today, listOf(symptom), 1L), EyeCareContext(today, 10))
+            assertEquals(points, report.score, symptom)
+            assertEquals(points, report.factors.single { it.key == "symptoms" }.points, symptom)
+            if (symptom == "眼睛疼痛" || symptom == "突然重影或看不清") {
+                assertEquals("CONCERNED", report.mood, symptom)
+                assertTrue(report.consults.first().urgent, symptom)
+            }
+        }
+        val comfortable = EyeCareEngine.report(LedgerData().withCheckIn(today, emptyList(), 1L), EyeCareContext(today, 10))
+        assertEquals(0, comfortable.score)
+        assertTrue(comfortable.factors.none { it.key == "symptoms" })
+    }
+
+    @Test fun symptomPointsStackOnceAndCapAtEightyWhileTotalCapsAtHundred() {
+        val combined = EyeCareEngine.report(LedgerData().withCheckIn(today, listOf("看东西模糊", "突然重影或看不清"), 1L),
+            EyeCareContext(today, 10))
+        assertEquals(50, combined.score)
+        // 兼容旧账本中的重复值与未知值，不重复扣分。
+        val legacy = LedgerData(checkIns = listOf(CheckIn(today, listOf("看东西模糊", "看东西模糊", "未知感受"), 1L)))
+        assertEquals(20, EyeCareEngine.report(legacy, EyeCareContext(today, 10)).score)
+        val ledger = LedgerData().withCheckIn(today, EyeCareEngine.SYMPTOMS, 1L)
+        val allSymptoms = EyeCareEngine.report(ledger, EyeCareContext(today, 10))
+        assertEquals(80, allSymptoms.score)
+        assertEquals(80, allSymptoms.factors.single { it.key == "symptoms" }.points)
+        val withScreen = EyeCareEngine.report(ledger, EyeCareContext(today, 10,
+            systemUsage = listOf(UsageDay(today, screenMinutes = 481)), usageAccess = EyeCareEngine.ACCESS_GRANTED))
+        assertEquals(100, withScreen.score)
+        assertEquals(80, withScreen.factors.single { it.key == "symptoms" }.points)
+    }
+
+    @Test fun symptomWeightsApplyToHistoricalTrendAsWellAsToday() {
+        val yesterday = EyeCareDays.plusDays(today, -1)
+        val ledger = LedgerData().withCheckIn(yesterday, listOf("看东西模糊"), 1L)
+            .withCheckIn(today, listOf("突然重影或看不清"), 2L)
+        val report = EyeCareEngine.report(ledger, EyeCareContext(today, 10))
+        assertEquals(20, report.trend.days.first { it.day == yesterday }.score)
+        assertEquals(30, report.trend.days.last().score)
+        assertEquals(report.score, report.trend.days.last().score)
+    }
+
     @Test fun trendSummarisesTheWeek() {
         val usage = (0..13).map { UsageDay(EyeCareDays.plusDays(today, -it), screenMinutes = if (it < 7) 300 else 240, nightMinutes = if (it == 1) 90 else 0) }
         val ledger = LedgerData().withSession(EyeCareDays.plusDays(today, -2), 1L, LiveEyeMonitor.Session(60_000, 10, 10f, 35f, 0f, 5f))
@@ -125,8 +169,9 @@ class EyeCareEngineTest {
         var ledger = EyeCareBridge.addSession("", today, 1L, LiveEyeMonitor.Session(120_000, 12, 6f, 24f, 0.8f, 10f))
         ledger = EyeCareBridge.checkIn(ledger, today, listOf("头痛", "眼睛酸胀"), 1L)
         val json = EyeCareBridge.reportJson(ledger, """{"today":"$today","hour":9,"screenBrightness":0.5,"profile":{"职业":"办公室工作"},"age":41}""")
-        // 15 眨眼少 + 12 太近 + 12 两项不适 = 39
+        // 15 眨眼少 + 12 太近 + 20 两项不适 = 47
         assertTrue(json.contains("\"level\":\"MEDIUM\""), json)
+        assertTrue(json.contains("\"score\":47"), json)
         assertTrue(json.contains("做一次老视自测"))
         assertEquals("{}", EyeCareBridge.reportJson(ledger, "not json"))
     }

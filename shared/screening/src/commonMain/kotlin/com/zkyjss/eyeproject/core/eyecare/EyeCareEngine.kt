@@ -122,8 +122,19 @@ object EyeCareEngine {
     const val ACCESS_DENIED = "DENIED"
     const val ACCESS_UNSUPPORTED = "UNSUPPORTED"
 
+    /** 不适扣分的工程配置；同一症状只计一次，多项叠加封顶，不替代危险信号提醒。 */
+    private val SYMPTOM_POINTS = linkedMapOf(
+        "眼睛干涩" to 10,
+        "眼睛酸胀" to 10,
+        "看东西模糊" to 20,
+        "头痛" to 10,
+        "眼睛疼痛" to 25,
+        "突然重影或看不清" to 30,
+    )
+    private const val MAX_SYMPTOM_POINTS = 80
+
     /** 每日打卡可选的感受（两端同一份）；后两项为需要尽快就医的危险信号。 */
-    val SYMPTOMS = listOf("眼睛干涩", "眼睛酸胀", "看东西模糊", "头痛", "眼睛疼痛", "突然重影或看不清")
+    val SYMPTOMS = SYMPTOM_POINTS.keys.toList()
     private val RED_FLAGS = setOf("眼睛疼痛", "突然重影或看不清")
 
     /** 平时眨眼约每分钟 15 次（知识库 dry-screen-blink）。 */
@@ -278,8 +289,9 @@ object EyeCareEngine {
         weighted(sessions) { it.meanHeadOffsetDeg }?.let { h ->
             if (h > 25f) add(EyeFactor("posture", "姿势不正", "头部平均偏离正对屏幕 ${h.roundToInt()}°", 4))
         }
-        val felt = symptoms.filter { it in SYMPTOMS }
-        if (felt.isNotEmpty()) add(EyeFactor("symptoms", "自觉不适", "今天感到${felt.joinToString("、")}", (felt.size * 6).coerceAtMost(18)))
+        val felt = symptoms.filter { it in SYMPTOM_POINTS }.distinct()
+        if (felt.isNotEmpty()) add(EyeFactor("symptoms", "自觉不适", "今天感到${felt.joinToString("、")}",
+            felt.sumOf { SYMPTOM_POINTS.getValue(it) }.coerceAtMost(MAX_SYMPTOM_POINTS)))
     }
 
     /** 只属于「今天」的因素：环境光与亮度、近期自测结论、个人档案。 */
