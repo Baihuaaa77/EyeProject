@@ -1,0 +1,40 @@
+{
+  "date": "2026-11-11",
+  "tool": "内置 image_gen",
+  "reference": "shared/guide/reference/eyecho-v2.png",
+  "reference_sha256": "f81fffa85742175b654c3ecbc13735f4548979be4ff830985699160535a4665a",
+  "common_constraints": "以用户提供的新爱科形象为身份依据，严格保持面容、盘发、白大褂蓝内搭与胸前EYE标志；单幅真人教学摄影，浅灰背景，无文字、箭头、水印，不镜像。",
+  "prompt_notes": "以下为各次生成和精确编辑的动作及身份约束整理；不是生成视频。",
+  "assets": [
+    {
+      "file": "res/drawable-nodpi/eyecho_guide_side_far.png",
+      "label": "单眼移近起始姿势",
+      "prompt": "镜头在爱科左前方约60度，人物朝向画面左侧。右手拿竖直真实手机，屏幕朝本人，手臂伸出，距眼睛约45厘米。同时用自己的左手遮住自己的左眼，右眼看手机。不压眼球，完整保留头顶、两手、手肘和手机。",
+      "source": "exec-1da54197-0b16-4036-ac5f-4d9d008c10aa.png"
+    },
+    {
+      "file": "res/drawable-nodpi/eyecho_guide_side_near.png",
+      "label": "保持自遮并移近手机",
+      "prompt": "精确编辑side_far：仅把右手持的手机移近到眼前约25厘米、手肘弯曲，左手仍遮左眼，头部位置与坐姿不变，保持同一机位、构图、身份和浅灰背景。",
+      "source": "exec-8305a38f-84e5-4a90-9873-2340c146df31.png"
+    },
+    {
+      "file": "res/drawable-nodpi/eyecho_guide_lighting_right.png",
+      "label": "本人遮右眼，协助者打光",
+      "prompt": "镜头在正前方偏左45度，爱科在右侧端坐，自己的右手遮右眼，左眼看支架上的手机。手机固定竖屏、正对双眼约33厘米。协助者在画面左侧、手机后方，手持柔和灯源靠近手机顶部打光；手远离爱科的脸，绝不帮忙遮眼。",
+      "source": "exec-68e89df0-60b0-4730-9456-d08de9389406.png"
+    },
+    {
+      "file": "res/drawable-nodpi/eyecho_guide_lighting_left.png",
+      "label": "本人遮左眼，协助者打光",
+      "prompt": "精确编辑lighting_right：只把爱科右手放回膝上，改用自己的左手遮左眼，右眼可见并看手机。禁止镜像整个场景，手机、灯、协助者、胸前标志均不变。协助者仍只在手机旁打光。",
+      "source": "exec-98e33244-7faa-4564-983d-2ecaee9cb785.png"
+    },
+    {
+      "file": "res/drawable-nodpi/eyecho_guide_lighting_open.png",
+      "label": "双眼注视，协助者打光",
+      "prompt": "精确编辑lighting_right：只把爱科遮眼的手放回膝上，两手自然放膝上，双眼睁开平视支架上的手机。保持机位、身份、手机支架、协助者打光姿势及浅灰背景；没有手在面部附近。",
+      "source": "exec-679ca9c4-bab8-44e4-a6df-e1a476cdbf9a.png"
+    }
+  ]
+}

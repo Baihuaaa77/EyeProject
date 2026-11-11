@@ -14,9 +14,13 @@ internal const val RESIZE_STEP = 0.02f
 internal const val BACK_TO_DISTANCE = "距离超出范围，请回到约"
 
 /** 双端统一入口：病种状态转移委托各自状态机，此处只持有共享会话、采集与生命周期。 */
-class ScreeningEngine(internal val platform: ScreeningPlatform, internal val scope: CoroutineScope,
+class ScreeningEngine(platform: ScreeningPlatform, internal val scope: CoroutineScope,
     internal val recordScope: CoroutineScope = ScreeningPersistence.scope,
     internal val recordDispatcher: CoroutineDispatcher = Dispatchers.IO) {
+    internal val helpSession = TestHelpSession(platform)
+    internal val platform: ScreeningPlatform = helpSession
+    fun setHelpPresented(presented: Boolean) = helpSession.setPresented(presented)
+
     internal val _state = MutableStateFlow(ScreeningState())
     val state: StateFlow<ScreeningState> = _state.asStateFlow()
     internal val frames = Channel<Triple<Long, ScreeningStep, FaceLandmarkFrame>>(Channel.UNLIMITED)
@@ -123,7 +127,7 @@ class ScreeningEngine(internal val platform: ScreeningPlatform, internal val sco
         cameraWatchdog?.cancel()
         cameraWatchdog = scope.launch {
             while (isActive && cameraAttached) {
-                delay(1_000)
+                helpSession.delay(1_000)
                 if ((lastCameraFrameMs == 0L || platform.nowMs() - lastCameraFrameMs > 2_500) && _state.value.step != ScreeningStep.RESULT)
                     _state.update { it.copy(faceDetected = false, distanceCm = 0f, leftOpticalX = null, leftOpticalY = null,
                         rightOpticalX = null, rightOpticalY = null, opticalStatus = "相机帧中断", trackingStatus = "相机未收到新帧",
@@ -217,7 +221,7 @@ class ScreeningEngine(internal val platform: ScreeningPlatform, internal val sco
     fun showTrial() = presbyopia.showTrial()
 
     /** Compose 完成首帧呈现后调用，避免把移动与渲染时间算进辨认反应。 */
-    fun markTrialPresented(trialId: Int, timestampMs: Long) = presbyopia.markTrialPresented(trialId, timestampMs)
+    fun markTrialPresented(trialId: Int, timestampMs: Long) = presbyopia.markTrialPresented(trialId, helpSession.presentationTime(timestampMs))
 
     /** [direction] 为 -1 表示「看不清」，记为错误作答。 */
     fun answer(direction: Int, byVoice: Boolean = false) = presbyopia.answer(direction, byVoice)
@@ -321,7 +325,7 @@ class ScreeningEngine(internal val platform: ScreeningPlatform, internal val sco
         val current = _state.value
         if (current.step != ScreeningStep.PURSUIT || current.guidePending || stepStartMs <= 0L)
             return GazePoint(current.targetX, current.targetY)
-        val elapsed = (timeMs - stepStartMs).coerceIn(0L, StrabismusProtocol.PURSUIT_SECONDS * 1_000L) / 1_000f
+        val elapsed = (helpSession.presentationTime(timeMs) - stepStartMs).coerceIn(0L, StrabismusProtocol.PURSUIT_SECONDS * 1_000L) / 1_000f
         val target = StrabismusProtocol.pursuitTarget(elapsed)
         return GazePoint(target.first, target.second)
     }
@@ -380,7 +384,7 @@ class ScreeningEngine(internal val platform: ScreeningPlatform, internal val sco
     internal fun distanceStable(target: Float, tolerance: Float): Boolean =
         distanceTracker.stable(target, tolerance, platform.nowMs())
 
-    private fun processFrame(time: Long, step: ScreeningStep, frame: FaceLandmarkFrame) = frameProcessor.processFrame(time, step, frame)
+    private fun processFrame(time: Long, step: ScreeningStep, frame: FaceLandmarkFrame) { if (!helpSession.paused) frameProcessor.processFrame(time, step, frame) }
 
 
 

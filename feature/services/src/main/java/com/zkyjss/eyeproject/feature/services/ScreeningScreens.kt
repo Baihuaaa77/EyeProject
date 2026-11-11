@@ -93,7 +93,14 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, onEditSubje
     LaunchedEffect(settings.speechVolume, settings.speechRate) { voice.configure(settings.speechVolume, settings.speechRate) }
     val voiceEnabled = settings.speechEnabled
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
-    TestFeedbackEffect(settings, voice, settingsOpen, viewModel::feedbackCues)
+    var helpOpen by rememberSaveable { mutableStateOf(false) }
+    // 点击时立即暂停，避免弹窗首次绘制前继续消耗题目时限。
+    val openHelp = { viewModel.setHelpPresented(true); helpOpen = true }
+    val closeHelp = { helpOpen = false; viewModel.setHelpPresented(false) }
+    DisposableEffect(viewModel) { onDispose { viewModel.setHelpPresented(false) } }
+    if (helpOpen) TestHelpDialog(screeningHelp(s), closeHelp)
+
+    TestFeedbackEffect(settings, voice, settingsOpen || helpOpen, viewModel::feedbackCues)
     val cameraPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) viewModel.startCamera(owner) else viewModel.cameraPermissionDenied()
     }
@@ -123,7 +130,7 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, onEditSubje
     val voicePrompt = when (s.step) {
         // 选人页不播报：页面标题已写明，开口就问「这次测谁」显得突兀
         ScreeningStep.PROFILE -> ""
-        ScreeningStep.ENVIRONMENT -> if (kind == ScreeningKind.PRESBYOPIA) "请正对屏幕，保持约四十厘米，检查光照和距离。" else "请正对屏幕，保持三十三厘米，由家长协助后续遮眼任务。"
+        ScreeningStep.ENVIRONMENT -> if (kind == ScreeningKind.PRESBYOPIA) "请正对屏幕，保持约四十厘米，检查光照和距离。" else "请正对屏幕，保持三十三厘米，本人按提示遮眼，请协助者在手机旁打光。"
         ScreeningStep.NEAR_VISION -> if (s.nearAwaitingEyeReady) s.instruction else "${s.visionEye.label}测试。保持四十厘米，停稳后显示视标。"
         ScreeningStep.PUSH_UP -> if (s.pushStage == PushStage.READY) "${pushEyeCue(s.visionEye)}，第${s.nearPoints.count { it.eye == s.visionEye } + 1}次移近。先移到四十五厘米以外。"
             else "看着E，慢慢移近。模糊后停一下，仍看不清就点按。"
@@ -145,7 +152,7 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, onEditSubje
         distanceStatus(s.distanceCm, faceVisible, target, tolerance, moving = s.distanceMoveToCm != null) }
     val voiceActive = !s.guidePending && s.step in setOf(
         ScreeningStep.NEAR_VISION, ScreeningStep.FLIPPER, ScreeningStep.DISTANCE_CURVE, ScreeningStep.PUSH_UP)
-    val voiceAnswer = rememberVoiceAnswer(voiceActive && !settingsOpen, voice, settings.answersEnabled) { command ->
+    val voiceAnswer = rememberVoiceAnswer(voiceActive && !settingsOpen && !helpOpen, voice, settings.answersEnabled) { command ->
         val st = viewModel.state.value
         when {
             st.step == ScreeningStep.PUSH_UP -> when (command) {
@@ -163,7 +170,7 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, onEditSubje
     val urgent = if (s.guidePending) screeningGuideText(s) else s.gazeWarning ?: s.warning
     val basePrompt = urgent ?: guidance?.takeUnless { it == "保持稳定" || it.startsWith("太近") || it.startsWith("太远") || it.startsWith("请移动到") || it == "请正对屏幕" }
         ?: voicePrompt
-    SpeakTestPrompts(voice, voiceEnabled && !settingsOpen, basePrompt, distance?.takeIf { urgent == null && it.clearlyOff() })
+    SpeakTestPrompts(voice, voiceEnabled && !settingsOpen && !helpOpen, basePrompt, distance?.takeIf { urgent == null && it.clearlyOff() })
     DisposableEffect(viewModel, voice) { onDispose { viewModel.stopCamera(); voice.close() } }
     DisposableEffect(kind, context) {
         val window = (context as? Activity)?.window
@@ -203,7 +210,7 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, onEditSubje
         TestSessionLayout(
             title = if (kind == ScreeningKind.PRESBYOPIA) "老视自测" else "眼位自测",
             onBack = { viewModel.stopCamera(); onBack() }, onSettings = { settingsOpen = true },
-            centered = activeTest, scroll = pageScroll, progress = screeningProgress(s),
+            centered = activeTest, onHelp = openHelp.takeUnless { s.step == ScreeningStep.PROFILE || s.step == ScreeningStep.RESULT }, scroll = pageScroll, progress = screeningProgress(s),
             confirmExit = s.step !in setOf(ScreeningStep.PROFILE, ScreeningStep.ENVIRONMENT, ScreeningStep.RESULT),
             // 斜视：距离条放到底部，注视目标紧贴顶栏下方
             statusAtBottom = kind == ScreeningKind.STRABISMUS,
@@ -270,7 +277,7 @@ internal fun ProfileContent(kind: ScreeningKind, s: ScreeningState, vm: Screenin
 
 @Composable
 private fun EnvironmentContent(kind: ScreeningKind, s: ScreeningState, vm: ScreeningTestViewModel, onRetryCamera: () -> Unit) {
-    TestGuide(GuideMotion.POSTURE, "调整姿势", if (kind == ScreeningKind.PRESBYOPIA) "正对屏幕，约 40 厘米" else "正对屏幕，约 33 厘米；请协助者在旁准备")
+    TestGuide(if (kind == ScreeningKind.STRABISMUS) GuideMotion.LIGHTING else GuideMotion.POSTURE, "调整姿势", if (kind == ScreeningKind.PRESBYOPIA) "正对屏幕，约 40 厘米" else "正对屏幕，约 33 厘米；本人按提示遮眼，请协助者在手机旁打光")
     if (s.cameraFrames == 0 || !s.faceDetected || s.distanceCm <= 0f) {
         EyeButton("重试相机", EyeButtonRole.SECONDARY, onRetryCamera, Modifier.fillMaxWidth())
     }
@@ -374,12 +381,12 @@ internal fun FarFixationContent(s: ScreeningState, onStart: () -> Unit) {
                 EyechoGuidePortrait(GuidePose.OPEN, "爱科", Modifier.size(64.dp))
                 if (s.farWaiting) {
                     BaseEyeText("看着 ${StrabismusProtocol.FAR_TARGET_M} 米外的目标", style = typography.title, color = colors.white, textAlign = center)
-                    BaseEyeText("看好以后，协助者点下面的按钮开始计时", style = typography.bodySecondary, color = colors.white.copy(alpha = 0.72f),
+                    BaseEyeText("看好以后，点下面的按钮开始计时", style = typography.bodySecondary, color = colors.white.copy(alpha = 0.72f),
                         textAlign = center)
                 } else {
                     BaseEyeText("${s.secondsLeft}", style = typography.headline, color = colors.white)
                     BaseEyeText("眼睛越过手机，看着远处的目标", style = typography.subtitle, color = colors.white, textAlign = center)
-                    BaseEyeText("协助者：确认一直看着远处，头和手机不动", style = typography.bodySecondary, color = colors.white.copy(alpha = 0.72f),
+                    BaseEyeText("协助者保持打光稳定；本人看远处，头和手机不动", style = typography.bodySecondary, color = colors.white.copy(alpha = 0.72f),
                         textAlign = center)
                 }
             }

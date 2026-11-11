@@ -32,6 +32,7 @@ class ScreeningTestViewModel @Inject constructor(
     private val platform = AndroidScreeningPlatform(context, camera, intrinsics, records)
     val engine = ScreeningEngine(platform, viewModelScope)
     val state get() = engine.state
+    fun setHelpPresented(presented: Boolean) = engine.setHelpPresented(presented)
     fun feedbackCues(enabled: Boolean) = platform.feedbackSession.poll(screeningFeedbackFrame(state.value, engine.coverRemainingMs()), platform.nowMs(), enabled)
     fun configure(kind: ScreeningKind) = engine.configure(kind)
     /** 本人与家庭成员：测试开始时选「这次测谁」，资料在「我的」维护。 */

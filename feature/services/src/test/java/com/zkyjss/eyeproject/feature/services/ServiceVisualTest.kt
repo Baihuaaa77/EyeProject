@@ -70,6 +70,26 @@ class ServiceVisualTest {
         } finally { voice.close() }
     }
 
+    @Test fun currentStepHelpCanBeOpenedAndDismissed() {
+        var open by mutableStateOf(false)
+        compose.setContent {
+            EyeProjectTheme(darkTheme = true) {
+                TestSessionLayout("眼位自测", {}, {}, true, onHelp = { open = true }) {
+                    EyeText("正在交替遮盖", style = LocalEyeTypography.current.body)
+                }
+                if (open) TestHelpDialog(screeningHelp(ScreeningState(kind = ScreeningKind.STRABISMUS, step = ScreeningStep.COVER))) { open = false }
+            }
+        }
+        compose.onNodeWithContentDescription("当前环节演示与说明").assertIsDisplayed().performClick()
+        compose.onNodeWithText("当前环节演示").assertIsDisplayed()
+        compose.onNodeWithText("交替遮盖").assertIsDisplayed()
+        compose.onNodeWithText("看懂了，继续").assertIsDisplayed()
+        capture("test-help")
+        compose.onNodeWithText("看懂了，继续").performClick()
+        compose.onNodeWithText("当前环节演示").assertDoesNotExist()
+        compose.onNodeWithText("正在交替遮盖").assertIsDisplayed()
+    }
+
     @Test fun servicesNavigation() {
         var destination = ""
         compose.setContent { EyeProjectTheme {
@@ -776,7 +796,7 @@ class ServiceVisualTest {
     private fun capture(name: String) {
         compose.mainClock.advanceTimeBy(700)
         val bitmap = compose.runOnIdle {
-            val view = if (name == "test-settings") android.view.inspector.WindowInspector.getGlobalWindowViews().last()
+            val view = if (name == "test-settings" || name == "test-help") android.view.inspector.WindowInspector.getGlobalWindowViews().last()
                 else compose.activity.window.decorView
             Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888).also {
                 view.draw(android.graphics.Canvas(it))

@@ -36,7 +36,7 @@ internal class PresbyopiaStateMachine(private val host: ScreeningEngine) {
 
     fun showTrial() {
         with(host) {
-            if (_state.value.guidePending) return
+            if (helpSession.paused || _state.value.guidePending) return
             val s = _state.value
             if (s.trialVisible || s.nearAwaitingEyeReady) return
             val target = trialTargetCm(s) ?: return
@@ -92,7 +92,7 @@ internal class PresbyopiaStateMachine(private val host: ScreeningEngine) {
     fun answer(direction: Int, byVoice: Boolean = false) {
         with(host) {
             val s = _state.value
-            if (!s.trialVisible || questionStartMs == 0L ||
+            if (helpSession.paused || !s.trialVisible || questionStartMs == 0L ||
                 (s.step != ScreeningStep.NEAR_VISION && s.step != ScreeningStep.FLIPPER && s.step != ScreeningStep.DISTANCE_CURVE)) return
             val target = trialTargetCm(s) ?: return
             val now = platform.nowMs()
@@ -375,7 +375,7 @@ internal class PresbyopiaStateMachine(private val host: ScreeningEngine) {
             _state.update { it.copy(flipperCheck = false, trialIndex = 0, trialVisible = false, direction = Random.nextInt(4), warning = null) }
             timer?.cancel()
             timer = scope.launch {
-                repeat(PresbyopiaProtocol.FLIPPER_SECONDS) { index -> delay(1000); _state.update { it.copy(secondsLeft = PresbyopiaProtocol.FLIPPER_SECONDS - 1 - index) } }
+                repeat(PresbyopiaProtocol.FLIPPER_SECONDS) { index -> helpSession.delay(1000); _state.update { it.copy(secondsLeft = PresbyopiaProtocol.FLIPPER_SECONDS - 1 - index) } }
                 finish()
             }
         }

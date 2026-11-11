@@ -15,6 +15,7 @@ enum EyeStyle {
     static let panel = dyn(0xFFFFFF, 0x26282B)
     /// 浅填充：次要按钮、分段控件底、输入框、圆环底环。
     static let surfaceVariant = dyn(0xE9EDF3, 0x1B1D20)
+    static let guideBackground = Color(rgb: 0xE9EDF3)
     static let borderSubtle = dyn(0x5D6280, 0xFFFFFF, lightAlpha: 0.1216, darkAlpha: 0.0706)
     static let text = dyn(0x313949, 0xE3E5E8)
     /// 示意图墨色：深浅主题都保持深色（视标、示意人物五官）。

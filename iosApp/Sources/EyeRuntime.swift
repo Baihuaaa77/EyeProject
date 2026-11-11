@@ -216,6 +216,10 @@ final class EyeRuntime: ObservableObject {
         isForeground = true; _ = controller.feedbackJson(enabled: false); lastPrompt = ""
         voice.prepareForTest(); feedback.prepare(); controller.resume(); refresh()
     }
+    func setHelpPresented(_ value: Bool) {
+        controller.setHelpPresented(presented: value)
+        setSettingsPresented(value)
+    }
     func setSettingsPresented(_ value: Bool) {
         settingsPresented = value
         if value { promptWork?.cancel(); voice.stop(); feedback.stop() }

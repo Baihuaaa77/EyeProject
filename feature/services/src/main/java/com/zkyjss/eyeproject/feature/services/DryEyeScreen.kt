@@ -109,7 +109,14 @@ fun DryEyeScreen(
     LaunchedEffect(settings.speechVolume, settings.speechRate) { voice.configure(settings.speechVolume, settings.speechRate) }
     val voiceEnabled = settings.speechEnabled
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
-    TestFeedbackEffect(settings, voice, settingsOpen, viewModel::feedbackCues)
+    var helpOpen by rememberSaveable { mutableStateOf(false) }
+    // 点击时立即暂停，避免弹窗首次绘制前继续消耗题目时限。
+    val openHelp = { viewModel.setHelpPresented(true); helpOpen = true }
+    val closeHelp = { helpOpen = false; viewModel.setHelpPresented(false) }
+    DisposableEffect(viewModel) { onDispose { viewModel.setHelpPresented(false) } }
+    if (helpOpen) TestHelpDialog(dryEyeHelp(state), closeHelp)
+
+    TestFeedbackEffect(settings, voice, settingsOpen || helpOpen, viewModel::feedbackCues)
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         if (it) viewModel.startMonitoring(lifecycleOwner) else viewModel.permissionDenied()
     }
@@ -134,7 +141,7 @@ fun DryEyeScreen(
     val distanceMatters = state.phase in setOf(DryEyePhase.Setup, DryEyePhase.FormalGuide, DryEyePhase.Countdown,
         DryEyePhase.Practice, DryEyePhase.Natural, DryEyePhase.Open)
     val voiceAnswer = rememberVoiceAnswer(
-        active = !settingsOpen && state.phase in setOf(DryEyePhase.Practice, DryEyePhase.Natural, DryEyePhase.Open),
+        active = !settingsOpen && !helpOpen && state.phase in setOf(DryEyePhase.Practice, DryEyePhase.Natural, DryEyePhase.Open),
         voice = voice,
         enabled = settings.answersEnabled,
     ) { command ->
@@ -155,7 +162,7 @@ fun DryEyeScreen(
         DryEyePhase.Result -> "测试完成"
         else -> state.qualityWarning ?: state.instruction
     }
-    SpeakTestPrompts(voice, voiceEnabled && !settingsOpen, basePrompt, distance.takeIf { distanceMatters && it.clearlyOff() })
+    SpeakTestPrompts(voice, voiceEnabled && !settingsOpen && !helpOpen, basePrompt, distance.takeIf { distanceMatters && it.clearlyOff() })
     DisposableEffect(viewModel, voice) { onDispose { viewModel.stopMonitoring(); voice.close() } }
     // 测试期间窗口亮度固定为最高，保证视标对比度一致（原文要求记录屏幕亮度）
     DisposableEffect(context) {
@@ -179,7 +186,7 @@ fun DryEyeScreen(
     }
     val running = state.phase in setOf(DryEyePhase.Practice, DryEyePhase.Countdown, DryEyePhase.Natural, DryEyePhase.Open, DryEyePhase.Rest)
     Box(modifier.fillMaxSize()) {
-        TestSessionLayout("干眼自测", onBack, { settingsOpen = true }, running, progress = dryEyeProgress(state),
+        TestSessionLayout("干眼自测", onBack, { settingsOpen = true }, running, onHelp = openHelp.takeUnless { state.phase == DryEyePhase.Profile || state.phase == DryEyePhase.Result }, progress = dryEyeProgress(state),
             confirmExit = state.phase !in setOf(DryEyePhase.Profile, DryEyePhase.Setup, DryEyePhase.Result),
             status = {
                 if (running && state.phase != DryEyePhase.Rest) DistanceBanner(distance, compact = true)

@@ -55,6 +55,20 @@ import java.io.File
 class HomeVisualTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
+    @Test fun exerciseCompletionKeepsTheActionVisible() {
+        var closed = false
+        compose.setContent { EyeProjectTheme(darkTheme = true) {
+            Box(Modifier.fillMaxSize().background(LocalEyeColors.current.appBackground).padding(20.dp)) {
+                ExerciseCompletion(8, 7, true, { closed = true }, Modifier.fillMaxSize())
+            }
+        } }
+        compose.onNodeWithText("完成啦！").assertIsDisplayed()
+        compose.onNodeWithText("共 8 步，检测到你做到了 7 步").assertIsDisplayed()
+        capture("exercise-complete")
+        compose.onNodeWithText("完成").assertIsDisplayed().performClick()
+        assertTrue(closed)
+    }
+
     private val today = "2026-10-23"
 
     /** 一周的虚构用眼数据：今天用屏 6 小时多、连续 75 分钟、眨眼偏少，已打卡眼睛干涩。 */

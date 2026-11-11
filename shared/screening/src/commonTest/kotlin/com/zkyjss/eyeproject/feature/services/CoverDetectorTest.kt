@@ -89,13 +89,14 @@ class CoverDetectorTest {
         engine.close()
     }
 
-    @Test fun helperChoiceSelectsMatchingInstructions() {
+    @Test fun helperChoiceNeverChangesSelfCover() {
         assertTrue(usesSelfCover(mapOf("协助测试者" to "自己完成")))
         assertTrue(coverGuideCue(mapOf("协助测试者" to "自己完成")).contains("自己"))
         for (helper in listOf("家长", "医生或护士", "其他")) {
             val fields = mapOf("协助测试者" to helper)
-            assertFalse(usesSelfCover(fields))
-            assertTrue(coverGuideCue(fields).contains("协助者"))
+            assertTrue(usesSelfCover(fields))
+            assertTrue(coverGuideCue(fields).contains("手机旁打光"))
+            assertFalse(coverGuideCue(fields).contains("协助者按提示真实遮盖"))
             assertFalse(coverGuideCue(fields).contains("同时点按"))
         }
     }

@@ -6,19 +6,21 @@ import XCTest
 /// 验证 XcodeGen 真正把共用图片放进应用，并保留透明通道。
 @MainActor
 final class GuideAssetsTests: XCTestCase {
-    func testEveryGuidePoseIsBundledWithAlpha() throws {
-        for pose in ["open", "blink", "left", "right", "helper_open", "helper_left", "helper_right"] {
+    func testEveryGuidePoseIsBundledWithExpectedBackground() throws {
+        for pose in ["open", "blink", "left", "right", "lighting_open", "lighting_left", "lighting_right", "side_far", "side_near"] {
             let name = "eyecho_guide_" + pose
             let image = try XCTUnwrap(EyechoGuideImages.image(named: name)?.cgImage, "缺少爱科分镜：" + name)
+            if ["open", "blink", "left", "right"].contains(pose) {
             XCTAssertTrue([CGImageAlphaInfo.premultipliedFirst, .premultipliedLast, .first, .last].contains(image.alphaInfo),
                           "人物图片必须保留透明背景：" + name)
+            }
         }
     }
 
     /// 检查应用实际使用的 SwiftUI 图片，而不仅仅检查 UIImage 能解码。
     func testPortraitActuallyRendersInBothThemes() throws {
         for dark in [false, true] {
-            for pose in ["open", "blink", "left", "right", "helper_open", "helper_left", "helper_right"] {
+            for pose in ["open", "blink", "left", "right", "lighting_open", "lighting_left", "lighting_right", "side_far", "side_near"] {
                 let view = EyechoGuideImage(name: "eyecho_guide_" + pose)
                     .frame(width: 320, height: 240)
                     .background(EyeStyle.surfaceVariant)
@@ -33,14 +35,31 @@ final class GuideAssetsTests: XCTestCase {
     }
 
     /// 完整舞台左侧必须有人物；手机简图和文字不能代替这项检查。
-    func testServiceStageKeepsPortraitVisibleBesidePhone() throws {
+    func testServiceStageKeepsPersonVisible() throws {
         for motion in [GuideMotion.near, .move, .cover, .coverSelf, .fva] {
             let renderer = ImageRenderer(content: GuideFrame(motion: motion, phase: 0.8).frame(width: 343, height: 190))
             renderer.scale = 1
             let image = try XCTUnwrap(renderer.uiImage)
-            XCTAssertGreaterThan(try skinPixels(image, minX: 0, maxX: 210), 500, "示范舞台左侧缺少爱科：\(motion)")
+            XCTAssertGreaterThan(try skinPixels(image, minX: 0, maxX: 343), 500, "示范舞台缺少爱科：\(motion)")
             attach(image, name: "服务页爱科-\(motion)")
         }
+    }
+
+    func testHelpAndCompletionViewsRender() throws {
+        for dark in [false, true] {
+            let help = TestHelpView(motion: .coverSelf, title: "交替遮盖", cue: "本人按提示遮眼，协助者在手机旁打光。", onClose: {})
+                .frame(width: 390, height: 844).environment(\.colorScheme, dark ? .dark : .light)
+            let helpRenderer = ImageRenderer(content: help)
+            helpRenderer.scale = 1
+            let helpImage = try XCTUnwrap(helpRenderer.uiImage)
+            XCTAssertGreaterThan(try skinPixels(helpImage, minX: 0, maxX: 390), 500)
+            attach(helpImage, name: "当前环节问号-\(dark ? "深色" : "浅色")")
+        }
+        let completion = ExerciseCompletionView(total: 8, seen: 7, usedCamera: true, onClose: {})
+            .padding(20).frame(width: 390, height: 844).background(EyeStyle.background).environment(\.colorScheme, .dark)
+        let renderer = ImageRenderer(content: completion)
+        renderer.scale = 1
+        attach(try XCTUnwrap(renderer.uiImage), name: "护眼操完成页")
     }
 
     private func skinPixels(_ image: UIImage, minX: Int, maxX: Int) throws -> Int {

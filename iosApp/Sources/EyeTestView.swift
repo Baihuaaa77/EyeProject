@@ -9,6 +9,7 @@ struct EyeTestView: View {
     @State private var brightness: CGFloat?
     @State private var previousIdleDisabled = false
     @State private var settingsOpen = false
+    @State private var helpOpen = false
     @State private var suspended = false
     @State private var confirmingExit = false
     init(kind: String) { _runtime = StateObject(wrappedValue: EyeRuntime(kind: kind)) }
@@ -16,7 +17,8 @@ struct EyeTestView: View {
         VStack(spacing: 0) {
             TestTopBar(title: runtime.string("title").isEmpty ? "眼健康自测" : runtime.string("title"),
                 onBack: { if needsExitConfirm { confirmingExit = true } else { runtime.close(); dismiss() } },
-                onSettings: { settingsOpen = true })
+                onSettings: { settingsOpen = true },
+                onHelp: isProfile || ["Result", "RESULT"].contains(phase) ? nil : { runtime.setHelpPresented(true); helpOpen = true })
                 .padding(.horizontal, 4)
             if let progress = runtime.state["overallProgress"] as? NSNumber, displayReady {
                 TestProgressBar(fraction: progress.doubleValue, text: runtime.string("remainingText"))
@@ -71,6 +73,11 @@ struct EyeTestView: View {
             // 系统设置以完整页面盖在测试上（不用底部弹窗），右上角「完成」回到测试
             .fullScreenCover(isPresented: $settingsOpen) {
                 NavigationStack { SystemSettingsPage(voice: runtime.voice, feedback: runtime.feedback, inTest: true) }.tint(EyeStyle.primary)
+            }
+            .sheet(isPresented: $helpOpen, onDismiss: { runtime.setHelpPresented(false) }) {
+                TestHelpView(motion: .forHelp(runtime.string("helpMotion")), title: runtime.string("helpTitle"), cue: runtime.string("helpCue")) {
+                    helpOpen = false; runtime.setHelpPresented(false)
+                }
             }
             .onChange(of: settingsOpen) { runtime.setSettingsPresented($0) }
             .onAppear {
@@ -150,9 +157,9 @@ struct EyeTestView: View {
                 Text("建议佩戴最佳矫正视力眼镜进行测试").font(EyeStyle.body).frame(maxWidth: .infinity, alignment: .leading)
                     .padding(14).background(EyeStyle.accentSoft, in: RoundedRectangle(cornerRadius: EyeStyle.radiusMedium))
             }
-            TestGuideView(motion: .posture, title: runtime.kind == "DRY_EYE" ? "调整姿势 · 约 40 cm" : "调整姿势",
+            TestGuideView(motion: runtime.kind == "STRABISMUS" ? .lighting : .posture, title: runtime.kind == "DRY_EYE" ? "调整姿势 · 约 40 cm" : "调整姿势",
                 cue: runtime.kind == "DRY_EYE" ? "正对屏幕，手机距离眼睛约 40 厘米，光线均匀"
-                    : runtime.kind == "STRABISMUS" ? "正对屏幕，约 33 厘米；请协助者在旁准备" : "正对屏幕，约 40 厘米")
+                    : runtime.kind == "STRABISMUS" ? "正对屏幕，约 33 厘米；本人按提示遮眼，请协助者在手机旁打光" : "正对屏幕，约 40 厘米")
             Button("开始测试") { runtime.act("begin") }.buttonStyle(EyeButtonStyle())
             Button("重试相机") { runtime.act("retryCamera") }.buttonStyle(EyeButtonStyle(role: .secondary))
             DisclosureGroup("测距校准") {
@@ -412,12 +419,12 @@ private struct FarFixationPanel: View {
                 .frame(width: 64, height: 64).accessibilityLabel("爱科")
             if waiting {
                 Text("看着 \(meters) 米外的目标").font(EyeStyle.title).foregroundStyle(.white).multilineTextAlignment(.center)
-                Text("看好以后，协助者点下面的按钮开始计时").font(EyeStyle.bodySecondary).foregroundStyle(.white.opacity(0.72))
+                Text("看好以后，点下面的按钮开始计时").font(EyeStyle.bodySecondary).foregroundStyle(.white.opacity(0.72))
                     .multilineTextAlignment(.center)
             } else {
                 Text("\(seconds)").font(EyeStyle.headline).monospacedDigit().foregroundStyle(.white)
                 Text("眼睛越过手机，看着远处的目标").font(EyeStyle.subtitle).foregroundStyle(.white).multilineTextAlignment(.center)
-                Text("协助者：确认一直看着远处，头和手机不动").font(EyeStyle.bodySecondary).foregroundStyle(.white.opacity(0.72))
+                Text("协助者保持打光稳定；本人看远处，头和手机不动").font(EyeStyle.bodySecondary).foregroundStyle(.white.opacity(0.72))
                     .multilineTextAlignment(.center)
             }
         }

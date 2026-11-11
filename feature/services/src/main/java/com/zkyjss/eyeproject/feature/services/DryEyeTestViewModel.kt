@@ -32,6 +32,7 @@ class DryEyeTestViewModel @Inject constructor(
     private val platform = AndroidScreeningPlatform(context, camera, intrinsics, records)
     val engine = DryEyeEngine(platform, viewModelScope)
     val uiState get() = engine.uiState
+    fun setHelpPresented(presented: Boolean) = engine.setHelpPresented(presented)
     fun feedbackCues(enabled: Boolean) = platform.feedbackSession.poll(screeningFeedbackFrame(uiState.value), platform.nowMs(), enabled)
     /** 本人与家庭成员：测试开始时选「这次测谁」，资料在「我的」维护。 */
     val subjects: StateFlow<List<SubjectProfile>> =

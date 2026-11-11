@@ -16,6 +16,8 @@ data class EyeColors(
     val appBackground: Color,
     val panelBackground: Color,
     val surfaceVariant: Color,
+    /** 方法演示固定浅灰底，不随深浅主题变化。 */
+    val guideBackground: Color = Color(0xFFE9EDF3),
     val cameraSurface: Color,
     val primary: Color,
     val primaryDark: Color,

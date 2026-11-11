@@ -68,6 +68,7 @@ class ColorVisionViewModel @Inject constructor(
     val uiState get() = engine.uiState
     val subjects: StateFlow<List<SubjectProfile>> =
         subjectRepository.subjects.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    fun setHelpPresented(presented: Boolean) = engine.setHelpPresented(presented)
     fun feedbackCues(enabled: Boolean) = uiState.value.let { s ->
         platform.feedbackSession.poll(ScreeningFeedbackFrame("${s.phase}:${s.plateIndex}",
             taskActive = s.phase == ColorVisionPhase.Demo || s.phase == ColorVisionPhase.Plates,
@@ -97,7 +98,14 @@ fun ColorVisionScreen(
     val voice = remember(context) { ScreeningVoice(context) }
     val settings = rememberTestSettings()
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
-    TestFeedbackEffect(settings, voice, settingsOpen, viewModel::feedbackCues)
+    var helpOpen by rememberSaveable { mutableStateOf(false) }
+    // 点击时立即暂停，避免弹窗首次绘制前继续消耗题目时限。
+    val openHelp = { viewModel.setHelpPresented(true); helpOpen = true }
+    val closeHelp = { helpOpen = false; viewModel.setHelpPresented(false) }
+    DisposableEffect(viewModel) { onDispose { viewModel.setHelpPresented(false) } }
+    if (helpOpen) TestHelpDialog(colorVisionHelp(), closeHelp)
+
+    TestFeedbackEffect(settings, voice, settingsOpen || helpOpen, viewModel::feedbackCues)
     DisposableEffect(voice) { onDispose { voice.close() } }
     // 测试期间窗口亮度固定为最高，颜色对比一致
     DisposableEffect(context) {
@@ -108,7 +116,7 @@ fun ColorVisionScreen(
     }
     val running = state.phase == ColorVisionPhase.Demo || state.phase == ColorVisionPhase.Plates
     Box(modifier) {
-        TestSessionLayout("色觉自测", onBack, { settingsOpen = true }, running, confirmExit = running,
+        TestSessionLayout("色觉自测", onBack, { settingsOpen = true }, running, onHelp = openHelp.takeUnless { state.phase == ColorVisionPhase.Profile || state.phase == ColorVisionPhase.Result }, confirmExit = running,
             progress = if (state.phase == ColorVisionPhase.Plates)
                 TestProgress(state.progress, (state.plateCount - state.answers.size) * 5) else null) {
             when (state.phase) {
