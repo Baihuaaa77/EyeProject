@@ -68,7 +68,6 @@ import com.zkyjss.eyeproject.core.designsystem.util.screenHorizontalPaddingLarge
 import com.zkyjss.eyeproject.core.ui.component.EyeButton
 import com.zkyjss.eyeproject.core.ui.component.EyeButtonRole
 import com.zkyjss.eyeproject.core.ui.component.EyeText as BaseEyeText
-import com.zkyjss.eyeproject.core.ui.component.drawFigure
 import com.zkyjss.eyeproject.core.ui.component.drawFixationTarget
 import com.zkyjss.eyeproject.core.designsystem.theme.LightEyeColors
 
@@ -372,9 +371,7 @@ internal fun FarFixationContent(s: ScreeningState, onStart: () -> Unit) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Column(Modifier.fillMaxWidth().height(240.dp + rememberStageExtra()).clip(EyeShapes.medium).background(colors.ink).padding(20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterVertically)) {
-                Canvas(Modifier.size(64.dp)) {
-                    drawFigure(colors, Offset(size.width / 2, size.height * 0.5f), size.minDimension * 0.86f, gaze = Offset(0f, -0.6f))
-                }
+                EyechoGuidePortrait(GuidePose.OPEN, "爱科", Modifier.size(64.dp))
                 if (s.farWaiting) {
                     BaseEyeText("看着 ${StrabismusProtocol.FAR_TARGET_M} 米外的目标", style = typography.title, color = colors.white, textAlign = center)
                     BaseEyeText("看好以后，协助者点下面的按钮开始计时", style = typography.bodySecondary, color = colors.white.copy(alpha = 0.72f),
@@ -588,10 +585,7 @@ private fun GlassesCheckContent(check: PresbyopiaIntake.GlassesCheck, onConfirm:
     val typography = LocalEyeTypography.current
     TestStageCard {
         Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Canvas(Modifier.size(112.dp)) {
-                val s = size.minDimension
-                drawFigure(colors, Offset(s / 2, s * 0.5f), s * 0.86f, gaze = Offset(0f, -0.3f))
-            }
+            EyechoGuidePortrait(GuidePose.OPEN, "爱科", Modifier.size(112.dp))
             EyeText(check.title, typography.title, colors.textPrimary)
             BaseEyeText(check.prompt, style = typography.body, color = colors.textSecondary, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
             EyeButton(check.button, EyeButtonRole.PRIMARY, onConfirm, Modifier.fillMaxWidth())

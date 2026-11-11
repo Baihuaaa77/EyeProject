@@ -408,10 +408,8 @@ private struct FarFixationPanel: View {
     let waiting: Bool
     var body: some View {
         VStack(spacing: 10) {
-            Canvas { ctx, size in
-                Cartoon.figure(ctx, center: CGPoint(x: size.width / 2, y: size.height * 0.5), size: min(size.width, size.height) * 0.86,
-                    gaze: CGPoint(x: 0, y: -0.6))
-            }.frame(width: 64, height: 64)
+            Image("eyecho_guide_open").resizable().scaledToFit()
+                .frame(width: 64, height: 64).accessibilityLabel("爱科")
             if waiting {
                 Text("看着 \(meters) 米外的目标").font(EyeStyle.title).foregroundStyle(.white).multilineTextAlignment(.center)
                 Text("看好以后，协助者点下面的按钮开始计时").font(EyeStyle.bodySecondary).foregroundStyle(.white.opacity(0.72))
@@ -563,10 +561,8 @@ private struct GlassesCheckView: View {
     let confirm: () -> Void
     var body: some View {
         VStack(spacing: 16) {
-            Canvas { ctx, size in
-                let s = min(size.width, size.height)
-                Cartoon.figure(ctx, center: CGPoint(x: size.width / 2, y: size.height / 2), size: s * 0.86, gaze: CGPoint(x: 0, y: -0.3))
-            }.frame(width: 112, height: 112)
+            Image("eyecho_guide_open").resizable().scaledToFit()
+                .frame(width: 112, height: 112).accessibilityLabel("爱科")
             Text(title).font(EyeStyle.title)
             Text(prompt)
                 .font(EyeStyle.body).foregroundStyle(EyeStyle.secondary).multilineTextAlignment(.center)

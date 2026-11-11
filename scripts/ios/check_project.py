@@ -28,6 +28,15 @@ model = root / 'core/camera/src/main/assets/face_landmarker.task'
 # 数字字体由安卓资源目录与 iOS 工程共同引用，防止一端漏包后悄悄回退到系统字。
 score_font = root / 'core/designsystem/src/main/res/font/nunito_black.ttf'
 ios_project = (root / 'iosApp/project.yml').read_text(encoding='utf-8')
+# 两端直接打包同一份爱科分镜，避免 iOS 缺图或协助遮盖阶段退回自行遮盖。
+guide_images = root / 'shared/guide/res/drawable-nodpi'
+for pose in ('open', 'blink', 'left', 'right', 'helper_open', 'helper_left', 'helper_right'):
+    image = guide_images / ('eyecho_guide_' + pose + '.png')
+    png = image.read_bytes() if image.exists() else b''
+    if len(png) < 26 or png[:8] != b'\x89PNG\r\n\x1a\n' or png[25] != 6:
+        errors.append('Missing or invalid Eyecho guide image: ' + pose)
+if '../shared/guide/res/drawable-nodpi' not in ios_project:
+    errors.append('iOS must bundle the shared Eyecho guide images')
 if not score_font.exists() or score_font.read_bytes()[:4] != b'\x00\x01\x00\x00':
     errors.append('Missing or invalid bundled score font')
 if '../core/designsystem/src/main/res/font/nunito_black.ttf' not in ios_project or 'UIAppFonts: [nunito_black.ttf]' not in ios_project:

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 测试前的方法演示：逐项移植安卓 TestGuide.kt（13 个场景、320×200 舞台单位、与动画同步高亮的分镜）。
+/// 测试前的方法演示：爱科数字人图片分镜与操作简图，和安卓保持一致。
 /// 只出现在准备阶段，不参与正式刺激呈现或计时；系统减弱动态效果时停在关键帧并展示全部步骤。
 enum GuideMotion { case posture, acuity, fva, blink, open, near, move, curve, flip, fixate, far, cover, coverSelf, follow
     /// 与安卓 guideMotion(step) 相同的映射。
@@ -70,29 +70,6 @@ struct TestGuideView: View {
     }
 }
 
-/// 演示舞台：浅主色圆角底，场景按 320×200 等比缩放居中；按圆角裁切，人物与手臂不会画出舞台。
-private struct GuideStage: View {
-    let scene: GuideScene
-    let phase: Double
-    var body: some View {
-        let shape = RoundedRectangle(cornerRadius: EyeStyle.radiusLarge)
-        Canvas { context, size in
-            let unit = min(size.width / 320, size.height / 200)
-            let origin = CGPoint(x: (size.width - 320 * unit) / 2, y: (size.height - 200 * unit) / 2)
-            scene.draw(GuidePainter(ctx: context, unit: unit, origin: origin), phase)
-        }.frame(height: 200).frame(maxWidth: .infinity)
-            .background(EyeStyle.primarySoft, in: shape)
-            .clipShape(shape)
-    }
-}
-
-/// 由外部给进度的无文字演示舞台（服务页轮播示范用）。
-struct GuideFrame: View {
-    let motion: GuideMotion
-    let phase: Double
-    var body: some View { GuideStage(scene: GuideScene.scene(motion), phase: phase) }
-}
-
 /// 分镜行：当前步骤主色高亮，已完成步骤弱化。
 private struct GuideBeatRow: View {
     let label: String
@@ -109,442 +86,206 @@ private struct GuideBeatRow: View {
     }
 }
 
-/// 场景绘制上下文：舞台单位换算与常用画法。
-struct GuidePainter {
-    let ctx: GraphicsContext
-    let unit: CGFloat
-    let origin: CGPoint
-    func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: origin.x + x * unit, y: origin.y + y * unit) }
-    func u(_ v: CGFloat) -> CGFloat { v * unit }
-
-    func label(_ text: String, _ x: CGFloat, _ y: CGFloat, _ color: Color, alpha: Double = 1) {
-        var c = ctx; c.opacity = alpha
-        c.draw(Text(text).font(EyeStyle.chip).foregroundColor(EyeStyle.readableText(color)), at: p(x, y), anchor: .center)
-    }
-    func line(_ a: CGPoint, _ b: CGPoint, _ color: Color, _ width: CGFloat, alpha: Double = 1, dash: [CGFloat] = [], dashPhase: CGFloat = 0) {
-        var path = Path(); path.move(to: a); path.addLine(to: b)
-        var c = ctx; c.opacity = alpha
-        c.stroke(path, with: .color(color), style: StrokeStyle(lineWidth: width, lineCap: .round, dash: dash, dashPhase: dashPhase))
-    }
-    func circle(_ center: CGPoint, _ r: CGFloat, _ color: Color, alpha: Double = 1, stroke: CGFloat? = nil) {
-        let path = Path(ellipseIn: CGRect(x: center.x - r, y: center.y - r, width: r * 2, height: r * 2))
-        var c = ctx; c.opacity = alpha
-        if let stroke { c.stroke(path, with: .color(color), lineWidth: stroke) } else { c.fill(path, with: .color(color)) }
-    }
-    func pill(_ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat, _ color: Color, alpha: Double = 1) {
-        var c = ctx; c.opacity = alpha
-        c.fill(Path(roundedRect: CGRect(origin: p(x, y), size: CGSize(width: u(w), height: u(h))), cornerRadius: u(h / 2)), with: .color(color))
-    }
-    /// 圆弧：从 12 点方向顺时针扫过 [fraction]。
-    func arc(_ center: CGPoint, _ r: CGFloat, _ fraction: Double, _ color: Color, _ width: CGFloat) {
-        guard fraction > 0 else { return }
-        var path = Path()
-        path.addArc(center: center, radius: r, startAngle: .degrees(-90), endAngle: .degrees(-90 + 360 * fraction), clockwise: false)
-        ctx.stroke(path, with: .color(color), style: StrokeStyle(lineWidth: width, lineCap: .round))
-    }
-    /// 头部固定的四角取景框：表达「头保持不动」。
-    func headLock(_ cx: CGFloat, _ cy: CGFloat, _ half: CGFloat) {
-        for sx: CGFloat in [-1, 1] { for sy: CGFloat in [-1, 1] {
-            let corner = p(cx + sx * half, cy + sy * half)
-            line(corner, CGPoint(x: corner.x - sx * u(14), y: corner.y), EyeStyle.primary, u(3))
-            line(corner, CGPoint(x: corner.x, y: corner.y - sy * u(14)), EyeStyle.primary, u(3))
-        }}
-    }
-    func ruler(_ fromX: CGFloat, _ toX: CGFloat, _ y: CGFloat) {
-        line(p(fromX, y), p(toX, y), EyeStyle.primary.opacity(0.5), u(2.5), dash: [u(6), u(6)])
-    }
-    func distanceBadge(_ x: CGFloat, _ cm: CGFloat) {
-        pill(x - 30, 12, 60, 24, EyeStyle.panel)
-        label("\(Int(cm)) cm", x, 24, EyeStyle.text)
-    }
-    func verdict(_ x: CGFloat, _ y: CGFloat, clear: Bool, alpha: Double) {
-        guard alpha > 0 else { return }
-        let tint = clear ? EyeStyle.success : EyeStyle.warning
-        pill(x - 26, y - 12, 52, 24, tint.opacity(0.18), alpha: alpha)
-        label(clear ? "清晰" : "模糊", x, y, tint, alpha: alpha)
-    }
-    /// 视标四周的箭头按键；[highlight] 为被点选的方向（−1 无），[tap] 0…1 为点按涟漪进度。
-    func arrowPad(_ tl: CGPoint, _ screen: CGSize, highlight: Int, tap: Double) {
-        let c = CGPoint(x: tl.x + screen.width / 2, y: tl.y + screen.height * 0.3)
-        let d = screen.width * 0.35
-        let dirs = [CGPoint(x: 1, y: 0), CGPoint(x: 0, y: 1), CGPoint(x: -1, y: 0), CGPoint(x: 0, y: -1)]
-        for (i, v) in dirs.enumerated() {
-            let at = CGPoint(x: c.x + v.x * d, y: c.y + v.y * d)
-            let on = i == highlight
-            circle(at, screen.width * 0.11, on ? EyeStyle.primary : EyeStyle.borderSubtle)
-            if on && tap > 0 { circle(at, screen.width * (0.11 + 0.12 * tap), EyeStyle.primary, alpha: (1 - tap) * 0.4) }
-            let ink = on ? Color.white : EyeStyle.ink
-            let length = screen.width * 0.055
-            let tip = CGPoint(x: at.x + v.x * length, y: at.y + v.y * length)
-            let normal = CGPoint(x: -v.y * length, y: v.x * length)
-            line(CGPoint(x: at.x - v.x * length, y: at.y - v.y * length), tip, ink, u(1.5))
-            line(tip, CGPoint(x: at.x + normal.x, y: at.y + normal.y), ink, u(1.5))
-            line(tip, CGPoint(x: at.x - normal.x, y: at.y - normal.y), ink, u(1.5))
-        }
-        ctx.fill(Path(roundedRect: CGRect(x: tl.x + screen.width * 0.12, y: tl.y + screen.height * 0.67,
-            width: screen.width * 0.76, height: screen.height * 0.13), cornerRadius: screen.width * 0.06), with: .color(EyeStyle.borderSubtle))
-    }
-    /// 演示人物（短发男孩）：上身一直画到舞台底边。[arms] 为 true 时两臂垂在身侧；
-    /// 要抬手的场景传 false，自己用 restArm / raisedArm 画手臂。
-    func figure(_ x: CGFloat, _ y: CGFloat, _ size: CGFloat, gaze: CGPoint = .zero, lid: CGFloat = 0, wide: CGFloat = 1,
-                arms: Bool = true) {
-        Cartoon.figure(ctx, center: p(x, y), size: u(size), gaze: gaze, lid: lid, wide: wide, bottom: p(0, 200).y)
-        if arms { for side: CGFloat in [-1, 1] { restArm(x, y, size, side: side) } }
-    }
-    /// 垂在身侧的手臂（side = −1 人物右臂，在画面左侧）。
-    func restArm(_ x: CGFloat, _ y: CGFloat, _ size: CGFloat, side: CGFloat) {
-        Cartoon.arm(ctx, center: p(x, y), size: u(size), side: side, wrist: Cartoon.armRest(side), depth: armDepthRest)
-    }
-    /// 人物自己的手臂从身侧抬到手腕位置 [to]（[raise] 0 垂下…1 到位）：中途略向外、向前，肘先出后收。
-    func raisedArm(_ x: CGFloat, _ y: CGFloat, _ size: CGFloat, side: CGFloat, to: CGPoint, raise: CGFloat) {
-        let rest = Cartoon.armRest(side)
-        let arc = CGFloat(sin(Double.pi * Double(raise)))
-        Cartoon.arm(ctx, center: p(x, y), size: u(size), side: side,
-                    wrist: CGPoint(x: rest.x + (to.x - rest.x) * raise + side * 0.08 * arc, y: rest.y + (to.y - rest.y) * raise),
-                    depth: armDepthRest + (armDepthFace - armDepthRest) * raise + 0.15 * arc)
-    }
-    func target(_ x: CGFloat, _ y: CGFloat, _ size: CGFloat) {
-        Cartoon.fixationTarget(ctx, center: p(x, y), size: u(size))
-    }
-    func phone(_ x: CGFloat, _ y: CGFloat, _ height: CGFloat) -> (CGPoint, CGSize) { Cartoon.phone(ctx, center: p(x, y), height: u(height)) }
-    func optotype(_ center: CGPoint, _ edge: CGFloat, _ direction: Int, alpha: Double = 1) {
-        Cartoon.tumblingE(ctx, color: EyeStyle.ink, center: center, edge: edge, direction: direction, alpha: alpha)
-    }
-}
-
-/// 手腕离身体平面的前伸量（头宽的倍数）：垂在身侧 / 抬到脸前。
-private let armDepthRest: CGFloat = 0.05
-private let armDepthFace: CGFloat = 0.45
-
-// MARK: 时间工具（与安卓相同的曲线）
-
-/// 平时偶尔眨一下眼，人物不呆板：在循环进度 [at] 各处眨一次，半宽固定约 130 毫秒（[cycle] 为一遍的秒数）。
-private func idleBlink(_ phase: Double, _ cycle: Double, _ at: [Double]) -> CGFloat {
-    CGFloat(at.map { tri(phase, $0, 0.13 / cycle) }.max() ?? 0)
-}
-
-private func clamp01(_ t: Double) -> Double { min(1, max(0, t)) }
-/// EyeMotion.Gentle：三次贝塞尔 (0.45, 0, 0.55, 1)。
-private func ease(_ t: Double) -> Double {
-    let x = clamp01(t)
-    func bez(_ a: Double, _ b: Double, _ s: Double) -> Double { 3 * a * s * (1 - s) * (1 - s) + 3 * b * s * s * (1 - s) + s * s * s }
-    var lo = 0.0, hi = 1.0
-    for _ in 0..<24 { let mid = (lo + hi) / 2; if bez(0.45, 0.55, mid) < x { lo = mid } else { hi = mid } }
-    return bez(0, 1, (lo + hi) / 2)
-}
-private func seg(_ p: Double, _ a: Double, _ b: Double) -> Double { ease((p - a) / (b - a)) }
-private func lerp(_ a: Double, _ b: Double, _ t: Double) -> Double { a + (b - a) * t }
-/// 三角脉冲：在 [at] 处达到 1，前后 [half] 内线性回落到 0。
-private func tri(_ p: Double, _ at: Double, _ half: Double) -> Double { clamp01(1 - abs(p - at) / half) }
-/// 关键帧插值：相邻关键帧之间柔和过渡，相同取值即为停留。
-private func keyframes(_ p: Double, _ frames: [(Double, Double)]) -> Double {
-    if p <= frames[0].0 { return frames[0].1 }
-    for i in 1..<frames.count where p <= frames[i].0 {
-        return lerp(frames[i - 1].1, frames[i].1, seg(p, frames[i - 1].0, frames[i].0))
-    }
-    return frames[frames.count - 1].1
-}
-/// 手机水平位置（舞台 x）换算为示意距离：280 → 40 cm，140 → 15 cm。
-private func cmAt(_ x: CGFloat) -> CGFloat { 15 + (x - 140) / 140 * 25 }
-
-// MARK: 场景
-
+/// 爱科图片分镜；只用于方法教学，不参与正式刺激与计时。
 struct GuideScene {
     struct Beat { let start: Double; let label: String }
+    let motion: GuideMotion
     let cycle: Double
     let beats: [Beat]
     let keyframe: Double
-    let draw: (GuidePainter, Double) -> Void
-
     static func scene(_ motion: GuideMotion) -> GuideScene {
         switch motion {
-        case .posture: posture
-        case .acuity: acuity
-        case .fva: fva
-        case .blink: blink
-        case .open: open
-        case .near: near
-        case .move: move
-        case .curve: curve
-        case .flip: flip
-        case .fixate: fixate
-        case .far: far
-        case .cover: cover
-        case .coverSelf: coverSelf
-        case .follow: follow
+        case .posture: GuideScene(motion: motion, cycle: 5.2, beats: [.init(start: 0.0, label: "① 正对屏幕，露出双眼"), .init(start: 0.25, label: "② 前后微调到提示的距离"), .init(start: 0.6, label: "③ 光线均匀，避免逆光")], keyframe: 0.7)
+        case .blink: GuideScene(motion: motion, cycle: 4.2, beats: [.init(start: 0.0, label: "① 正对屏幕，保持放松"), .init(start: 0.15, label: "② 像平时一样自然眨眼"), .init(start: 0.55, label: "③ 应用自动记录眨眼")], keyframe: 0.6)
+        case .open: GuideScene(motion: motion, cycle: 4.8, beats: [.init(start: 0.0, label: "① 轻松睁开双眼"), .init(start: 0.15, label: "② 尽量保持睁眼，看着屏幕"), .init(start: 0.86, label: "③ 不舒服就眨眼，随时可停止")], keyframe: 0.5)
+        case .near: GuideScene(motion: motion, cycle: 5.6, beats: [.init(start: 0.0, label: "① 用手掌遮住左眼（不压眼球）"), .init(start: 0.2, label: "② 用右眼看 E 的开口方向"), .init(start: 0.28, label: "③ 点选对应方向；之后换眼再做")], keyframe: 0.35)
+        case .move: GuideScene(motion: motion, cycle: 7.6, beats: [.init(start: 0.0, label: "① 从 45 cm 外开始，看着 E"), .init(start: 0.15, label: "② 慢慢移近（每秒不超过 5 cm）"), .init(start: 0.6, label: "③ E 一开始持续模糊就点按，记录近点")], keyframe: 0.66)
+        case .flip: GuideScene(motion: motion, cycle: 6.4, beats: [.init(start: 0.0, label: "① 远处停稳，点选 E 的开口"), .init(start: 0.15, label: "② 移近停稳，再点选一次"), .init(start: 0.55, label: "③ 移远，远近交替进行")], keyframe: 0.45)
+        case .fixate: GuideScene(motion: motion, cycle: 4.0, beats: [.init(start: 0.0, label: "① 看着屏幕上方闪烁的圆点"), .init(start: 0.45, label: "② 头和手机都保持不动")], keyframe: 0.5)
+        case .far: GuideScene(motion: motion, cycle: 5.2, beats: [.init(start: 0.0, label: "① 手机留在眼前约 33 cm，略低于视线"), .init(start: 0.3, label: "② 眼睛越过手机，看 6 米外的目标"), .init(start: 0.65, label: "③ 看约 10 秒，头和手机都不动")], keyframe: 0.5)
+        case .coverSelf: GuideScene(motion: motion, cycle: 12.0, beats: [.init(start: 0.0, label: "① 遮右眼 2 秒 → 移开，双眼注视 2 秒"), .init(start: 0.3333333333333333, label: "② 遮左眼 2 秒 → 移开，双眼注视 2 秒"), .init(start: 0.6666666666666666, label: "③ 右眼、左眼各遮 1 秒，快速交替两轮")], keyframe: 0.12)
+        case .cover: GuideScene(motion: motion, cycle: 12.0, beats: [.init(start: 0.0, label: "① 遮右眼 2 秒 → 移开，双眼注视 2 秒"), .init(start: 0.3333333333333333, label: "② 遮左眼 2 秒 → 移开，双眼注视 2 秒"), .init(start: 0.6666666666666666, label: "③ 右眼、左眼各遮 1 秒，快速交替两轮")], keyframe: 0.12)
+        case .follow: GuideScene(motion: motion, cycle: 7.2, beats: [.init(start: 0.0, label: "① 水平：只用眼睛跟随圆点"), .init(start: 0.36, label: "② 垂直：头保持不动"), .init(start: 0.72, label: "③ 斜向：继续跟随")], keyframe: 0.2)
+        case .acuity: GuideScene(motion: motion, cycle: 6.0, beats: [.init(start: 0.0, label: "① 看 E 的开口方向"), .init(start: 0.1, label: "② 2 秒内点选对应方向"), .init(start: 0.4, label: "③ 连对两次变小，答错或超时变大")], keyframe: 0.12)
+        case .fva: GuideScene(motion: motion, cycle: 7.0, beats: [.init(start: 0.0, label: "① 全程看 E，点选开口方向"), .init(start: 0.12, label: "② 前一段像平时一样自然眨眼"), .init(start: 0.68, label: "③ 不停顿，转入尽量保持睁眼")], keyframe: 0.3)
+        case .curve: GuideScene(motion: motion, cycle: 6.6, beats: [.init(start: 0.0, label: "① 移到提示的距离并停稳"), .init(start: 0.12, label: "② 点选 E 的开口方向"), .init(start: 0.36, label: "③ 依次换到下一个距离")], keyframe: 0.2)
         }
     }
+}
 
-    /// 准备姿势：手机在人物面前前后微调到合适距离后出现对勾；左上角灯光示意光线均匀。
-    static let posture = GuideScene(cycle: 5.2, beats: [.init(start: 0, label: "① 正对屏幕，露出双眼"),
-        .init(start: 0.25, label: "② 前后微调到提示的距离"), .init(start: 0.6, label: "③ 光线均匀，避免逆光")], keyframe: 0.7) { g, phase in
-        g.figure(82, 112, 100, gaze: CGPoint(x: 0.9, y: 0), lid: idleBlink(phase, 5.2, [0.45, 0.88]))
-        let x = CGFloat(keyframes(phase, [(0, 290), (0.15, 290), (0.3, 215), (0.4, 250), (0.5, 238), (1, 238)]))
-        let (tl, screen) = g.phone(x, 104, 128)
-        let ok = seg(phase, 0.5, 0.56)
-        let c = CGPoint(x: tl.x + screen.width / 2, y: tl.y + screen.height / 2)
-        let r = screen.width * 0.32
-        g.circle(c, r, EyeStyle.borderSubtle, alpha: 1 - ok, stroke: g.u(3))
-        g.circle(c, r, EyeStyle.success, alpha: ok, stroke: g.u(3))
-        if ok > 0 {
-            g.line(CGPoint(x: c.x - r * 0.45, y: c.y), CGPoint(x: c.x - r * 0.1, y: c.y + r * 0.35), EyeStyle.success, g.u(3.5), alpha: ok)
-            g.line(CGPoint(x: c.x - r * 0.1, y: c.y + r * 0.35), CGPoint(x: c.x + r * 0.5, y: c.y - r * 0.35), EyeStyle.success, g.u(3.5), alpha: ok)
+private enum GuidePose: String {
+    case open, blink, left, right
+    case helperOpen = "helper_open", helperLeft = "helper_left", helperRight = "helper_right"
+    var image: String { "eyecho_guide_" + rawValue }
+    var label: String {
+        switch self {
+        case .open: "双眼注视"
+        case .blink: "自然眨眼"
+        case .left: "遮左眼"
+        case .right: "遮右眼"
+        case .helperOpen: "移开遮挡 · 双眼注视"
+        case .helperLeft: "协助者遮左眼"
+        case .helperRight: "协助者遮右眼"
         }
-        g.ruler(140, x - 24, 186)
-        let sun = g.p(160, 34)
-        let bright = 0.6 + 0.4 * seg(phase, 0.6, 0.7)
-        for i in 0..<8 {
-            let a = (Double(i) / 8 + phase * 0.25) * 2 * .pi
-            g.line(CGPoint(x: sun.x + cos(a) * g.u(14), y: sun.y + sin(a) * g.u(14)),
-                   CGPoint(x: sun.x + cos(a) * g.u(20), y: sun.y + sin(a) * g.u(20)), EyeStyle.accent, g.u(3), alpha: bright)
-        }
-        g.circle(sun, g.u(9), EyeStyle.accent, alpha: bright)
     }
-
-    static let blinkTimes = [0.2, 0.5, 0.8]
-
-    static let blink = GuideScene(cycle: 4.2, beats: [.init(start: 0, label: "① 正对屏幕，保持放松"),
-        .init(start: 0.15, label: "② 像平时一样自然眨眼"), .init(start: 0.55, label: "③ 应用自动记录眨眼")], keyframe: 0.6) { g, phase in
-        let lid = GuideScene.blinkTimes.map { tri(phase, $0, 0.035) }.max() ?? 0
-        g.figure(160, 108, 118, lid: CGFloat(lid))
-        for t in GuideScene.blinkTimes {
-            let k = (phase - t) / 0.22
-            if (0...1).contains(k) { g.label("+1", 232, 72 - 30 * CGFloat(k), EyeStyle.primary, alpha: 1 - k) }
-        }
-        let count = GuideScene.blinkTimes.filter { phase > $0 }.count
-        g.pill(222, 150, 80, 30, EyeStyle.panel)
-        g.label("眨眼 ×\(count)", 262, 165, EyeStyle.text)
-    }
-
-    static let open = GuideScene(cycle: 4.8, beats: [.init(start: 0, label: "① 轻松睁开双眼"),
-        .init(start: 0.15, label: "② 尽量保持睁眼，看着屏幕"), .init(start: 0.86, label: "③ 不舒服就眨眼，随时可停止")], keyframe: 0.5) { g, phase in
-        let rest = tri(phase, 0.92, 0.04)
-        let wide = 1 + 0.22 * seg(phase, 0.02, 0.15) * (1 - seg(phase, 0.86, 0.9))
-        g.figure(130, 108, 118, lid: CGFloat(rest), wide: CGFloat(wide))
-        if (0.15...0.86).contains(phase) {
-            let twinkle = (sin(phase * 40) + 1) / 2
-            for side: CGFloat in [-1, 1] {
-                let eye = Cartoon.figureEyeCenter(g.p(130, 108), g.u(118), side)
-                let c = CGPoint(x: eye.x + side * g.u(26), y: eye.y - g.u(22))
-                let r = g.u(3 + 3 * CGFloat(twinkle))
-                g.line(CGPoint(x: c.x - r, y: c.y), CGPoint(x: c.x + r, y: c.y), EyeStyle.accent, g.u(2.5))
-                g.line(CGPoint(x: c.x, y: c.y - r), CGPoint(x: c.x, y: c.y + r), EyeStyle.accent, g.u(2.5))
+    /// 与安卓相同的十二秒教学循环；左右以被测者自身为准，图片不做镜像。
+    static func at(_ motion: GuideMotion, _ phase: Double) -> GuidePose {
+        let p = min(0.999999, max(0, phase))
+        if motion == .cover || motion == .coverSelf {
+            let pose: GuidePose
+            switch Int(p * 12) {
+            case 0, 1, 8, 10: pose = .right
+            case 4, 5, 9, 11: pose = .left
+            default: pose = .open
             }
+            if motion == .cover {
+                switch pose {
+                case .right: return .helperRight
+                case .left: return .helperLeft
+                default: return .helperOpen
+                }
+            }
+            return pose
         }
-        let center = g.p(255, 92), r = g.u(34)
-        let progress = seg(phase, 0.1, 0.86)
-        g.circle(center, r + g.u(6), EyeStyle.panel)
-        g.circle(center, r, EyeStyle.borderSubtle, stroke: g.u(6))
-        g.arc(center, r, progress, EyeStyle.primary, g.u(6))
-        g.label("\(max(0, 20 - Int(progress * 20)))s", 255, 92, EyeStyle.text)
-    }
-
-    static let nearDirections = [0, 3, 2, 1]
-
-    static let near = GuideScene(cycle: 5.6, beats: [.init(start: 0, label: "① 用手掌遮住左眼（不压眼球）"),
-        .init(start: 0.2, label: "② 用右眼看 E 的开口方向"), .init(start: 0.28, label: "③ 点选对应方向；之后换眼再做")], keyframe: 0.35) { g, phase in
-        g.figure(95, 98, 100, gaze: CGPoint(x: 0.8, y: 0), lid: idleBlink(phase, 5.6, [0.62]), arms: false)
-        // 人物抬起自己的左手（画面右侧），手掌盖住左眼；一遍演示结束前放下，循环首尾相接
-        g.restArm(95, 98, 100, side: -1)
-        g.raisedArm(95, 98, 100, side: 1, to: Cartoon.armCover(1, eye: 1),
-                    raise: CGFloat(keyframes(phase, [(0, 0), (0.02, 0), (0.16, 1), (0.94, 1), (1, 0)])))
-        let (tl, screen) = g.phone(242, 100, 160)
-        let segment = min(3, max(0, Int((phase - 0.2) / 0.2)))
-        let dir = GuideScene.nearDirections[segment]
-        g.optotype(CGPoint(x: tl.x + screen.width / 2, y: tl.y + screen.height * 0.3), screen.width * 0.36, dir)
-        let tap = phase >= 0.2 ? clamp01((phase - 0.2 - Double(segment) * 0.2 - 0.08) / 0.1) : 0
-        g.arrowPad(tl, screen, highlight: phase >= 0.28 ? dir : -1, tap: tap)
-    }
-
-    static let move = GuideScene(cycle: 7.6, beats: [.init(start: 0, label: "① 从 45 cm 外开始，看着 E"),
-        .init(start: 0.15, label: "② 慢慢移近（每秒不超过 5 cm）"), .init(start: 0.6, label: "③ E 一开始持续模糊就点按，记录近点")], keyframe: 0.66) { g, phase in
-        g.figure(62, 112, 96, gaze: CGPoint(x: 1, y: 0), lid: idleBlink(phase, 7.6, [0.3, 0.88]))
-        g.ruler(120, 300, 188)
-        let x = CGFloat(keyframes(phase, [(0, 290), (0.15, 290), (0.68, 150), (0.76, 150), (0.9, 290), (1, 290)]))
-        let (tl, screen) = g.phone(x, 104, 118)
-        let e = CGPoint(x: tl.x + screen.width / 2, y: tl.y + screen.height / 2)
-        let blur = seg(phase, 0.58, 0.68) * (1 - seg(phase, 0.78, 0.84))
-        if blur > 0.05 {
-            for dx: CGFloat in [-2.5, 0, 2.5] { g.optotype(CGPoint(x: e.x + g.u(dx * CGFloat(blur)), y: e.y), screen.width * 0.42, 0, alpha: 1 - 0.65 * blur) }
-        } else { g.optotype(e, screen.width * 0.42, 0) }
-        g.distanceBadge(x, cmAt(x))
-        if (0.15...0.68).contains(phase) { g.label("约 3 cm/秒", 215, 172, EyeStyle.primary) }
-        let tap = tri(phase, 0.69, 0.04)
-        if tap > 0 { g.circle(CGPoint(x: e.x, y: tl.y + screen.height + g.u(14)), g.u(10 + 16 * CGFloat(1 - tap)), EyeStyle.primary, alpha: tap * 0.5) }
-        g.verdict(x, 176, clear: false, alpha: tri(phase, 0.72, 0.05))
-    }
-
-    static let flip = GuideScene(cycle: 6.4, beats: [.init(start: 0, label: "① 远处停稳，点选 E 的开口"),
-        .init(start: 0.15, label: "② 移近停稳，再点选一次"), .init(start: 0.55, label: "③ 移远，远近交替进行")], keyframe: 0.45) { g, phase in
-        g.figure(62, 112, 96, gaze: CGPoint(x: 1, y: 0), lid: idleBlink(phase, 6.4, [0.36, 0.78]))
-        g.ruler(120, 300, 188)
-        let x = CGFloat(keyframes(phase, [(0, 268), (0.15, 268), (0.3, 170), (0.55, 170), (0.7, 268), (1, 268)]))
-        let (tl, screen) = g.phone(x, 102, 150)
-        let dir = phase < 0.3 ? 0 : phase < 0.7 ? 3 : 2
-        g.optotype(CGPoint(x: tl.x + screen.width / 2, y: tl.y + screen.height * 0.3), screen.width * 0.34, dir)
-        let tap = max(tri(phase, 0.1, 0.05), tri(phase, 0.45, 0.05), tri(phase, 0.85, 0.05))
-        g.arrowPad(tl, screen, highlight: tap > 0 ? dir : -1, tap: 1 - tap)
-        g.distanceBadge(x, cmAt(x))
-        if (0.15...0.3).contains(phase) { g.label("← 移近", 220, 172, EyeStyle.primary) }
-        else if (0.55...0.7).contains(phase) { g.label("移远 →", 220, 172, EyeStyle.primary) }
-    }
-
-    static let fixate = GuideScene(cycle: 4.0, beats: [.init(start: 0, label: "① 看着屏幕上方闪烁的圆点"),
-        .init(start: 0.45, label: "② 头和手机都保持不动")], keyframe: 0.5) { g, phase in
-        let head = g.p(95, 110)
-        g.figure(95, 110, 108, gaze: CGPoint(x: 0.9, y: -0.1), lid: idleBlink(phase, 4.0, [0.3]))
-        if phase >= 0.45 { g.headLock(95, 106, 66) }
-        let (tl, screen) = g.phone(242, 100, 160)
-        let dot = CGPoint(x: tl.x + screen.width / 2, y: tl.y + screen.height * 0.2)
-        let pulse = (sin(phase * 2 * .pi * 2) + 1) / 2
-        var flash = g.ctx; flash.opacity = pulse > 0.5 ? 1 : 0.3
-        flash.drawLayer { layer in Cartoon.fixationTarget(layer, center: dot, size: g.u(26)) }
-        let eye = Cartoon.figureEyeCenter(head, g.u(108), 1)
-        g.line(CGPoint(x: eye.x + g.u(16), y: eye.y), CGPoint(x: dot.x - g.u(14), y: dot.y), EyeStyle.primary.opacity(0.45), g.u(2),
-               dash: [g.u(5), g.u(6)], dashPhase: -CGFloat(phase) * g.u(110))
-    }
-
-    /// 看远：手机在人物面前、略低于视线；视线越过手机，落到远处的目标上，保持约 10 秒。
-    static let far = GuideScene(cycle: 5.2, beats: [.init(start: 0, label: "① 手机留在眼前约 33 cm，略低于视线"),
-        .init(start: 0.3, label: "② 眼睛越过手机，看 6 米外的目标"), .init(start: 0.65, label: "③ 看约 10 秒，头和手机都不动")], keyframe: 0.5) { g, phase in
-        let head = g.p(62, 104)
-        let look = seg(phase, 0.3, 0.4)
-        g.figure(62, 104, 92, gaze: CGPoint(x: 0.9, y: -0.15 * look), lid: idleBlink(phase, 5.2, [0.2]))
-        if phase >= 0.65 { g.headLock(62, 100, 56) }
-        _ = g.phone(142, 128, 78)
-        // 远处的目标：一扇门，旁边标注距离
-        let door = CGRect(origin: g.p(255, 40), size: CGSize(width: g.u(34), height: g.u(60)))
-        g.ctx.fill(Path(roundedRect: door, cornerRadius: g.u(4)), with: .color(EyeStyle.panel))
-        g.ctx.stroke(Path(roundedRect: door, cornerRadius: g.u(4)), with: .color(EyeStyle.primary), lineWidth: g.u(2.5))
-        g.circle(g.p(281, 74), g.u(3), EyeStyle.accent)
-        g.label("6 米外", 272, 120, EyeStyle.secondary)
-        // 视线：从双眼越过手机顶部流向远处
-        if look > 0 {
-            let eye = Cartoon.figureEyeCenter(head, g.u(92), 1)
-            g.line(CGPoint(x: eye.x + g.u(14), y: eye.y), g.p(252, 70), EyeStyle.primary.opacity(0.45), g.u(2), alpha: look,
-                   dash: [g.u(5), g.u(6)], dashPhase: -CGFloat(phase) * g.u(160))
+        if motion == .near {
+            if p < 0.06 || (p >= 0.62 && p <= 0.68) || p >= 0.94 { return .open }
+            return p < 0.62 ? .left : .right
         }
-    }
-
-    /// 交替遮盖：人物用自己的右手（画面左侧）。同侧的右眼直接抬手遮住；遮左眼时手越过鼻梁伸过去；
-    /// 快速交替时手不放下，贴着脸在两眼之间平移——和真实的交替遮盖手法一致，手始终连着身体。
-    static let cover = GuideScene(cycle: 11.0, beats: [.init(start: 0, label: "① 遮右眼 2 秒 → 移开，双眼注视 2 秒"),
-        .init(start: 0.33, label: "② 遮左眼 2 秒 → 移开，双眼注视 2 秒"), .init(start: 0.66, label: "③ 右眼、左眼各遮 1 秒，快速交替两轮")], keyframe: 0.12) { g, phase in
-        let arm: CGFloat = -1
-        // 抬手程度：① 抬起 → 停 → 放下；② 同；③ 抬起后一直停在脸前，结束时放下
-        let raise = CGFloat(keyframes(phase, [(0, 0), (0.015, 0), (0.065, 1), (0.205, 1), (0.255, 0),
-            (0.345, 0), (0.395, 1), (0.535, 1), (0.585, 0),
-            (0.675, 0), (0.72, 1), (0.962, 1), (1, 0)]))
-        // 遮哪只眼：0 右眼（人物面向我们，在画面左侧）…1 左眼。手放下时换目标，画面上看不出跳变
-        let toLeft = CGFloat(keyframes(phase, [(0, 0), (0.27, 0), (0.32, 1), (0.6, 1), (0.65, 0),
-            (0.765, 0), (0.79, 1), (0.84, 1), (0.865, 0), (0.915, 0), (0.94, 1), (1, 1)]))
-        g.figure(110, 88, 94, lid: idleBlink(phase, 11.0, [0.3, 0.63]))
-        g.figure(252, 98, 104, arms: false)
-        g.restArm(252, 98, 104, side: 1)
-        let targetX: CGFloat = 110 - 94 * 0.19 + 94 * 0.38 * toLeft
-        let wrist = CGPoint(x: (targetX + 94 * 0.18 - 252) / 104, y: (88 + 94 * 0.18 - 98) / 104)
-        g.raisedArm(252, 98, 104, side: -1, to: wrist, raise: raise)
-        let text = raise < 0.8 ? "移开 · 双眼注视" : toLeft < 0.5 ? "遮右眼" : "遮左眼"
-        g.pill(12, 12, 112, 28, EyeStyle.panel)
-        g.label(text, 68, 26, text.hasPrefix("遮") ? EyeStyle.primary : EyeStyle.secondary)
-    }
-
-
-    static let coverSelf = GuideScene(cycle: 11.0, beats: [.init(start: 0, label: "① 遮右眼 2 秒 → 移开，双眼注视 2 秒"),
-        .init(start: 0.33, label: "② 遮左眼 2 秒 → 移开，双眼注视 2 秒"), .init(start: 0.66, label: "③ 右眼、左眼各遮 1 秒，快速交替两轮")], keyframe: 0.12) { g, phase in
-        let arm: CGFloat = -1
-        // 抬手程度：① 抬起 → 停 → 放下；② 同；③ 抬起后一直停在脸前，结束时放下
-        let raise = CGFloat(keyframes(phase, [(0, 0), (0.015, 0), (0.065, 1), (0.205, 1), (0.255, 0),
-            (0.345, 0), (0.395, 1), (0.535, 1), (0.585, 0),
-            (0.675, 0), (0.72, 1), (0.962, 1), (1, 0)]))
-        // 遮哪只眼：0 右眼（人物面向我们，在画面左侧）…1 左眼。手放下时换目标，画面上看不出跳变
-        let toLeft = CGFloat(keyframes(phase, [(0, 0), (0.27, 0), (0.32, 1), (0.6, 1), (0.65, 0),
-            (0.765, 0), (0.79, 1), (0.84, 1), (0.865, 0), (0.915, 0), (0.94, 1), (1, 1)]))
-        g.figure(160, 88, 100, lid: idleBlink(phase, 11.0, [0.3, 0.63]), arms: false)
-        g.restArm(160, 88, 100, side: -arm)
-        let right = Cartoon.armCover(arm, eye: -1), left = Cartoon.armCover(arm, eye: 1)
-        // 换眼时手略抬离鼻梁
-        let spot = CGPoint(x: right.x + (left.x - right.x) * toLeft,
-                            y: right.y + (left.y - right.y) * toLeft - 0.03 * CGFloat(sin(Double.pi * Double(toLeft))))
-        g.raisedArm(160, 88, 100, side: arm, to: spot, raise: raise)
-        let text = raise < 0.8 ? "移开 · 双眼注视" : toLeft < 0.5 ? "遮右眼" : "遮左眼"
-        g.pill(12, 12, 112, 28, EyeStyle.panel)
-        g.label(text, 68, 26, text.hasPrefix("遮") ? EyeStyle.primary : EyeStyle.secondary)
-    }
-
-    /// 水平正弦 → 垂直正弦 → 45° 斜向直线往复，与正式追踪任务的顺序一致。
-    static let follow = GuideScene(cycle: 7.2, beats: [.init(start: 0, label: "① 水平：只用眼睛跟随圆点"),
-        .init(start: 0.36, label: "② 垂直：头保持不动"), .init(start: 0.72, label: "③ 斜向：继续跟随")], keyframe: 0.2) { g, phase in
-        let cx: CGFloat = 214, cy: CGFloat = 92
-        let dot: CGPoint
-        if phase < 0.36 { dot = CGPoint(x: cx + 72 * CGFloat(sin(phase / 0.36 * 2 * .pi)), y: cy) }
-        else if phase < 0.72 { dot = CGPoint(x: cx, y: cy + 62 * CGFloat(sin((phase - 0.36) / 0.36 * 2 * .pi))) }
-        else {
-            let t = (phase - 0.72) / 0.28
-            let wave = CGFloat(t < 0.5 ? t * 4 - 1 : 3 - t * 4)
-            dot = CGPoint(x: cx + 52 * wave, y: cy - 52 * wave)
+        if motion == .move { return .left }
+        let times: [Double]
+        switch motion {
+        case .blink: times = [0.2, 0.5, 0.8]
+        case .fva: times = p < 0.68 ? [0.2, 0.45] : []
+        case .open: times = [0.92]
+        default: times = []
         }
-        let text = phase < 0.36 ? "水平" : phase < 0.72 ? "垂直" : "斜向"
-        g.pill(150, 18, 128, 150, EyeStyle.panel, alpha: 0.7)
-        g.figure(72, 130, 86, gaze: CGPoint(x: min(1, max(-1, (dot.x - 72) / 140)), y: min(1, max(-1, (dot.y - 130) / 90))))
-        g.headLock(72, 126, 54)
-        g.target(dot.x, dot.y, 18)
-        g.pill(12, 12, 64, 28, EyeStyle.panel)
-        g.label(text, 44, 26, EyeStyle.primary)
+        return times.contains(where: { abs(p - $0) < 0.025 }) ? .blink : .open
     }
+}
 
-    /// 视标练习：每题 2 秒限时，连对两次变小、超时或答错变大。
-    static let acuity = GuideScene(cycle: 6.0, beats: [.init(start: 0, label: "① 看 E 的开口方向"),
-        .init(start: 0.1, label: "② 2 秒内点选对应方向"), .init(start: 0.4, label: "③ 连对两次变小，答错或超时变大")], keyframe: 0.12) { g, phase in
-        g.figure(66, 118, 84, gaze: CGPoint(x: 1, y: -0.2), lid: idleBlink(phase, 6.0, [0.5]))
-        let segment = min(4, max(0, Int(phase / 0.2)))
-        let t = (phase - Double(segment) * 0.2) / 0.2
-        let sizes: [CGFloat] = [1, 1, 0.78, 1, 1]
-        let dirs = [0, 3, 2, 1, 0]
-        let timeout = segment == 2
-        let answerAt = timeout ? 1.0 : 0.5
-        let (tl, screen) = g.phone(200, 100, 170)
-        let e = CGPoint(x: tl.x + screen.width / 2, y: tl.y + screen.height * 0.3)
-        if t < answerAt { g.optotype(e, screen.width * 0.34 * sizes[segment], dirs[segment]) }
-        g.arrowPad(tl, screen, highlight: !timeout && t >= 0.45 ? dirs[segment] : -1, tap: !timeout ? clamp01((t - 0.45) / 0.2) : 0)
-        let ring = g.p(272, 40), r = g.u(16)
-        g.circle(ring, r + g.u(5), EyeStyle.panel)
-        g.arc(ring, r, 1 - min(1, t / answerAt), EyeStyle.accent, g.u(4))
-        g.label("2s", 272, 40, EyeStyle.text)
-        if t >= answerAt {
-            if timeout { g.label("超时 → 变大", 272, 170, EyeStyle.warning) } else { g.label("正确", 272, 170, EyeStyle.success) }
-        }
+/// 完整展示头顶、手势与胸前标识；图像等比适配，不使用圆形裁切。
+private struct GuideStage: View {
+    let scene: GuideScene
+    let phase: Double
+    var height: CGFloat = EyeStyle.guideStageHeight
+    private var portraitOnly: Bool { [.cover, .coverSelf, .blink, .open].contains(scene.motion) }
+    var body: some View {
+        let pose = GuidePose.at(scene.motion, phase)
+        VStack(spacing: 8) {
+            GeometryReader { proxy in
+                HStack(spacing: 8) {
+                    Image(pose.image).resizable().scaledToFit()
+                        .frame(width: portraitOnly ? proxy.size.width : (proxy.size.width - 8) * 2 / 3, height: proxy.size.height)
+                        .clipShape(RoundedRectangle(cornerRadius: EyeStyle.radiusLarge))
+                        .accessibilityLabel("爱科示范：" + pose.label)
+                    if !portraitOnly {
+                        VStack(spacing: 0) {
+                            GuideDiagram(motion: scene.motion, phase: phase)
+                            Text(guideDiagramLabel(scene.motion, phase)).font(EyeStyle.chip)
+                                .foregroundStyle(EyeStyle.text).multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
+                        }.frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                }
+            }
+            if portraitOnly || scene.motion == .near {
+                Text(pose.label).font(EyeStyle.chip).foregroundStyle(EyeStyle.text)
+            }
+        }.padding(8).frame(height: height).frame(maxWidth: .infinity)
+            .background(EyeStyle.surfaceVariant, in: RoundedRectangle(cornerRadius: EyeStyle.radiusLarge))
     }
+}
 
-    /// 功能性连续视力：自然眨眼时持续辨认视标，之后不停顿转入保持睁眼。
-    static let fva = GuideScene(cycle: 7.0, beats: [.init(start: 0, label: "① 全程看 E，点选开口方向"),
-        .init(start: 0.12, label: "② 前一段像平时一样自然眨眼"), .init(start: 0.68, label: "③ 不停顿，转入尽量保持睁眼")], keyframe: 0.3) { g, phase in
-        let opened = phase >= 0.68
-        let lid = opened ? 0 : max(tri(phase, 0.2, 0.03), tri(phase, 0.45, 0.03))
-        g.figure(84, 112, 100, gaze: CGPoint(x: 1, y: 0), lid: CGFloat(lid), wide: opened ? 1.22 : 1)
-        let (tl, screen) = g.phone(240, 100, 160)
-        let segment = min(7, max(0, Int(phase / 0.14)))
-        let dir = [0, 3, 2, 1, 0, 1, 3, 2][segment]
-        g.optotype(CGPoint(x: tl.x + screen.width / 2, y: tl.y + screen.height * 0.3), screen.width * 0.32, dir)
-        let local = (phase - Double(segment) * 0.14) / 0.14
-        g.arrowPad(tl, screen, highlight: local > 0.5 ? dir : -1, tap: clamp01((local - 0.5) / 0.3))
-        g.pill(12, 12, 96, 28, EyeStyle.panel)
-        g.label(opened ? "持续睁眼" : "自然眨眼", 60, 26, opened ? EyeStyle.warning : EyeStyle.primary)
+/// 服务页示范与测试引导共用分镜，系统减弱动态效果时停在关键帧。
+struct GuideFrame: View {
+    let motion: GuideMotion
+    let phase: Double
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    var body: some View {
+        let scene = GuideScene.scene(motion)
+        GuideStage(scene: scene, phase: reduceMotion ? scene.keyframe : phase, height: 190)
     }
+}
 
-    /// 多距离视觉表现：在 60 / 33 / 25 cm 依次停稳并辨认视标。
-    static let curve = GuideScene(cycle: 6.6, beats: [.init(start: 0, label: "① 移到提示的距离并停稳"),
-        .init(start: 0.12, label: "② 点选 E 的开口方向"), .init(start: 0.36, label: "③ 依次换到下一个距离")], keyframe: 0.2) { g, phase in
-        g.figure(62, 112, 96, gaze: CGPoint(x: 1, y: 0), lid: idleBlink(phase, 6.6, [0.33, 0.7]))
-        g.ruler(120, 300, 188)
-        let x = CGFloat(keyframes(phase, [(0, 290), (0.3, 290), (0.38, 200), (0.64, 200), (0.72, 165), (1, 165)]))
-        let (tl, screen) = g.phone(x, 102, 140)
-        let dir = phase < 0.34 ? 0 : phase < 0.68 ? 3 : 2
-        g.optotype(CGPoint(x: tl.x + screen.width / 2, y: tl.y + screen.height * 0.3), screen.width * 0.3, dir)
-        let tap = max(tri(phase, 0.18, 0.05), tri(phase, 0.52, 0.05), tri(phase, 0.86, 0.05))
-        g.arrowPad(tl, screen, highlight: tap > 0 ? dir : -1, tap: 1 - tap)
-        let cm = phase < 0.34 ? 60 : phase < 0.68 ? 33 : 25
-        g.pill(x - 30, 12, 60, 24, EyeStyle.panel)
-        g.label("\(cm) cm", x, 24, EyeStyle.text)
+private func guideDiagramLabel(_ motion: GuideMotion, _ p: Double) -> String {
+    switch motion {
+    case .posture: "调整到提示距离"
+    case .acuity: Int(p * 5) == 2 ? "超时后视标变大" : "2 秒内点选方向"
+    case .fva: p < 0.68 ? "自然眨眼 · 辨认 E" : "保持睁眼 · 辨认 E"
+    case .near: "看 E · 点选方向"
+    case .move: p < 0.68 ? "慢慢移近" : "持续模糊时确认"
+    case .curve: p < 0.34 ? "67 cm" : p < 0.68 ? "50 cm" : "33 cm"
+    case .flip: p < 0.3 || p >= 0.7 ? "远处停稳作答" : "近处停稳作答"
+    case .fixate: "看圆点 · 头不动"
+    case .follow: "跟随圆点 · 头不动"
+    case .far: "越过手机看 6 米外"
+    default: ""
+    }
+}
+
+/// 手机、视标与注视点保留为矢量操作简图，正式测试沿用原来的刺激组件。
+private struct GuideDiagram: View {
+    let motion: GuideMotion
+    let phase: Double
+    var body: some View {
+        Canvas { context, size in
+            let p = min(1, max(0, phase))
+            let unit = min(size.width / 100, size.height / 170)
+            func at(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
+                CGPoint(x: size.width / 2 + (x - 50) * unit, y: size.height / 2 + (y - 85) * unit)
+            }
+            let approach: Double
+            switch motion {
+            case .move: approach = p < 0.15 ? 0 : p < 0.68 ? (p - 0.15) / 0.53 : p < 0.8 ? 1 : (1 - p) / 0.2
+            case .flip: approach = p < 0.15 || p > 0.7 ? 0 : p < 0.3 ? (p - 0.15) / 0.15 : p < 0.55 ? 1 : (0.7 - p) / 0.15
+            case .curve: approach = p < 0.3 ? 0 : p < 0.38 ? (p - 0.3) / 0.08 * 0.6 : p < 0.64 ? 0.6 : p < 0.72 ? 0.6 + (p - 0.64) / 0.08 * 0.4 : 1
+            default: approach = 0.5
+            }
+            let phoneHeight: CGFloat = motion == .far ? 76 : 106 + CGFloat(approach) * 36
+            let (tl, screen) = Cartoon.phone(context, center: at(50, motion == .far ? 116 : 85), height: phoneHeight * unit)
+            let target = CGPoint(x: tl.x + screen.width / 2, y: tl.y + screen.height * 0.3)
+            switch motion {
+            case .far:
+                Cartoon.fixationTarget(context, center: at(50, 27), size: 22 * unit)
+                context.stroke(Cartoon.segment(at(50, 46), at(50, 66)), with: .color(EyeStyle.primary), lineWidth: 2 * unit)
+            case .posture:
+                let r = screen.width * 0.28
+                let c = CGPoint(x: target.x, y: tl.y + screen.height / 2)
+                context.stroke(Path(ellipseIn: CGRect(x: c.x - r, y: c.y - r, width: r * 2, height: r * 2)),
+                               with: .color(EyeStyle.success), lineWidth: 2 * unit)
+            case .fixate, .follow:
+                let relative: CGPoint
+                if p < 0.36 {
+                    relative = CGPoint(x: 0.32 * sin(p / 0.36 * 2 * Double.pi), y: 0)
+                } else if p < 0.72 {
+                    relative = CGPoint(x: 0, y: 0.32 * sin((p - 0.36) / 0.36 * 2 * Double.pi))
+                } else {
+                    let t = (p - 0.72) / 0.28
+                    let wave = t < 0.5 ? t * 4 - 1 : 3 - t * 4
+                    relative = CGPoint(x: 0.32 * wave, y: -0.32 * wave)
+                }
+                let dot = motion == .follow ? CGPoint(x: tl.x + screen.width * (0.5 + relative.x),
+                    y: tl.y + screen.height * (0.5 + relative.y)) : target
+                Cartoon.fixationTarget(context, center: dot, size: 17 * unit)
+            default:
+                let step = min(4, max(0, Int(p * 5)))
+                let direction = [0, 3, 2, 1, 0][step]
+                let edge = screen.width * (motion == .acuity && step == 1 ? 0.26 : 0.36)
+                Cartoon.tumblingE(context, color: EyeStyle.ink, center: target, edge: edge, direction: direction)
+                let offsets = [CGPoint(x: 1, y: 0), CGPoint(x: 0, y: 1), CGPoint(x: -1, y: 0), CGPoint(x: 0, y: -1)]
+                for (index, offset) in offsets.enumerated() {
+                    let c = CGPoint(x: target.x + offset.x * screen.width * 0.32, y: tl.y + screen.height * 0.7 + offset.y * screen.width * 0.32)
+                    let r = screen.width * 0.12
+                    context.fill(Path(ellipseIn: CGRect(x: c.x - r, y: c.y - r, width: r * 2, height: r * 2)),
+                                 with: .color(index == direction ? EyeStyle.primary : EyeStyle.borderSubtle))
+                    let ink = index == direction ? Color.white : EyeStyle.ink
+                    let length = screen.width * 0.055
+                    let tip = CGPoint(x: c.x + offset.x * length, y: c.y + offset.y * length)
+                    let normal = CGPoint(x: -offset.y * length, y: offset.x * length)
+                    context.stroke(Cartoon.segment(CGPoint(x: c.x - offset.x * length, y: c.y - offset.y * length), tip), with: .color(ink), lineWidth: unit)
+                    context.stroke(Cartoon.segment(tip, CGPoint(x: c.x + normal.x, y: c.y + normal.y)), with: .color(ink), lineWidth: unit)
+                    context.stroke(Cartoon.segment(tip, CGPoint(x: c.x - normal.x, y: c.y - normal.y)), with: .color(ink), lineWidth: unit)
+                }
+            }
+        }.accessibilityLabel("操作示意")
     }
 }

@@ -25,6 +25,8 @@ targets:
         buildPhase: resources
       - path: ../shared/feedback/res/raw
         buildPhase: resources
+      - path: ../shared/guide/res/drawable-nodpi
+        buildPhase: resources
     info:
       path: Info.plist
       properties:

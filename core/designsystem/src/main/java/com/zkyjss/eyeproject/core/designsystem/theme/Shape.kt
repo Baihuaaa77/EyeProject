@@ -16,6 +16,7 @@ object EyeShapes {
 
 /** 作答控件在大字号时保留触达空间，尺寸均大于最小触摸范围。 */
 object EyeControlSizes {
+    val guideStageHeight = 200.dp
     val chatAvatar = 48.dp
     val chatIntroPortraitWidth = 112.dp
     val chatIntroPortraitHeight = 144.dp

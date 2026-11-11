@@ -16,6 +16,7 @@ android {
 androidComponents {
     onVariants(selector().all()) { variant ->
         variant.sources.res?.addStaticSourceDirectory("../../shared/feedback/res")
+        variant.sources.res?.addStaticSourceDirectory("../../shared/guide/res")
     }
 }
 

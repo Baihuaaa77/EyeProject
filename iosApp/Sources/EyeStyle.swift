@@ -5,6 +5,7 @@ import UIKit
 enum EyeStyle {
     static let background = dyn(0xF5F6F8, 0x1E2023)
     static let optotypeSurround = dyn(0xFFFFFF, 0x1E2023, darkAlpha: 0)
+    static let guideStageHeight: CGFloat = 200
     static let gazeCanvasHeight: CGFloat = 480
     static let gazeCanvasMinHeight: CGFloat = 160
     static let optotypeField = Color.white
