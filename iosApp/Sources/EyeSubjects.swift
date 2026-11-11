@@ -374,3 +374,9 @@ struct PreTestCheckView: View {
         }
     }
 }
+
+#if SCREENSHOT_CAPTURE
+extension SubjectStore {
+    func capture(_ values: [SubjectProfileItem]) { subjects = values }
+}
+#endif

@@ -360,3 +360,11 @@ private struct DataPanel<Content: View>: View {
         .eyeGlass(cornerRadius: EyeStyle.radiusLarge)
     }
 }
+
+#if SCREENSHOT_CAPTURE
+extension ResultReportView {
+    @ViewBuilder static func captureData(_ value: [String: Any]) -> some View {
+        if let model = ReportModel(value) { ReportDataSheet(report: model, exportURL: nil) }
+    }
+}
+#endif

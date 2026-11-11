@@ -285,3 +285,23 @@ private struct ServiceRow: View {
         }.buttonStyle(PressScale(scale: 0.98))
     }
 }
+
+#if SCREENSHOT_CAPTURE
+/// 截图入口沿用三个主页与真实底栏，只移除启动浮层和导航副作用。
+@MainActor
+struct CaptureMainPage: View {
+    let tab: TopLevelTab
+    var body: some View {
+        VStack(spacing: 0) {
+            Group {
+                switch tab {
+                case .home: HomePage(navigate: { _ in }, openTest: { _ in })
+                case .services: ServicesPage(open: { _ in }, navigate: { _ in })
+                case .mine: MinePage(navigate: { _ in })
+                }
+            }.frame(maxWidth: .infinity, maxHeight: .infinity)
+            EyeBottomBar(selected: .constant(tab))
+        }.background(EyeStyle.background.ignoresSafeArea())
+    }
+}
+#endif

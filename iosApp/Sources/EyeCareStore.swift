@@ -150,6 +150,9 @@ final class EyeCareStore: ObservableObject {
 
     /// 重新计算报告：主线程取本人资料、屏幕亮度与提醒设置，记录解析与规则计算在后台队列。
     func refresh() {
+#if SCREENSHOT_CAPTURE
+        if captureReport != nil { return }
+#endif
         let fields = SubjectStore.shared.subjects.first { $0.relation == "SELF" }?.fields ?? [:]
         let now = nowMs, offset = offsetMinutes
         let age = SubjectProfiles.shared.age(fields: fields, nowMs: now)?.intValue
@@ -193,3 +196,11 @@ final class EyeCareStore: ObservableObject {
         return parsed
     }
 }
+
+#if SCREENSHOT_CAPTURE
+extension EyeCareStore {
+    private static var fixtureReport: CareReport?
+    private var captureReport: CareReport? { Self.fixtureReport }
+    func capture(_ value: CareReport) { Self.fixtureReport = value; report = value }
+}
+#endif

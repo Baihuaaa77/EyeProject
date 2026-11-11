@@ -12,6 +12,20 @@ struct EyeTestView: View {
     @State private var suspended = false
     @State private var confirmingExit = false
     init(kind: String) { _runtime = StateObject(wrappedValue: EyeRuntime(kind: kind)) }
+#if SCREENSHOT_CAPTURE
+    private var captureOnly = false
+    /// 只在专用截图构建中注入呈现快照，不启动相机、计时或记录保存。
+    init(captureKind: String, snapshot: [String: Any], calibrated: Bool = true, exitDialog: Bool = false) {
+        let value = EyeRuntime(kind: captureKind)
+        value.controller.selectTest(name: captureKind)
+        value.state = snapshot
+        _runtime = StateObject(wrappedValue: value)
+        _pixelsPerMm = State(initialValue: calibrated ? 18 : 0)
+        _confirmingExit = State(initialValue: exitDialog)
+        captureOnly = true
+    }
+#endif
+
     var body: some View {
         VStack(spacing: 0) {
             TestTopBar(title: runtime.string("title").isEmpty ? "眼健康自测" : runtime.string("title"),
@@ -74,16 +88,25 @@ struct EyeTestView: View {
             }
             .onChange(of: settingsOpen) { runtime.setSettingsPresented($0) }
             .onAppear {
+#if SCREENSHOT_CAPTURE
+                guard !captureOnly else { return }
+#endif
                 brightness = UIScreen.main.brightness; UIScreen.main.brightness = 1
                 previousIdleDisabled = UIApplication.shared.isIdleTimerDisabled
                 UIApplication.shared.isIdleTimerDisabled = true
                 if displayReady { runtime.prepare(pixelsPerMm: pixelsPerMm > 0 ? pixelsPerMm : Self.nominalPixelsPerMm) }
             }
             .onDisappear {
+#if SCREENSHOT_CAPTURE
+                guard !captureOnly else { return }
+#endif
                 runtime.close(); UIApplication.shared.isIdleTimerDisabled = previousIdleDisabled
                 if let value = brightness { UIScreen.main.brightness = value }
             }
             .onChange(of: scenePhase) { phase in
+#if SCREENSHOT_CAPTURE
+                guard !captureOnly else { return }
+#endif
                 // 只在真正进入后台时中断；权限弹窗、控制中心等短暂失焦（inactive）不打断测试。
                 if phase == .background {
                     if !suspended { suspended = true; runtime.interrupt() }

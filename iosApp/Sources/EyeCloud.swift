@@ -14,7 +14,11 @@ final class CloudModel: ObservableObject {
     // 首次访问可能来自保存记录的后台线程：状态只在主线程更新
     private init() { DispatchQueue.main.async { self.refresh() } }
 
-    func refresh() { explanations = [:]; advices = [:]; chatState = nil; state = EyeRuntime.object(client.snapshotJson()) }
+    func refresh() {
+#if SCREENSHOT_CAPTURE
+        if captureFrozen { return }
+#endif
+        explanations = [:]; advices = [:]; chatState = nil; state = EyeRuntime.object(client.snapshotJson()) }
     func string(_ key: String) -> String { state[key] as? String ?? "" }
     func bool(_ key: String) -> Bool { state[key] as? Bool ?? false }
     func int(_ key: String) -> Int { (state[key] as? NSNumber)?.intValue ?? 0 }
@@ -437,3 +441,16 @@ private struct CloudExportDocument: FileDocument {
     init(configuration: ReadConfiguration) throws { text = String(data: configuration.file.regularFileContents ?? Data(), encoding: .utf8) ?? "" }
     func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper { FileWrapper(regularFileWithContents: Data(text.utf8)) }
 }
+
+#if SCREENSHOT_CAPTURE
+extension CloudModel {
+    private static var frozen = false
+    private var captureFrozen: Bool { Self.frozen }
+    func capture(state value: [String: Any], chat: [String: Any] = [:]) {
+        Self.frozen = true; state = value; chatState = chat
+    }
+}
+extension SignInForm {
+    init(captureMode: Int) { _mode = State(initialValue: captureMode) }
+}
+#endif

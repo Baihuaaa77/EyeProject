@@ -310,3 +310,13 @@ private struct ChatBubble: View {
         }
     }
 }
+
+#if SCREENSHOT_CAPTURE
+extension AiChatPage {
+    init(captureOption: String? = nil, captureConsent: Bool = false) {
+        openAccount = {}
+        _pendingOption = State(initialValue: captureOption)
+        _confirming = State(initialValue: captureConsent)
+    }
+}
+#endif
