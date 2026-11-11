@@ -176,7 +176,7 @@ final class ScreenshotCatalogTests: XCTestCase {
     private func fixture(_ kind: String, _ phase: String, _ values: [String: Any] = [:]) -> EyeRuntime {
         let runtime = EyeRuntime(kind: kind)
         runtime.controller.selectTest(name: kind)
-        let target = kind == "STRABISMUS" ? 33.0 : 40.0
+        let target = kind == "COLOR_VISION" ? 0.0 : kind == "STRABISMUS" ? 33.0 : 40.0
         runtime.state = ["phase": phase, "title": ["DRY_EYE":"干眼自测", "PRESBYOPIA":"老视自测", "STRABISMUS":"眼位自测", "COLOR_VISION":"色觉自测"][kind]!,
             "instruction": "保持头和手机稳定，按提示完成测试", "distanceCm": target, "targetDistanceCm": target, "distanceToleranceCm": 5.0,
             "faceDetected": true, "gateReady": true, "trialVisible": true, "trialId": 1, "direction": 0, "optotypePx": 42.0,
@@ -184,6 +184,15 @@ final class ScreenshotCatalogTests: XCTestCase {
             "eye": "RIGHT", "pushEye": "右眼", "pushStage": "MOVING", "targetX": 0.5, "targetY": 0.5,
             "calibrationX": 0.5, "calibrationY": 0.5, "calibrationCount": 9, "gazeCalibrationIndex": 0,
             "targetDiameterMm": 8, "farTargetM": 6, "subjectId": "capture-self", "subjectName": "示例用户"]
+        // 与核心快照一致：选人、结果、休息和不采集距离的阶段不额外塞入距离条。
+        if ["Profile", "PROFILE", "Result", "RESULT"].contains(phase) {
+            runtime.state.removeValue(forKey: "overallProgress")
+            runtime.state.removeValue(forKey: "subjectId")
+            runtime.state["targetDistanceCm"] = 0
+        }
+        if kind == "DRY_EYE" && !["Setup", "FormalGuide", "Countdown", "Practice", "Natural", "Open"].contains(phase) {
+            runtime.state["targetDistanceCm"] = 0
+        }
         runtime.state.merge(values, uniquingKeysWith: { _, new in new })
         return runtime
     }
