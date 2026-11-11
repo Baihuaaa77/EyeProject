@@ -174,7 +174,7 @@ private struct GuideStage: View {
         VStack(spacing: 8) {
             GeometryReader { proxy in
                 HStack(spacing: 8) {
-                    Image(pose.image).resizable().scaledToFit()
+                    EyechoGuideImage(name: pose.image)
                         .frame(width: portraitOnly ? proxy.size.width : (proxy.size.width - 8) * 2 / 3, height: proxy.size.height)
                         .clipShape(RoundedRectangle(cornerRadius: EyeStyle.radiusLarge))
                         .accessibilityLabel("爱科示范：" + pose.label)

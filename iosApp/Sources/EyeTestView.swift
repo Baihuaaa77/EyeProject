@@ -408,7 +408,7 @@ private struct FarFixationPanel: View {
     let waiting: Bool
     var body: some View {
         VStack(spacing: 10) {
-            Image("eyecho_guide_open").resizable().scaledToFit()
+            EyechoGuideImage(name: "eyecho_guide_open")
                 .frame(width: 64, height: 64).accessibilityLabel("爱科")
             if waiting {
                 Text("看着 \(meters) 米外的目标").font(EyeStyle.title).foregroundStyle(.white).multilineTextAlignment(.center)
@@ -561,7 +561,7 @@ private struct GlassesCheckView: View {
     let confirm: () -> Void
     var body: some View {
         VStack(spacing: 16) {
-            Image("eyecho_guide_open").resizable().scaledToFit()
+            EyechoGuideImage(name: "eyecho_guide_open")
                 .frame(width: 112, height: 112).accessibilityLabel("爱科")
             Text(title).font(EyeStyle.title)
             Text(prompt)

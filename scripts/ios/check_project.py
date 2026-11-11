@@ -37,6 +37,9 @@ for pose in ('open', 'blink', 'left', 'right', 'helper_open', 'helper_left', 'he
         errors.append('Missing or invalid Eyecho guide image: ' + pose)
 if '../shared/guide/res/drawable-nodpi' not in ios_project:
     errors.append('iOS must bundle the shared Eyecho guide images')
+guide_loader = root / 'iosApp/Sources/EyechoGuideImage.swift'
+if not guide_loader.exists() or 'UIImage(contentsOfFile:' not in guide_loader.read_text(encoding='utf-8'):
+    errors.append('iOS must decode shared guide PNG files explicitly')
 if not score_font.exists() or score_font.read_bytes()[:4] != b'\x00\x01\x00\x00':
     errors.append('Missing or invalid bundled score font')
 if '../core/designsystem/src/main/res/font/nunito_black.ttf' not in ios_project or 'UIAppFonts: [nunito_black.ttf]' not in ios_project:
