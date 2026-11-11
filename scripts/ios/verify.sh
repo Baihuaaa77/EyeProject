@@ -13,4 +13,4 @@ SIMULATOR_ID="$(xcrun simctl list devices available --json | python3 -c 'import 
 xcodebuild test -workspace EyeProject.xcworkspace -scheme EyeProject -configuration Release \
   -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
   -derivedDataPath build/DerivedData -resultBundlePath "build/ios-$(date +%s).xcresult" \
-  CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=YES ARCHS=arm64
+  CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=YES ARCHS=arm64 ENABLE_TESTABILITY=YES
