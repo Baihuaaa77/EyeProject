@@ -14,13 +14,20 @@ if [[ "${EYE_SCREENSHOT_CAPTURE:-0}" == "1" ]]; then
   CAPTURE_ARGS=("-only-testing:EyeProjectTests/ScreenshotCatalogTests" "SWIFT_ACTIVE_COMPILATION_CONDITIONS=SCREENSHOT_CAPTURE")
 fi
 # 使用与 IPA 相同的 Release 配置；共用核心只提供 ARM64 模拟器，避免 Release 默认再请求 Intel 架构。
+set +e
 xcodebuild test -workspace EyeProject.xcworkspace -scheme EyeProject -configuration Release \
   -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
   -derivedDataPath build/DerivedData -resultBundlePath "build/ios-$(date +%s).xcresult" \
   CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=YES ARCHS=arm64 ENABLE_TESTABILITY=YES "${CAPTURE_ARGS[@]}"
+TEST_STATUS=$?
+set -e
 
 if [[ "${EYE_SCREENSHOT_CAPTURE:-0}" == "1" ]]; then
   APP_DATA="$(xcrun simctl get_app_container "$SIMULATOR_ID" com.zkyjss.eyeproject.ios data)"
   mkdir -p build/page-captures
-  cp -R "$APP_DATA/Documents/PageCaptures/." build/page-captures/
+  if [[ -d "$APP_DATA/Documents/PageCaptures" ]]; then
+    cp -R "$APP_DATA/Documents/PageCaptures/." build/page-captures/
+  fi
 fi
+
+exit "$TEST_STATUS"

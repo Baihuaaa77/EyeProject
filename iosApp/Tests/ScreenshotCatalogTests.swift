@@ -205,7 +205,7 @@ final class ScreenshotCatalogTests: XCTestCase {
             if navigation { NavigationStack { view } } else { view }
         }.tint(EyeStyle.primary).foregroundStyle(EyeStyle.text)
             .background(EyeStyle.background.ignoresSafeArea()).scrollIndicators(.hidden)
-            .environment(\.colorScheme, dark ? .dark : .light).environment(\.accessibilityReduceMotion, true)
+            .environment(\.colorScheme, dark ? .dark : .light)
             .transaction { $0.disablesAnimations = true }
         let host = UIHostingController(rootView: content)
         window.rootViewController = host
