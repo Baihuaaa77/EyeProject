@@ -9,8 +9,9 @@ import XCTest
 final class ScreenshotCatalogTests: XCTestCase {
     private var window: UIWindow!
     private var rows: [[String: Any]] = []
-    private let root = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        .appendingPathComponent("PageCaptures", isDirectory: true)
+    // 模拟器 XCTest 与源代码共用宿主文件系统，直接写到宿主导出目录，避免测试结束后设备已关闭而无法取容器。
+    private let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        .appendingPathComponent("build/page-captures", isDirectory: true)
 
     func testCaptureAllPages() async throws {
         let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)

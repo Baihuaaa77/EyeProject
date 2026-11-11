@@ -22,12 +22,8 @@ xcodebuild test -workspace EyeProject.xcworkspace -scheme EyeProject -configurat
 TEST_STATUS=$?
 set -e
 
-if [[ "${EYE_SCREENSHOT_CAPTURE:-0}" == "1" ]]; then
-  APP_DATA="$(xcrun simctl get_app_container "$SIMULATOR_ID" com.zkyjss.eyeproject.ios data)"
-  mkdir -p build/page-captures
-  if [[ -d "$APP_DATA/Documents/PageCaptures" ]]; then
-    cp -R "$APP_DATA/Documents/PageCaptures/." build/page-captures/
-  fi
+if [[ "${EYE_SCREENSHOT_CAPTURE:-0}" == "1" && "$TEST_STATUS" == "0" ]]; then
+  test -f build/page-captures/截图清单.json
 fi
 
 exit "$TEST_STATUS"
