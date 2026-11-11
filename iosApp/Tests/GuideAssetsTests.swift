@@ -34,7 +34,7 @@ final class GuideAssetsTests: XCTestCase {
         }
     }
 
-    /// 完整舞台左侧必须有人物；手机简图和文字不能代替这项检查。
+    /// 完整舞台必须有人物；手机简图和文字不能代替这项检查。
     func testServiceStageKeepsPersonVisible() throws {
         for motion in [GuideMotion.near, .move, .cover, .coverSelf, .fva] {
             let renderer = ImageRenderer(content: GuideFrame(motion: motion, phase: 0.8).frame(width: 343, height: 190))
@@ -45,21 +45,38 @@ final class GuideAssetsTests: XCTestCase {
         }
     }
 
-    func testHelpAndCompletionViewsRender() throws {
+    func testHelpAndCompletionViewsRender() async throws {
         for dark in [false, true] {
             let help = TestHelpView(motion: .coverSelf, title: "交替遮盖", cue: "本人按提示遮眼，协助者在手机旁打光。", onClose: {})
-                .frame(width: 390, height: 844).environment(\.colorScheme, dark ? .dark : .light)
-            let helpRenderer = ImageRenderer(content: help)
-            helpRenderer.scale = 1
-            let helpImage = try XCTUnwrap(helpRenderer.uiImage)
-            XCTAssertGreaterThan(try skinPixels(helpImage, minX: 0, maxX: 390), 500)
+            let helpImage = try await windowImage(help, dark: dark)
+            XCTAssertGreaterThan(try skinPixels(helpImage, minX: 0, maxX: helpImage.cgImage!.width), 500)
             attach(helpImage, name: "当前环节问号-\(dark ? "深色" : "浅色")")
         }
         let completion = ExerciseCompletionView(total: 8, seen: 7, usedCamera: true, onClose: {})
-            .padding(20).frame(width: 390, height: 844).background(EyeStyle.background).environment(\.colorScheme, .dark)
-        let renderer = ImageRenderer(content: completion)
-        renderer.scale = 1
-        attach(try XCTUnwrap(renderer.uiImage), name: "护眼操完成页")
+            .padding(20).background(EyeStyle.background.ignoresSafeArea())
+        attach(try await windowImage(completion, dark: true), name: "护眼操完成页")
+    }
+
+    /// ScrollView 依赖 UIKit 托管；离屏 ImageRenderer 会漏掉滚动内容，因此使用真实模拟器窗口。
+    private func windowImage<V: View>(_ view: V, dark: Bool) async throws -> UIImage {
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let previous = scene.windows.first { $0.isKeyWindow }
+        let window = UIWindow(windowScene: scene)
+        window.frame = UIScreen.main.bounds
+        window.windowLevel = .alert + 1
+        window.overrideUserInterfaceStyle = dark ? .dark : .light
+        let content = view.environment(\.colorScheme, dark ? .dark : .light)
+            .environment(\.accessibilityReduceMotion, true)
+            .transaction { $0.disablesAnimations = true }
+        let host = UIHostingController(rootView: content)
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true; window.rootViewController = nil; previous?.makeKey() }
+        host.view.setNeedsLayout()
+        host.view.layoutIfNeeded()
+        try await Task.sleep(nanoseconds: 600_000_000)
+        let renderer = UIGraphicsImageRenderer(bounds: window.bounds)
+        return renderer.image { _ in window.drawHierarchy(in: window.bounds, afterScreenUpdates: true) }
     }
 
     private func skinPixels(_ image: UIImage, minX: Int, maxX: Int) throws -> Int {
