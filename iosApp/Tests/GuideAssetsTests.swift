@@ -66,7 +66,6 @@ final class GuideAssetsTests: XCTestCase {
         window.windowLevel = .alert + 1
         window.overrideUserInterfaceStyle = dark ? .dark : .light
         let content = view.environment(\.colorScheme, dark ? .dark : .light)
-            .environment(\.accessibilityReduceMotion, true)
             .transaction { $0.disablesAnimations = true }
         let host = UIHostingController(rootView: content)
         window.rootViewController = host
