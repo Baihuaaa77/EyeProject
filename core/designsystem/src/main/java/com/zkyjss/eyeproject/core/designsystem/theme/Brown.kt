@@ -32,7 +32,6 @@ object EyeBrown {
         Brush.linearGradient(
             when (index) {
                 1 -> listOf(Color(0xFF312721), Color(0xFF28221F))
-                2 -> listOf(Color(0xFF262924), Color(0xFF21231F))
                 3 -> listOf(Color(0xFF302A26), Color(0xFF262320))
                 else -> listOf(Color(0xFF302920), Color(0xFF25241F))
             }

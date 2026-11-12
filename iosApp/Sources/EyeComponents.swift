@@ -68,23 +68,16 @@ struct ThemeToggleButton: View {
     }
 }
 
-/// 账户头像（顶层页右上角唯一的按钮）：登录后品牌蓝实心圆 + 白色首字母，未登录为浅填充圆 + 人像线稿；点开完整的账户页。
-/// 与安卓 EyeAccountButton 一致。
+/// 顶栏账户按钮：登录前后均显示高对比人像线稿；点开完整账户页，与安卓一致。
 struct AccountButton: View {
     @ObservedObject private var cloud = CloudModel.shared
     let action: () -> Void
     var body: some View {
         let email = cloud.bool("signedIn") ? cloud.string("email") : ""
         Button { EyeHaptics.tap(); action() } label: {
-            ZStack {
-                Color.clear
-                if email.isEmpty {
-                    EyeGlyphView(glyph: .person, color: EyeStyle.primary).frame(width: 20, height: 20)
-                } else {
-                    Text(String(email.prefix(1)).uppercased()).font(EyeStyle.subtitle).foregroundStyle(EyeStyle.onPrimary)
-                }
-            }
-            .frame(width: 48, height: 48).eyeGlass(cornerRadius: 24).contentShape(Rectangle())
+            // 登录前后都保留人像线稿，避免深色首字母在暗色表面上不可见。
+            EyeGlyphView(glyph: .person, color: EyeStyle.secondary).frame(width: 20, height: 20)
+                .frame(width: 48, height: 48).eyeGlass(cornerRadius: 24).contentShape(Rectangle())
         }.buttonStyle(.plain).accessibilityLabel(email.isEmpty ? "账户（未登录）" : "账户（已登录）")
     }
 }

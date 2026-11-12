@@ -17,7 +17,6 @@ enum BrownStyle {
     static func tile(_ index: Int) -> LinearGradient {
         let values: [UInt32] = switch index {
         case 1: [0x312721, 0x28221F]
-        case 2: [0x262924, 0x21231F]
         case 3: [0x302A26, 0x262320]
         default: [0x302920, 0x25241F]
         }

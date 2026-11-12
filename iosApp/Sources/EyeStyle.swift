@@ -58,7 +58,7 @@ enum EyeStyle {
         static let blue = Color(rgb: 0xEFB285)
         static let indigo = Color(rgb: 0xE8A68B)
         static let teal = Color(rgb: 0xEFB285)
-        static let orange = Color(rgb: 0xC4C7A7)
+        static let orange = Color(rgb: 0xEFB285)
         static let green = Color(rgb: 0xD4B69A)
         static let red = Color(rgb: 0xD4B69A)
         static let gray = Color(rgb: 0xB5A994)
