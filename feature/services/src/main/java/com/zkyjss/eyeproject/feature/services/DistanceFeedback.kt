@@ -37,6 +37,7 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.zkyjss.eyeproject.core.designsystem.theme.testTooFarText
 import com.zkyjss.eyeproject.core.designsystem.theme.testTooClose
 import com.zkyjss.eyeproject.core.designsystem.theme.testReady
 import com.zkyjss.eyeproject.core.designsystem.theme.testReadySoft
@@ -50,7 +51,7 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /**
- * 眼—屏距离所处区间。颜色约定：太近 = 红、太远 = 蓝、合适 = 主题到位色、未知 = 灰；
+ * 眼—屏距离所处区间。颜色约定：太近 = 红、太远 = 黄、合适 = 品牌主蓝、未知 = 灰；
  * MOVE_TO = 刚换了目标距离、还在移过去的路上（主色），提示「请移动到 xx 厘米处」而不是太近 / 太远。
  */
 internal enum class DistanceZone { UNKNOWN, TOO_CLOSE, OK, TOO_FAR, MOVE_TO }
@@ -119,7 +120,7 @@ internal fun DistanceBanner(status: DistanceStatus, modifier: Modifier = Modifie
     val bg by animateColorAsState(
         when (status.zone) {
             DistanceZone.TOO_CLOSE -> colors.dangerSoft
-            DistanceZone.TOO_FAR -> colors.primarySoft
+            DistanceZone.TOO_FAR -> colors.warningSoft
             DistanceZone.OK -> colors.testReadySoft
             DistanceZone.MOVE_TO -> colors.primarySoft
             DistanceZone.UNKNOWN -> colors.neutralSoft
@@ -128,7 +129,8 @@ internal fun DistanceBanner(status: DistanceStatus, modifier: Modifier = Modifie
     )
     val fg by animateColorAsState(when (status.zone) {
         DistanceZone.TOO_CLOSE -> colors.testTooClose
-        DistanceZone.TOO_FAR, DistanceZone.MOVE_TO -> colors.primaryDark
+        DistanceZone.TOO_FAR -> colors.tooFar
+        DistanceZone.MOVE_TO -> colors.primaryDark
         DistanceZone.OK -> colors.testReady
         DistanceZone.UNKNOWN -> colors.textSecondary
     }, tween(EyeMotion.MEDIUM), label = "距离文字色")
@@ -147,10 +149,12 @@ internal fun DistanceBanner(status: DistanceStatus, modifier: Modifier = Modifie
         ) {
             DirectionGlyph(status.zone, fg, Modifier.size(if (compact) 28.dp else 36.dp))
             Column(Modifier.weight(1f)) {
-                if (singleLine) EyeText(status.detail, style = typography.body, color = fg, maxLines = 1)
+                if (singleLine) EyeText(status.detail, style = typography.body, color = colors.textPrimary, maxLines = 1)
                 else {
-                    EyeText(status.title, style = if (compact) typography.subtitle else typography.title, color = fg)
-                    EyeText(status.detail, style = typography.bodySecondary, color = fg)
+                    // 标题保留距离状态色，说明使用中性文字；避免通用文字原语把主蓝映射回墨色。
+                    EyeText(status.title, style = (if (compact) typography.subtitle else typography.title)
+                        .copy(color = if (status.zone == DistanceZone.TOO_FAR) colors.testTooFarText else fg))
+                    EyeText(status.detail, style = typography.bodySecondary, color = colors.textSecondary)
                 }
             }
             if (showRuler && status.zone != DistanceZone.UNKNOWN) DistanceRuler(status, fg, Modifier.size(width = 72.dp, height = 28.dp))

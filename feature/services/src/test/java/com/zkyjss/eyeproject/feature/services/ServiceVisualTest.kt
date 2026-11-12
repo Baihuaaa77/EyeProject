@@ -684,22 +684,27 @@ class ServiceVisualTest {
         capture("dry-eye-rest")
     }
 
-    @Test fun distanceBannersUseRedForNearAndBlueForFar() {
+    @Test fun distanceBannersUseRedForNearYellowForFarAndBlueForReady() {
+        var dark by mutableStateOf(false)
         compose.setContent {
-            EyeProjectTheme {
+            EyeProjectTheme(darkTheme = dark) {
                 Column(Modifier.fillMaxSize().background(LocalEyeColors.current.appBackground).padding(20.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     DistanceBanner(distanceStatus(28f, true, 40f, 5f))
                     DistanceBanner(distanceStatus(53f, true, 40f, 5f))
                     DistanceBanner(distanceStatus(41f, true, 40f, 5f))
                     DistanceBanner(distanceStatus(0f, false, 40f, 5f), compact = true)
-                    Box(Modifier.fillMaxWidth().height(220.dp)) { DistanceEdgeGlow(DistanceZone.TOO_CLOSE) }
+                    Box(Modifier.fillMaxWidth().height(100.dp)) { DistanceEdgeGlow(DistanceZone.TOO_CLOSE) }
+                    Box(Modifier.fillMaxWidth().height(100.dp)) { DistanceEdgeGlow(DistanceZone.TOO_FAR) }
                 }
             }
         }
         compose.onNodeWithText("把手机往远处移约 7 cm").assertExists()
         compose.onNodeWithText("把手机往近处移约 8 cm").assertExists()
         capture("distance-feedback")
+        dark = true
+        compose.waitForIdle()
+        capture("distance-feedback-dark")
     }
 
     @Test fun reportsUseHeroMetricsAndFindings() {

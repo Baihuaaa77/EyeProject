@@ -49,16 +49,17 @@ enum EyeStyle {
     static let gray = dyn(0x878EA3, 0x73767C)
     static let blue = dyn(0x2F7BFF, 0x2F7BFF)
     static let warning = dyn(0xFFB020, 0xFFB020)
-    // 测试到位提示（与「正常」同一组绿色）与演示插画（短发男孩）；与安卓 Illustration.kt 同值。
-    static let testReady = dyn(0x12B886, 0x12B886)
+    // 测试到位提示使用品牌主蓝，距离过远使用黄色；与安卓 Illustration.kt 同值。
+    static let testReady = primary
+    static let testTooFarText = dyn(0x8A6500, 0xFFE45C)
     static let testTooClose = dyn(0xFF5A6E, 0xFF5A6E)
-    static let testReadySoft = dyn(0xE8EDF7, 0x1B1D20)
+    static let testReadySoft = primarySoft
     enum Tile {
         static let blue = Color(rgb: 0x2F7BFF)
         static let indigo = Color(rgb: 0x8B78E6)
-        static let teal = Color(rgb: 0x12B886)
+        static let teal = Color(rgb: 0x2F7BFF)
         static let orange = Color(rgb: 0xFFB020)
-        static let green = Color(rgb: 0x12B886)
+        static let green = Color(rgb: 0x8B78E6)
         static let red = Color(rgb: 0xFF5A6E)
         static let gray = Color(rgb: 0x878EA3)
     }
@@ -77,7 +78,7 @@ enum EyeStyle {
         /// 袖子的描边：手臂叠在身体上时把两者分开
         static let shirtShade = EyeStyle.dyn(0x4A72B3, 0x5479B4)
     }
-    static let success = dyn(0x12B886, 0x12B886)
+    static let success = dyn(0x2F7BFF, 0x2F7BFF)
     static let successSoft = dyn(0xE8EDF7, 0x1B1D20)
     static let warningSoft = dyn(0xE8EDF7, 0x1B1D20)
     static let onStatus = dyn(0x141A2B, 0xF2F3F5)
@@ -86,7 +87,7 @@ enum EyeStyle {
     static let danger = dyn(0xFF5A6E, 0xFF5A6E)
     static let dangerSoft = dyn(0xE8EDF7, 0x1B1D20)
     static let tooClose = dyn(0xFF5A6E, 0xFF5A6E)
-    static let tooFar = dyn(0x2F7BFF, 0x2F7BFF)
+    static let tooFar = dyn(0xFFE45C, 0xFFE45C)
     static let heroStart = dyn(0xFFFFFF, 0x26282B)
     static let heroEnd = dyn(0xFFFFFF, 0x26282B)
     static let heroBorder = Color.clear
@@ -126,7 +127,7 @@ enum EyeStyle {
     static let cardGlowOpacity: Double = 0.38
     static let cardBorderSubtle: Double = 0.65
     static var borderGradient: LinearGradient {
-        LinearGradient(colors: [brandStart, dataCyan, dataAqua], startPoint: .topLeading, endPoint: .bottomTrailing)
+        LinearGradient(colors: [brandStart, dataCyan, violet], startPoint: .topLeading, endPoint: .bottomTrailing)
     }
     static let liquidShadowRadius: CGFloat = 18
     static let liquidShadowOffset: CGFloat = 8

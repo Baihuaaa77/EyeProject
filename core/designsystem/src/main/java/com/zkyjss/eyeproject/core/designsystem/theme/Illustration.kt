@@ -28,9 +28,10 @@ private val LightIllustration = IllustrationColors()
 private val DarkIllustration = IllustrationColors(shirt = Color(0xFF648BC8), shirtLight = Color(0xFF86A6DA), shirtShade = Color(0xFF5479B4))
 val EyeColors.illustration: IllustrationColors get() = if (isDark) DarkIllustration else LightIllustration
 
-/** 测试到位提示：沿用 DESIGN.md 的语义图形色。 */
-val EyeColors.testReady: Color get() = success
-val EyeColors.testReadySoft: Color get() = successSoft
+/** 测试到位提示使用品牌主蓝，距离过远使用黄色；浅色主题的黄色文字加深以保证可读。 */
+val EyeColors.testReady: Color get() = primary
+val EyeColors.testReadySoft: Color get() = primarySoft
+val EyeColors.testTooFarText: Color get() = if (isDark) tooFar else Color(0xFF8A6500)
 
 /** 太近状态的图形色；正文由文字原语映射为中性墨色。 */
 val EyeColors.testTooClose: Color get() = danger
