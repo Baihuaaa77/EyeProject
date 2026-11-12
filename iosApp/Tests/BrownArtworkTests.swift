@@ -18,7 +18,17 @@ final class BrownArtworkTests: XCTestCase {
                     bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
                 context.draw(image, in: CGRect(x: 0, y: 0, width: CGFloat(image.width), height: CGFloat(image.height)))
             }
-            let visible = stride(from: 0, to: bytes.count, by: 4).filter { Int(bytes[$0]) + Int(bytes[$0 + 1]) + Int(bytes[$0 + 2]) > 180 }.count
+            // 拆开像素取值和求和，避免 Swift 对链式泛型表达式的类型检查超时。
+            var visible = 0
+            for offset in stride(from: 0, to: bytes.count, by: 4) {
+                let red = Int(bytes[offset])
+                let green = Int(bytes[offset + 1])
+                let blue = Int(bytes[offset + 2])
+                let brightness = red + green + blue
+                if brightness > 180 {
+                    visible += 1
+                }
+            }
             XCTAssertGreaterThan(visible, 1500, "负荷眼睛不能显示为空白：" + level)
         }
     }
