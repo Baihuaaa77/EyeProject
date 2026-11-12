@@ -69,7 +69,7 @@ class HomeVisualTest {
         assertTrue(closed)
     }
 
-    private val today = "2026-10-23"
+    private val today = java.time.LocalDate.now().toString()
 
     /** 一周的虚构用眼数据：今天用屏 6 小时多、连续 75 分钟、眨眼偏少，已打卡眼睛干涩。 */
     private fun demoState(checkIn: Boolean = true, reminder: Boolean = false): HomeUiState {
@@ -81,6 +81,8 @@ class HomeVisualTest {
         var ledger = LedgerData()
             .withSession(today, 1L, LiveEyeMonitor.Session(150_000, 22, 8.8f, 31f, 0.3f, 12f))
             .withSession(EyeCareDays.plusDays(today, -2), 1L, LiveEyeMonitor.Session(90_000, 18, 12f, 36f, 0.1f, 9f))
+        for (back in 1..6) ledger = ledger.withSession(EyeCareDays.plusDays(today, -back), 1L,
+            LiveEyeMonitor.Session(150_000, 30, 12f, 36f, .1f, 5f))
         if (checkIn) ledger = ledger.withCheckIn(today, listOf("眼睛干涩"), 2L)
         val report = EyeCareEngine.report(ledger, EyeCareContext(today, 15, usage, EyeCareEngine.ACCESS_GRANTED, 180f, true, 0.72f,
             mapOf("出生年份" to "1990", "职业" to "办公室工作", "基础视力" to "一般", "既往眼病" to "没有"), 36,
@@ -90,46 +92,21 @@ class HomeVisualTest {
     }
 
     @Test fun homeShowsTheEyeCareLoopAndServices() {
-        var reminder = false
+        var chat = false
         var trend = false
-        var openedModel = false
-        // AI 光球等无限动画会让自动推进的测试时钟停不下来，先用手动时钟
-        compose.mainClock.autoAdvance = false
-        compose.setContent {
-            EyeProjectTheme {
-                HomeContent(demoState(), HomeNavigation(onNavigateToTestModel = { openedModel = true }, onOpenTrend = { trend = true }),
-                    HomeActions(toggleReminder = { reminder = true }))
-            }
-        }
-        compose.mainClock.advanceTimeBy(100)
-        compose.onNodeWithText("今日").assertExists()
-        compose.onNodeWithText("今日用眼").assertDoesNotExist()
-        compose.onAllNodesWithText("留意", useUnmergedTree = true).onFirst().assertExists()
-        compose.onNodeWithText("为你推荐").assertDoesNotExist()
-        compose.onNodeWithText("个体档案").assertDoesNotExist()
-        // 2026-11 改版：主卡带一句结论与「做 1 分钟护眼操」；读数分在「今日数据」小卡里；问诊入口是爱科卡
-        compose.onNodeWithText("今日数据").assertExists()
-        compose.onNodeWithText(EYECHO_CARD_LABEL).assertExists()
-        listOf("AI 综合建议", "多源感知", "主动服务", "专业咨询建议", "视觉行为", "基础数据").forEach { compose.onNodeWithText(it).assertDoesNotExist() }
-        compose.mainClock.advanceTimeBy(1_400)
-        compose.onNodeWithContentDescription("今日眼健康指数", substring = true).assertExists()
-        compose.onNodeWithText("做 1 分钟护眼操").assertDoesNotExist()
-        compose.onNodeWithText("护眼操").assertExists()
-        // 系统设置移至主页顶栏，账户入口仍在仪表头像。
-        compose.onNodeWithContentDescription("系统设置").assertIsDisplayed()
-        capture("01-首页-首屏", advance = false)
-        compose.mainClock.autoAdvance = true
-        compose.onNodeWithText("休息提醒").performScrollTo().performClick()
-        assertTrue(reminder)
-        // 休息提醒不再给出建议间隔与「采用」
-        compose.onNodeWithText("采用").assertDoesNotExist()
-        compose.onNodeWithText("建议每", substring = true).assertDoesNotExist()
-        compose.onNodeWithText("用眼趋势报告").assertDoesNotExist()
-        compose.onNodeWithText("用眼趋势").performScrollTo().performClick()
+        var reminder = false
+        compose.setContent { EyeProjectTheme {
+            HomeContent(demoState(), HomeNavigation(onOpenChat = {chat=true},onOpenTrend={trend=true}), HomeActions(toggleReminder={reminder=true}))
+        } }
+        compose.onNodeWithText("今日用眼负荷").assertIsDisplayed()
+        compose.onNodeWithText("全部数据  ›").assertIsDisplayed()
+        capture("01-首页-首屏")
+        compose.onNodeWithText("按日查看  ›").performScrollTo().performClick()
         assertTrue(trend)
-        compose.onNodeWithText("开发者工具").performScrollTo().performClick()
-        compose.onNodeWithText("模型测试").performScrollTo().performClick()
-        assertTrue(openedModel)
+        compose.onNodeWithText("AI 主动问诊").performScrollTo().performClick()
+        assertTrue(chat)
+        compose.onNodeWithText("休息一下").performScrollTo().performClick()
+        assertTrue(reminder)
     }
 
     @Test @Config(qualifiers = "zh-rCN-w390dp-h2600dp-mdpi")
@@ -148,17 +125,17 @@ class HomeVisualTest {
             }
         }
         // 还没记录：爱科卡问「今天眼睛感觉怎么样？」，给几项快捷感受和「更多」
-        compose.onNodeWithText("今天眼睛感觉怎么样？").assertExists()
-        compose.onNodeWithText("更多").assertExists()
+        compose.onNodeWithText("暂无读数").assertExists()
+        compose.onNodeWithText("暂无趋势记录").assertExists()
         capture("03-首页-深色-还没有数据")
     }
 
     /** 深色模式展示真实页面与虚构报告，检查圆环、空槽和正文层次。 */
     @Test fun homeDarkWithData() {
         compose.setContent { EyeProjectTheme(darkTheme = true) { HomeContent(demoState(), HomeNavigation(), HomeActions()) } }
-        compose.onNodeWithText("眼健康指数").assertIsDisplayed()
+        compose.onNodeWithText("今日用眼负荷").assertIsDisplayed()
         compose.onNodeWithText("做 1 分钟护眼操").assertDoesNotExist()
-        compose.onNodeWithContentDescription("账户头像").assertIsDisplayed()
+        compose.onNodeWithContentDescription("账户").assertIsDisplayed()
         capture("01c-首页-深色-首屏")
     }
 
@@ -177,14 +154,14 @@ class HomeVisualTest {
                 }
             }
         }
-        compose.onNodeWithText("79").assertIsDisplayed()
-        compose.onNodeWithContentDescription("账户头像").performClick()
+        compose.onAllNodesWithText("较轻").onFirst().assertIsDisplayed()
+        compose.onNodeWithContentDescription("账户").performClick()
         assertTrue(opened)
         capture("01e-首页-79-暖金")
         dark = true
         capture("01f-首页-79-深色暖金")
         report = report.copy(score = 80, level = "HIGH", label = "偏累")
-        compose.onNodeWithText("20").assertIsDisplayed()
+        compose.onAllNodesWithText("较大").onFirst().assertIsDisplayed()
         capture("01g-首页-20-银色")
     }
 
@@ -201,10 +178,11 @@ class HomeVisualTest {
                 }
             }
         }
-        compose.onNodeWithText("眼健康指数").assertIsDisplayed()
+        compose.onNodeWithText("今日用眼负荷").assertIsDisplayed()
+        compose.onNodeWithText("日常护眼").performScrollTo().performClick()
         compose.onNodeWithText("屏幕光").performScrollTo().assertIsDisplayed().performClick()
         assertTrue(openedBrightness)
-        compose.onNodeWithText("休息提醒").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("休息一下").performScrollTo().assertIsDisplayed()
         capture("01d-首页-375-大字号")
     }
 
@@ -218,18 +196,14 @@ class HomeVisualTest {
         compose.mainClock.autoAdvance = false
         compose.setContent { EyeProjectTheme { HomeContent(HomeUiState(report = report), HomeNavigation(), HomeActions()) } }
         compose.mainClock.advanceTimeBy(2_400)
-        compose.onNodeWithText("偏累", useUnmergedTree = true).assertExists()
+        compose.onAllNodesWithText("较大", useUnmergedTree = true).onFirst().assertExists()
         capture("01b-首页-负荷偏高", advance = false)
     }
 
     @Test fun checkInRecordsSymptoms() {
         var saved: List<String>? = null
         compose.setContent { EyeProjectTheme { HomeContent(demoState(checkIn = false), HomeNavigation(), HomeActions(checkIn = { saved = it })) } }
-        // 爱科卡上点一下快捷感受就记下
-        compose.onNodeWithText("眼睛干涩").performScrollTo().performClick()
-        assertEquals(listOf("眼睛干涩"), saved)
-        // 「更多」弹出完整选择：没选不能保存；「没有不适」与具体不适互斥
-        compose.onNodeWithText("更多").performScrollTo().performClick()
+        compose.onNodeWithText("今日感受").performScrollTo().performClick()
         compose.onNodeWithText("保存").assertIsNotEnabled()
         compose.onAllNodesWithText("没有不适").onLast().performClick()
         compose.onAllNodesWithText("眼睛酸胀").onLast().performClick()
@@ -266,7 +240,7 @@ class HomeVisualTest {
         // 未检测时只有一行（名称 +「开始」），开始后才展开取景框与读数
         compose.onNodeWithText("开始检测").assertDoesNotExist()
         capture("05a-首页-实时检测-未开始")
-        compose.onNodeWithText("开始").performClick()
+        compose.onNodeWithContentDescription("开始实时检测").performClick()
         compose.onNodeWithText("运行正常").assertExists()
         compose.onNodeWithText("睁眼").assertExists()
         compose.onNodeWithText("33 厘米", useUnmergedTree = true).assertExists()
@@ -464,7 +438,7 @@ class HomeVisualTest {
         }
         compose.mainClock.advanceTimeBy(1_500)
         compose.onNodeWithText("首页").assertIsSelected()
-        capture("01h-首页-玻璃底栏", advance = false)
+        capture("brown-home", advance = false)
         compose.onAllNodes(hasScrollAction()).onFirst().performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.ScrollBy) { it(0f, 820f) }
         compose.runOnIdle { androidx.compose.runtime.snapshots.Snapshot.sendApplyNotifications() }
         compose.mainClock.advanceTimeBy(400)
@@ -484,7 +458,7 @@ class HomeVisualTest {
         }
         compose.mainClock.advanceTimeBy(400)
         compose.waitForIdle()
-        compose.runOnIdle { assertFalse(renderedDark) }
+        compose.runOnIdle { assertTrue(renderedDark) }
         val folder = File("build/reports/glass-dock-motion").apply { mkdirs() }
         var frame = 0
         for (label in listOf("服务", "我的", "首页")) {

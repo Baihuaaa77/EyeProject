@@ -55,7 +55,7 @@ fun EyeThemeButton(modifier: Modifier = Modifier) {
     val colors = LocalEyeColors.current
     val haptics = rememberEyeHaptics()
     Box(
-        modifier.size(48.dp).eyeSoftSurface(colors, EyeShapes.medium, compact = true)
+        modifier.size(48.dp).eyeSoftSurface(colors, CircleShape, compact = true)
             .clickable(role = Role.Button) { haptics.tap(); onToggle() }
             .semantics { contentDescription = if (toggle.isDark) "切换到白天模式" else "切换到夜晚模式" },
         contentAlignment = Alignment.Center,
@@ -70,12 +70,12 @@ fun EyeSettingsGear(onClick: () -> Unit, modifier: Modifier = Modifier) {
     val colors = LocalEyeColors.current
     val haptics = rememberEyeHaptics()
     Box(
-        modifier.size(48.dp).eyeSoftSurface(colors, EyeShapes.medium, compact = true).clickable(role = Role.Button) { haptics.tap(); onClick() }
+        modifier.size(48.dp).eyeSoftSurface(colors, CircleShape, compact = true).clickable(role = Role.Button) { haptics.tap(); onClick() }
             .semantics { contentDescription = "系统设置" },
         contentAlignment = Alignment.Center,
     ) {
         Box(Modifier.size(36.dp), contentAlignment = Alignment.Center) {
-            EyeIcon(painterResource(R.drawable.ic_settings_gear), null, Modifier.size(20.dp), tint = colors.primary)
+            EyeIcon(painterResource(R.drawable.ic_settings_gear), null, Modifier.size(20.dp), tint = colors.textSecondary)
         }
     }
 }
@@ -96,7 +96,6 @@ fun PersonGlyph(modifier: Modifier = Modifier) {
 @Composable
 fun EyeHeaderActions(onOpenSettings: (() -> Unit)?) {
     Row(horizontalArrangement = Arrangement.spacedBy(EyeSpacing.xs), verticalAlignment = Alignment.CenterVertically) {
-        EyeThemeButton()
         onOpenSettings?.let { EyeSettingsGear(it) }
     }
 }
@@ -114,9 +113,17 @@ fun EyePageHeader(
     val typography = LocalEyeTypography.current
     Row(modifier.fillMaxWidth().padding(top = EyeSpacing.lg, bottom = EyeSpacing.sm), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
+            if (subtitle != null) EyeText(subtitle, Modifier.padding(bottom = EyeSpacing.xxs), style = typography.caption, color = colors.textSecondary)
             EyeText(title, style = typography.headline, color = colors.textHeading)
-            if (subtitle != null) EyeText(subtitle, Modifier.padding(top = EyeSpacing.xxs), style = typography.label, color = colors.textSecondary)
         }
-        EyeHeaderActions(onOpenSettings)
+        Row(horizontalArrangement = Arrangement.spacedBy(EyeSpacing.xs), verticalAlignment = Alignment.CenterVertically) {
+            onOpenAccount?.let { open ->
+                Box(Modifier.size(48.dp).eyeSoftSurface(colors, CircleShape)
+                    .clickable(role = Role.Button, onClick = open).semantics { contentDescription = "账户" }, contentAlignment = Alignment.Center) {
+                    EyeGlyphIcon(EyeGlyph.PERSON, Modifier.size(20.dp), colors.textSecondary)
+                }
+            }
+            EyeHeaderActions(onOpenSettings)
+        }
     }
 }

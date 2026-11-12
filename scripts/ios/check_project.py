@@ -24,6 +24,17 @@ for key, value in mapping.items():
     if match is None or match.group(1).upper() != light[value].upper() or match.group(2).upper() != dark[value].upper():
         errors.append(f'iOS theme token drift: {key}')
 
+# 棕色界面眼睛素材由两端打包同一份；空态资源同样必需。
+for tone in ('amber', 'sage', 'rose', 'empty'):
+    artwork = root / 'shared/artwork/res/drawable-nodpi' / ('load_eye_' + tone + '.png')
+    data = artwork.read_bytes() if artwork.exists() else b''
+    if len(data) < 26 or data[:8] != b'\x89PNG\r\n\x1a\n' or data[25] != 6:
+        errors.append('Missing or invalid shared load artwork: ' + tone)
+if '../shared/artwork/res/drawable-nodpi' not in (root / 'iosApp/project.yml').read_text(encoding='utf-8'):
+    errors.append('iOS must bundle the shared load artwork')
+if '../../shared/artwork/res' not in (root / 'core/designsystem/build.gradle.kts').read_text(encoding='utf-8'):
+    errors.append('Android must bundle the shared load artwork')
+
 model = root / 'core/camera/src/main/assets/face_landmarker.task'
 # 数字字体由安卓资源目录与 iOS 工程共同引用，防止一端漏包后悄悄回退到系统字。
 score_font = root / 'core/designsystem/src/main/res/font/nunito_black.ttf'

@@ -8,9 +8,9 @@ object EyeShapes {
     val small = RoundedCornerShape(10.dp)
     val medium = RoundedCornerShape(14.dp)
     val large = RoundedCornerShape(14.dp)
-    val card = RoundedCornerShape(20.dp)
-    val panel = RoundedCornerShape(20.dp)
-    val hero = RoundedCornerShape(20.dp)
+    val card = RoundedCornerShape(26.dp)
+    val panel = RoundedCornerShape(26.dp)
+    val hero = RoundedCornerShape(26.dp)
     val chip = RoundedCornerShape(999.dp)
 }
 

@@ -1,5 +1,11 @@
 package com.zkyjss.eyeproject.feature.services.navigation
 
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.lifecycle.Lifecycle
+import com.zkyjss.eyeproject.feature.services.ServicesViewModel
 import androidx.navigation.NavController
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavOptions
@@ -66,9 +72,14 @@ fun NavGraphBuilder.servicesScreen(
     onOpenSettings: () -> Unit = {},
     onOpenAccount: () -> Unit = {},
     onColorVisionClick: () -> Unit = {},
+    onOpenExercise: () -> Unit = {},
 ) {
     composable<ServicesRoute> {
+        val model: ServicesViewModel = hiltViewModel()
+        val state by model.uiState.collectAsStateWithLifecycle()
+        LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { model.refresh() }
         ServicesScreen(
+            week = state.week, todayIndex = state.todayIndex, onOpenExercise = onOpenExercise,
             onDryEyeClick = onDryEyeClick,
             onPresbyopiaClick = onPresbyopiaClick,
             onStrabismusClick = onStrabismusClick,

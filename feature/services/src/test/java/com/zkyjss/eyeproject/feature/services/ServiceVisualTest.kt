@@ -98,17 +98,17 @@ class ServiceVisualTest {
                     onOpenSettings = { destination = "settings" }, onOpenAccount = { destination = "account" })
             }
         } }
-        compose.onNodeWithContentDescription("切换到夜晚模式").performClick()
-        assertEquals("theme", destination)
-        compose.onNodeWithContentDescription("账户（未登录）").assertDoesNotExist()
+        compose.onNodeWithContentDescription("切换到夜晚模式").assertDoesNotExist()
+        compose.onNodeWithContentDescription("账户").performClick()
+        assertEquals("account", destination)
         compose.onNodeWithContentDescription("系统设置").performClick()
         assertEquals("settings", destination)
         capture("services-light")
         compose.onNodeWithText("干眼自测").performClick()
         assertEquals("dry", destination)
-        compose.onNodeWithText("老视自测").performClick()
+        compose.onNodeWithText("老视自测").performScrollTo().performClick()
         assertEquals("near", destination)
-        compose.onNodeWithText("眼位自测").performClick()
+        compose.onNodeWithText("眼位自测").performScrollTo().performClick()
         assertEquals("cover", destination)
     }
 
@@ -420,12 +420,19 @@ class ServiceVisualTest {
     @Test fun servicesHeroPlaysTestDemosAboveTheList() {
         var dark by mutableStateOf(false)
         compose.mainClock.autoAdvance = false
-        compose.setContent { EyeProjectTheme(darkTheme = dark) { ServicesScreen({}, {}, {}, onOpenAccount = {}) } }
+        compose.setContent { EyeProjectTheme(darkTheme = dark) { Box(Modifier.fillMaxSize().background(LocalEyeColors.current.appBackground)) {
+                    ServicesScreen({}, {}, {}, modifier = Modifier.padding(bottom = 88.dp), onOpenAccount = {}, week = listOf(132, 181, 141, 242, null, null, null), todayIndex = 3)
+                    EyeNavigationDock(listOf(
+                        EyeNavigationItem("首页",com.zkyjss.eyeproject.core.designsystem.R.drawable.ic_nav_home,com.zkyjss.eyeproject.core.designsystem.R.drawable.ic_nav_home_filled),
+                        EyeNavigationItem("服务",com.zkyjss.eyeproject.core.designsystem.R.drawable.ic_nav_services,com.zkyjss.eyeproject.core.designsystem.R.drawable.ic_nav_services_filled),
+                        EyeNavigationItem("我的",com.zkyjss.eyeproject.core.designsystem.R.drawable.ic_nav_mine,com.zkyjss.eyeproject.core.designsystem.R.drawable.ic_nav_mine_filled)
+                    ), 1, {}, Modifier.align(androidx.compose.ui.Alignment.BottomCenter).padding(16.dp))
+                } } }
         compose.mainClock.advanceTimeBy(1_500)
-        compose.onNodeWithText("示范：", substring = true).assertExists()
-        compose.onNodeWithText("全部自测").assertExists()
+        compose.onNodeWithText("手机使用时长").assertExists()
+        compose.onNodeWithText("选择一项自测").assertExists()
         compose.onNodeWithText("推荐").assertDoesNotExist()
-        capture("22-服务")
+        capture("brown-services")
         dark = true
         compose.mainClock.advanceTimeBy(1_500)
         capture("22b-服务-深色")

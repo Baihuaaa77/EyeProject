@@ -23,6 +23,8 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.ui.text.font.FontWeight
@@ -116,17 +118,17 @@ internal fun LiveEyeContent(
         // 未开始：一行（青色圆形图标 + 放大名称 +「开始」），开始后才展开取景框
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(44.dp).clip(CircleShape).background(colors.iceSoft), contentAlignment = Alignment.Center) {
+                Box(Modifier.size(22.dp), contentAlignment = Alignment.Center) {
                     EyeGlyphIcon(EyeGlyph.CAMERA, Modifier.size(22.dp), colors.iceInk)
                 }
                 Spacer(Modifier.width(14.dp))
                 Column(Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        EyeText("实时检测", style = typography.title, color = colors.textPrimary)
+                        EyeText("实时检测", style = typography.navigationTitle, color = colors.textPrimary)
                         EyeHelpButton("实时检测", LIVE_HELP)
                     }
                 }
-                PillButton("开始") { haptics.toggle(true); onStart() }
+                EyeSwitch(false, { haptics.toggle(true); onStart() }, Modifier.semantics { contentDescription = "开始实时检测" })
             }
             note?.let { EyeText(it, style = typography.bodySecondary, color = colors.warning) }
         }
@@ -137,7 +139,7 @@ internal fun LiveEyeContent(
         Row(Modifier.fillMaxWidth().heightIn(min = 40.dp), verticalAlignment = Alignment.CenterVertically) {
             EyeGlyphIcon(EyeGlyph.CAMERA, Modifier.size(20.dp), colors.iceInk)
             Spacer(Modifier.width(8.dp))
-            EyeText("实时检测", style = typography.title, color = colors.textPrimary)
+            EyeText("实时检测", style = typography.navigationTitle, color = colors.textPrimary)
             EyeHelpButton("实时检测", LIVE_HELP)
             Spacer(Modifier.weight(1f))
             if (state.running) {

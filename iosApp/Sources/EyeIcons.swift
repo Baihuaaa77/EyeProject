@@ -21,13 +21,10 @@ struct NavIconView: View {
                 house.addLine(to: p(4, 20)); house.closeSubpath()
                 if selected { context.fill(house, with: ink) } else { context.stroke(house, with: ink, style: line) }
             case .services:
-                // 自测清单：圆角板 + 勾 + 两条线
-                let board = Path(roundedRect: CGRect(x: 4 * k, y: 3.5 * k, width: 16 * k, height: 17 * k), cornerRadius: 2 * k)
-                if selected { context.fill(board, with: ink) } else { context.stroke(board, with: ink, style: line) }
-                var check = Path(); check.move(to: p(7.5, 9)); check.addLine(to: p(9.2, 10.7)); check.addLine(to: p(12, 7.8))
-                context.stroke(check, with: selected ? .color(EyeStyle.panel) : ink, style: line)
-                var lines = Path(); lines.move(to: p(14, 9.3)); lines.addLine(to: p(16.5, 9.3)); lines.move(to: p(7.5, 15)); lines.addLine(to: p(16.5, 15))
-                context.stroke(lines, with: selected ? .color(EyeStyle.panel) : ink, style: line)
+                for x in [CGFloat(3.5), CGFloat(14)] { for y in [CGFloat(3.5), CGFloat(14)] {
+                    let square = Path(roundedRect: CGRect(x: x * k, y: y * k, width: 6.5 * k, height: 6.5 * k), cornerRadius: 1.5 * k)
+                    context.stroke(square, with: ink, style: line)
+                } }
             case .mine:
                 let head = Path(ellipseIn: CGRect(x: 8.2 * k, y: 4.7 * k, width: 7.6 * k, height: 7.6 * k))
                 if selected { context.fill(head, with: ink) } else { context.stroke(head, with: ink, style: line) }

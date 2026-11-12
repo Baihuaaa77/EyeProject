@@ -23,6 +23,8 @@ targets:
         buildPhase: resources
       - path: ../core/designsystem/src/main/assets/fonts/OFL-Nunito.txt
         buildPhase: resources
+      - path: ../shared/artwork/res/drawable-nodpi
+        buildPhase: resources
       - path: ../shared/feedback/res/raw
         buildPhase: resources
       - path: ../shared/guide/res/drawable-nodpi
@@ -31,6 +33,7 @@ targets:
       path: Info.plist
       properties:
         CFBundleDisplayName: 眼健康助手
+        UIUserInterfaceStyle: Dark
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         # 系统启动页底色 = 启动动画顶部的浅主色，衔接应用内启动动画（SplashView）

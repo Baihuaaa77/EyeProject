@@ -1,5 +1,8 @@
 # core:ui
 
+> 2026-11-12 棕色界面：棕色版本：EyeWarmCard / EyeLoadArtwork / EyeLoadRail / EyeTrendRibbon / EyeWeekUsageCard 提供纯展示原语。导航改为横向图标与文字的杏桃胶囊，列表改为整组表面，开关使用清晰浅色滑块。所有数据和导航仍由调用方提供。 以下历史章节中的旧配色和布局描述由根目录 DESIGN.md 取代。
+
+
 > 可复用自绘 UI 组件库：全部基于 Compose Foundation 自绘，不使用 Material 组件。
 
 ## 职责

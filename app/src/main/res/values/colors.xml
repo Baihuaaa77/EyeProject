@@ -1,9 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- 与 core:designsystem EyeColors 保持一致，仅供系统窗口/启动页使用 -->
-    <color name="app_background">#FFF3F6F5</color>
-    <color name="primary">#FF0B7A78</color>
-    <color name="brand_start">#FF12A39A</color>
-    <!-- 系统启动页底色 = 启动动画顶部的浅主色（primarySoft），两段衔接不闪 -->
-    <color name="splash_background">#FFE3F4F2</color>
+    <!-- 系统窗口和启动页统一读取棕色深色设计令牌。 -->
+    <color name="app_background">@color/eye_dark_background</color>
+    <color name="primary">@color/eye_warm_primary</color>
+    <color name="brand_start">@color/eye_warm_brand_start</color>
+    <color name="splash_background">@color/eye_dark_background</color>
 </resources>

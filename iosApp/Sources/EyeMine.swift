@@ -20,28 +20,19 @@ struct MinePage: View {
 
     var body: some View {
         PageScroll {
-            PageHeader(title: "我的", openSettings: { navigate(.settings) })
+            PageHeader(title: "我的", openAccount: { navigate(.account) }, openSettings: { navigate(.settings) })
             profileCard
-            // 三格概览：一张卡里细竖线分隔，数字大、单位灰（与安卓 StatsRow 一致）
-            HStack(spacing: 0) {
-                stat("测试记录", "\(recordCount)", "条") { navigate(.records) }
-                Rectangle().fill(EyeStyle.borderSubtle).frame(width: 0.5).padding(.vertical, 14)
-                stat("家庭成员", "\(store.subjects.count)", "人") { navigate(.subjects) }
-                Rectangle().fill(EyeStyle.borderSubtle).frame(width: 0.5).padding(.vertical, 14)
-                stat("已上传", "\(cloud.int("synced"))", "条") { navigate(.cloud) }
-            }
-            .fixedSize(horizontal: false, vertical: true)
-            .eyeGlass()
             ListGroup(title: "健康档案") {
                 ListRow(title: "测试记录", glyph: .document, value: recordCount == 0 ? "暂无" : "\(recordCount) 条", glowBorder: false) { navigate(.records) }
                 ListRow(title: "家庭成员与资料", glyph: .family, tone: .violet, value: "\(store.subjects.count) 人", glowBorder: false) { navigate(.subjects) }
-                ListRow(title: "用眼趋势", glyph: .chart, tone: .violet, divider: false, glowBorder: false) { navigate(.trend) }
+                ListRow(title: "用眼趋势报告", glyph: .chart, tone: .violet, divider: false, glowBorder: false) { navigate(.trend) }
             }
             ListGroup(title: "数据与隐私") {
                 ListRow(title: "云端同步", glyph: .cloud, tone: .blue, value: cloudSummary, glowBorder: false) { navigate(.cloud) }
                 ListRow(title: "权限与通知", glyph: .shield, tone: .success, divider: false, glowBorder: false) { navigate(.permissions) }
             }
 
+            ListGroup(title: "通用") { ListRow(title: "系统设置", glyph: .gear, divider: false) { navigate(.settings) } }
         }.onAppear(perform: recount)
     }
 
@@ -51,12 +42,13 @@ struct MinePage: View {
         return VStack(spacing: 0) {
             Button { EyeHaptics.tap(); navigate(.subjectEdit(me?.id)) } label: {
                 HStack(spacing: 14) {
-                    Text(String((me?.displayName ?? "我").prefix(1))).font(EyeStyle.title).foregroundStyle(EyeStyle.onPrimary)
-                        .frame(width: 56, height: 56).eyeGlass(cornerRadius: EyeStyle.radiusMedium)
+                    EyeGlyphView(glyph: .eye, color: EyeStyle.primary).frame(width: 32, height: 32)
+                        .frame(width: 56, height: 56).eyeGlass(cornerRadius: 17, fill: AnyShapeStyle(BrownStyle.avatar))
                     VStack(alignment: .leading, spacing: 4) {
                         Text(me?.displayName ?? "我").font(EyeStyle.title).foregroundStyle(EyeStyle.text)
                         Text(([age.map { "\($0) 岁" }, complete >= 5 ? "档案已完善" : "档案完善 \(complete)/5"] as [String?]).compactMap { $0 }.joined(separator: " · "))
-                            .font(EyeStyle.body).foregroundStyle(EyeStyle.secondary)
+                            .font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
+                        HStack(spacing: 3) { ForEach(0..<5) { i in Capsule().fill(i < complete ? EyeStyle.primary : BrownStyle.rail).frame(width: 16, height: 3) } }
                     }.frame(maxWidth: .infinity, alignment: .leading)
                     Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(EyeStyle.tertiary)
                 }.padding(.leading, 18).padding(.trailing, 16).padding(.top, 18).padding(.bottom, 14).contentShape(Rectangle())
@@ -64,14 +56,14 @@ struct MinePage: View {
             Rectangle().fill(EyeStyle.borderSubtle).frame(height: 0.5).padding(.leading, 16)
             Button { EyeHaptics.tap(); navigate(.account) } label: {
                 HStack {
-                    Text(signedIn ? cloud.string("email") : "未登录").font(EyeStyle.body)
-                        .foregroundStyle(signedIn ? EyeStyle.text : EyeStyle.secondary).lineLimit(1)
+                    Text(signedIn ? cloud.string("email") : "登录 / 注册").font(EyeStyle.body)
+                        .foregroundStyle(signedIn ? EyeStyle.text : EyeStyle.primary).lineLimit(1)
                     Spacer()
-                    Text(signedIn ? "账户" : "登录 / 注册").font(EyeStyle.body).foregroundStyle(EyeStyle.readableText(EyeStyle.primary))
+                    Text("↗").font(EyeStyle.body).foregroundStyle(EyeStyle.readableText(EyeStyle.primary))
                 }.padding(.horizontal, 20).padding(.vertical, 14).contentShape(Rectangle())
             }.buttonStyle(RowPressStyle())
         }
-        .eyeGlass(cornerRadius: EyeStyle.radiusHero).eyeGlowBorder(cornerRadius: EyeStyle.radiusHero)
+        .eyeGlass(cornerRadius: EyeStyle.radiusHero, fill: AnyShapeStyle(BrownStyle.profile))
     }
 
     private func stat(_ label: String, _ value: String, _ unit: String, _ action: @escaping () -> Void) -> some View {

@@ -41,7 +41,7 @@ struct LiveEyeSection: View {
                         HelpButton(title: "实时检测", text: Self.help)
                     }
                 }.frame(maxWidth: .infinity, alignment: .leading)
-                PillButton(label: "开始") { model.wanted = true; model.start() }
+                Toggle("实时检测", isOn: Binding(get: { false }, set: { if $0 { model.wanted = true; model.start() } })).labelsHidden().tint(EyeStyle.primary)
             }
             if let message = model.error ?? model.cameraNote {
                 Text(message).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.readableText(EyeStyle.warning))

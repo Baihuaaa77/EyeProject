@@ -13,6 +13,9 @@ import com.zkyjss.eyeproject.feature.home.HomeScreen
 import kotlinx.serialization.Serializable
 
 @Serializable
+data object EyeExerciseRoute
+
+@Serializable
 data object HomeRoute
 
 /** 用眼趋势报告（首页「主动服务」与「我的」都能进入）。 */
@@ -35,6 +38,7 @@ fun NavController.navigateToHome(navOptions: NavOptions? = null) {
     navigate(HomeRoute, navOptions)
 }
 
+fun NavController.navigateToEyeExercise() { navigate(EyeExerciseRoute) { launchSingleTop = true } }
 fun NavController.navigateToEyeTrend() { navigate(EyeTrendRoute) { launchSingleTop = true } }
 fun NavController.navigateToEyeAdvice() { navigate(EyeAdviceRoute) { launchSingleTop = true } }
 fun NavController.navigateToEyeBrightness() { navigate(EyeBrightnessRoute) { launchSingleTop = true } }
@@ -47,6 +51,7 @@ fun NavGraphBuilder.homeScreen(navigation: HomeNavigation) {
 
 /** 首页的二级页面：用眼趋势报告、健康建议、亮度与蓝光、AI 综合建议对话。 */
 fun NavGraphBuilder.eyeCareScreens(onBack: () -> Unit, onOpenTest: (String) -> Unit, onOpenAccount: () -> Unit) {
+    composable<EyeExerciseRoute> { com.zkyjss.eyeproject.feature.home.EyeExercisePage(onBack) }
     composable<EyeTrendRoute> { EyeTrendScreen(onBack = onBack) }
     composable<EyeAdviceRoute> { EyeAdviceScreen(onBack = onBack, onOpenTest = onOpenTest) }
     composable<EyeBrightnessRoute> { EyeBrightnessScreen(onBack = onBack) }

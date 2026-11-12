@@ -9,7 +9,7 @@ enum TopLevelTab: CaseIterable { case home, services, mine
 
 /// 二级完整页面（NavigationStack 推入，替代系统底部弹窗）；与安卓各 feature 的路由一一对应。
 enum AppRoute: Hashable {
-    case account, settings, records, subjects, cloud, permissions, trend, advice, brightness, chat
+    case account, settings, records, subjects, cloud, permissions, trend, advice, brightness, chat, exercise
     /// 编辑成员资料；nil 为新建家庭成员
     case subjectEdit(String?)
 }
@@ -73,6 +73,7 @@ struct EyeRootView: View {
 
     @ViewBuilder private func destination(_ route: AppRoute) -> some View {
         switch route {
+        case .exercise: EyeExerciseView()
         case .account: AccountPage(openCloudSync: { navigate(.cloud) })
         case .settings: SystemSettingsPage(voice: voice, feedback: feedback)
         case .records: RecordsPage()
@@ -93,26 +94,27 @@ private struct TestSelection: Identifiable { let id: String; init(_ id: String) 
 
 private struct EyeBottomBar: View {
     @Binding var selected: TopLevelTab
+    @Environment(\.accessibilityReduceMotion) private var reducedMotion
     var body: some View {
         HStack(spacing: 4) {
             ForEach(TopLevelTab.allCases, id: \.self) { tab in
                 let active = tab == selected
                 Button { if !active { EyeHaptics.tap() }; selected = tab } label: {
-                    VStack(spacing: 2) {
-                        NavIconView(icon: tab.icon, selected: active).frame(width: 24, height: 24).scaleEffect(active ? 1.06 : 1)
-                        Text(tab.label).font(EyeStyle.tab).foregroundStyle(EyeStyle.text)
+                    HStack(spacing: 6) {
+                        NavIconView(icon: tab.icon, selected: false).frame(width: 24, height: 24).scaleEffect(active ? 1.06 : 1)
+                        Text(tab.label).font(EyeStyle.body)
                     }
-                    .foregroundStyle(active ? EyeStyle.primary : EyeStyle.secondary)
+                    .foregroundStyle(active ? EyeStyle.onPrimary : EyeStyle.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(active ? EyeStyle.primary.opacity(EyeStyle.liquidSelectedOpacity) : .clear, in: Capsule())
+                    .background { if active { Capsule().fill(EyeStyle.buttonGradient) } }
                     .contentShape(Capsule())
                 }.buttonStyle(.plain)
                     .accessibilityLabel(tab.label)
                     .accessibilityAddTraits(active ? [.isSelected] : [])
-                    .animation(.spring(response: 0.35, dampingFraction: 0.8), value: active)
+                    .animation(reducedMotion ? nil : .spring(response: 0.35, dampingFraction: 0.8), value: active)
             }
         }
-        .padding(6).frame(height: 64)
+        .padding(6).frame(height: 60)
         .eyeLiquidGlass(cornerRadius: EyeStyle.liquidDockRadius)
         .padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 12)
     }
@@ -176,11 +178,12 @@ final class EyeReminder: ObservableObject {
 private struct ServicesPage: View {
     let open: (String) -> Void
     let navigate: (AppRoute) -> Void
+    @ObservedObject private var store = EyeCareStore.shared
     var body: some View {
         PageScroll {
-            PageHeader(title: "服务", openSettings: { navigate(.settings) })
-            DemoHeroCard()
-            Text("全部自测").font(EyeStyle.title).foregroundStyle(EyeStyle.text)
+            PageHeader(title: "服务", openAccount: { navigate(.account) }, openSettings: { navigate(.settings) })
+            WeekUsageCard(values: serviceWeek, labels: ["周一","周二","周三","周四","周五","周六","周日"], todayIndex: (Calendar.current.component(.weekday, from: Date()) + 5) % 7)
+            Text("选择一项自测").font(EyeStyle.title).foregroundStyle(EyeStyle.text)
                 .padding(.top, EyeSpacing.sectionGap - EyeSpacing.cardGap).padding(.leading, 4)
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 16), GridItem(.flexible(), spacing: 16)], spacing: 16) {
                 ServiceRow(title: "干眼自测", glyph: .dryEye, tone: .blue) { open("DRY_EYE") }
@@ -188,10 +191,29 @@ private struct ServicesPage: View {
                 ServiceRow(title: "老视自测", glyph: .presbyopia, tone: .primary) { open("PRESBYOPIA") }
                 ServiceRow(title: "色觉自测", glyph: .color, tone: .accent, divider: false) { open("COLOR_VISION") }
             }
+            Text("日常护眼").font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text).padding(.top, 8)
+            Button { navigate(.exercise) } label: {
+                WarmCard(fill: BrownStyle.tile(0)) {
+                    EyeGlyphView(glyph: .eye, color: EyeStyle.primary).frame(width: 32, height: 32).frame(maxWidth: .infinity).padding(.top, 12)
+                    Text("护眼操").font(EyeStyle.navigationTitle).foregroundStyle(EyeStyle.text).frame(maxWidth: .infinity).padding(.vertical, 12)
+                }
+            }.buttonStyle(.plain).frame(maxWidth: 170)
+            WarmDisclosure(title: "自测方法示范") { DemoHeroCard() }
             Text("自测结果仅供参考，不能替代医院检查。").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.tertiary)
                 .frame(maxWidth: .infinity).multilineTextAlignment(.center).padding(.top, 4)
         }
     }
+    private var serviceWeek: [Int?] {
+        var calendar = Calendar(identifier: .iso8601)
+        calendar.timeZone = .current
+        guard let monday = calendar.dateInterval(of: .weekOfYear, for: Date())?.start else { return Array(repeating: nil, count: 7) }
+        let formatter = DateFormatter(); formatter.calendar = calendar; formatter.dateFormat = "yyyy-MM-dd"
+        return (0..<7).map { offset in
+            guard let day = calendar.date(byAdding: .day, value: offset, to: monday) else { return nil }
+            return store.report.days.first { $0.id == formatter.string(from: day) }?.screenMinutes
+        }
+    }
+
 }
 
 /// 示范主卡：随机轮流演示三项自测的做法（每种连播两遍），上方是测试名称与一句做法（随示范淡入淡出）。
@@ -266,22 +288,12 @@ private struct ServiceRow: View {
     let action: () -> Void
     var body: some View {
         Button { EyeHaptics.tap(); action() } label: {
-            VStack(alignment: .leading, spacing: 20) {
-                ServiceGlyphView(glyph: glyph, color: {
-                    switch glyph {
-                    case .dryEye: EyeStyle.Tile.teal
-                    case .alignment: EyeStyle.Tile.indigo
-                    case .presbyopia: EyeStyle.Tile.orange
-                    case .color: EyeStyle.Tile.red
-                    }
-                }()).frame(width: 26, height: 26)
-                    .frame(width: 48, height: 48).eyeGlass(cornerRadius: EyeStyle.radiusMedium)
-                HStack {
-                    Text(title).font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text)
-                    Spacer(minLength: 4)
-                    Image(systemName: "chevron.right").foregroundStyle(EyeStyle.primary)
-                }
-            }.padding(EyeSpacing.lg).frame(maxWidth: .infinity, alignment: .leading).eyeLiquidGlass()
+            VStack(spacing: 16) {
+                ServiceGlyphView(glyph: glyph, color: glyph == .presbyopia ? EyeStyle.Tile.orange : glyph == .alignment ? EyeStyle.Tile.indigo : EyeStyle.Tile.teal)
+                    .frame(width: 32, height: 32)
+                Text(title).font(EyeStyle.navigationTitle).foregroundStyle(EyeStyle.text)
+            }.frame(maxWidth: .infinity, minHeight: 148)
+                .eyeGlass(fill: AnyShapeStyle(BrownStyle.tile(glyph == .alignment ? 1 : glyph == .presbyopia ? 2 : glyph == .color ? 3 : 0)))
         }.buttonStyle(PressScale(scale: 0.98))
     }
 }

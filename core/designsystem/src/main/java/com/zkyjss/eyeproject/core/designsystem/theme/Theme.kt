@@ -13,7 +13,8 @@ fun EyeProjectTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit
 ) {
-    val colors = if (darkTheme) DarkEyeColors else LightEyeColors
+    // 新界面只提供深色；保留参数供旧调用方兼容。
+    val colors = DarkEyeColors
     CompositionLocalProvider(
         LocalEyeColors provides colors,
         LocalEyeTypography provides EyeTypographyDefaults,

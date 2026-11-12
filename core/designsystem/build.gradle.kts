@@ -7,6 +7,12 @@ android {
     namespace = "com.zkyjss.eyeproject.core.designsystem"
 }
 
+androidComponents {
+    onVariants(selector().all()) { variant ->
+        variant.sources.res?.addStaticSourceDirectory("../../shared/artwork/res")
+    }
+}
+
 dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)

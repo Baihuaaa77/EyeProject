@@ -12,20 +12,11 @@ struct EyeGlassModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-        content.clipShape(shape)
-            .background {
-                if pressed {
-                    shape.fill(EyeStyle.panel
-                        .shadow(.inner(color: EyeStyle.shadow, radius: 5, x: 2, y: 2))
-                        .shadow(.inner(color: EyeStyle.shadowLight, radius: 5, x: -2, y: -2)))
-                } else {
-                    shape.fill(fill ?? AnyShapeStyle(EyeStyle.glassFill))
-                        .shadow(color: EyeStyle.shadowLight, radius: 16, x: -6, y: -6)
-                        .shadow(color: EyeStyle.shadow, radius: 22, x: 8, y: 8)
-                }
-            }
+        content.background(fill ?? AnyShapeStyle(pressed ? EyeStyle.surfaceVariant : EyeStyle.panel), in: shape)
             .overlay { shape.stroke(EyeStyle.glassEdgeTop, lineWidth: 1).allowsHitTesting(false) }
+            .clipShape(shape)
     }
+
 }
 
 extension View {
@@ -49,32 +40,10 @@ private struct EyeLiquidGlassModifier: ViewModifier {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceTransparency) private var reducedTransparency
     @Environment(\.accessibilityReduceMotion) private var reducedMotion
-    @ViewBuilder func body(content: Content) -> some View {
-        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-        if reducedTransparency {
-            content.background(EyeStyle.panel, in: shape)
-                .overlay { shape.stroke(EyeStyle.borderSubtle, lineWidth: EyeStyle.liquidRimWidth).allowsHitTesting(false) }
-        } else if #available(iOS 26.0, *) {
-            content.glassEffect(.regular.tint(EyeStyle.primary.opacity(EyeStyle.liquidTintLight)).interactive(!reducedMotion), in: shape)
-        } else {
-            let reflection = scheme == .dark ? EyeStyle.liquidReflectionDark : EyeStyle.liquidReflectionLight
-            let edge = scheme == .dark ? EyeStyle.liquidEdgeDark : EyeStyle.liquidEdgeLight
-            content.background {
-                shape.fill(.ultraThinMaterial)
-                    .overlay { shape.fill(EyeStyle.primary.opacity(scheme == .dark ? EyeStyle.liquidTintDark : EyeStyle.liquidTintLight)) }
-                    .overlay { shape.fill(RadialGradient(colors: [.white.opacity(reflection), .clear],
-                        center: .topLeading, startRadius: 0, endRadius: EyeStyle.liquidReflectionRadius)) }
-            }
-            .overlay {
-                shape.inset(by: EyeStyle.liquidRimWidth / 2).stroke(LinearGradient(colors: [
-                    .white.opacity(edge), EyeStyle.primary.opacity(edge * 0.22), .white.opacity(edge * 0.75)
-                ], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: EyeStyle.liquidRimWidth)
-                    .allowsHitTesting(false).accessibilityHidden(true)
-            }
-            .clipShape(shape)
-            .shadow(color: EyeStyle.shadow.opacity(EyeStyle.liquidShadowOpacity), radius: EyeStyle.liquidShadowRadius, x: 0, y: EyeStyle.liquidShadowOffset)
-        }
+    func body(content: Content) -> some View {
+        content.eyeGlass(cornerRadius: cornerRadius)
     }
+
 }
 
 private struct EyeGlowBorderModifier: ViewModifier {
@@ -82,18 +51,10 @@ private struct EyeGlowBorderModifier: ViewModifier {
     let strength: Double
     @Environment(\.colorScheme) private var scheme
     func body(content: Content) -> some View {
-        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous).inset(by: EyeStyle.cardBorderInset)
-        let gradient = EyeStyle.borderGradient
-        let opacity = (scheme == .dark ? EyeStyle.cardBorderOpacityDark : EyeStyle.cardBorderOpacityLight) * strength
-        content.overlay {
-            ZStack {
-                shape.stroke(gradient, lineWidth: EyeStyle.cardBorderWidth * 2)
-                    .opacity(opacity * EyeStyle.cardGlowOpacity).blur(radius: EyeStyle.cardGlowRadius)
-                shape.stroke(gradient, lineWidth: EyeStyle.cardBorderWidth).opacity(opacity)
-            }.clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-                .allowsHitTesting(false).accessibilityHidden(true)
-        }
+        content.overlay { RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            .stroke(EyeStyle.glassEdgeTop, lineWidth: 1).allowsHitTesting(false) }
     }
+
 }
 
 struct EyeBackdrop: View {
