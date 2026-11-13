@@ -11,7 +11,7 @@ struct TrialSummary: Codable, Identifiable {
     var stoppedEarly: Bool
     var results: [EyeAnalysis]
     var frameRecords: Int
-    var algorithmVersion: String = "corneal-feasibility-1"
+    var algorithmVersion: String = "corneal-feasibility-2"
     var eligibilityNotes: [String] = []
 }
 
@@ -71,7 +71,7 @@ final class LabModel: ObservableObject {
                         self.directory = directory
                         let start = labHostTime()+0.3
                         self.startTime = start
-                        self.camera.beginRecording(directory: directory,start: start) { recordingResult in DispatchQueue.main.async {
+                        self.camera.beginRecording(directory: directory,start: start,captureColor: config.mode == .motion) { recordingResult in DispatchQueue.main.async {
                             guard self.phase == .warming else { return }
                             switch recordingResult {
                             case .failure(let error): self.fail(error.localizedDescription)
@@ -97,7 +97,7 @@ final class LabModel: ObservableObject {
             "screenNativeWidth": UIScreen.main.nativeBounds.width,"screenNativeHeight": UIScreen.main.nativeBounds.height,
             "screenMaxFPS": UIScreen.main.maximumFramesPerSecond]
         guard let directory = directory else { phase = .setup; return }
-        camera.finish { [weak self] samples,records,data,images,info in
+        camera.finish { [weak self] samples,records,data,rgb,images,info in
             self?.camera.stop()
             DispatchQueue.global(qos: .userInitiated).async {
                 do {
@@ -105,7 +105,7 @@ final class LabModel: ObservableObject {
                     var summary = TrialSummary(id: directory.lastPathComponent,date: Date(),configuration: config,
                         startHostTime: start,stoppedEarly: early,results: results,frameRecords: records.count)
                     if early { summary.eligibilityNotes.append("提前停止，不能作为完整轮次") }
-                    if events.count != StimulusCode.bits.count { summary.eligibilityNotes.append("显示码元日志不完整") }
+                    if Set(events.map(\.chip)).count != StimulusCode.bits.count { summary.eligibilityNotes.append("显示码元日志不完整") }
                     if (info["videoStatus"] as? Int) != AVAssetWriter.Status.completed.rawValue { summary.eligibilityNotes.append("原始视频未成功完成写入") }
                     if results.contains(where: { $0.samples < 60 }) { summary.eligibilityNotes.append("至少一个眼区有效帧不足") }
                     let brightness = events.map(\.screenBrightness)
@@ -116,14 +116,23 @@ final class LabModel: ObservableObject {
                     let rows = try records.map { String(decoding: try rowEncoder.encode($0),as: UTF8.self) }.joined(separator: "\n")+"\n"
                     try rows.write(to: directory.appendingPathComponent("frames.jsonl"),atomically: true,encoding: .utf8)
                     try data.write(to: directory.appendingPathComponent("patches.f32"))
+                    if !rgb.isEmpty { try rgb.write(to: directory.appendingPathComponent("patches_rgb.u8")) }
                     var metadata = info
                     metadata.merge(deviceInfo) { _,new in new }
                     metadata["observedCameraFPS"] = Double(Set(records.map(\.index)).count)/config.duration
                     metadata["clock"] = "camera PTS converted from session masterClock to host clock; CADisplayLink targetTimestamp + host offset"
                     metadata["timingLimit"] = "No photodiode measurement; lag includes display/camera/ISP timing and rolling shutter."
-                    metadata["patchFormat"] = "little-endian Float32, 64 columns x 32 rows, pupil-centered eye ROI, gray=0.2126R+0.7152G+0.0722B; byte offsets in frames.jsonl"
+                    metadata["patchWidth"] = CornealAnalyzer.width; metadata["patchHeight"] = CornealAnalyzer.height
+                    metadata["rgbPatchFormat"] = "interleaved UInt8 R,G,B; byte offsets rgbPatchOffset in frames.jsonl; motion trials only"
+                    metadata["patchFormat"] = "little-endian Float32, 128 columns x 64 rows, bilinear sampled, pupil-centered eye ROI, gray=0.2126R+0.7152G+0.0722B; byte offsets in frames.jsonl"
                     try JSONSerialization.data(withJSONObject: metadata,options: [.prettyPrinted,.sortedKeys]).write(to: directory.appendingPathComponent("camera.json"))
-                    for (eye,image) in images { try image.pngData()?.write(to: directory.appendingPathComponent(eye+".png")) }
+                    for result in results {
+                        var image = images[result.eye]
+                        if let time = result.referenceHostTime, let sample = samples.filter({ $0.eye == result.eye }).min(by: { abs($0.hostTime-time)<abs($1.hostTime-time) }) {
+                            image = LabCamera.patchImage(sample.pixels)
+                        }
+                        try image?.pngData()?.write(to: directory.appendingPathComponent(result.eye+".png"))
+                    }
                     try encoder.encode(summary).write(to: directory.appendingPathComponent("summary.json"))
                     DispatchQueue.main.async {
                         self?.phase = .setup; self?.cameraReady = false; self?.selected = summary; self?.loadSaved()

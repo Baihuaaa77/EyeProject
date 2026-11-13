@@ -40,7 +40,7 @@ struct LabRootView: View {
         Form {
             Section {
                 Text("屏幕白点 → 前摄眼区 → 映光定位").font(LabStyle.title)
-                Text("验证光学信号，不输出斜视诊断。采集时屏幕全黑，只保留一个白点；点屏幕任意位置停止。").font(LabStyle.detail)
+                Text("验证光学信号，不输出斜视诊断。黑色背景仅显示实验光点；点屏幕任意位置停止。").font(LabStyle.detail)
             }
             Section("1 · 准备相机") {
                 if let image = model.preview {
@@ -54,11 +54,30 @@ struct LabRootView: View {
                 Picker("照明",selection: $model.configuration.mode) {
                     ForEach(TrialMode.allCases) { mode in Text(mode.title).tag(mode) }
                 }
-                Picker("白点直径",selection: $model.configuration.dotDiameter) {
+                Picker(model.configuration.mode == .motion ? "移动光点直径" : "白点直径",selection: $model.configuration.dotDiameter) {
                     ForEach([16.0,32,64,96],id: \.self) { Text("\(Int($0)) pt").tag($0) }
                 }
-                Picker("白点位置",selection: $model.configuration.dotY) {
+                Picker(model.configuration.mode == .motion ? "固定注视点位置" : "白点位置",selection: $model.configuration.dotY) {
                     Text("上方，靠近前摄").tag(0.15); Text("上四分之一").tag(0.25); Text("屏幕中央").tag(0.50)
+                }
+                if model.configuration.mode == .motion {
+                    Stepper("移动光点 \(model.configuration.probeCount) 个",value: $model.configuration.probeCount,in: 1...3)
+                    Toggle("移动光点使用红 / 绿 / 蓝",isOn: $model.configuration.colorfulProbes)
+                    Picker("移动范围",selection: $model.configuration.motionScale) {
+                        Text("小").tag(0.5); Text("标准").tag(1.0); Text("大").tag(1.3)
+                    }
+                    Text("始终盯住静止的小白点。其他光点在外围移动，不要追看；固定白点为 24 pt，移动光点为上方设定直径。").font(LabStyle.detail)
+                } else if model.configuration.mode == .coded || model.configuration.mode == .steady {
+                    Picker("明暗变化",selection: Binding(get: { model.configuration.modulation },set: { value in
+                        model.configuration.modulation = value
+                        model.configuration.mean = value == 0.15 ? 0.8 : 1-value
+                    })) {
+                        Text("弱：65% ↔ 95%（旧版）").tag(0.15)
+                        Text("中：20% ↔ 100%").tag(0.4)
+                        Text("强：5% ↔ 100%").tag(0.475)
+                        Text("全幅：0% ↔ 100%").tag(0.5)
+                    }
+                    Text("均值对照恒亮值：\(Int((model.configuration.mean*100).rounded()))%。百分比为输出通道值，不是实测物理亮度。").font(LabStyle.detail)
                 }
                 HStack { Text("屏幕亮度"); Slider(value: $model.configuration.screenBrightness,in: 0.3...1); Text("\(Int(model.configuration.screenBrightness*100))%") }
                 HStack { Text("自报距离"); TextField("厘米",value: $model.configuration.distanceCM,format: .number).keyboardType(.decimalPad); Text("cm") }
@@ -68,7 +87,7 @@ struct LabRootView: View {
                 Text("对照轮保持白点大小、位置、距离和曝光一致。首次使用或更换环境后关闭沿用，再点准备相机。").font(LabStyle.detail)
             }
             Section("3 · 采集") {
-                Text("先用常亮白点，再用编码白点，最后全黑对照；每轮 32 秒，开始前有 2.5 秒黑屏白点预适应。").font(LabStyle.detail)
+                Text("先用全白常亮确认可见性，再比较明暗编码与均值对照。运动验证先用一个白色移动点，再试多个点和彩色点。每轮 32 秒，开始前 2.5 秒恒亮预适应。").font(LabStyle.detail)
                 Button("开始 \(model.configuration.mode.title)",action: model.begin).disabled(!model.cameraReady)
                 Text("成人先做短时台架验证。编码仅改变小点灰度，2 码元/秒；如感到不适，立即点屏幕停止。实验数据只保存在本机。").font(LabStyle.detail)
             }
@@ -107,17 +126,30 @@ struct TrialResultView: View {
                         if let image = UIImage(contentsOfFile: directory.appendingPathComponent(eye.eye+".png").path) {
                             Image(uiImage: image).resizable().interpolation(.none).aspectRatio(2,contentMode: .fit)
                                 .overlay { GeometryReader { g in
+                                    if let iris = eye.referenceIris {
+                                        IrisOverlay(region: iris)
+                                    }
                                     if let p = eye.point {
-                                        Circle().stroke(eye.codedEvidence ? LabStyle.coded : LabStyle.candidate,lineWidth: 2)
+                                        Circle().stroke((eye.motionResults?.first?.accepted ?? eye.codedEvidence) ? LabStyle.coded : LabStyle.candidate,lineWidth: 2)
                                             .frame(width: 18,height: 18).position(x: p.x*g.size.width,y: p.y*g.size.height)
                                     }
                                 } }
                         }
+                        if eye.referenceIris != nil { Text("虚线为保守虹膜内区估计，与眼睑轮廓取交集；请核对边界。").font(LabStyle.detail) }
                         Text(eye.message).font(LabStyle.body)
                         Text("有效眼区 \(eye.samples) 帧 · 单帧亮点候选率 \(Int(eye.rawCandidateRate*100))%").font(LabStyle.detail)
+                        if trial.configuration.mode != .motion {
                         HStack { metric("前半段 r",eye.trainCorrelation); metric("后半段 r",eye.heldOutCorrelation); metric("错码 |r|",eye.wrongCodeCorrelation) }
                         HStack { metric("响应幅度",eye.amplitude); metric("拟合延迟 ms",eye.lagSeconds.map { $0*1000 }) }
-                        if eye.heatmap.count == CornealAnalyzer.count {
+                        }
+                        if let motion = eye.motionResults {
+                            ForEach(0..<trial.configuration.probeCount,id: \.self) { id in
+                                if let item = motion.first(where: { $0.sourceID == id }) {
+                                    MotionResultView(result: item)
+                                } else { Text("移动光点 \(id+1)：未找到覆盖前后半段的稳定轨迹。").font(LabStyle.detail) }
+                            }
+                        }
+                        if eye.heatmap.count == 2048 || eye.heatmap.count == CornealAnalyzer.count {
                             Text("码相关热图（对照轮为伪码）").font(.subheadline)
                             HeatmapView(values: eye.heatmap).aspectRatio(2,contentMode: .fit)
                             Text("局部高通信号与编码参考").font(.subheadline)
@@ -125,11 +157,11 @@ struct TrialResultView: View {
                         }
                     }.padding().background(LabStyle.background).clipShape(RoundedRectangle(cornerRadius: LabStyle.radius))
                 }
-                Text("绿圈：通过后半段固定位置验证的编码响应候选。橙圈：未通过验证的聚合候选。配准以 Vision 瞳孔估计为中心，显示图为 64×32 灰度眼区；原始彩色视频另存。镜片反射也可能带编码，必须人工检查位置。").font(LabStyle.detail)
+                Text("绿圈：至少一个编码响应候选通过后半段验证。橙圈：未通过验证的聚合候选。配准以 Vision 瞳孔估计为中心，新版眼区为 128×64。运动轮的圈对应第一条候选轨迹末帧，其他光源分别见轨迹图；位移单位为眼区采样像素。镜片反射也可能带编码，必须人工检查位置。").font(LabStyle.detail)
                 VideoPlayer(player: AVPlayer(url: directory.appendingPathComponent("camera.mov"))).frame(height: 300)
                 Button("导出本轮视频、图像与时间日志",action: share).buttonStyle(.borderedProminent)
                 DisclosureGroup("参数与判定边界") {
-                    Text("只用前半段选择位置与延迟，固定后在后半段验证。参考门槛：前半段 r≥0.35、后半段 r≥0.30、后半段比错码至少高 0.15，局部响应≥0.5 灰度级。这些是工程门槛，不是经临床验证的阈值。延迟不是纯硬件延迟。").font(LabStyle.detail)
+                    Text("运动轮：仅前半段选择轨迹、空间映射与延迟，固定参数验证后半段。增益为相对仅含眼动/头动模型的误差下降比例，要求前半段≥0.45、后半段≥0.30、比错轨迹高0.20、位移≥0.18采样像素、覆盖≥60%，并排除严重运动混杂。明暗轮：只用前半段选择位置与延迟，固定后在后半段验证。参考门槛：前半段 r≥0.35、后半段 r≥0.30、后半段比错码至少高 0.15，局部响应≥0.5 灰度级。这些是工程门槛，不是经临床验证的阈值。延迟不是纯硬件延迟。").font(LabStyle.detail)
                     Text((try? String(contentsOf: directory.appendingPathComponent("camera.json"),encoding: .utf8)) ?? "无相机参数").font(.system(.caption,design: .monospaced))
                 }
             }.padding()
@@ -144,9 +176,10 @@ struct HeatmapView: View {
     let values: [Double]
     var body: some View { Canvas { context,size in
         let peak = max(values.max() ?? 0,0.001)
-        for y in 0..<32 { for x in 0..<64 {
-            let v = max(0,min(1,values[y*64+x]/peak))
-            context.fill(Path(CGRect(x: Double(x)*size.width/64,y: Double(y)*size.height/32,width: size.width/64+0.5,height: size.height/32+0.5)),with: .color(LabStyle.primary.opacity(v)))
+        let width = values.count == 2048 ? 64 : CornealAnalyzer.width, height = width/2
+        for y in 0..<height { for x in 0..<width {
+            let v = max(0,min(1,values[y*width+x]/peak))
+            context.fill(Path(CGRect(x: Double(x)*size.width/Double(width),y: Double(y)*size.height/Double(height),width: size.width/Double(width)+0.5,height: size.height/Double(height)+0.5)),with: .color(LabStyle.primary.opacity(v)))
         } }
     }.background(LabStyle.background) }
 }
@@ -165,6 +198,59 @@ struct SignalView: View {
             }
             context.stroke(path,with: .color(color),lineWidth: 1)
         }
+    } }
+}
+
+struct IrisOverlay: View {
+    let region: IrisRegion
+    var body: some View { Canvas { context,size in
+        var eyelid = Path()
+        for (i,p) in region.eyelid.enumerated() {
+            let q = CGPoint(x: p.x*size.width,y: p.y*size.height)
+            if i == 0 { eyelid.move(to: q) } else { eyelid.addLine(to: q) }
+        }
+        eyelid.closeSubpath(); context.clip(to: eyelid)
+        let ellipse = Path(ellipseIn: CGRect(x: (region.center.x-region.radiusX)*size.width,y: (region.center.y-region.radiusY)*size.height,width: region.radiusX*2*size.width,height: region.radiusY*2*size.height))
+        context.fill(ellipse,with: .color(LabStyle.primary.opacity(0.10)))
+        context.stroke(ellipse,with: .color(LabStyle.primary),style: StrokeStyle(lineWidth: 1,dash: [4,3]))
+    }.allowsHitTesting(false) }
+}
+
+struct MotionResultView: View {
+    let result: MotionAnalysis
+    private func number(_ value: Double) -> String { String(format: "%.2f",value) }
+    var body: some View {
+        VStack(alignment: .leading,spacing: 8) {
+            Text("移动光点 \(result.sourceID+1) · \(result.color == "white" ? "白" : result.color == "red" ? "红" : result.color == "green" ? "绿" : "蓝")").font(.headline)
+            Text(result.message).foregroundStyle(result.accepted ? LabStyle.coded : LabStyle.candidate).font(LabStyle.detail)
+            Text("误差下降：前半 \(number(result.trainGain)) / 后半 \(number(result.heldOutGain)) / 错轨迹 \(number(result.wrongTrajectoryGain))").font(LabStyle.detail)
+            Text("位移 RMS \(number(result.amplitudePixels)) px · 验证误差 \(number(result.heldOutErrorPixels)) px · 覆盖 \(Int(result.coverage*100))% · 延迟 \(Int(result.lagSeconds*1000)) ms").font(LabStyle.detail)
+            Text("实际亮点轨迹（橙） / 固定模型预测（灰）；虚线为验证段起点").font(LabStyle.detail)
+            MotionTraceView(observations: result.observations,predicted: result.predicted,axisX: true).frame(height: 90)
+            MotionTraceView(observations: result.observations,predicted: result.predicted,axisX: false).frame(height: 90)
+        }.padding(.vertical,8)
+    }
+}
+
+struct MotionTraceView: View {
+    let observations: [MotionObservation]
+    let predicted: [LabPoint]
+    let axisX: Bool
+    var body: some View { Canvas { context,size in
+        let actual = observations.map { axisX ? $0.point.x : $0.point.y }
+        let model = predicted.map { axisX ? $0.x : $0.y }
+        let all = actual+model, lo = (all.min() ?? 0)-0.1, hi = (all.max() ?? 1)+0.1
+        for (values,color) in [(actual,LabStyle.primary),(model,LabStyle.secondary)] {
+            var path = Path()
+            for i in 0..<min(values.count,observations.count) {
+                let p = CGPoint(x: observations[i].time/32*size.width,y: size.height-(values[i]-lo)/(hi-lo)*size.height)
+                if i == 0 || observations[i].time-observations[i-1].time>0.4 { path.move(to: p) } else { path.addLine(to: p) }
+            }
+            context.stroke(path,with: .color(color),lineWidth: 1.5)
+        }
+        var split = Path(); split.move(to: CGPoint(x: size.width/2,y: 0)); split.addLine(to: CGPoint(x: size.width/2,y: size.height))
+        context.stroke(split,with: .color(LabStyle.secondary),style: StrokeStyle(lineWidth: 1,dash: [3,3]))
+        context.draw(Text(axisX ? "X" : "Y").font(LabStyle.detail),at: CGPoint(x: 8,y: 8))
     } }
 }
 

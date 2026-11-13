@@ -22,6 +22,8 @@ final class LabCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
     private var samples: [PatchSample] = []
     private var records: [FrameRecord] = []
     private var patchData = Data()
+    private var rgbData = Data()
+    private var captureColor = false
     private var eyeImages: [String: UIImage] = [:]
     private var lastPoints: [String: CGPoint] = [:]
     private var dropped = 0
@@ -118,11 +120,12 @@ final class LabCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
         }
     }
 
-    func beginRecording(directory: URL, start: Double, completion: @escaping (Result<Void, Error>) -> Void) {
+    func beginRecording(directory: URL, start: Double, captureColor: Bool = false, completion: @escaping (Result<Void, Error>) -> Void) {
         queue.async {
             do {
                 self.writer = try AVAssetWriter(outputURL: directory.appendingPathComponent("camera.mov"), fileType: .mov)
                 self.writerInput = nil; self.videoStartPTS = nil
+                self.captureColor = captureColor; self.rgbData = Data()
                 self.samples = []; self.records = []; self.patchData = Data(); self.eyeImages = [:]; self.lastPoints = [:]
                 self.dropped = 0; self.writeDropped = 0; self.frame = 0; self.startTime = start; self.recording = true
                 completion(.success(()))
@@ -130,10 +133,10 @@ final class LabCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
         }
     }
 
-    func finish(completion: @escaping ([PatchSample], [FrameRecord], Data, [String: UIImage], [String: Any]) -> Void) {
+    func finish(completion: @escaping ([PatchSample], [FrameRecord], Data, Data, [String: UIImage], [String: Any]) -> Void) {
         queue.async {
             self.recording = false
-            let samples = self.samples, records = self.records, data = self.patchData, images = self.eyeImages
+            let samples = self.samples, records = self.records, data = self.patchData, rgb = self.rgbData, images = self.eyeImages
             var info = self.cameraInfo
             info["captureDroppedFrames"] = self.dropped; info["videoWriteDroppedFrames"] = self.writeDropped
             info["videoStartPTS"] = self.videoStartPTS.map { $0 as Any } ?? NSNull()
@@ -141,18 +144,18 @@ final class LabCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
             let writer = self.writer
             self.writerInput?.markAsFinished()
             self.writer = nil; self.writerInput = nil
-            self.samples = []; self.records = []; self.patchData = Data()
+            self.samples = []; self.records = []; self.patchData = Data(); self.rgbData = Data()
             if writer?.status == .writing {
                 writer?.finishWriting {
                     var finalInfo = info
                     finalInfo["videoStatus"] = writer?.status.rawValue ?? -1
                     finalInfo["videoError"] = writer?.error?.localizedDescription ?? ""
-                    completion(samples, records, data, images, finalInfo)
+                    completion(samples, records, data, rgb, images, finalInfo)
                 }
             } else {
                 info["videoStatus"] = writer?.status.rawValue ?? -1
                 info["videoError"] = writer?.error?.localizedDescription ?? "未写入视频"
-                completion(samples, records, data, images, info)
+                completion(samples, records, data, rgb, images, info)
             }
         }
     }
@@ -181,15 +184,17 @@ final class LabCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
         func record(_ status: String, sample: PatchSample? = nil) {
             guard saving else { return }
             let offset = sample == nil ? nil : patchData.count
+            let rgbOffset = sample?.rgb == nil ? nil : rgbData.count
             if let sample = sample {
                 var little = sample.pixels.map { $0.bitPattern.littleEndian }
                 little.withUnsafeBytes { patchData.append(contentsOf: $0) }
+                if let rgb = sample.rgb { rgbData.append(contentsOf: rgb) }
                 samples.append(sample)
             }
             records.append(FrameRecord(index: frame, pts: CMTimeGetSeconds(pts), hostTime: host,
                 exposureSeconds: CMTimeGetSeconds(device.exposureDuration), iso: device.iso, width: width, height: height,
                 status: status, eye: sample?.eye, roi: sample?.roi, pupil: sample?.pupil,
-                rawCandidate: sample?.rawCandidate, saturation: sample?.saturation, patchOffset: offset))
+                rawCandidate: sample?.rawCandidate, saturation: sample?.saturation, patchOffset: offset,iris: sample?.iris,rgbPatchOffset: rgbOffset,nuisance: sample?.nuisance))
         }
         guard frame % 2 == 0 else { record("not_analyzed"); return }
         let request = VNDetectFaceLandmarksRequest()
@@ -206,14 +211,15 @@ final class LabCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
                 y: (1-face.boundingBox.minY-p.y*face.boundingBox.height)*Double(height))
         }
         let regions: [(VNFaceLandmarkRegion2D?, VNFaceLandmarkRegion2D?)] = [(landmarks.leftEye, landmarks.leftPupil), (landmarks.rightEye, landmarks.rightPupil)]
-        var eyes: [(CGPoint, Double)] = []
+        var eyes: [(CGPoint, Double, CGPoint, [CGPoint])] = []
         for (region, pupilRegion) in regions {
             guard let region = region, region.pointCount >= 4, let pupilRegion = pupilRegion, pupilRegion.pointCount > 0 else { continue }
             let points = region.normalizedPoints.map(imagePoint)
             let eyeWidth = (points.map(\.x).max() ?? 0) - (points.map(\.x).min() ?? 0)
             let eyeHeight = (points.map(\.y).max() ?? 0) - (points.map(\.y).min() ?? 0)
             guard eyeWidth >= 20, eyeHeight/eyeWidth >= 0.08 else { continue }
-            eyes.append((imagePoint(pupilRegion.normalizedPoints[0]), eyeWidth))
+            let center = CGPoint(x: points.map(\.x).reduce(0,+)/Double(points.count),y: points.map(\.y).reduce(0,+)/Double(points.count))
+            eyes.append((imagePoint(pupilRegion.normalizedPoints[0]), eyeWidth, center, points))
         }
         eyes.sort { $0.0.x < $1.0.x }
         guard eyes.count == 2 else { record("blink_or_eye_roi_missing"); preview(pixels, time: host, text: "眨眼或瞳孔区域不可用", ready: false); return }
@@ -221,6 +227,7 @@ final class LabCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
         defer { CVPixelBufferUnlockBaseAddress(pixels, .readOnly) }
         guard let base = CVPixelBufferGetBaseAddress(pixels)?.assumingMemoryBound(to: UInt8.self) else { record("pixel_buffer_missing"); return }
         let stride = CVPixelBufferGetBytesPerRow(pixels)
+        var irisCount = 0
         for (index, eye) in eyes.enumerated() {
             let name = index == 0 ? "image_left" : "image_right"
             let p = eye.0, w = eye.1*1.4, h = w/2
@@ -231,28 +238,43 @@ final class LabCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
             }
             lastPoints[name] = p
             var patch = [Float](repeating: 0, count: CornealAnalyzer.count)
+            var rgb = captureColor ? [UInt8](repeating: 0,count: CornealAnalyzer.count*3) : []
             for y in 0..<CornealAnalyzer.height { for x in 0..<CornealAnalyzer.width {
-                let sx = Int(rect.x+(Double(x)+0.5)/Double(CornealAnalyzer.width)*w)
-                let sy = Int(rect.y+(Double(y)+0.5)/Double(CornealAnalyzer.height)*h)
-                let i = sy*stride+sx*4
-                patch[y*CornealAnalyzer.width+x] = 0.2126*Float(base[i+2])+0.7152*Float(base[i+1])+0.0722*Float(base[i])
+                let sx = rect.x+(Double(x)+0.5)/Double(CornealAnalyzer.width)*w-0.5
+                let sy = rect.y+(Double(y)+0.5)/Double(CornealAnalyzer.height)*h-0.5
+                let ix = max(0,min(width-2,Int(floor(sx)))), iy = max(0,min(height-2,Int(floor(sy))))
+                let fx = max(0,min(1,sx-Double(ix))), fy = max(0,min(1,sy-Double(iy)))
+                var channels = [Float](repeating: 0,count: 3)
+                for channel in 0..<3 {
+                    let offset = 2-channel
+                    let a = Double(base[iy*stride+ix*4+offset]), b = Double(base[iy*stride+(ix+1)*4+offset])
+                    let c = Double(base[(iy+1)*stride+ix*4+offset]), d = Double(base[(iy+1)*stride+(ix+1)*4+offset])
+                    channels[channel] = Float((a*(1-fx)+b*fx)*(1-fy)+(c*(1-fx)+d*fx)*fy)
+                    if captureColor { rgb[(y*CornealAnalyzer.width+x)*3+channel] = UInt8(max(0,min(255,channels[channel]))) }
+                }
+                patch[y*CornealAnalyzer.width+x] = 0.2126*channels[0]+0.7152*channels[1]+0.0722*channels[2]
             } }
+            let eyelid = eye.3.map { LabPoint(x: (Double($0.x)-rect.x)/w,y: (Double($0.y)-rect.y)/h) }
+            guard let iris = IrisRegion.estimate(pixels: patch,eyelid: eyelid) else { record("iris_boundary_uncertain"); continue }
+            irisCount += 1
             let hp = CornealAnalyzer.highPass(patch)
             var candidate: Int?, score: Float = 0
             for i in hp.indices {
-                let x = Double(i%64)/64, y = Double(i/64)/32
-                if abs(x-0.5)<0.32 && abs(y-0.5)<0.36 && patch[i]>140 && hp[i]>max(12,score) { score = hp[i]; candidate = i }
+                let x = Double(i%CornealAnalyzer.width)/Double(CornealAnalyzer.width), y = Double(i/CornealAnalyzer.width)/Double(CornealAnalyzer.height)
+                if iris.contains(LabPoint(x: x+0.5/Double(CornealAnalyzer.width),y: y+0.5/Double(CornealAnalyzer.height))) && patch[i]>140 && hp[i]>max(12,score) { score = hp[i]; candidate = i }
             }
-            let raw = candidate.map { LabPoint(x: (Double($0%64)+0.5)/64, y: (Double($0/64)+0.5)/32) }
+            let raw = candidate.map { LabPoint(x: (Double($0%CornealAnalyzer.width)+0.5)/Double(CornealAnalyzer.width), y: (Double($0/CornealAnalyzer.width)+0.5)/Double(CornealAnalyzer.height)) }
             let saturation = Double(patch.filter { $0 >= 250 }.count)/Double(patch.count)
             let sample = PatchSample(eye: name, hostTime: host, pixels: patch, roi: rect,
-                pupil: LabPoint(x: Double(p.x),y: Double(p.y)), rawCandidate: raw, saturation: saturation)
+                pupil: LabPoint(x: Double(p.x),y: Double(p.y)), rawCandidate: raw, saturation: saturation,iris: iris,rgb: captureColor ? rgb : nil,
+                nuisance: [(Double(p.x)-Double(eye.2.x))/eye.1,(Double(p.y)-Double(eye.2.y))/eye.1,
+                    Double(face.boundingBox.midX),Double(face.boundingBox.midY)])
             if saving {
                 record(saturation > 0.15 ? "saturated_excluded" : "valid", sample: sample)
                 if saturation <= 0.15 { eyeImages[name] = Self.patchImage(patch) }
             }
         }
-        preview(pixels, time: host, text: "双眼可见 · \(width)×\(height) · ISO \(Int(device.iso))", ready: true)
+        preview(pixels, time: host, text: "双眼可见 · 虹膜内区 \(irisCount)/2 · ISO \(Int(device.iso))", ready: true)
     }
 
     private func preview(_ buffer: CVPixelBuffer, time: Double, text: String, ready: Bool) {
@@ -281,8 +303,8 @@ final class LabCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
 
     static func patchImage(_ pixels: [Float]) -> UIImage? {
         let data = Data(pixels.map { UInt8(max(0,min(255,Int($0)))) })
-        guard let provider = CGDataProvider(data: data as CFData), let cg = CGImage(width: 64,height: 32,bitsPerComponent: 8,
-            bitsPerPixel: 8,bytesPerRow: 64,space: CGColorSpaceCreateDeviceGray(),bitmapInfo: CGBitmapInfo(rawValue: 0),
+        guard let provider = CGDataProvider(data: data as CFData), let cg = CGImage(width: CornealAnalyzer.width,height: CornealAnalyzer.height,bitsPerComponent: 8,
+            bitsPerPixel: 8,bytesPerRow: CornealAnalyzer.width,space: CGColorSpaceCreateDeviceGray(),bitmapInfo: CGBitmapInfo(rawValue: 0),
             provider: provider,decode: nil,shouldInterpolate: false,intent: .defaultIntent) else { return nil }
         return UIImage(cgImage: cg)
     }

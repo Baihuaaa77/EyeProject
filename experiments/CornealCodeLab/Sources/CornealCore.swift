@@ -1,24 +1,47 @@
 import Foundation
 
 enum TrialMode: String, Codable, CaseIterable, Identifiable {
-    case steady, coded, dark
+    case steady, coded, dark, peak, motion
     var id: String { rawValue }
-    var title: String { switch self { case .steady: return "常亮白点"; case .coded: return "编码白点"; case .dark: return "全黑阴性对照" } }
+    var title: String { switch self { case .steady: return "常亮白点（均值对照）"; case .coded: return "明暗编码白点"; case .dark: return "全黑阴性对照"; case .peak: return "全白常亮（找点）"; case .motion: return "固定注视＋移动光点" } }
 }
 
 struct TrialConfiguration: Codable {
     var mode: TrialMode = .steady
-    var dotDiameter: Double = 32
+    var dotDiameter: Double = 64
     var dotY: Double = 0.25
-    var screenBrightness: Double = 0.8
-    var mean: Double = 0.80
-    var modulation: Double = 0.15
+    var screenBrightness: Double = 1
+    var mean: Double = 0.525
+    var modulation: Double = 0.475
     var chipSeconds: Double = 0.5
     var distanceCM: Double = 33
     var glasses: String = "未戴镜"
     var lighting: String = "室内普通光"
     var reuseExposure: Bool = true
+    var probeCount: Int = 1
+    var colorfulProbes: Bool = false
+    var motionScale: Double = 1
     var duration: Double { Double(StimulusCode.bits.count) * chipSeconds }
+    init() {}
+    enum CodingKeys: String, CodingKey { case mode, dotDiameter, dotY, screenBrightness, mean, modulation, chipSeconds, distanceCM, glasses, lighting, reuseExposure, probeCount, colorfulProbes, motionScale }
+    /// 旧轮次缺少运动参数时仍可打开；保留旧强度，不能用新默认值改写旧实验条件。
+    init(from decoder: Decoder) throws {
+        let v = try decoder.container(keyedBy: CodingKeys.self)
+        mode = try v.decodeIfPresent(TrialMode.self,forKey: .mode) ?? .steady
+        dotDiameter = try v.decodeIfPresent(Double.self,forKey: .dotDiameter) ?? 32
+        dotY = try v.decodeIfPresent(Double.self,forKey: .dotY) ?? 0.25
+        screenBrightness = try v.decodeIfPresent(Double.self,forKey: .screenBrightness) ?? 0.8
+        mean = try v.decodeIfPresent(Double.self,forKey: .mean) ?? 0.8
+        modulation = try v.decodeIfPresent(Double.self,forKey: .modulation) ?? 0.15
+        chipSeconds = try v.decodeIfPresent(Double.self,forKey: .chipSeconds) ?? 0.5
+        distanceCM = try v.decodeIfPresent(Double.self,forKey: .distanceCM) ?? 33
+        glasses = try v.decodeIfPresent(String.self,forKey: .glasses) ?? "未戴镜"
+        lighting = try v.decodeIfPresent(String.self,forKey: .lighting) ?? "室内普通光"
+        reuseExposure = try v.decodeIfPresent(Bool.self,forKey: .reuseExposure) ?? true
+        probeCount = try v.decodeIfPresent(Int.self,forKey: .probeCount) ?? 1
+        colorfulProbes = try v.decodeIfPresent(Bool.self,forKey: .colorfulProbes) ?? false
+        motionScale = try v.decodeIfPresent(Double.self,forKey: .motionScale) ?? 1
+    }
 }
 
 enum StimulusCode {
@@ -42,6 +65,7 @@ enum StimulusCode {
     static func intensity(at seconds: Double, configuration c: TrialConfiguration) -> Double {
         switch c.mode {
         case .dark: return 0
+        case .peak, .motion: return 1
         case .steady: return c.mean
         case .coded: return c.mean + c.modulation * value(at: seconds, configuration: c)
         }
@@ -55,6 +79,7 @@ struct DisplayEvent: Codable {
     let chip: Int
     let callbackHostTime: Double
     var screenBrightness: Double = 0
+    var probes: [ProbeEvent]?
 }
 
 struct LabPoint: Codable { var x: Double; var y: Double }
@@ -68,6 +93,9 @@ struct PatchSample {
     let pupil: LabPoint
     let rawCandidate: LabPoint?
     let saturation: Double
+    var iris: IrisRegion? = nil
+    var rgb: [UInt8]? = nil
+    var nuisance: [Double]? = nil
 }
 
 struct FrameRecord: Codable {
@@ -85,6 +113,9 @@ struct FrameRecord: Codable {
     var rawCandidate: LabPoint?
     var saturation: Double?
     var patchOffset: Int?
+    var iris: IrisRegion?
+    var rgbPatchOffset: Int?
+    var nuisance: [Double]?
 }
 
 struct EyeAnalysis: Codable {
@@ -103,11 +134,15 @@ struct EyeAnalysis: Codable {
     let traceTime: [Double]
     let traceSignal: [Double]
     let traceCode: [Double]
+    var referenceIris: IrisRegion? = nil
+    var motionResults: [MotionAnalysis]? = nil
+    var patchWidth: Int? = nil
+    var referenceHostTime: Double? = nil
 }
 
 enum CornealAnalyzer {
-    static let width = 64
-    static let height = 32
+    static let width = 128
+    static let height = 64
     static let count = width * height
 
     /// 眼区配准后的局部高通，降低整个脸随屏幕一起变亮造成的伪相关。
@@ -141,7 +176,8 @@ enum CornealAnalyzer {
 
     static func analyze(eye: String, samples input: [PatchSample], events: [DisplayEvent],
                         start: Double, configuration c: TrialConfiguration) -> EyeAnalysis {
-        let samples = input.filter { $0.eye == eye && $0.pixels.count == count && $0.saturation <= 0.15 }
+        if c.mode == .motion { return MotionDecoder.analyze(eye: eye,samples: input,events: events,start: start,configuration: c) }
+        let samples = input.filter { $0.eye == eye && $0.pixels.count == count && $0.saturation <= 0.15 && $0.iris != nil }
         let rawRate = samples.isEmpty ? 0 : Double(samples.filter { $0.rawCandidate != nil }.count) / Double(samples.count)
         func empty(_ message: String) -> EyeAnalysis {
             EyeAnalysis(eye: eye, samples: samples.count, rawCandidateRate: rawRate, point: nil, trainCorrelation: nil,
@@ -160,6 +196,10 @@ enum CornealAnalyzer {
             guard lo > 0 else { return 0 }
             return shift == 0 ? events[lo-1].code : StimulusCode.bits[(events[lo-1].chip+shift)%StimulusCode.bits.count]
         }
+        let searchable = (0..<count).filter { p in
+            let point = LabPoint(x: (Double(p%width)+0.5)/Double(width),y: (Double(p/width)+0.5)/Double(height))
+            return train.allSatisfy { samples[$0].iris?.contains(point) == true }
+        }
         var bestIndex: Int?, bestLag = 0.0, bestScore = -Double.infinity, bestR = 0.0, bestAmplitude = 0.0
         var heat = [Double](repeating: 0, count: count)
         for step in -3...9 {
@@ -168,10 +208,7 @@ enum CornealAnalyzer {
             let meanC = codes.reduce(0,+)/Double(codes.count)
             let cc = codes.map { ($0-meanC)*($0-meanC) }.reduce(0,+)
             guard cc > 10 else { continue }
-            for p in 0..<count {
-                // 只在瞳孔附近的内眼区找候选；镜框等外侧区域不参与峰值选择。
-                let px = Double(p % width)/Double(width), py = Double(p/width)/Double(height)
-                guard abs(px-0.5) < 0.32, abs(py-0.5) < 0.36 else { continue }
+            for p in searchable {
                 var sum = 0.0, sum2 = 0.0, cross = 0.0
                 for (j, i) in train.enumerated() { let y = Double(filtered[i][p]); sum += y; sum2 += y*y; cross += (codes[j]-meanC)*y }
                 let variance = sum2 - sum*sum/Double(train.count)
@@ -183,21 +220,27 @@ enum CornealAnalyzer {
             }
         }
         guard let p = bestIndex else { return empty("未找到可解调位置。") }
-        let heldSignal = test.map { Double(filtered[$0][p]) }
-        let heldCode = test.map { reference(samples[$0].hostTime-bestLag) }
+        let point = LabPoint(x: (Double(p%width)+0.5)/Double(width),y: (Double(p/width)+0.5)/Double(height))
+        let heldIndices = test.filter { samples[$0].iris?.contains(point) == true }
+        guard heldIndices.count>=25,Double(heldIndices.count)>=Double(test.count)*0.6 else { return empty("后半段候选位于虹膜内区的有效覆盖不足。") }
+        let heldSignal = heldIndices.map { Double(filtered[$0][p]) }
+        let heldCode = heldIndices.map { reference(samples[$0].hostTime-bestLag) }
         let held = correlation(heldSignal, heldCode)
         // 空间位置和延迟只用前半段选择；后半段固定验证，并与错码对照。
         let nullScores = [7,13,23,31].compactMap { shift in
-            correlation(heldSignal, test.map { reference(samples[$0].hostTime-bestLag,shift: shift) })
+            correlation(heldSignal, heldIndices.map { reference(samples[$0].hostTime-bestLag,shift: shift) })
         }
         let wrong = nullScores.map(abs).max() ?? 1
         let evidence = c.mode == .coded && bestR >= 0.35 && (held ?? -1) >= 0.30 && (held ?? -1) > wrong + 0.15 && bestAmplitude >= 0.5
-        return EyeAnalysis(eye: eye, samples: samples.count, rawCandidateRate: rawRate,
+        var result = EyeAnalysis(eye: eye, samples: samples.count, rawCandidateRate: rawRate,
             point: LabPoint(x: (Double(p % width)+0.5)/Double(width), y: (Double(p/width)+0.5)/Double(height)),
             trainCorrelation: bestR, heldOutCorrelation: held, wrongCodeCorrelation: wrong, amplitude: bestAmplitude,
             lagSeconds: bestLag, codedEvidence: evidence,
             message: c.mode != .coded ? "本轮未发出编码；伪码相关仅用于检查偶然相关，亮点候选需人工确认。" : evidence ? "有独立后半段编码响应，仍需人工确认位于角膜而非镜片或眼睑。" : "编码证据不足；不能把热图最高点当作已定位映光。",
             heatmap: heat, traceTime: samples.map { $0.hostTime-start }, traceSignal: filtered.map { Double($0[p]) },
             traceCode: samples.map { reference($0.hostTime-bestLag) })
+        result.patchWidth = width; let referenceSample = samples.last { $0.iris?.contains(point) == true }
+        result.referenceIris = referenceSample?.iris; result.referenceHostTime = referenceSample?.hostTime
+        return result
     }
 }
