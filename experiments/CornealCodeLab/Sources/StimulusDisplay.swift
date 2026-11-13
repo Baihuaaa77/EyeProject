@@ -60,7 +60,7 @@ final class StimulusDriver: NSObject {
         guard let view = view else { return [] }
         let moving = configuration.mode == .motion
         let diameter = moving ? 24 : configuration.dotDiameter
-        let probes = moving && intensity>0 ? MotionStimulus.probes(at: time,configuration: configuration,width: Double(view.bounds.width),height: Double(view.bounds.height)) : []
+        let probes = moving && intensity>0 ? MotionStimulus.probes(at: time,configuration: configuration,width: Double(view.bounds.width),height: Double(view.bounds.height),topInset: max(64,Double(view.window?.safeAreaInsets.top ?? 0)),bottomInset: max(34,Double(view.window?.safeAreaInsets.bottom ?? 0))) : []
         CATransaction.begin(); CATransaction.setDisableActions(true)
         dot.bounds = CGRect(x: 0,y: 0,width: diameter,height: diameter)
         dot.cornerRadius = diameter/2

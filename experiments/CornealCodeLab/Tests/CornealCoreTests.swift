@@ -102,7 +102,8 @@ final class CornealCoreTests: XCTestCase {
             XCTAssertEqual(probes.map(\.color),["red","green","blue"])
             for p in probes {
                 XCTAssertGreaterThanOrEqual(p.position.x*320,c.dotDiameter/2)
-                XCTAssertLessThanOrEqual(p.position.y*568,568-c.dotDiameter/2)
+                XCTAssertLessThanOrEqual(p.position.y*568,568-34-c.dotDiameter/2)
+                XCTAssertGreaterThanOrEqual(p.position.y*568,64+c.dotDiameter/2)
                 XCTAssertGreaterThan(hypot((p.position.x-0.5)*320,(p.position.y-c.dotY)*568),c.dotDiameter/2+12)
                 traces[p.id].append(p.position.x)
             }

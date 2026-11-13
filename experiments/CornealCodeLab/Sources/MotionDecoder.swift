@@ -9,7 +9,7 @@ struct ProbeEvent: Codable {
 
 enum MotionStimulus {
     /// 注视点保持不动；外围三个分区用不同伪随机相位，余弦过渡避免瞬移。
-    static func probes(at time: Double, configuration c: TrialConfiguration, width: Double = 390, height: Double = 844) -> [ProbeEvent] {
+    static func probes(at time: Double, configuration c: TrialConfiguration, width: Double = 390, height: Double = 844, topInset: Double = 64, bottomInset: Double = 34) -> [ProbeEvent] {
         let centers = [LabPoint(x: 0.22,y: 0.75), LabPoint(x: 0.78,y: 0.75), LabPoint(x: 0.78,y: 0.17)]
         let colors = ["red","green","blue"]
         let u = max(0,time)/0.8, k = Int(u), blend = (1-cos((u-Double(k)) * .pi))/2
@@ -20,7 +20,7 @@ enum MotionStimulus {
         return (0..<max(1,min(3,c.probeCount))).map { id in
             let marginX = (c.dotDiameter/2+4)/max(width,1), marginY = (c.dotDiameter/2+4)/max(height,1)
             var p = LabPoint(x: centers[id].x+0.13*c.motionScale*wave(7+id*17),y: centers[id].y+0.10*c.motionScale*wave(29+id*11))
-            p.x = max(marginX,min(1-marginX,p.x)); p.y = max(marginY,min(1-marginY,p.y))
+            p.x = max(marginX,min(1-marginX,p.x)); p.y = max(marginY+topInset/max(height,1),min(1-marginY-bottomInset/max(height,1),p.y))
             // 第三个分区可能靠近上方注视点，沿横向推出固定白点，避免重叠。
             let exclusion = c.dotDiameter/2+12+8
             if hypot((p.x-0.5)*width,(p.y-c.dotY)*height)<exclusion {
