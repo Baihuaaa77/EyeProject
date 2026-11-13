@@ -122,7 +122,7 @@ struct TrialResultView: View {
                 ForEach(trial.eligibilityNotes,id: \.self) { Text($0).foregroundStyle(LabStyle.candidate) }
                 ForEach(trial.results,id: \.eye) { eye in
                     VStack(alignment: .leading,spacing: 10) {
-                        Text(eye.eye == "image_left" ? "画面左眼区（未镜像）" : "画面右眼区（未镜像）").font(.headline)
+                        Text(eye.eye == "image_left" ? "画面左眼区（未镜像）" : "画面右眼区（未镜像）").font(LabStyle.heading)
                         if let image = UIImage(contentsOfFile: directory.appendingPathComponent(eye.eye+".png").path) {
                             Image(uiImage: image).resizable().interpolation(.none).aspectRatio(2,contentMode: .fit)
                                 .overlay { GeometryReader { g in
@@ -150,9 +150,9 @@ struct TrialResultView: View {
                             }
                         }
                         if eye.heatmap.count == 2048 || eye.heatmap.count == CornealAnalyzer.count {
-                            Text("码相关热图（对照轮为伪码）").font(.subheadline)
+                            Text("码相关热图（对照轮为伪码）").font(LabStyle.subheading)
                             HeatmapView(values: eye.heatmap).aspectRatio(2,contentMode: .fit)
-                            Text("局部高通信号与编码参考").font(.subheadline)
+                            Text("局部高通信号与编码参考").font(LabStyle.subheading)
                             SignalView(signal: eye.traceSignal,code: eye.traceCode).frame(height: 100)
                         }
                     }.padding().background(LabStyle.background).clipShape(RoundedRectangle(cornerRadius: LabStyle.radius))
@@ -162,7 +162,7 @@ struct TrialResultView: View {
                 Button("导出本轮视频、图像与时间日志",action: share).buttonStyle(.borderedProminent)
                 DisclosureGroup("参数与判定边界") {
                     Text("运动轮：仅前半段选择轨迹、空间映射与延迟，固定参数验证后半段。增益为相对仅含眼动/头动模型的误差下降比例，要求前半段≥0.45、后半段≥0.30、比错轨迹高0.20、位移≥0.18采样像素、覆盖≥60%，并排除严重运动混杂。明暗轮：只用前半段选择位置与延迟，固定后在后半段验证。参考门槛：前半段 r≥0.35、后半段 r≥0.30、后半段比错码至少高 0.15，局部响应≥0.5 灰度级。这些是工程门槛，不是经临床验证的阈值。延迟不是纯硬件延迟。").font(LabStyle.detail)
-                    Text((try? String(contentsOf: directory.appendingPathComponent("camera.json"),encoding: .utf8)) ?? "无相机参数").font(.system(.caption,design: .monospaced))
+                    Text((try? String(contentsOf: directory.appendingPathComponent("camera.json"),encoding: .utf8)) ?? "无相机参数").font(LabStyle.code)
                 }
             }.padding()
         }.navigationTitle("本轮验证").navigationBarTitleDisplayMode(.inline)
@@ -221,7 +221,7 @@ struct MotionResultView: View {
     private func number(_ value: Double) -> String { String(format: "%.2f",value) }
     var body: some View {
         VStack(alignment: .leading,spacing: 8) {
-            Text("移动光点 \(result.sourceID+1) · \(result.color == "white" ? "白" : result.color == "red" ? "红" : result.color == "green" ? "绿" : "蓝")").font(.headline)
+            Text("移动光点 \(result.sourceID+1) · \(result.color == "white" ? "白" : result.color == "red" ? "红" : result.color == "green" ? "绿" : "蓝")").font(LabStyle.heading)
             Text(result.message).foregroundStyle(result.accepted ? LabStyle.coded : LabStyle.candidate).font(LabStyle.detail)
             Text("误差下降：前半 \(number(result.trainGain)) / 后半 \(number(result.heldOutGain)) / 错轨迹 \(number(result.wrongTrajectoryGain))").font(LabStyle.detail)
             Text("位移 RMS \(number(result.amplitudePixels)) px · 验证误差 \(number(result.heldOutErrorPixels)) px · 覆盖 \(Int(result.coverage*100))% · 延迟 \(Int(result.lagSeconds*1000)) ms").font(LabStyle.detail)

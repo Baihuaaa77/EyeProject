@@ -11,6 +11,9 @@ enum LabStyle {
     static let coded = Color.green
     static let stimulusBackground = UIColor.black
     static let title = Font.title2.weight(.semibold)
+    static let heading = Font.headline
+    static let subheading = Font.subheadline
+    static let code = Font.system(.caption,design: .monospaced)
     static let body = Font.body
     static let detail = Font.caption
     static let radius: CGFloat = 16
