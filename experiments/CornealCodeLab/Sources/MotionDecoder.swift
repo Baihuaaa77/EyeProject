@@ -213,9 +213,9 @@ enum MotionDecoder {
             trainCorrelation: nil,heldOutCorrelation: nil,wrongCodeCorrelation: nil,amplitude: nil,lagSeconds: nil,codedEvidence: results.contains { $0.accepted },
             message: results.isEmpty ? "没有覆盖前后半段的稳定亮点轨迹；不能据此认定没有映光。" : "\(results.filter { $0.accepted }.count)/\(c.probeCount) 个移动光源通过轨迹验证。固定白点不参与移动解调。",
             heatmap: [],traceTime: [],traceSignal: [],traceCode: [])
-        let referenceTime = reference.map { start+$0.time } ?? start
+        let referenceTime = reference.map { start+$0.time } ?? samples.last?.hostTime ?? start
         result.referenceIris = samples.min(by: { abs($0.hostTime-referenceTime)<abs($1.hostTime-referenceTime) })?.iris
-        result.motionResults = results; result.patchWidth = CornealAnalyzer.width; result.referenceHostTime = reference.map { start+$0.time }
+        result.motionResults = results; result.patchWidth = CornealAnalyzer.width; result.referenceHostTime = samples.isEmpty ? nil : referenceTime
         return result
     }
 }

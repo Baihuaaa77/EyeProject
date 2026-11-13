@@ -167,12 +167,32 @@ final class CornealCoreTests: XCTestCase {
                 } }
             }
             for channel in 0..<3 { rgb[(32*128+93)*3+channel] = 250 }
-            let gray = (0..<CornealAnalyzer.count).map { j in 0.2126*Float(rgb[j*3])+0.7152*Float(rgb[j*3+1])+0.0722*Float(rgb[j*3+2]) }
+            var gray = [Float](repeating: 0,count: CornealAnalyzer.count)
+            for j in gray.indices {
+                let red = Float(rgb[j*3])*0.2126
+                let green = Float(rgb[j*3+1])*0.7152
+                let blue = Float(rgb[j*3+2])*0.0722
+                gray[j] = red+green+blue
+            }
             return PatchSample(eye: "image_left",hostTime: t,pixels: gray,roi: LabRect(x: 0,y: 0,width: 128,height: 64),pupil: LabPoint(x: 64,y: 32),rawCandidate: nil,saturation: 0,iris: iris,rgb: rgb,nuisance: [0,0,0,0])
         }
         let result = MotionDecoder.analyze(eye: "image_left",samples: samples,events: events,start: 0,configuration: c)
         XCTAssertEqual(result.motionResults?.count,3)
         XCTAssertEqual(result.motionResults?.filter { $0.accepted }.count,3,result.message)
+    }
+
+    @MainActor func testMotionStimulusRendersFixedWhitePointAndThreeProbes() throws {
+        let driver = StimulusDriver()
+        driver.configuration.mode = .motion; driver.configuration.probeCount = 3; driver.configuration.colorfulProbes = true
+        let view = UIView(frame: CGRect(x: 0,y: 0,width: 390,height: 844)); driver.attach(view)
+        let image = UIGraphicsImageRenderer(size: view.bounds.size).image { ctx in view.layer.render(in: ctx.cgContext) }
+        let attachment = XCTAttachment(image: image); attachment.name = "运动刺激-固定注视与三个彩色点"; attachment.lifetime = .keepAlways; add(attachment)
+        XCTAssertGreaterThan(try XCTUnwrap(image.pngData()).count,2_000)
+        let (_,events,track) = motionFixture()
+        let result = try XCTUnwrap(MotionDecoder.decode(track: track,id: 0,color: "white",events: events,start: 0,duration: 32,lag: 0.1,expectedSamples: 480))
+        let renderer = ImageRenderer(content: MotionResultView(result: result).padding().frame(width: 390).background(LabStyle.background).preferredColorScheme(.dark))
+        let resultImage = try XCTUnwrap(renderer.uiImage)
+        let resultAttachment = XCTAttachment(image: resultImage); resultAttachment.name = "运动解调-合成验证结果"; resultAttachment.lifetime = .keepAlways; add(resultAttachment)
     }
 
     @MainActor func testSetupScreenRendersWithoutStartingTheCamera() throws {

@@ -27,7 +27,7 @@ final class StimulusDriver: NSObject {
             let layer = CALayer(); layer.actions = dot.actions
             view.layer.addSublayer(layer); probeLayers.append(layer)
         }
-        render(configuration.mean)
+        render(StimulusCode.intensity(at: 0,configuration: configuration))
     }
     func warmup(_ c: TrialConfiguration) {
         stop(); configuration = c; events = []; start = nil; lastChip = -999

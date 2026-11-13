@@ -180,9 +180,11 @@ enum CornealAnalyzer {
         let samples = input.filter { $0.eye == eye && $0.pixels.count == count && $0.saturation <= 0.15 && $0.iris != nil }
         let rawRate = samples.isEmpty ? 0 : Double(samples.filter { $0.rawCandidate != nil }.count) / Double(samples.count)
         func empty(_ message: String) -> EyeAnalysis {
-            EyeAnalysis(eye: eye, samples: samples.count, rawCandidateRate: rawRate, point: nil, trainCorrelation: nil,
+            var result = EyeAnalysis(eye: eye, samples: samples.count, rawCandidateRate: rawRate, point: nil, trainCorrelation: nil,
                         heldOutCorrelation: nil, wrongCodeCorrelation: nil, amplitude: nil, lagSeconds: nil,
                         codedEvidence: false, message: message, heatmap: [], traceTime: [], traceSignal: [], traceCode: [])
+            result.referenceIris = samples.last?.iris; result.referenceHostTime = samples.last?.hostTime; result.patchWidth = width
+            return result
         }
         guard samples.count >= 60 else { return empty("有效眼区不足 60 帧，请检查距离、光照和头部稳定性。") }
         let train = samples.indices.filter { samples[$0].hostTime-start < c.duration/2 }
