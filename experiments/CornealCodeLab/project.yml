@@ -1,0 +1,47 @@
+name: CornealCodeLab
+options:
+  deploymentTarget: {iOS: "16.0"}
+  xcodeVersion: "26.4"
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    CODE_SIGN_STYLE: Automatic
+    TARGETED_DEVICE_FAMILY: "1"
+targets:
+  CornealCodeLab:
+    type: application
+    platform: iOS
+    sources:
+      - Sources
+      - path: ../../core/designsystem/ios/CornealLabStyle.swift
+    info:
+      path: Info.plist
+      properties:
+        CFBundleDisplayName: 光码映光验证
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        NSCameraUsageDescription: 录制双眼视频，验证屏幕白点能否形成可定位、可编码解调的映光。
+        UIUserInterfaceStyle: Dark
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        UILaunchScreen: {}
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
+        ITSAppUsesNonExemptEncryption: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.zkyjss.cornealcodelab
+        GENERATE_INFOPLIST_FILE: NO
+    scheme:
+      testTargets: [CornealCodeLabTests]
+  CornealCodeLabTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: Tests
+    dependencies:
+      - target: CornealCodeLab
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.zkyjss.cornealcodelab.tests
+        GENERATE_INFOPLIST_FILE: YES

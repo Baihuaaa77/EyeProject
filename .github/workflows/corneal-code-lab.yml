@@ -1,0 +1,58 @@
+name: 光码映光独立实验 IPA
+on:
+  workflow_dispatch:
+  push:
+    branches: ["codex/**"]
+    paths:
+      - "experiments/CornealCodeLab/**"
+      - "core/designsystem/ios/CornealLabStyle.swift"
+      - ".github/workflows/corneal-code-lab.yml"
+permissions:
+  contents: read
+concurrency:
+  group: corneal-code-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  ios-lab:
+    name: 独立相机实验回归与 IPA
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: maxim-lobanov/setup-xcode@v1
+        with: {xcode-version: "26.4"}
+      - run: brew install xcodegen
+      - name: 生成独立工程
+        working-directory: experiments/CornealCodeLab
+        run: xcodegen generate --spec project.yml
+      - name: 编码算法与模拟器回归
+        working-directory: experiments/CornealCodeLab
+        run: |
+          SIMULATOR_ID="$(xcrun simctl list devices available --json | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(x["udid"] for v in d["devices"].values() for x in v if x["name"].startswith("iPhone")))')"
+          xcodebuild test -project CornealCodeLab.xcodeproj -scheme CornealCodeLab -configuration Release \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_ID" -derivedDataPath build/Simulator \
+            -resultBundlePath build/LabTests.xcresult CODE_SIGNING_ALLOWED=NO ENABLE_TESTABILITY=YES
+      - name: 生成独立未签名 IPA
+        working-directory: experiments/CornealCodeLab
+        run: |
+          xcodebuild build -project CornealCodeLab.xcodeproj -scheme CornealCodeLab -configuration Release \
+            -destination 'generic/platform=iOS' -derivedDataPath build/Device \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
+          mkdir -p build/unsigned/Payload
+          cp -R build/Device/Build/Products/Release-iphoneos/CornealCodeLab.app build/unsigned/Payload/
+          (cd build/unsigned && zip -qry CornealCodeLab-unsigned.ipa Payload)
+          shasum -a 256 build/unsigned/CornealCodeLab-unsigned.ipa > build/unsigned/SHA256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: corneal-code-lab-unsigned-ipa
+          path: |
+            experiments/CornealCodeLab/build/unsigned/CornealCodeLab-unsigned.ipa
+            experiments/CornealCodeLab/build/unsigned/SHA256.txt
+          if-no-files-found: error
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: corneal-code-lab-tests
+          path: experiments/CornealCodeLab/build/LabTests.xcresult
+          retention-days: 14
