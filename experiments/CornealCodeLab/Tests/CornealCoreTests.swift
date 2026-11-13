@@ -190,16 +190,32 @@ final class CornealCoreTests: XCTestCase {
         XCTAssertGreaterThan(try XCTUnwrap(image.pngData()).count,2_000)
         let (_,events,track) = motionFixture()
         let result = try XCTUnwrap(MotionDecoder.decode(track: track,id: 0,color: "white",events: events,start: 0,duration: 32,lag: 0.1,expectedSamples: 480))
-        let renderer = ImageRenderer(content: MotionResultView(result: result).padding().frame(width: 390).background(LabStyle.background).preferredColorScheme(.dark))
-        let resultImage = try XCTUnwrap(renderer.uiImage)
+        let resultImage = try hostedImage(ScrollView { MotionResultView(result: result).padding() }.background(LabStyle.background))
         let resultAttachment = XCTAttachment(image: resultImage); resultAttachment.name = "运动解调-合成验证结果"; resultAttachment.lifetime = .keepAlways; add(resultAttachment)
+    }
+
+    /// 原生 Form 含 UIKit 视图，使用真实窗口截图，避免 ImageRenderer 的不支持占位图。
+    @MainActor private func hostedImage<Content: View>(_ content: Content) throws -> UIImage {
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let previous = scene.windows.first { $0.isKeyWindow }
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(x: 0,y: 0,width: 390,height: 844)
+        let controller = UIHostingController(rootView: content.environment(\.colorScheme,.dark))
+        controller.overrideUserInterfaceStyle = .dark
+        window.rootViewController = controller; window.makeKeyAndVisible()
+        defer { window.isHidden = true; previous?.makeKeyAndVisible() }
+        controller.view.frame = window.bounds
+        controller.view.setNeedsLayout(); controller.view.layoutIfNeeded()
+        RunLoop.main.run(until: Date().addingTimeInterval(0.5))
+        let format = UIGraphicsImageRendererFormat(); format.scale = 1
+        return UIGraphicsImageRenderer(size: window.bounds.size,format: format).image { _ in
+            window.drawHierarchy(in: window.bounds,afterScreenUpdates: true)
+        }
     }
 
     @MainActor func testSetupScreenRendersWithoutStartingTheCamera() throws {
         let model = LabModel()
-        let renderer = ImageRenderer(content: LabRootView(model: model).frame(width: 390,height: 844).preferredColorScheme(.dark))
-        renderer.scale = 1
-        let image = try XCTUnwrap(renderer.uiImage)
+        let image = try hostedImage(LabRootView(model: model))
         let attachment = XCTAttachment(image: image); attachment.name = "光码验证-准备页"; attachment.lifetime = .keepAlways
         add(attachment)
         XCTAssertGreaterThan(try XCTUnwrap(image.pngData()).count,2_000)
