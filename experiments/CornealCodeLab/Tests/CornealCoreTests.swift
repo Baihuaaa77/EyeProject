@@ -1,5 +1,7 @@
 import XCTest
 import SwiftUI
+import EyeScreening
+import AVFoundation
 @testable import CornealCodeLab
 
 final class CornealCoreTests: XCTestCase {
@@ -53,14 +55,13 @@ final class CornealCoreTests: XCTestCase {
         XCTAssertFalse(CornealAnalyzer.analyze(eye: "image_left",samples: samples,events: events,start: 0,configuration: c).codedEvidence)
     }
 
-    func testIrisBoundaryRequiresScleralEdgesAndRejectsCornerPeaks() throws {
+    func testIrisMaskRejectsCornerPeaks() throws {
         let w = CornealAnalyzer.width,h = CornealAnalyzer.height
         var p = [Float](repeating: 150,count: w*h)
         for y in 0..<h { for x in 0..<w where hypot(Double(x-w/2),Double(y-h/2))<20 { p[y*w+x] = 50 } }
-        let region = try XCTUnwrap(IrisRegion.estimate(pixels: p,eyelid: iris.eyelid))
+        let region = iris
         XCTAssertTrue(region.contains(LabPoint(x: 0.5,y: 0.5)))
         XCTAssertFalse(region.contains(LabPoint(x: 0.75,y: 0.5)))
-        XCTAssertNil(IrisRegion.estimate(pixels: [Float](repeating: 80,count: w*h),eyelid: iris.eyelid))
         p[32*w+94] = 255
         let sample = PatchSample(eye: "image_left",hostTime: 0,pixels: p,roi: LabRect(x: 0,y: 0,width: 128,height: 64),pupil: LabPoint(x: 64,y: 32),rawCandidate: nil,saturation: 0,iris: region)
         let tracks = MotionDecoder.tracks(samples: (0..<70).map { i in let s = sample; return PatchSample(eye: s.eye,hostTime: Double(i)/10,pixels: s.pixels,roi: s.roi,pupil: s.pupil,rawCandidate: nil,saturation: 0,iris: region) },color: "white",start: 0)
@@ -182,6 +183,54 @@ final class CornealCoreTests: XCTestCase {
         XCTAssertEqual(result.motionResults?.filter { $0.accepted }.count,3,result.message)
     }
 
+    func testSharedMainAppAlgorithmFindsTheKnownGlintAndRejectsOutsideIris() throws {
+        let gray = FixtureGrayImage()
+        let points = KotlinFloatArray(size: 478*3)
+        for i in 0..<478 { points.set(index: Int32(i*3),value: 0.5); points.set(index: Int32(i*3+1),value: 0.5) }
+        for base in [468,473] {
+            for (i,p) in [(0,(0.5,0.5)),(1,(0.75,0.5)),(2,(0.5,0.25)),(3,(0.25,0.5)),(4,(0.5,0.75))] {
+                points.set(index: Int32((base+i)*3),value: Float(p.0)); points.set(index: Int32((base+i)*3+1),value: Float(p.1))
+            }
+        }
+        let face = try XCTUnwrap(LandmarkGeometry.shared.face(points: points,matrix: KotlinFloatArray(size: 0),image: gray,optics: true))
+        let optical = try XCTUnwrap(face.leftOptical)
+        XCTAssertEqual(optical.cornealReflex?.x,22); XCTAssertEqual(optical.cornealReflex?.y,18)
+        XCTAssertTrue(optical.usable)
+    }
+
+    func testMediaPipeUsesTheMainAppModelAndOptions() throws {
+        XCTAssertNotNil(Bundle.main.url(forResource: "face_landmarker",withExtension: "task"))
+        XCTAssertNotNil(try EyeCamera.makeDetector(gpu: false))
+    }
+
+    func testRemovedPeakModeAndHistoricalRecords() throws {
+        XCTAssertEqual(TrialMode.allCases.count,4)
+        let old = try JSONDecoder().decode(TrialConfiguration.self,from: Data("{\"mode\":\"peak\",\"mean\":0.525}".utf8))
+        XCTAssertEqual(old.mode,.steady); XCTAssertEqual(old.mean,1)
+        let motion = try JSONDecoder().decode(TrialConfiguration.self,from: Data("{\"mode\":\"motion\",\"dotDiameter\":96}".utf8))
+        XCTAssertEqual(motion.dotDiameter,24); XCTAssertEqual(motion.probeDiameter,96)
+    }
+
+    @MainActor func testRemountKeepsAllMovingLayersAndHonorsBothSizes() throws {
+        let driver = StimulusDriver()
+        var config = TrialConfiguration(); config.mode = .motion; config.probeCount = 3; config.colorfulProbes = true
+        config.dotDiameter = 32; config.probeDiameter = 96
+        driver.warmup(config); defer { driver.stop() }
+        let first = UIView(frame: CGRect(x: 0,y: 0,width: 390,height: 844)); driver.attach(first)
+        driver.begin(at: 100); driver.advance(to: 100.1)
+        let fixed = try XCTUnwrap(first.layer.sublayers?.first).position
+        let positions = Array((first.layer.sublayers ?? []).dropFirst()).map(\.position)
+        let second = UIView(frame: first.frame); driver.attach(second); driver.advance(to: 108.7)
+        let layers = try XCTUnwrap(second.layer.sublayers)
+        XCTAssertEqual(layers.count,4); XCTAssertEqual(first.layer.sublayers?.count ?? 0,0)
+        XCTAssertEqual(layers[0].position,fixed); XCTAssertEqual(layers[0].bounds.width,32)
+        XCTAssertTrue(layers.dropFirst().allSatisfy { !$0.isHidden && $0.bounds.width == 96 })
+        XCTAssertNotEqual(Array(layers.dropFirst()).map(\.position),positions)
+        XCTAssertEqual(driver.events.last?.probes?.count,3)
+        let image = UIGraphicsImageRenderer(size: second.bounds.size).image { ctx in second.layer.render(in: ctx.cgContext) }
+        let attachment = XCTAttachment(image: image); attachment.name = "重建后的三色运动刺激"; attachment.lifetime = .keepAlways; add(attachment)
+    }
+
     @MainActor func testMotionStimulusRendersFixedWhitePointAndThreeProbes() throws {
         let driver = StimulusDriver()
         driver.configuration.mode = .motion; driver.configuration.probeCount = 3; driver.configuration.colorfulProbes = true
@@ -220,5 +269,19 @@ final class CornealCoreTests: XCTestCase {
         let attachment = XCTAttachment(image: image); attachment.name = "光码验证-准备页"; attachment.lifetime = .keepAlways
         add(attachment)
         XCTAssertGreaterThan(try XCTUnwrap(image.pngData()).count,2_000)
+    }
+}
+
+private final class FixtureGrayImage: NSObject,GrayImage {
+    let width: Int32 = 40
+    let height: Int32 = 40
+    func grayRegion(left: Int32,top: Int32,width: Int32,height: Int32) -> KotlinIntArray {
+        let values = KotlinIntArray(size: width*height)
+        for i in 0..<Int(width*height) {
+            let x = Int(left)+i%Int(width), y = Int(top)+i/Int(width)
+            let value = x == 22 && y == 18 ? 255 : (x == 35 && y == 20 ? 255 : ((x-20)*(x-20)+(y-20)*(y-20)<=16 ? 10 : 100))
+            values.set(index: Int32(i),value: Int32(value))
+        }
+        return values
     }
 }

@@ -34,7 +34,7 @@ def replay(directory, summary, eye):
     times = [e["hostTime"] for e in events]
     rows = [json.loads(s) for s in (directory / "frames.jsonl").read_text(encoding="utf-8-sig").splitlines() if s.strip()]
     data = (directory / "patches.f32").read_bytes()
-    width = eye.get("patchWidth") or (128 if summary.get("algorithmVersion") == "corneal-feasibility-2" else 64)
+    width = eye.get("patchWidth") or (128 if not summary.get("algorithmVersion", "corneal-feasibility-1").startswith("corneal-feasibility-1") else 64)
     height, byte_count = width//2, width*width//2*4
     x, y = min(width-1, int(point["x"]*width)), min(height-1, int(point["y"]*height))
     signal, code = [], []
@@ -160,13 +160,14 @@ def make_report(root: Path, output: Path):
             except (ValueError, OSError, KeyError) as error:
                 check = {"error": str(error)}
             audit.append({"trial": summary["id"], "eye": eye["eye"], **check})
-            image = file.parent / (eye["eye"]+".png")
+            image = file.parent / (eye["eye"]+"_original.png")
+            if not image.exists(): image = file.parent / (eye["eye"]+".png")
             image_html = '<p>缺少参考眼区图像</p>'
             if image.exists():
                 encoded = base64.b64encode(image.read_bytes()).decode("ascii")
                 image_html = f'<div class="image"><img src="data:image/png;base64,{encoded}" alt="参考眼区"><b class="manual"></b><b class="pred"></b></div>'
             point = eye.get("point") or {}
-            sections.append(f'<article data-key="{html.escape(key, quote=True)}" data-mode="{html.escape(config["mode"])}" data-width="{eye.get("patchWidth") or (128 if summary.get("algorithmVersion") == "corneal-feasibility-2" else 64)}" data-x="{point.get("x", "")}" data-y="{point.get("y", "")}"><h3>{html.escape(eye["eye"])}</h3>{image_html}')
+            sections.append(f'<article data-key="{html.escape(key, quote=True)}" data-mode="{html.escape(config["mode"])}" data-width="{eye.get("patchWidth") or (128 if not summary.get("algorithmVersion", "corneal-feasibility-1").startswith("corneal-feasibility-1") else 64)}" data-x="{point.get("x", "")}" data-y="{point.get("y", "")}"><h3>{html.escape(eye["eye"])}</h3>{image_html}')
             sections.append('<p>'+html.escape(eye["message"])+"</p>")
             stats = {k: eye.get(k) for k in ["samples", "rawCandidateRate", "trainCorrelation", "heldOutCorrelation", "wrongCodeCorrelation", "amplitude", "lagSeconds", "codedEvidence"]}
             sections.append('<pre>'+html.escape(json.dumps(stats, ensure_ascii=False, indent=2))+'</pre><p>从 patches.f32 独立重算：</p><pre>'+html.escape(json.dumps(check, ensure_ascii=False, indent=2))+'</pre>')
@@ -182,6 +183,12 @@ def make_report(root: Path, output: Path):
                             return " ".join(f'{o["time"]/32*600:.2f},{95-(v-lo)/(hi-lo)*90:.2f}' for o,v in zip(result["observations"],values))
                         sections.append(f'<p>{axis.upper()}，共同像素尺度，橙：观测；灰：预测</p><svg viewBox="0 0 600 100"><path d="M300 0 V100" stroke="#aaa" stroke-dasharray="3 3"/><polyline points="{motion_plot(actual)}" fill="none" stroke="#a45e28"/><polyline points="{motion_plot(predicted)}" fill="none" stroke="#888"/></svg>')
             sections.append(f'<svg viewBox="0 0 600 100"><polyline points="{plot(eye.get("traceSignal", []))}" fill="none" stroke="#a45e28"/><polyline points="{plot(eye.get("traceCode", []))}" fill="none" stroke="#888"/></svg>')
+            for suffix,caption in [("_original.mov","彩色眼区原内容（裁剪放大）"),("_overlay.mov","彩色眼区检测叠加")]:
+                movie = file.parent/(eye["eye"]+suffix)
+                if movie.exists():
+                    try: link = quote(Path(os.path.relpath(movie,output.parent)).as_posix(),safe="/:")
+                    except ValueError: link = movie.as_uri()
+                    sections.append(f'<p>{caption}</p><video controls preload="none" src="{link}"></video>')
             sections.append('<p class="small">两条曲线分别归一化，只检查时序；量化结果看上表。点击眼区中的人工参考点，再选择反光类型。</p><select><option>未标注</option><option>角膜</option><option>镜片</option><option>眼睑或其他</option><option>看不清</option></select><input placeholder="备注"><p class="distance"></p></article>')
         video = file.parent / "camera.mov"
         if video.exists():

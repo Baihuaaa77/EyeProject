@@ -12,7 +12,7 @@ final class StimulusDriver: NSObject {
     var onEnd: (() -> Void)?
     private weak var view: UIView?
     private let dot = CALayer()
-    private var probeLayers: [CALayer] = []
+    private let probeLayers = (0..<3).map { _ in CALayer() }
     private var link: CADisplayLink?
     private var start: Double?
     private var lastChip = -999
@@ -23,10 +23,8 @@ final class StimulusDriver: NSObject {
         view.backgroundColor = LabStyle.stimulusBackground
         dot.actions = ["backgroundColor": NSNull(), "position": NSNull(), "bounds": NSNull()]
         view.layer.addSublayer(dot)
-        for _ in 0..<3 {
-            let layer = CALayer(); layer.actions = dot.actions
-            view.layer.addSublayer(layer); probeLayers.append(layer)
-        }
+        // SwiftUI 会重建承载视图；复用的所有图层必须一起迁移，不能留在旧视图上。
+        for layer in probeLayers { layer.actions = dot.actions; view.layer.addSublayer(layer) }
         render(StimulusCode.intensity(at: 0,configuration: configuration))
     }
     func warmup(_ c: TrialConfiguration) {
@@ -39,7 +37,9 @@ final class StimulusDriver: NSObject {
     func begin(at time: Double) { events = []; start = time; lastChip = -999 }
     func stop() { link?.invalidate(); link = nil }
     @objc private func tick(_ sender: CADisplayLink) {
-        let planned = sender.targetTimestamp+clockOffset
+        advance(to: sender.targetTimestamp+clockOffset)
+    }
+    func advance(to planned: Double) {
         guard let start = start, planned >= start else {
             render(StimulusCode.intensity(at: 0,configuration: configuration)); return
         }
@@ -59,7 +59,7 @@ final class StimulusDriver: NSObject {
     @discardableResult private func render(_ intensity: Double,time: Double = 0) -> [ProbeEvent] {
         guard let view = view else { return [] }
         let moving = configuration.mode == .motion
-        let diameter = moving ? 24 : configuration.dotDiameter
+        let diameter = configuration.dotDiameter
         let probes = moving && intensity>0 ? MotionStimulus.probes(at: time,configuration: configuration,width: Double(view.bounds.width),height: Double(view.bounds.height),topInset: max(64,Double(view.window?.safeAreaInsets.top ?? 0)),bottomInset: max(34,Double(view.window?.safeAreaInsets.bottom ?? 0))) : []
         CATransaction.begin(); CATransaction.setDisableActions(true)
         dot.bounds = CGRect(x: 0,y: 0,width: diameter,height: diameter)
@@ -69,7 +69,7 @@ final class StimulusDriver: NSObject {
         for (index,layer) in probeLayers.enumerated() {
             layer.isHidden = index>=probes.count
             if index<probes.count {
-                let probe = probes[index], size = configuration.dotDiameter
+                let probe = probes[index], size = configuration.probeDiameter
                 layer.bounds = CGRect(x: 0,y: 0,width: size,height: size); layer.cornerRadius = size/2
                 layer.position = CGPoint(x: probe.position.x*Double(view.bounds.width),y: probe.position.y*Double(view.bounds.height))
                 // 这是刺激通道值，不是界面主题色；白平衡锁定后保存原始 RGB 供复核。

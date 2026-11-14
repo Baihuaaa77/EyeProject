@@ -11,8 +11,9 @@ struct TrialSummary: Codable, Identifiable {
     var stoppedEarly: Bool
     var results: [EyeAnalysis]
     var frameRecords: Int
-    var algorithmVersion: String = "corneal-feasibility-2"
+    var algorithmVersion: String = "corneal-feasibility-3-mediapipe-shared"
     var eligibilityNotes: [String] = []
+    var eyeMediaFiles: [String]? = nil
 }
 
 final class LabModel: ObservableObject {
@@ -122,9 +123,10 @@ final class LabModel: ObservableObject {
                     metadata["observedCameraFPS"] = Double(Set(records.map(\.index)).count)/config.duration
                     metadata["clock"] = "camera PTS converted from session masterClock to host clock; CADisplayLink targetTimestamp + host offset"
                     metadata["timingLimit"] = "No photodiode measurement; lag includes display/camera/ISP timing and rolling shutter."
+                    metadata["detector"] = "MediaPipeTasksVision 1.0.0 / 主App相同模型、EyeCamera配置、LandmarkGeometry与EyeOpticalAlgorithm"
                     metadata["patchWidth"] = CornealAnalyzer.width; metadata["patchHeight"] = CornealAnalyzer.height
-                    metadata["rgbPatchFormat"] = "interleaved UInt8 R,G,B; byte offsets rgbPatchOffset in frames.jsonl; motion trials only"
-                    metadata["patchFormat"] = "little-endian Float32, 128 columns x 64 rows, bilinear sampled, pupil-centered eye ROI, gray=0.2126R+0.7152G+0.0722B; byte offsets in frames.jsonl"
+                    metadata["rgbPatchFormat"] = "interleaved UInt8 R,G,B; byte offsets rgbPatchOffset in frames.jsonl; all trial modes"
+                    metadata["patchFormat"] = "little-endian Float32, 128 columns x 64 rows, bilinear sampled, MediaPipe iris-centered eye ROI, gray=0.2126R+0.7152G+0.0722B; byte offsets in frames.jsonl"
                     try JSONSerialization.data(withJSONObject: metadata,options: [.prettyPrinted,.sortedKeys]).write(to: directory.appendingPathComponent("camera.json"))
                     for result in results {
                         var image = images[result.eye]
@@ -133,6 +135,9 @@ final class LabModel: ObservableObject {
                         }
                         try image?.pngData()?.write(to: directory.appendingPathComponent(result.eye+".png"))
                     }
+                    do {
+                        summary.eyeMediaFiles = try EyeMediaExporter.export(directory: directory,records: records,results: results,start: start,videoStartPTS: info["videoStartPTS"] as? Double ?? records.first?.pts ?? 0)
+                    } catch { summary.eligibilityNotes.append("彩色眼区资料生成失败："+error.localizedDescription+"。原始全画面视频仍保留。") }
                     try encoder.encode(summary).write(to: directory.appendingPathComponent("summary.json"))
                     DispatchQueue.main.async {
                         self?.phase = .setup; self?.cameraReady = false; self?.selected = summary; self?.loadSaved()

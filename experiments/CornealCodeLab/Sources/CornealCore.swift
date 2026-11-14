@@ -1,9 +1,9 @@
 import Foundation
 
 enum TrialMode: String, Codable, CaseIterable, Identifiable {
-    case steady, coded, dark, peak, motion
+    case steady, coded, dark, motion
     var id: String { rawValue }
-    var title: String { switch self { case .steady: return "常亮白点（均值对照）"; case .coded: return "明暗编码白点"; case .dark: return "全黑阴性对照"; case .peak: return "全白常亮（找点）"; case .motion: return "固定注视＋移动光点" } }
+    var title: String { switch self { case .steady: return "常亮白点（均值对照）"; case .coded: return "明暗编码白点"; case .dark: return "全黑阴性对照"; case .motion: return "固定注视＋移动光点" } }
 }
 
 struct TrialConfiguration: Codable {
@@ -18,16 +18,18 @@ struct TrialConfiguration: Codable {
     var glasses: String = "未戴镜"
     var lighting: String = "室内普通光"
     var reuseExposure: Bool = true
+    var probeDiameter: Double = 64
     var probeCount: Int = 1
     var colorfulProbes: Bool = false
     var motionScale: Double = 1
     var duration: Double { Double(StimulusCode.bits.count) * chipSeconds }
     init() {}
-    enum CodingKeys: String, CodingKey { case mode, dotDiameter, dotY, screenBrightness, mean, modulation, chipSeconds, distanceCM, glasses, lighting, reuseExposure, probeCount, colorfulProbes, motionScale }
+    enum CodingKeys: String, CodingKey { case mode, dotDiameter, dotY, screenBrightness, mean, modulation, chipSeconds, distanceCM, glasses, lighting, reuseExposure, probeCount, colorfulProbes, motionScale, probeDiameter }
     /// 旧轮次缺少运动参数时仍可打开；保留旧强度，不能用新默认值改写旧实验条件。
     init(from decoder: Decoder) throws {
         let v = try decoder.container(keyedBy: CodingKeys.self)
-        mode = try v.decodeIfPresent(TrialMode.self,forKey: .mode) ?? .steady
+        let rawMode = try v.decodeIfPresent(String.self,forKey: .mode) ?? "steady"
+        mode = rawMode == "peak" ? .steady : (TrialMode(rawValue: rawMode) ?? .steady)
         dotDiameter = try v.decodeIfPresent(Double.self,forKey: .dotDiameter) ?? 32
         dotY = try v.decodeIfPresent(Double.self,forKey: .dotY) ?? 0.25
         screenBrightness = try v.decodeIfPresent(Double.self,forKey: .screenBrightness) ?? 0.8
@@ -41,6 +43,9 @@ struct TrialConfiguration: Codable {
         probeCount = try v.decodeIfPresent(Int.self,forKey: .probeCount) ?? 1
         colorfulProbes = try v.decodeIfPresent(Bool.self,forKey: .colorfulProbes) ?? false
         motionScale = try v.decodeIfPresent(Double.self,forKey: .motionScale) ?? 1
+        probeDiameter = try v.decodeIfPresent(Double.self,forKey: .probeDiameter) ?? dotDiameter
+        if mode == .motion && !v.contains(.probeDiameter) { dotDiameter = 24 }
+        if rawMode == "peak" { mean = 1 }
     }
 }
 
@@ -65,7 +70,7 @@ enum StimulusCode {
     static func intensity(at seconds: Double, configuration c: TrialConfiguration) -> Double {
         switch c.mode {
         case .dark: return 0
-        case .peak, .motion: return 1
+        case .motion: return 1
         case .steady: return c.mean
         case .coded: return c.mean + c.modulation * value(at: seconds, configuration: c)
         }
@@ -96,6 +101,8 @@ struct PatchSample {
     var iris: IrisRegion? = nil
     var rgb: [UInt8]? = nil
     var nuisance: [Double]? = nil
+    var baselinePupil: LabPoint? = nil
+    var baselineReason: String? = nil
 }
 
 struct FrameRecord: Codable {
@@ -116,6 +123,8 @@ struct FrameRecord: Codable {
     var iris: IrisRegion?
     var rgbPatchOffset: Int?
     var nuisance: [Double]?
+    var baselinePupil: LabPoint?
+    var baselineReason: String?
 }
 
 struct EyeAnalysis: Codable {
@@ -134,6 +143,7 @@ struct EyeAnalysis: Codable {
     let traceTime: [Double]
     let traceSignal: [Double]
     let traceCode: [Double]
+    var codingApplied: Bool? = nil
     var referenceIris: IrisRegion? = nil
     var motionResults: [MotionAnalysis]? = nil
     var patchWidth: Int? = nil
@@ -241,6 +251,7 @@ enum CornealAnalyzer {
             message: c.mode != .coded ? "本轮未发出编码；伪码相关仅用于检查偶然相关，亮点候选需人工确认。" : evidence ? "有独立后半段编码响应，仍需人工确认位于角膜而非镜片或眼睑。" : "编码证据不足；不能把热图最高点当作已定位映光。",
             heatmap: heat, traceTime: samples.map { $0.hostTime-start }, traceSignal: filtered.map { Double($0[p]) },
             traceCode: samples.map { reference($0.hostTime-bestLag) })
+        result.codingApplied = c.mode == .coded
         result.patchWidth = width; let referenceSample = samples.last { $0.iris?.contains(point) == true }
         result.referenceIris = referenceSample?.iris; result.referenceHostTime = referenceSample?.hostTime
         return result

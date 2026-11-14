@@ -9,6 +9,8 @@ enum LabStyle {
     static let secondary = Color.gray
     static let candidate = Color.orange
     static let coded = Color.green
+    static let landmark = Color.cyan
+    static let baseline = Color.yellow
     static let stimulusBackground = UIColor.black
     static let title = Font.title2.weight(.semibold)
     static let heading = Font.headline

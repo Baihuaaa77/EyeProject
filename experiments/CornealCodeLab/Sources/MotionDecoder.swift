@@ -18,11 +18,11 @@ enum MotionStimulus {
             return a+(b-a)*blend
         }
         return (0..<max(1,min(3,c.probeCount))).map { id in
-            let marginX = (c.dotDiameter/2+4)/max(width,1), marginY = (c.dotDiameter/2+4)/max(height,1)
+            let marginX = (c.probeDiameter/2+4)/max(width,1), marginY = (c.probeDiameter/2+4)/max(height,1)
             var p = LabPoint(x: centers[id].x+0.13*c.motionScale*wave(7+id*17),y: centers[id].y+0.10*c.motionScale*wave(29+id*11))
             p.x = max(marginX,min(1-marginX,p.x)); p.y = max(marginY+topInset/max(height,1),min(1-marginY-bottomInset/max(height,1),p.y))
             // 第三个分区可能靠近上方注视点，沿横向推出固定白点，避免重叠。
-            let exclusion = c.dotDiameter/2+12+8
+            let exclusion = c.probeDiameter/2+c.dotDiameter/2+8
             if hypot((p.x-0.5)*width,(p.y-c.dotY)*height)<exclusion {
                 p.x = min(1-marginX,0.5+exclusion/width)
             }
@@ -214,6 +214,7 @@ enum MotionDecoder {
             message: results.isEmpty ? "没有覆盖前后半段的稳定亮点轨迹；不能据此认定没有映光。" : "\(results.filter { $0.accepted }.count)/\(c.probeCount) 个移动光源通过轨迹验证。固定白点不参与移动解调。",
             heatmap: [],traceTime: [],traceSignal: [],traceCode: [])
         let referenceTime = reference.map { start+$0.time } ?? samples.last?.hostTime ?? start
+        result.codingApplied = true
         result.referenceIris = samples.min(by: { abs($0.hostTime-referenceTime)<abs($1.hostTime-referenceTime) })?.iris
         result.motionResults = results; result.patchWidth = CornealAnalyzer.width; result.referenceHostTime = samples.isEmpty ? nil : referenceTime
         return result
