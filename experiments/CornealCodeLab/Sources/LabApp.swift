@@ -127,7 +127,7 @@ struct TrialResultView: View {
                     VStack(alignment: .leading,spacing: 10) {
                         Text(eye.eye == "image_left" ? "画面左眼区（未镜像）" : "画面右眼区（未镜像）").font(LabStyle.heading)
                         if FileManager.default.fileExists(atPath: directory.appendingPathComponent(eye.eye+"_original.png").path) {
-                            EyeMediaSection(eye: eye.eye,directory: directory)
+                            EyeMediaSection(eye: eye.eye,directory: directory,nativeSnapshot: trial.nativeSnapshots == true)
                         } else if let image = UIImage(contentsOfFile: directory.appendingPathComponent(eye.eye+".png").path) {
                             Text("分析采样图（旧记录或彩色资料尚未生成）").font(LabStyle.detail)
                             Image(uiImage: image).resizable().interpolation(.none).aspectRatio(2,contentMode: .fit)
@@ -153,7 +153,7 @@ struct TrialResultView: View {
                         }
                     }.padding().background(LabStyle.background).clipShape(RoundedRectangle(cornerRadius: LabStyle.radius))
                 }
-                Text(trial.algorithmVersion.hasPrefix("corneal-feasibility-3") ? "基础检测：MediaPipe 与主 App 共用 Kotlin 光学算法。编码解调是新增筛选，不改变基础映光阈值。彩色原图来自原视频原生眼区裁剪，放大视频不增加光学分辨率。" : "这是旧版 Vision 实验记录，不能视为主 App 同算法结果。").font(LabStyle.detail)
+                Text(trial.algorithmVersion.hasPrefix("corneal-feasibility-3") ? "基础检测：MediaPipe 与主 App 共用 Kotlin 光学算法。编码解调是新增筛选，不改变基础映光阈值。彩色原图优先保存相机原生BGRA像素的无损PNG；放大视频由原视频裁剪重编码，不增加光学分辨率。" : "这是旧版 Vision 实验记录，不能视为主 App 同算法结果。").font(LabStyle.detail)
                 Text("叠加图：橙色为虹膜边界，虚线为搜索范围；青色为瞳孔/虹膜参考中心，黄色为主 App 基础映光候选；绿色大圈为通过编码验证的候选，橙色大圈为未通过的候选。仍须人工确认角膜来源。").font(LabStyle.detail)
                 LocalMovieView(url: directory.appendingPathComponent("camera.mov"),title: "原始全画面视频").frame(minHeight: 240)
                 Button("导出本轮视频、图像与时间日志",action: share).buttonStyle(.borderedProminent)
@@ -182,14 +182,15 @@ struct LocalMovieView: View {
 struct EyeMediaSection: View {
     let eye: String
     let directory: URL
+    let nativeSnapshot: Bool
     @State private var annotated = false
     var body: some View {
         VStack(alignment: .leading,spacing: 10) {
             Picker("彩色资料",selection: $annotated) { Text("彩色原始内容").tag(false); Text("检测结果叠加").tag(true) }.pickerStyle(.segmented)
             let suffix = annotated ? "_overlay" : "_original"
             if let image = UIImage(contentsOfFile: directory.appendingPathComponent(eye+suffix+".png").path) {
-                Text(annotated ? "彩色原图上的检测结果" : "眼部彩色原图（原生像素裁剪、显示放大）").font(LabStyle.detail)
-                Image(uiImage: image).resizable().interpolation(.none).aspectRatio(2,contentMode: .fit)
+                Text(annotated ? "彩色原图上的检测结果" : (nativeSnapshot ? "眼部彩色原图（相机原生像素、无损PNG）" : "原视频彩色帧（眼区裁剪）")).font(LabStyle.detail)
+                Image(uiImage: image).resizable().interpolation(.none).scaledToFit()
                 Text("图像尺寸 \(Int(image.size.width)) × \(Int(image.size.height))").font(LabStyle.detail)
             }
             let video = directory.appendingPathComponent(eye+suffix+".mov")

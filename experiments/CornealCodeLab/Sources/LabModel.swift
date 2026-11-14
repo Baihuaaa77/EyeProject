@@ -14,6 +14,7 @@ struct TrialSummary: Codable, Identifiable {
     var algorithmVersion: String = "corneal-feasibility-3-mediapipe-shared"
     var eligibilityNotes: [String] = []
     var eyeMediaFiles: [String]? = nil
+    var nativeSnapshots: Bool? = nil
 }
 
 final class LabModel: ObservableObject {
@@ -114,7 +115,10 @@ final class LabModel: ObservableObject {
                     let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted,.sortedKeys]; encoder.dateEncodingStrategy = .iso8601
                     try encoder.encode(events).write(to: directory.appendingPathComponent("display_events.json"))
                     let rowEncoder = JSONEncoder()
-                    let rows = try records.map { String(decoding: try rowEncoder.encode($0),as: UTF8.self) }.joined(separator: "\n")+"\n"
+                    let rows = try records.map { record -> String in
+                        var row = record; row.nativeOffset = nil
+                        return String(decoding: try rowEncoder.encode(row),as: UTF8.self)
+                    }.joined(separator: "\n")+"\n"
                     try rows.write(to: directory.appendingPathComponent("frames.jsonl"),atomically: true,encoding: .utf8)
                     try data.write(to: directory.appendingPathComponent("patches.f32"))
                     if !rgb.isEmpty { try rgb.write(to: directory.appendingPathComponent("patches_rgb.u8")) }
@@ -138,6 +142,12 @@ final class LabModel: ObservableObject {
                     do {
                         summary.eyeMediaFiles = try EyeMediaExporter.export(directory: directory,records: records,results: results,start: start,videoStartPTS: info["videoStartPTS"] as? Double ?? records.first?.pts ?? 0)
                     } catch { summary.eligibilityNotes.append("彩色眼区资料生成失败："+error.localizedDescription+"。原始全画面视频仍保留。") }
+                    do {
+                        summary.nativeSnapshots = try NativeEyeSnapshots.write(directory: directory,records: records,results: results,start: start)>0
+                    } catch {
+                        summary.nativeSnapshots = false
+                        summary.eligibilityNotes.append("原生彩色PNG保存失败，图像为视频帧裁剪："+error.localizedDescription)
+                    }
                     try encoder.encode(summary).write(to: directory.appendingPathComponent("summary.json"))
                     DispatchQueue.main.async {
                         self?.phase = .setup; self?.cameraReady = false; self?.selected = summary; self?.loadSaved()

@@ -24,6 +24,8 @@ final class LabCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
     private var records: [FrameRecord] = []
     private var patchData = Data()
     private var rgbData = Data()
+    private var nativeFile: FileHandle?
+    private var nativeBytes = 0
     private var captureColor = false
     private var eyeImages: [String: UIImage] = [:]
     private var lastPoints: [String: CGPoint] = [:]
@@ -126,6 +128,9 @@ final class LabCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
         queue.async {
             do {
                 self.writer = try AVAssetWriter(outputURL: directory.appendingPathComponent("camera.mov"), fileType: .mov)
+                let nativeURL = directory.appendingPathComponent("temporary_eye_pixels.bgra")
+                FileManager.default.createFile(atPath: nativeURL.path,contents: nil)
+                self.nativeFile = try FileHandle(forWritingTo: nativeURL); self.nativeBytes = 0
                 self.writerInput = nil; self.videoStartPTS = nil
                 self.captureColor = true; self.rgbData = Data()
                 self.samples = []; self.records = []; self.patchData = Data(); self.eyeImages = [:]; self.lastPoints = [:]
@@ -138,6 +143,7 @@ final class LabCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
     func finish(completion: @escaping ([PatchSample], [FrameRecord], Data, Data, [String: UIImage], [String: Any]) -> Void) {
         queue.async {
             self.recording = false
+            try? self.nativeFile?.close(); self.nativeFile = nil
             let samples = self.samples, records = self.records, data = self.patchData, rgb = self.rgbData, images = self.eyeImages
             var info = self.cameraInfo
             info["captureDroppedFrames"] = self.dropped; info["videoWriteDroppedFrames"] = self.writeDropped
@@ -164,6 +170,7 @@ final class LabCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
 
     func stop() { queue.async {
         self.recording = false
+        try? self.nativeFile?.close(); self.nativeFile = nil
         self.writer?.cancelWriting(); self.writer = nil; self.writerInput = nil
         if self.session.isRunning { self.session.stopRunning() }
     } }
@@ -183,10 +190,26 @@ final class LabCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
         if recording && !saving { return }
         frame += 1
         if saving { appendVideo(buffer, width: width, height: height, pts: pts) }
-        func record(_ status: String, sample: PatchSample? = nil) {
+        func record(_ status: String, sample: PatchSample? = nil, rejectedEye: String? = nil) {
             guard saving else { return }
             let offset = sample == nil ? nil : patchData.count
             let rgbOffset = sample?.rgb == nil ? nil : rgbData.count
+            var nativeOffset: Int?, nativeROI: LabRect?
+            // 相机原像素按行写入临时文件；不在实时管线上做 PNG 压缩，也不跨帧占用 PixelBuffer。
+            if let sample = sample,let file = nativeFile {
+                let x = Int(floor(sample.roi.x)), y = Int(floor(sample.roi.y))
+                let w = Int(ceil(sample.roi.x+sample.roi.width))-x, h = Int(ceil(sample.roi.y+sample.roi.height))-y
+                // 有 sample 时调用方已持有当前缓冲的只读锁。
+                if let base = CVPixelBufferGetBaseAddress(pixels)?.assumingMemoryBound(to: UInt8.self) {
+                    let stride = CVPixelBufferGetBytesPerRow(pixels)
+                    var bytes = Data(capacity: w*h*4)
+                    for row in y..<(y+h) { bytes.append(contentsOf: UnsafeBufferPointer(start: base+row*stride+x*4,count: w*4)) }
+                    do {
+                        try file.write(contentsOf: bytes); nativeOffset = nativeBytes; nativeBytes += bytes.count
+                        nativeROI = LabRect(x: Double(x),y: Double(y),width: Double(w),height: Double(h))
+                    } catch { onError?("原生眼区像素写入失败："+error.localizedDescription) }
+                }
+            }
             if let sample = sample {
                 var little = sample.pixels.map { $0.bitPattern.littleEndian }
                 little.withUnsafeBytes { patchData.append(contentsOf: $0) }
@@ -195,8 +218,8 @@ final class LabCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
             }
             records.append(FrameRecord(index: frame, pts: CMTimeGetSeconds(pts), hostTime: host,
                 exposureSeconds: CMTimeGetSeconds(device.exposureDuration), iso: device.iso, width: width, height: height,
-                status: status, eye: sample?.eye, roi: sample?.roi, pupil: sample?.pupil,
-                rawCandidate: sample?.rawCandidate, saturation: sample?.saturation, patchOffset: offset,iris: sample?.iris,rgbPatchOffset: rgbOffset,nuisance: sample?.nuisance,baselinePupil: sample?.baselinePupil,baselineReason: sample?.baselineReason))
+                status: status, eye: sample?.eye ?? rejectedEye, roi: sample?.roi, pupil: sample?.pupil,
+                rawCandidate: sample?.rawCandidate, saturation: sample?.saturation, patchOffset: offset,iris: sample?.iris,rgbPatchOffset: rgbOffset,nuisance: sample?.nuisance,baselinePupil: sample?.baselinePupil,baselineReason: sample?.baselineReason,nativeOffset: nativeOffset,nativeROI: nativeROI))
         }
         guard frame % 2 == 0 else { record("not_analyzed"); return }
         let face: FaceMetrics
@@ -229,9 +252,9 @@ final class LabCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
             let name = index == 0 ? "image_left" : "image_right"
             let p = eye.0, w = eye.1*1.4, h = w/2
             let rect = LabRect(x: Double(p.x)-w/2, y: Double(p.y)-h/2, width: w, height: h)
-            guard rect.x >= 0, rect.y >= 0, rect.x+w < Double(width), rect.y+h < Double(height) else { record("eye_roi_cropped"); continue }
+            guard rect.x >= 0, rect.y >= 0, rect.x+w < Double(width), rect.y+h < Double(height) else { record("eye_roi_cropped",rejectedEye: name); continue }
             if let previous = lastPoints[name], hypot(p.x-Double(previous.x),p.y-Double(previous.y)) > eye.1*0.25 {
-                lastPoints[name] = CGPoint(x: p.x,y: p.y); record("large_motion"); continue
+                lastPoints[name] = CGPoint(x: p.x,y: p.y); record("large_motion",rejectedEye: name); continue
             }
             lastPoints[name] = CGPoint(x: p.x,y: p.y)
             var patch = [Float](repeating: 0, count: CornealAnalyzer.count)

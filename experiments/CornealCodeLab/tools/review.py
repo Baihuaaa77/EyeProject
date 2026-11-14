@@ -167,7 +167,16 @@ def make_report(root: Path, output: Path):
                 encoded = base64.b64encode(image.read_bytes()).decode("ascii")
                 image_html = f'<div class="image"><img src="data:image/png;base64,{encoded}" alt="参考眼区"><b class="manual"></b><b class="pred"></b></div>'
             point = eye.get("point") or {}
-            sections.append(f'<article data-key="{html.escape(key, quote=True)}" data-mode="{html.escape(config["mode"])}" data-width="{eye.get("patchWidth") or (128 if not summary.get("algorithmVersion", "corneal-feasibility-1").startswith("corneal-feasibility-1") else 64)}" data-x="{point.get("x", "")}" data-y="{point.get("y", "")}"><h3>{html.escape(eye["eye"])}</h3>{image_html}')
+            scale_x = eye.get("patchWidth") or (128 if not summary.get("algorithmVersion", "corneal-feasibility-1").startswith("corneal-feasibility-1") else 64)
+            scale_y = scale_x/2
+            native_file = file.parent/"native_snapshots.json"
+            if point and native_file.exists():
+                snapshot = json.loads(native_file.read_text(encoding="utf-8-sig")).get(eye["eye"])
+                if snapshot:
+                    a,n = snapshot["analysisROI"],snapshot["nativeROI"]
+                    point = {"x": (point["x"]*a[2]+a[0]-n[0])/n[2],"y": (point["y"]*a[3]+a[1]-n[1])/n[3]}
+                    scale_x *= n[2]/a[2]; scale_y *= n[3]/a[3]
+            sections.append(f'<article data-key="{html.escape(key, quote=True)}" data-mode="{html.escape(config["mode"])}" data-width="{scale_x}" data-height="{scale_y}" data-x="{point.get("x", "")}" data-y="{point.get("y", "")}"><h3>{html.escape(eye["eye"])}</h3>{image_html}')
             sections.append('<p>'+html.escape(eye["message"])+"</p>")
             stats = {k: eye.get(k) for k in ["samples", "rawCandidateRate", "trainCorrelation", "heldOutCorrelation", "wrongCodeCorrelation", "amplitude", "lagSeconds", "codedEvidence"]}
             sections.append('<pre>'+html.escape(json.dumps(stats, ensure_ascii=False, indent=2))+'</pre><p>从 patches.f32 独立重算：</p><pre>'+html.escape(json.dumps(check, ensure_ascii=False, indent=2))+'</pre>')
@@ -206,7 +215,7 @@ function draw(a,state){
  const mark=a.querySelector('.manual');mark.hidden=state.x===undefined;
  if(!mark.hidden){mark.style.left=(state.x*100)+'%';mark.style.top=(state.y*100)+'%'}
  a.querySelector('select').value=state.type||'未标注';a.querySelector('input').value=state.note||'';
- const distance=state.x!==undefined&&a.dataset.x!==''?Math.hypot((state.x-a.dataset.x)*a.dataset.width,(state.y-a.dataset.y)*a.dataset.width/2):null;
+ const distance=state.x!==undefined&&a.dataset.x!==''?Math.hypot((state.x-a.dataset.x)*a.dataset.width,(state.y-a.dataset.y)*a.dataset.height):null;
  a.querySelector('.distance').textContent=distance===null?'尚未点选人工参考位置':'到聚合候选的距离：'+distance.toFixed(2)+' 重采样眼区像素';
 }
 rows.forEach(a=>{let state=JSON.parse(localStorage.getItem('corneal:'+a.dataset.key)||'{}');
@@ -216,7 +225,7 @@ rows.forEach(a=>{let state=JSON.parse(localStorage.getItem('corneal:'+a.dataset.
 });
 document.getElementById('export').onclick=()=>{
  const csv=[['trial_eye','mode','manual_type','manual_x_norm','manual_y_norm','candidate_x_norm','candidate_y_norm','patch_pixel_distance','note']];
- rows.forEach(a=>{const s=JSON.parse(localStorage.getItem('corneal:'+a.dataset.key)||'{}');const d=s.x!==undefined&&a.dataset.x!==''?Math.hypot((s.x-a.dataset.x)*a.dataset.width,(s.y-a.dataset.y)*a.dataset.width/2):'';csv.push([a.dataset.key,a.dataset.mode,s.type||'未标注',s.x??'',s.y??'',a.dataset.x,a.dataset.y,d,s.note||''])});
+ rows.forEach(a=>{const s=JSON.parse(localStorage.getItem('corneal:'+a.dataset.key)||'{}');const d=s.x!==undefined&&a.dataset.x!==''?Math.hypot((s.x-a.dataset.x)*a.dataset.width,(s.y-a.dataset.y)*a.dataset.height):'';csv.push([a.dataset.key,a.dataset.mode,s.type||'未标注',s.x??'',s.y??'',a.dataset.x,a.dataset.y,d,s.note||''])});
  const text='\\ufeff'+csv.map(r=>r.map(v=>'"'+String(v).replaceAll('"','""')+'"').join(',')).join('\\r\\n');
  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type:'text/csv;charset=utf-8'}));a.download='corneal-annotations.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
 };

@@ -47,8 +47,9 @@ enum EyeMediaExporter {
         let reader = try AVAssetReader(asset: asset)
         let output = AVAssetReaderTrackOutput(track: track,outputSettings: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA])
         output.alwaysCopiesSampleData = false; reader.add(output)
-        var eyeRows: [String:[FrameRecord]] = [:], writers: [Stream] = []
+        var eyeRows: [String:[FrameRecord]] = [:], qualityRows: [String:[FrameRecord]] = [:], writers: [Stream] = []
         for eye in ["image_left","image_right"] {
+            qualityRows[eye] = records.filter { $0.eye == nil || $0.eye == eye }.sorted { $0.pts<$1.pts }
             let rows = records.filter { $0.eye == eye && $0.roi != nil }.sorted { $0.pts<$1.pts }
             if !rows.isEmpty { eyeRows[eye] = rows; writers += try streams(directory: directory,eye: eye) }
         }
@@ -69,7 +70,9 @@ enum EyeMediaExporter {
                     let cropped = crop(image,roi: roi)
                     let scaled = cropped.transformed(by: CGAffineTransform(scaleX: size.width/cropped.extent.width,y: size.height/cropped.extent.height))
                     let result = results.first { $0.eye == eye }
-                    let valid = abs(row.pts-videoStartPTS-t)<=0.12 && row.status == "valid"
+                    let latestStatus = nearest(t,rows: qualityRows[eye] ?? [],origin: videoStartPTS)?.status
+                    let age = t-(row.pts-videoStartPTS)
+                    let valid = age>=(-0.001) && age<=0.12 && row.status == "valid" && (latestStatus == "valid" || latestStatus == "not_analyzed")
                     for stream in writers where stream.eye == eye {
                         let deadline = Date().addingTimeInterval(5)
                         while !stream.input.isReadyForMoreMediaData {

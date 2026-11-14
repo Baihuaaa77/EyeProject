@@ -125,6 +125,8 @@ struct FrameRecord: Codable {
     var nuisance: [Double]?
     var baselinePupil: LabPoint?
     var baselineReason: String?
+    var nativeOffset: Int?
+    var nativeROI: LabRect?
 }
 
 struct EyeAnalysis: Codable {
