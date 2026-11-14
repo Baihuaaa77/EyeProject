@@ -89,7 +89,7 @@ enum EyeMediaExporter {
                     let reference = result?.referenceHostTime ?? rows.last!.hostTime
                     let target = rows.min { abs($0.hostTime-reference)<abs($1.hostTime-reference) }!.pts-videoStartPTS
                     let difference = abs(t-target)
-                    if difference<(bestReference[eye] ?? .infinity),let cg = context.createCGImage(cropped,from: cropped.extent) {
+                    if bestReference[eye] == nil,difference<=0.02,let cg = context.createCGImage(cropped,from: cropped.extent) {
                         bestReference[eye] = difference
                         try UIImage(cgImage: cg).pngData()?.write(to: directory.appendingPathComponent(eye+"_original.png"))
                         let format = UIGraphicsImageRendererFormat(); format.scale = 1
