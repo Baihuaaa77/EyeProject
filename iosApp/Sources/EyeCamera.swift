@@ -223,7 +223,7 @@ final class EyeCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
             session.startRunning()
         } catch { onError?("相机启动失败：\(error.localizedDescription)") }
     }
-    private static func makeDetector(gpu: Bool) throws -> FaceLandmarker {
+    static func makeDetector(gpu: Bool) throws -> FaceLandmarker {
         guard let model = Bundle.main.path(forResource: "face_landmarker", ofType: "task") else {
             throw NSError(domain: "EyeCamera", code: 1, userInfo: [NSLocalizedDescriptionKey: "缺少眼部检测模型"])
         }

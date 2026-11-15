@@ -1,0 +1,10 @@
+platform :ios, '16.0'
+use_frameworks! :linkage => :static
+
+target 'CornealCodeLab' do
+  # 与主 App 使用相同 SDK，模型资源也引用主 App 的同一文件。
+  pod 'MediaPipeTasksVision', '1.0.0'
+  target 'CornealCodeLabTests' do
+    inherit! :search_paths
+  end
+end
