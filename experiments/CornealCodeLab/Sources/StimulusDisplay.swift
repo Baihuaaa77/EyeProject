@@ -17,6 +17,7 @@ final class StimulusDriver: NSObject {
     private var start: Double?
     private var lastChip = -999
     private var clockOffset = 0.0
+    private var renderedTime = 0.0
 
     func attach(_ view: UIView) {
         self.view = view
@@ -25,10 +26,11 @@ final class StimulusDriver: NSObject {
         view.layer.addSublayer(dot)
         // SwiftUI 会重建承载视图；复用的所有图层必须一起迁移，不能留在旧视图上。
         for layer in probeLayers { layer.actions = dot.actions; view.layer.addSublayer(layer) }
-        render(StimulusCode.intensity(at: 0,configuration: configuration))
+        render(StimulusCode.intensity(at: renderedTime,configuration: configuration),time: renderedTime)
     }
     func warmup(_ c: TrialConfiguration) {
         stop(); configuration = c; events = []; start = nil; lastChip = -999
+        renderedTime = 0
         clockOffset = labHostTime()-CACurrentMediaTime()
         link = CADisplayLink(target: self, selector: #selector(tick(_:)))
         link?.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 60, preferred: 60)
@@ -41,10 +43,11 @@ final class StimulusDriver: NSObject {
     }
     func advance(to planned: Double) {
         guard let start = start, planned >= start else {
-            render(StimulusCode.intensity(at: 0,configuration: configuration)); return
+            render(configuration.mode == .coded ? configuration.mean : StimulusCode.intensity(at: 0,configuration: configuration)); return
         }
         let elapsed = planned-start
         if elapsed >= configuration.duration { stop(); render(0); onEnd?(); return }
+        renderedTime = elapsed
         let chip = Int(elapsed/configuration.chipSeconds)
         let intensity = StimulusCode.intensity(at: elapsed, configuration: configuration)
         let probes = render(intensity,time: elapsed)
@@ -62,10 +65,15 @@ final class StimulusDriver: NSObject {
         let diameter = configuration.dotDiameter
         let probes = moving && intensity>0 ? MotionStimulus.probes(at: time,configuration: configuration,width: Double(view.bounds.width),height: Double(view.bounds.height),topInset: max(64,Double(view.window?.safeAreaInsets.top ?? 0)),bottomInset: max(34,Double(view.window?.safeAreaInsets.bottom ?? 0))) : []
         CATransaction.begin(); CATransaction.setDisableActions(true)
+        view.backgroundColor = configuration.mode.isScreen ? UIColor(white: intensity,alpha: 1) : LabStyle.stimulusBackground
+        dot.isHidden = configuration.mode == .screenBlank
         dot.bounds = CGRect(x: 0,y: 0,width: diameter,height: diameter)
         dot.cornerRadius = diameter/2
         dot.position = CGPoint(x: Double(view.bounds.width)/2,y: Double(view.bounds.height)*configuration.dotY)
-        dot.backgroundColor = UIColor(white: intensity,alpha: 1).cgColor
+        if configuration.colorCode && (configuration.mode == .coded || configuration.mode == .steady) {
+            let bit = (start == nil || configuration.mode == .steady) ? 0 : StimulusCode.value(at: time,configuration: configuration)
+            dot.backgroundColor = UIColor(red: bit == 0 ? 0.5 : (bit>0 ? 1 : 0),green: bit == 0 ? 0.5 : (bit>0 ? 0 : 1),blue: 0,alpha: 1).cgColor
+        } else { dot.backgroundColor = UIColor(white: configuration.mode == .screenTarget ? 0 : intensity,alpha: 1).cgColor }
         for (index,layer) in probeLayers.enumerated() {
             layer.isHidden = index>=probes.count
             if index<probes.count {

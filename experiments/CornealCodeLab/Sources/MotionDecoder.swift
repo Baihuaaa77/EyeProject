@@ -66,12 +66,15 @@ enum MotionDecoder {
     struct Fit {
         var mean: [Double]; var scale: [Double]; var x: [Double]; var y: [Double]
         func predict(_ row: [Double]) -> LabPoint {
+            guard row.count == mean.count else { return LabPoint(x: .nan,y: .nan) }
             let z = [1.0]+row.indices.map { (row[$0]-mean[$0])/scale[$0] }
             return LabPoint(x: zip(z,x).map(*).reduce(0,+),y: zip(z,y).map(*).reduce(0,+))
         }
     }
     static func fit(_ rows: [[Double]], _ points: [LabPoint]) -> Fit? {
-        guard rows.count >= 20, let first = rows.first else { return nil }
+        guard rows.count >= 20,rows.count == points.count, let first = rows.first,
+              rows.allSatisfy({ $0.count == first.count && $0.allSatisfy({ $0.isFinite }) }),
+              points.allSatisfy({ $0.x.isFinite && $0.y.isFinite }) else { return nil }
         let n = first.count
         let mean = (0..<n).map { j in rows.map { $0[j] }.reduce(0,+)/Double(rows.count) }
         let scale = (0..<n).map { j in max(1e-6,sqrt(rows.map { pow($0[j]-mean[j],2) }.reduce(0,+)/Double(rows.count))) }
@@ -107,6 +110,7 @@ enum MotionDecoder {
     static func tracks(samples: [PatchSample], color: String, start: Double) -> [Track] {
         var tracks: [Track] = []
         for sample in samples {
+            guard sample.pixels.count == CornealAnalyzer.count,let iris = sample.iris else { continue }
             let pixels: [Float]
             if color != "white", let rgb = sample.rgb, rgb.count == CornealAnalyzer.count*3 {
                 let channel = color == "red" ? 0 : color == "green" ? 1 : 2
@@ -114,30 +118,14 @@ enum MotionDecoder {
                     Float(rgb[i*3+channel])-(Float(rgb[i*3+(channel+1)%3])+Float(rgb[i*3+(channel+2)%3]))/2
                 }
             } else if color == "white" { pixels = sample.pixels } else { continue }
-            let hp = CornealAnalyzer.highPass(pixels), w = CornealAnalyzer.width, h = CornealAnalyzer.height
-            var peaks: [(Int,Float)] = []
-            for y in (h/6)..<(h*5/6) { for x in (w/5)..<(w*4/5) {
-                let i = y*w+x, v = hp[i]
-                if sample.iris?.contains(LabPoint(x: (Double(x)+0.5)/Double(w),y: (Double(y)+0.5)/Double(h))) == true && v>4 && v>=hp[i-1] && v>=hp[i+1] && v>=hp[i-w] && v>=hp[i+w] { peaks.append((i,v)) }
-            } }
-            peaks.sort { $0.1>$1.1 }
-            var points: [LabPoint] = []
-            for (i,_) in peaks {
-                let x = i%w, y = i/w
-                if points.contains(where: { hypot($0.x-Double(x),$0.y-Double(y))<3 }) { continue }
-                var sx = 0.0, sy = 0.0, weight = 0.0
-                for yy in (y-1)...(y+1) { for xx in (x-1)...(x+1) {
-                    let v = Double(max(0,hp[yy*w+xx])); weight += v; sx += (Double(xx)+0.5)*v; sy += (Double(yy)+0.5)*v
-                } }
-                let point = LabPoint(x: sx/max(weight,1e-6),y: sy/max(weight,1e-6))
-                guard sample.iris?.contains(LabPoint(x: point.x/Double(w),y: point.y/Double(h))) == true else { continue }
-                points.append(point)
-                if points.count == 20 { break }
-            }
+            let hp = CornealAnalyzer.highPass(pixels)
+            let shapes = SpotGeometry.shapes(pixels: sample.pixels,iris: iris,roi: sample.roi,highPass: hp)
+                .filter(\.accepted).sorted { $0.contrast>$1.contrast }.prefix(20)
+            let points = shapes.map { LabPoint(x: $0.center.x*128,y: $0.center.y*64) }
             let time = sample.hostTime-start
             var matches: [(Double,Int,Int)] = []
             for (id,track) in tracks.enumerated() {
-                guard let last = track.observations.last, time-last.time<0.4 else { continue }
+                guard let last = track.observations.last,time>last.time,time-last.time<0.4 else { continue }
                 for (j,p) in points.enumerated() {
                     let distance = hypot(p.x-last.point.x,p.y-last.point.y)
                     if distance<4 { matches.append((distance,id,j)) }
@@ -151,13 +139,14 @@ enum MotionDecoder {
             }
             for j in points.indices where !usedPoints.contains(j) { tracks.append(Track(observations: [MotionObservation(time: time,point: points[j],nuisance: sample.nuisance ?? [])])) }
         }
-        return tracks.filter { $0.observations.count>=60 }
+        return tracks
     }
 
     static func decode(track: Track, id: Int, color: String, events: [DisplayEvent], start: Double, duration: Double, lag: Double, expectedSamples: Int) -> MotionAnalysis? {
-        let obs = track.observations.filter { reference(start+$0.time-lag,id: id,events: events) != nil }
+        let obs = track.observations.filter { $0.time>=0 && $0.time<duration && $0.nuisance.count == 4 && $0.nuisance.allSatisfy({ $0.isFinite }) && reference(start+$0.time-lag,id: id,events: events) != nil }
         let train = obs.filter { $0.time<duration/2 }, test = obs.filter { $0.time>=duration/2 }
-        guard train.count>=30,test.count>=30 else { return nil }
+        // 验证段不足也返回训练模型；不能因此改选另一条验证段表现更好的轨迹。
+        guard train.count>=30 else { return nil }
         func row(_ o: MotionObservation,shift: Double = 0) -> [Double] {
             var t = o.time-lag+shift
             if shift != 0 { t = t.truncatingRemainder(dividingBy: duration); if t<0 { t += duration } }
@@ -166,6 +155,7 @@ enum MotionDecoder {
         }
         guard let full = fit(train.map { row($0) },train.map(\.point)), let base = fit(train.map(\.nuisance),train.map(\.point)) else { return nil }
         func gain(_ segment: [MotionObservation],shift: Double = 0) -> (Double,Double) {
+            guard !segment.isEmpty else { return (-10,0) }
             let a = segment.map { squaredError($0.point,full.predict(row($0,shift: shift))) }.reduce(0,+)
             let b = segment.map { squaredError($0.point,base.predict($0.nuisance)) }.reduce(0,+)
             return (max(-10,min(1,1-a/max(b,1e-9))),sqrt(a/Double(segment.count)))
@@ -183,7 +173,7 @@ enum MotionDecoder {
         let center = LabPoint(x: sourceOnly.map(\.x).reduce(0,+)/Double(sourceOnly.count),y: sourceOnly.map(\.y).reduce(0,+)/Double(sourceOnly.count))
         let amplitude = sqrt(sourceOnly.map { squaredError($0,center) }.reduce(0,+)/Double(sourceOnly.count))
         let coverage = Double(obs.count)/Double(max(expectedSamples,1))
-        let accepted = training>=0.45 && held.0>=0.30 && held.0>wrong+0.20 && amplitude>=0.18 && coverage>=0.60 && !confounded
+        let accepted = test.count>=30 && training>=0.45 && held.0>=0.30 && held.0>wrong+0.20 && amplitude>=0.18 && coverage>=0.60 && !confounded
         let message = accepted ? "轨迹响应通过独立验证；请人工确认是否位于角膜。" : confounded ? "注视/头动与光点轨迹混杂，或缺少运动记录，不能确认独立光学响应。" : "未通过后半段、错轨迹、位移或覆盖率门槛。"
         return MotionAnalysis(sourceID: id,color: color,accepted: accepted,message: message,lagSeconds: lag,trainGain: training,heldOutGain: held.0,
             wrongTrajectoryGain: wrong,heldOutErrorPixels: held.1,amplitudePixels: amplitude,coverage: coverage,confounded: confounded,
@@ -191,20 +181,23 @@ enum MotionDecoder {
     }
 
     static func analyze(eye: String, samples input: [PatchSample], events: [DisplayEvent], start: Double, configuration c: TrialConfiguration) -> EyeAnalysis {
-        let samples = input.filter { $0.eye == eye && $0.saturation<=0.15 && $0.pixels.count == CornealAnalyzer.count && $0.iris != nil }.sorted { $0.hostTime<$1.hostTime }
+        let samples = CornealAnalyzer.validSamples(input,eye: eye,start: start,duration: c.duration)
+        let events = events.filter { $0.hostTime.isFinite }.sorted { $0.hostTime<$1.hostTime }
         var results: [MotionAnalysis] = []
         var cache: [String:[Track]] = [:]
+        var used: [String:Set<Int>] = [:]
         for source in (events.first?.probes ?? []) {
             if cache[source.color] == nil { cache[source.color] = tracks(samples: samples,color: source.color,start: start) }
             var best: MotionAnalysis?
+            var bestTrack: Int?
             // 锁定前半段得分最高的轨迹与延迟，后半段不参与挑选。
-            for track in cache[source.color] ?? [] { for step in -2...8 {
+            for (trackIndex,track) in (cache[source.color] ?? []).enumerated() where !(used[source.color] ?? []).contains(trackIndex) { for step in -2...8 {
                 if let candidate = decode(track: track,id: source.id,color: source.color,events: events,start: start,duration: c.duration,lag: Double(step)/30,expectedSamples: samples.count),
                    candidate.amplitudePixels>=0.18,
                    candidate.observations.filter({ $0.time<c.duration/2 }).count>=max(30,Int(Double(samples.filter { $0.hostTime-start<c.duration/2 }.count)*0.60)),
-                   best == nil || candidate.trainGain>(best?.trainGain ?? -10) { best = candidate }
+                   best == nil || candidate.trainGain>(best?.trainGain ?? -10) { best = candidate; bestTrack = trackIndex }
             } }
-            if let best = best { results.append(best) }
+            if let best = best,let bestTrack = bestTrack { results.append(best); used[source.color,default: []].insert(bestTrack) }
         }
         let reference = results.first?.observations.last
         let rate = samples.isEmpty ? 0 : Double(samples.filter { $0.rawCandidate != nil }.count)/Double(samples.count)

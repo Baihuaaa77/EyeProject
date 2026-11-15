@@ -24,7 +24,7 @@ final class CornealCoreTests: XCTestCase {
 
     func testCodedSpotWinsAgainstABrighterStaticReflectionAndValidatesHeldOut() {
         var c = TrialConfiguration(); c.mode = .coded
-        let start = 100.0, spot = 32*128+64, staticLamp = 32*128+90
+        let start = 100.0, staticLamp = 32*128+90
         let events = (0..<64).map { i in DisplayEvent(hostTime: start+Double(i)*0.5,intensity: 0.8+StimulusCode.bits[i]*0.15,
             code: StimulusCode.bits[i],chip: i,callbackHostTime: start+Double(i)*0.5) }
         var samples: [PatchSample] = []
@@ -32,7 +32,10 @@ final class CornealCoreTests: XCTestCase {
             let t = Double(frame)/15
             var pixels = [Float](repeating: 90,count: CornealAnalyzer.count)
             pixels[staticLamp] = 245
-            pixels[spot] = Float(150+8*StimulusCode.value(at: t-0.1,configuration: c)+0.2*sin(Double(frame)))
+            for y in 27...37 { for x in 59...69 {
+                let amplitude = 80+15*StimulusCode.value(at: t-0.1,configuration: c)+0.2*sin(Double(frame))
+                pixels[y*128+x] += Float(amplitude*exp(-(pow(Double(x-64),2)+pow(Double(y-32),2))/4))
+            } }
             samples.append(PatchSample(eye: "image_left",hostTime: start+t,pixels: pixels,
                 roi: LabRect(x: 0,y: 0,width: 100,height: 50),pupil: LabPoint(x: 50,y: 25),rawCandidate: nil,saturation: 0,iris: iris))
         }
@@ -204,7 +207,7 @@ final class CornealCoreTests: XCTestCase {
     }
 
     func testRemovedPeakModeAndHistoricalRecords() throws {
-        XCTAssertEqual(TrialMode.allCases.count,4)
+        XCTAssertEqual(TrialMode.allCases.count,6)
         let old = try JSONDecoder().decode(TrialConfiguration.self,from: Data("{\"mode\":\"peak\",\"mean\":0.525}".utf8))
         XCTAssertEqual(old.mode,.steady); XCTAssertEqual(old.mean,1)
         let motion = try JSONDecoder().decode(TrialConfiguration.self,from: Data("{\"mode\":\"motion\",\"dotDiameter\":96}".utf8))

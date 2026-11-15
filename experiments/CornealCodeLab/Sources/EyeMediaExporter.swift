@@ -132,7 +132,15 @@ enum EyeMediaExporter {
         }
         if let pupil = row.baselinePupil { ring(pupil,3,UIColor(LabStyle.landmark)) }
         if let point = row.rawCandidate { ring(point,6,UIColor(LabStyle.baseline)) }
-        if let motion = result?.motionResults {
+        if let screen = result?.screenResult,let observation = screen.observations.min(by: { abs($0.hostTime-row.hostTime)<abs($1.hostTime-row.hostTime) }),abs(observation.hostTime-row.hostTime)<=0.12 {
+            ctx.setStrokeColor(UIColor(LabStyle.candidate).cgColor); ctx.setLineWidth(2)
+            for (i,p) in observation.corners.enumerated() {
+                let q = CGPoint(x: p.x*size.width,y: p.y*size.height)
+                if i == 0 { ctx.move(to: q) } else { ctx.addLine(to: q) }
+            }
+            ctx.closePath(); ctx.strokePath()
+            if let p = observation.darkPoint { ring(p,8,UIColor(screen.structuralEvidence ? LabStyle.coded : LabStyle.candidate)) }
+        } else if let motion = result?.motionResults {
             for source in motion {
                 if let o = source.observations.min(by: { abs($0.time-elapsed)<abs($1.time-elapsed) }),abs(o.time-elapsed)<=0.12 {
                     let p = LabPoint(x: o.point.x/Double(result?.patchWidth ?? 128),y: o.point.y/Double((result?.patchWidth ?? 128)/2))
