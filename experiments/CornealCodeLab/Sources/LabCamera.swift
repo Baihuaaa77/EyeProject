@@ -13,6 +13,7 @@ final class LabCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
     var captureSession: AVCaptureSession { session }
     private var device: AVCaptureDevice?
     private var configured = false
+    private var active = false
     private var detector: MainAppDetector?
     private var frame = 0
     private var lastPreview = 0.0
@@ -72,11 +73,19 @@ final class LabCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
     override init() {
         super.init()
         observers.append(NotificationCenter.default.addObserver(forName: AVCaptureSession.wasInterruptedNotification,
-            object: session, queue: nil) { [weak self] _ in self?.onError?("相机被系统中断，本轮已停止；请重新准备相机。") })
+            object: session, queue: nil) { [weak self] _ in self?.reportSessionError("相机被系统中断，本轮已停止；请重新准备相机。") })
         observers.append(NotificationCenter.default.addObserver(forName: AVCaptureSession.runtimeErrorNotification,
-            object: session, queue: nil) { [weak self] _ in self?.onError?("相机运行异常，请重新准备相机。") })
+            object: session, queue: nil) { [weak self] _ in self?.reportSessionError("相机运行异常，请重新准备相机。") })
     }
     deinit { observers.forEach { NotificationCenter.default.removeObserver($0) } }
+
+    /// 未准备或已停止的预览层也可能收到系统通知，不把它当作正在采集的故障。
+    private func reportSessionError(_ message: String) {
+        queue.async { [weak self] in
+            guard let self = self,self.active else { return }
+            self.onError?(message)
+        }
+    }
 
     func prepare(reuseExposure: Bool = true, configuration: TrialConfiguration) {
         AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
@@ -84,6 +93,7 @@ final class LabCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
             guard granted else { self.onError?("请在 iPhone 设置中允许相机权限。"); return }
             self.queue.async {
                 do {
+                    self.active = true
                     self.trialConfig = configuration
                     if !self.configured { try self.configure() }
                     try self.selectCaptureFormat()
@@ -98,7 +108,7 @@ final class LabCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
                         device.unlockForConfiguration()
                     }
                     if !self.session.isRunning { self.session.startRunning() }
-                } catch { self.onError?("相机准备失败：\(error.localizedDescription)") }
+                } catch { self.active = false; self.onError?("相机准备失败：\(error.localizedDescription)") }
             }
         }
     }
@@ -257,6 +267,7 @@ final class LabCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
     }
 
     func stop() { queue.async {
+        self.active = false
         self.recording = false
         try? self.nativeFile?.close(); self.nativeFile = nil
         self.writer?.cancelWriting(); self.writer = nil; self.writerInput = nil

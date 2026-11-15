@@ -4,6 +4,15 @@ import AVFoundation
 @testable import CornealCodeLab
 
 final class InteractiveMediaTests: XCTestCase {
+    func testInactivePreviewDoesNotReportACaptureFailure() {
+        let camera = LabCamera()
+        let error = expectation(description: "未开始采集时不显示相机故障"); error.isInverted = true
+        camera.onError = { _ in error.fulfill() }
+        NotificationCenter.default.post(name: AVCaptureSession.runtimeErrorNotification,object: camera.captureSession)
+        NotificationCenter.default.post(name: AVCaptureSession.wasInterruptedNotification,object: camera.captureSession)
+        wait(for: [error],timeout: 0.2)
+    }
+
     @MainActor func testZoomAndOverlayKeepThePlayerItemAndPlaybackClock() throws {
         let player = AVPlayer()
         let item = AVPlayerItem(url: URL(fileURLWithPath: "/tmp/不存在的视频.mov"))
