@@ -30,7 +30,7 @@ final class ScreenshotCatalogTests: XCTestCase {
             seedHome()
             CloudModel.shared.capture(state: ["configured": false, "signedIn": false], chat: ["state": "ready", "messages": []])
             try await capture("01-首页", CaptureMainPage(tab: .home), dark, scroll: true)
-            try await capture("02-今日不适打卡", HomePage(captureFeeling: true), dark)
+            try await capture("02-今日不适打卡", BrownHomePage(captureFeeling: true), dark)
             try await capture("03-服务", CaptureMainPage(tab: .services), dark, scroll: true)
             try await capture("04-我的", CaptureMainPage(tab: .mine), dark, scroll: true)
             try await capture("05-用眼趋势", TrendPage(), dark, navigation: true, scroll: true)

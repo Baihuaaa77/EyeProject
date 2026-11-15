@@ -1,6 +1,16 @@
 import SwiftUI
 import EyeScreening
 
+#if SCREENSHOT_CAPTURE
+extension BrownHomePage {
+    /// 截图专用入口：展示当前首页的真实打卡弹窗。
+    init(captureFeeling: Bool) {
+        navigate = { _ in }; openTest = { _ in }
+        _feeling = State(initialValue: captureFeeling)
+    }
+}
+#endif
+
 /// 棕色深色首页。负荷分、历史与打卡仍来自共用报告，复测启动真实检测。
 struct BrownHomePage: View {
     let navigate: (AppRoute) -> Void

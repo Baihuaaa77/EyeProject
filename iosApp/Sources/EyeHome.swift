@@ -739,12 +739,3 @@ struct ExerciseCompletionView: View {
         }.frame(maxHeight: .infinity)
     }
 }
-
-#if SCREENSHOT_CAPTURE
-extension HomePage {
-    init(captureFeeling: Bool) {
-        navigate = { _ in }; openTest = { _ in }
-        _feelingEditing = State(initialValue: captureFeeling)
-    }
-}
-#endif
