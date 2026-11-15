@@ -12,7 +12,12 @@ import kotlin.math.roundToInt
  * Hirschberg 法本可用「映光点相对角膜缘中心」，左右眼共同的瞳孔偏心在鼻侧差中相互抵消。
  */
 object EyeOpticalAlgorithm {
-    fun measure(bitmap: GrayImage, eye: EyeLandmarks?): OpticalEyeMeasurement? {
+    fun measure(bitmap: GrayImage, eye: EyeLandmarks?): OpticalEyeMeasurement? = measure(bitmap, eye, 0.75f)
+
+    /** 光码实验搜索完整虹膜；主 App 继续使用原有内区参数，疾病规则不变。 */
+    fun measureFullIris(bitmap: GrayImage, eye: EyeLandmarks?): OpticalEyeMeasurement? = measure(bitmap, eye, 1f)
+
+    private fun measure(bitmap: GrayImage, eye: EyeLandmarks?, searchRadiusFraction: Float): OpticalEyeMeasurement? {
         eye ?: return null
         val iris = eye.irisPoints.firstOrNull() ?: return null
         val diameter = eye.irisDiameterPx
@@ -64,7 +69,7 @@ object EyeOpticalAlgorithm {
         for (start in gray.indices) {
             if (visited[start] || gray[start] < threshold) continue
             val sx = start % width; val sy = start / width
-            if (hypot(sx + x0 - iris.x, sy + y0 - iris.y) > radius * 0.75f) continue
+            if (hypot(sx + x0 - iris.x, sy + y0 - iris.y) > radius * searchRadiusFraction) continue
             var head = 0; var tail = 0
             queue[tail++] = start; visited[start] = true
             var sumX = 0f; var sumY = 0f; var sumBrightness = 0f
@@ -76,7 +81,7 @@ object EyeOpticalAlgorithm {
                     val nx = x + dx; val ny = y + dy
                     if (nx !in 0 until width || ny !in 0 until height) continue
                     val next = ny * width + nx
-                    if (!visited[next] && gray[next] >= threshold && hypot(nx + x0 - iris.x, ny + y0 - iris.y) <= radius * 0.75f) {
+                    if (!visited[next] && gray[next] >= threshold && hypot(nx + x0 - iris.x, ny + y0 - iris.y) <= radius * searchRadiusFraction) {
                         visited[next] = true; queue[tail++] = next
                     }
                 }

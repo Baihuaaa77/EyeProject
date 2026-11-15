@@ -11,6 +11,7 @@ enum EyeMediaExporter {
         let adaptor: AVAssetWriterInputPixelBufferAdaptor
         let eye: String
         let overlay: Bool
+        let size: CGSize
     }
     static func crop(_ image: CIImage,roi: LabRect) -> CIImage {
         let rect = CGRect(x: roi.x,y: image.extent.height-roi.y-roi.height,width: roi.width,height: roi.height).intersection(image.extent)
@@ -25,10 +26,14 @@ enum EyeMediaExporter {
     }
     static func streams(directory: URL,eye: String) throws -> [Stream] {
         try [false,true].map { overlay in
-            let url = directory.appendingPathComponent(eye+(overlay ? "_overlay.mov" : "_original.mov"))
+            try stream(directory: directory,name: eye+(overlay ? "_overlay.mov" : "_original.mov"),eye: eye,overlay: overlay,size: size)
+        }
+    }
+    static func stream(directory: URL,name: String,eye: String,overlay: Bool,size: CGSize) throws -> Stream {
+            let url = directory.appendingPathComponent(name)
             let writer = try AVAssetWriter(outputURL: url,fileType: .mov)
             let input = AVAssetWriterInput(mediaType: .video,outputSettings: [AVVideoCodecKey: AVVideoCodecType.h264,
-                AVVideoWidthKey: Int(size.width),AVVideoHeightKey: Int(size.height),AVVideoCompressionPropertiesKey: [AVVideoAverageBitRateKey: 3_000_000]])
+                AVVideoWidthKey: Int(size.width),AVVideoHeightKey: Int(size.height),AVVideoCompressionPropertiesKey: [AVVideoAverageBitRateKey: max(3_000_000,Int(size.width*size.height*4))]])
             input.expectsMediaDataInRealTime = false
             let adaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: input,sourcePixelBufferAttributes: [
                 kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,kCVPixelBufferWidthKey as String: Int(size.width),
@@ -36,8 +41,7 @@ enum EyeMediaExporter {
             guard writer.canAdd(input) else { throw failure("无法创建眼区视频编码器") }
             writer.add(input)
             guard writer.startWriting() else { throw writer.error ?? failure("眼区视频写入启动失败") }
-            return Stream(writer: writer,input: input,adaptor: adaptor,eye: eye,overlay: overlay)
-        }
+            return Stream(writer: writer,input: input,adaptor: adaptor,eye: eye,overlay: overlay,size: size)
     }
     static func failure(_ message: String) -> NSError { NSError(domain: "EyeMedia",code: 1,userInfo: [NSLocalizedDescriptionKey: message]) }
 
@@ -53,7 +57,8 @@ enum EyeMediaExporter {
             let rows = records.filter { $0.eye == eye && $0.roi != nil }.sorted { $0.pts<$1.pts }
             if !rows.isEmpty { eyeRows[eye] = rows; writers += try streams(directory: directory,eye: eye) }
         }
-        guard !writers.isEmpty else { throw failure("没有可用的虹膜关键点，无法生成眼区裁剪；原始全画面视频已保留") }
+        let fullSize = track.naturalSize
+        writers.append(try stream(directory: directory,name: "camera_overlay.mov",eye: "full",overlay: true,size: fullSize))
         var complete = false
         defer { if !complete { reader.cancelReading(); writers.forEach { $0.writer.cancelWriting() } } }
         guard reader.startReading() else { throw reader.error ?? failure("无法读取原始视频") }
@@ -93,12 +98,30 @@ enum EyeMediaExporter {
                         bestReference[eye] = difference
                         try UIImage(cgImage: cg).pngData()?.write(to: directory.appendingPathComponent(eye+"_original.png"))
                         let format = UIGraphicsImageRendererFormat(); format.scale = 1
+                        let enlarged = UIGraphicsImageRenderer(size: size,format: format).image { graphics in
+                            graphics.cgContext.interpolationQuality = .none
+                            UIImage(cgImage: cg).draw(in: CGRect(origin: .zero,size: size))
+                        }
+                        try enlarged.pngData()?.write(to: directory.appendingPathComponent(eye+"_enlarged.png"))
                         let annotated = UIGraphicsImageRenderer(size: size,format: format).image { graphics in
                             UIImage(cgImage: cg).draw(in: CGRect(origin: .zero,size: size))
                             if valid { overlay(graphics.cgContext,size: size,row: row,result: result,elapsed: row.hostTime-start) }
                         }
                         try annotated.pngData()?.write(to: directory.appendingPathComponent(eye+"_overlay.png"))
                     }
+                }
+                if let stream = writers.first(where: { $0.eye == "full" }) {
+                    let deadline = Date().addingTimeInterval(5)
+                    while !stream.input.isReadyForMoreMediaData {
+                        if Date()>deadline || stream.writer.status != .writing { throw stream.writer.error ?? failure("全画面叠加视频编码超时") }
+                        Thread.sleep(forTimeInterval: 0.001)
+                    }
+                    var pixel: CVPixelBuffer?
+                    guard let pool = stream.adaptor.pixelBufferPool,CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault,pool,&pixel) == kCVReturnSuccess,let pixel = pixel else { throw failure("全画面视频缓冲不足") }
+                    context.render(image,to: pixel)
+                    let current = ["image_left","image_right"].compactMap { eye in nearest(t,rows: qualityRows[eye] ?? [],origin: videoStartPTS) }
+                    drawFull(on: pixel,rows: current,results: results,videoTime: t,videoStartPTS: videoStartPTS,start: start)
+                    guard stream.adaptor.append(pixel,withPresentationTime: pts) else { throw stream.writer.error ?? failure("全画面叠加视频写入失败") }
                 }
             }
         }
@@ -109,7 +132,29 @@ enum EyeMediaExporter {
         let media: [String:Any] = ["输出尺寸": [640,320],"帧数": frameCounts,"说明": "彩色原图为原视频原生像素裁剪；眼区视频裁剪后放大并以H.264重新编码，不增加光学分辨率。关键点丢失时沿用最近裁剪窗口，隐藏检测叠加。", "参考图与目标时间差秒": bestReference]
         try JSONSerialization.data(withJSONObject: media,options: [.prettyPrinted,.sortedKeys]).write(to: directory.appendingPathComponent("eye_media.json"))
         complete = true
-        return writers.map { $0.eye+($0.overlay ? "_overlay.mov" : "_original.mov") }
+        return writers.map { $0.eye == "full" ? "camera_overlay.mov" : $0.eye+($0.overlay ? "_overlay.mov" : "_original.mov") }
+    }
+
+    static func drawFull(on buffer: CVPixelBuffer,rows: [FrameRecord],results: [EyeAnalysis],videoTime: Double,videoStartPTS: Double,start: Double) {
+        CVPixelBufferLockBaseAddress(buffer,[]); defer { CVPixelBufferUnlockBaseAddress(buffer,[]) }
+        let w = CVPixelBufferGetWidth(buffer),h = CVPixelBufferGetHeight(buffer)
+        guard let bytes = CVPixelBufferGetBaseAddress(buffer),let ctx = CGContext(data: bytes,width: w,height: h,bitsPerComponent: 8,bytesPerRow: CVPixelBufferGetBytesPerRow(buffer),space: CGColorSpaceCreateDeviceRGB(),bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue|CGBitmapInfo.byteOrder32Little.rawValue) else { return }
+        ctx.translateBy(x: 0,y: CGFloat(h)); ctx.scaleBy(x: 1,y: -1)
+        fullOverlay(ctx,canvasSize: CGSize(width: w,height: h),rows: rows,results: results,videoTime: videoTime,videoStartPTS: videoStartPTS,start: start)
+    }
+
+    /// 播放器和导出复用同一坐标转换；拒判帧及超过120ms的记录不显示历史标记。
+    static func fullOverlay(_ ctx: CGContext,canvasSize: CGSize,rows: [FrameRecord],results: [EyeAnalysis],videoTime: Double,videoStartPTS: Double,start: Double) {
+        for row in rows {
+            let age = videoTime-(row.pts-videoStartPTS)
+            guard row.status == "valid",age>=(-0.001),age<=0.12,let eye = row.eye,let roi = row.roi,row.width>0,row.height>0 else { continue }
+            ctx.saveGState()
+            ctx.scaleBy(x: canvasSize.width/CGFloat(row.width),y: canvasSize.height/CGFloat(row.height))
+            ctx.translateBy(x: roi.x,y: roi.y)
+            ctx.clip(to: CGRect(x: 0,y: 0,width: roi.width,height: roi.height))
+            overlay(ctx,size: CGSize(width: roi.width,height: roi.height),row: row,result: results.first { $0.eye == eye },elapsed: row.hostTime-start)
+            ctx.restoreGState()
+        }
     }
 
     static func draw(on buffer: CVPixelBuffer,row: FrameRecord,result: EyeAnalysis?,elapsed: Double) {

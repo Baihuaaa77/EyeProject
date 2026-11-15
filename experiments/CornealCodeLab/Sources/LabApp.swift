@@ -20,7 +20,7 @@ struct LabRootView: View {
     @State private var path: [TrialSummary] = []
     var body: some View {
         NavigationStack(path: $path) { setup.navigationDestination(for: TrialSummary.self) { trial in
-            TrialResultView(trial: trial,root: model.root,share: { model.share(trial) })
+            TrialResultView(trial: trial,model: model)
         } }
         .overlay {
             if model.phase == .warming || model.phase == .recording {
@@ -40,6 +40,7 @@ struct LabRootView: View {
             switch result { case .success(let url): model.importPlan(url); case .failure(let error): model.error = error.localizedDescription }
         }
         .sheet(isPresented: $model.showingShare) { ShareSheet(urls: model.shareURLs) }
+        .alert("提示",isPresented: Binding(get: { model.error != nil },set: { if !$0 { model.error = nil } })) { Button("知道了") { model.error = nil } } message: { Text(model.error ?? "") }
     }
     private var setup: some View {
         Form {
@@ -55,10 +56,8 @@ struct LabRootView: View {
                 }
             }
             Section("1 · 准备相机") {
-                if let image = model.preview {
-                    Image(uiImage: image).resizable().scaledToFit().frame(maxHeight: 220)
-                        .accessibilityLabel("未镜像的前置相机预览")
-                }
+                CameraPreview(session: model.captureSession).frame(height: 220)
+                    .accessibilityLabel("未镜像的前置相机实时预览")
                 Text(model.cameraStatus).font(LabStyle.detail)
                 Button("准备相机 / 重新检查双眼",action: model.prepare)
             }
@@ -109,7 +108,7 @@ struct LabRootView: View {
                     Text("均值对照恒亮值：\(Int((model.configuration.mean*100).rounded()))%。百分比为输出通道值，不是实测物理亮度。").font(LabStyle.detail)
                 }
                 HStack { Text("屏幕亮度"); Slider(value: $model.configuration.screenBrightness,in: 0.3...1); Text("\(Int(model.configuration.screenBrightness*100))%") }
-                HStack { Text("自报距离"); TextField("厘米",value: $model.configuration.distanceCM,format: .number).keyboardType(.decimalPad); Text("cm") }
+                LabeledContent("自动距离",value: model.measuredDistanceCM.map { String(format: "%.1f cm",$0) } ?? "等待双眼定位")
                 Picker("眼镜",selection: $model.configuration.glasses) { ForEach(["未戴镜","框架眼镜","隐形眼镜"],id: \.self) { Text($0) } }
                 Picker("环境",selection: $model.configuration.lighting) { ForEach(["室内普通光","暗室","背窗","外置点光源阳性对照"],id: \.self) { Text($0) } }
                 Toggle("沿用上一轮锁定曝光",isOn: $model.configuration.reuseExposure)
@@ -141,27 +140,39 @@ struct LabRootView: View {
 
 struct TrialResultView: View {
     let trial: TrialSummary
-    let root: URL
-    let share: () -> Void
-    private var directory: URL { root.appendingPathComponent(trial.id) }
+    @ObservedObject var model: LabModel
+    private var directory: URL { model.root.appendingPathComponent(trial.id) }
     var body: some View {
         ScrollView {
             VStack(alignment: .leading,spacing: 20) {
                 Text(trial.configuration.mode.title).font(LabStyle.title)
-                Text("\(Int(trial.configuration.dotDiameter)) pt · \(Int(trial.configuration.distanceCM)) cm · \(trial.configuration.glasses) · \(trial.configuration.lighting)").font(LabStyle.detail)
+                Text("\(Int(trial.configuration.dotDiameter)) pt · \(trial.configuration.automaticDistance ? "自动" : "记录")距离 \(String(format: "%.1f",trial.configuration.distanceCM)) cm · \(trial.configuration.glasses) · \(trial.configuration.lighting)").font(LabStyle.detail)
                 if trial.stoppedEarly { Text("本轮提前停止，不作为完整条件比较。").foregroundStyle(LabStyle.candidate) }
                 ForEach(trial.eligibilityNotes,id: \.self) { Text($0).foregroundStyle(LabStyle.candidate) }
+                InteractiveMovieView(directory: directory,trial: trial)
+                HStack {
+                    Button("导出原视频") { model.shareFile(trial,name: "camera.mov") }
+                    if FileManager.default.fileExists(atPath: directory.appendingPathComponent("camera_overlay.mov").path) {
+                        Button("导出可视化视频") { model.shareFile(trial,name: "camera_overlay.mov") }
+                    }
+                }.buttonStyle(.bordered).frame(minHeight: 44)
+                VStack(alignment: .leading,spacing: 8) {
+                    Button("导出全部数据（单个 JSON）") { model.shareData(trial,includePixels: true) }
+                    Button("导出轻量数据（不含像素）") { model.shareData(trial,includePixels: false) }
+                    if model.exporting { ProgressView("正在合并数据") }
+                }.buttonStyle(.bordered).disabled(model.exporting)
                 ForEach(trial.results,id: \.eye) { eye in
                     VStack(alignment: .leading,spacing: 10) {
                         Text(eye.eye == "image_left" ? "画面左眼区（未镜像）" : "画面右眼区（未镜像）").font(LabStyle.heading)
                         if FileManager.default.fileExists(atPath: directory.appendingPathComponent(eye.eye+"_original.png").path) {
-                            EyeMediaSection(eye: eye.eye,directory: directory,nativeSnapshot: trial.nativeSnapshots == true)
+                            EyeMediaSection(eye: eye.eye,directory: directory,nativeSnapshot: trial.nativeSnapshots == true,shareFile: { model.shareFile(trial,name: $0) })
                         } else if let image = UIImage(contentsOfFile: directory.appendingPathComponent(eye.eye+".png").path) {
                             Text("分析采样图（旧记录或彩色资料尚未生成）").font(LabStyle.detail)
                             Image(uiImage: image).resizable().interpolation(.none).aspectRatio(2,contentMode: .fit)
                         }
                         Text(eye.message).font(LabStyle.body)
-                        Text("有效眼区 \(eye.samples) 帧 · 主 App 基础映光候选率 \(Int(eye.rawCandidateRate*100))%").font(LabStyle.detail)
+                        if let prediction = eye.opticalPrediction { OpticalEvidenceView(prediction: prediction) }
+                        Text("有效眼区 \(eye.samples) 帧 · 基础亮点候选率 \(Int(eye.rawCandidateRate*100))%").font(LabStyle.detail)
                         if let coverage = eye.validFrameCoverage { Text("有效眼区占已分析帧 \(Int(coverage*100))%").font(LabStyle.detail) }
                         if let screen = eye.screenResult {
                             Text("屏幕轮廓覆盖 \(Int(screen.rectangleCoverage*100))% · 暗点覆盖 \(Int(screen.targetCoverage*100))%").font(LabStyle.detail)
@@ -192,10 +203,8 @@ struct TrialResultView: View {
                         }
                     }.padding().background(LabStyle.background).clipShape(RoundedRectangle(cornerRadius: LabStyle.radius))
                 }
-                Text((trial.algorithmVersion.hasPrefix("corneal-feasibility-3") || trial.algorithmVersion.hasPrefix("corneal-feasibility-4") || trial.algorithmVersion.hasPrefix("corneal-feasibility-5")) ? "基础检测：MediaPipe 与主 App 共用 Kotlin 光学算法。v4 另加近圆形筛选和屏幕空间模板，不改变基础映光阈值。彩色原图优先保存相机原生BGRA像素的无损PNG；放大视频由原视频裁剪重编码，不增加光学分辨率。" : "这是旧版 Vision 实验记录，不能视为主 App 同算法结果。").font(LabStyle.detail)
+                Text("新实验使用完整虹膜搜索与共享光学算法；旧记录保留当时范围。放大图片和视频不增加原始光学分辨率。").font(LabStyle.detail)
                 Text("叠加图：橙色为虹膜边界，虚线为搜索范围；青色为瞳孔/虹膜参考中心，黄色为主 App 基础映光候选；绿色大圈为通过编码验证的候选，橙色大圈为未通过的候选。仍须人工确认角膜来源。").font(LabStyle.detail)
-                LocalMovieView(url: directory.appendingPathComponent("camera.mov"),title: "原始全画面视频").frame(minHeight: 240)
-                Button("导出本轮视频、图像与时间日志",action: share).buttonStyle(.borderedProminent)
                 DisclosureGroup("参数与判定边界") {
                     Text("运动轮：仅前半段选择轨迹、空间映射与延迟，固定参数验证后半段。增益为相对仅含眼动/头动模型的误差下降比例，要求前半段≥0.45、后半段≥0.30、比错轨迹高0.20、位移≥0.18采样像素、覆盖≥60%，并排除严重运动混杂。明暗轮：只用前半段选择位置与延迟，固定后在后半段验证。参考门槛：前半段 r≥0.35、后半段 r≥0.30、后半段比错码至少高 0.15，局部响应≥0.5 灰度级。这些是工程门槛，不是经临床验证的阈值。延迟不是纯硬件延迟。").font(LabStyle.detail)
                     Text((try? String(contentsOf: directory.appendingPathComponent("camera.json"),encoding: .utf8)) ?? "无相机参数").font(LabStyle.code)
@@ -222,6 +231,7 @@ struct EyeMediaSection: View {
     let eye: String
     let directory: URL
     let nativeSnapshot: Bool
+    let shareFile: (String) -> Void
     @State private var annotated = false
     var body: some View {
         VStack(alignment: .leading,spacing: 10) {
@@ -229,12 +239,36 @@ struct EyeMediaSection: View {
             let suffix = annotated ? "_overlay" : "_original"
             if let image = UIImage(contentsOfFile: directory.appendingPathComponent(eye+suffix+".png").path) {
                 Text(annotated ? "彩色原图上的检测结果" : (nativeSnapshot ? "眼部彩色原图（相机原生像素、无损PNG）" : "原视频彩色帧（眼区裁剪）")).font(LabStyle.detail)
-                Image(uiImage: image).resizable().interpolation(.none).scaledToFit()
+                EyePhotoView(image: image)
                 Text("图像尺寸 \(Int(image.size.width)) × \(Int(image.size.height))").font(LabStyle.detail)
             }
-            let video = directory.appendingPathComponent(eye+suffix+".mov")
-            if FileManager.default.fileExists(atPath: video.path) {
-                LocalMovieView(url: video,title: annotated ? "放大眼区视频 · 检测叠加" : "放大眼区视频 · 彩色原内容").id(video)
+            let enlarged = eye+"_enlarged.png"
+            Button("导出放大眼部图片") { shareFile(FileManager.default.fileExists(atPath: directory.appendingPathComponent(enlarged).path) ? enlarged : eye+"_original.png") }.buttonStyle(.bordered).frame(minHeight: 44)
+            Button("导出眼部可视化图片") { shareFile(eye+"_overlay.png") }.buttonStyle(.bordered).frame(minHeight: 44)
+            DisclosureGroup("眼区视频导出") {
+                Button("导出眼区原内容视频") { shareFile(eye+"_original.mov") }.frame(minHeight: 44)
+                Button("导出眼区可视化视频") { shareFile(eye+"_overlay.mov") }.frame(minHeight: 44)
+            }
+        }
+    }
+}
+
+struct OpticalEvidenceView: View {
+    let prediction: OpticalPrediction
+    private func number(_ x: Double) -> String { String(format: "%.2f",x) }
+    var body: some View {
+        VStack(alignment: .leading,spacing: 6) {
+            Text("光学尺寸核查").font(LabStyle.subheading)
+            Text("自动距离 \(number(prediction.distanceCM)) cm · 光点直径约 \(number(prediction.stimulusDiameterMM)) mm").font(LabStyle.detail)
+            Text("预测反射直径 \(number(prediction.expectedDiameterPixels)) px（\(number(prediction.expectedMinPixels))–\(number(prediction.expectedMaxPixels))）").font(LabStyle.body)
+            if let observed = prediction.observedDiameterPixels {
+                Text("候选等效直径 \(number(observed)) px · 预测的 \(number(prediction.observedToExpected ?? 0)) 倍").font(LabStyle.detail)
+            }
+            DisclosureGroup("模型假设") {
+                Text("屏幕约 \(number(prediction.screenWidthMM)) × \(number(prediction.screenHeightMM)) mm；反射屏幕约 \(number(prediction.reflectedScreenWidthPixels)) × \(number(prediction.reflectedScreenHeightPixels)) px。角膜曲率半径假设 \(number(prediction.cornealRadiusMM)) mm。").font(LabStyle.detail)
+                Text(prediction.screenSizeSource).font(LabStyle.detail)
+                Text(prediction.distanceSource).font(LabStyle.detail)
+                Text(prediction.note).font(LabStyle.detail)
             }
         }
     }

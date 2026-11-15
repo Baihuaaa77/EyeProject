@@ -5,6 +5,25 @@ import UIKit
 @testable import CornealCodeLab
 
 final class EyeMediaTests: XCTestCase {
+    func testFullFrameOverlayMapsEyeROIAndHidesRejectedOrStaleRows() throws {
+        var row = FrameRecord(index: 0,pts: 900,hostTime: 500,exposureSeconds: 0.01,iso: 100,width: 200,height: 100,status: "valid",eye: "image_left",
+            roi: LabRect(x: 50,y: 20,width: 40,height: 20),baselinePupil: LabPoint(x: 0.5,y: 0.5))
+        let format = UIGraphicsImageRendererFormat(); format.scale = 1
+        func render(_ rows: [FrameRecord],time: Double = 0) -> UIImage {
+            UIGraphicsImageRenderer(size: CGSize(width: 200,height: 100),format: format).image { graphics in
+                EyeMediaExporter.fullOverlay(graphics.cgContext,canvasSize: CGSize(width: 200,height: 100),rows: rows,results: [],videoTime: time,videoStartPTS: 900,start: 500)
+            }
+        }
+        let empty = render([])
+        let valid = render([row])
+        XCTAssertNotEqual(valid.pngData(),empty.pngData())
+        let ci = try XCTUnwrap(CIImage(image: valid))
+        XCTAssertGreaterThan(rgba(ci,x: 72,y: 69)[3],0,"标记应位于全画面(70,30)附近")
+        XCTAssertEqual(render([row],time: 0.3).pngData(),empty.pngData(),"不能把旧帧检测画到之后的画面")
+        row.status = "large_motion"
+        XCTAssertEqual(render([row]).pngData(),empty.pngData())
+    }
+
     func testColorCropsAndAnnotatedMoviesKeepFramesAndOrientation() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString,isDirectory: true)
         try FileManager.default.createDirectory(at: directory,withIntermediateDirectories: true)
@@ -39,7 +58,8 @@ final class EyeMediaTests: XCTestCase {
         writer.finishWriting { finished.fulfill() }; wait(for: [finished],timeout: 10)
         XCTAssertEqual(writer.status,.completed)
         let files = try EyeMediaExporter.export(directory: directory,records: records,results: [],start: 500,videoStartPTS: 900)
-        XCTAssertEqual(files.count,4)
+        XCTAssertEqual(files.count,5)
+        XCTAssertTrue(files.contains("camera_overlay.mov"))
         let image = try XCTUnwrap(CIImage(contentsOf: directory.appendingPathComponent("image_left_original.png")))
         XCTAssertEqual(image.extent.width,32); XCTAssertEqual(image.extent.height,16)
         let top = rgba(image,x: 4,y: 14), bottom = rgba(image,x: 4,y: 2)
@@ -52,7 +72,7 @@ final class EyeMediaTests: XCTestCase {
         for file in files {
             let url = directory.appendingPathComponent(file)
             let asset = AVURLAsset(url: url)
-            XCTAssertEqual(try XCTUnwrap(asset.tracks(withMediaType: .video).first).naturalSize.width,640)
+            XCTAssertEqual(try XCTUnwrap(asset.tracks(withMediaType: .video).first).naturalSize.width,file == "camera_overlay.mov" ? 64 : 640)
             let times = try decodedTimes(url)
             XCTAssertEqual(times.count,sourceTimes.count,"\(file) 原片:\(sourceTimes) 派生:\(times)")
             for (a,b) in zip(times,sourceTimes) { XCTAssertEqual(a,b,accuracy: 0.001,file) }

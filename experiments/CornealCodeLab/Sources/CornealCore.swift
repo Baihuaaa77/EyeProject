@@ -33,13 +33,19 @@ struct TrialConfiguration: Codable {
     var screenLevel: Double = 0.7
     var displayWidth: Double = 390
     var displayHeight: Double = 844
+    var automaticDistance: Bool = true
+    var screenWidthMM: Double = 65
+    var screenHeightMM: Double = 140
+    var screenSizeSource: String = "未识别，使用屏幕尺寸假设"
+    var cornealRadiusMM: Double = 7.8
     var validationError: String? {
-        let values = [dotDiameter,dotY,screenBrightness,mean,modulation,chipSeconds,distanceCM,probeDiameter,motionScale,screenLevel,displayWidth,displayHeight]
+        let values = [dotDiameter,dotY,screenBrightness,mean,modulation,chipSeconds,distanceCM,probeDiameter,motionScale,screenLevel,displayWidth,displayHeight,screenWidthMM,screenHeightMM,cornealRadiusMM]
         guard values.allSatisfy({ $0.isFinite }) else { return "实验参数包含无效数值" }
         guard (8...160).contains(dotDiameter),(0.1...0.9).contains(dotY),(0.1...1).contains(screenBrightness),
               (0.1...2).contains(chipSeconds),(15...100).contains(distanceCM),(1...3).contains(probeCount),
               (8...160).contains(probeDiameter),(0.1...1.5).contains(motionScale),(0.2...1).contains(screenLevel),
-              displayWidth>=200,displayHeight>displayWidth,(0...1).contains(mean),modulation>=0 else { return "请检查距离（15–100 cm）、尺寸、亮度及编码参数" }
+              displayWidth>=200,displayHeight>displayWidth,(0...1).contains(mean),modulation>=0,
+              screenWidthMM>0,screenHeightMM>0,(6...10).contains(cornealRadiusMM) else { return "请检查距离（15–100 cm）、尺寸、亮度及编码参数" }
         guard [30,60].contains(captureFPS),(1...30).contains(exposureMS),exposureMS<=1000/Double(captureFPS),
               exposureISO.isFinite,(20...1600).contains(exposureISO),(64...1024).contains(chipCount),chipCount%64 == 0,
               transitionGuardMS.isFinite,(0...50).contains(transitionGuardMS) else { return "曝光时长须小于帧周期，码元数须为64的倍数，ISO需在20–1600内" }
@@ -48,7 +54,7 @@ struct TrialConfiguration: Codable {
     }
     var duration: Double { Double(chipCount) * chipSeconds }
     init() {}
-    enum CodingKeys: String, CodingKey { case mode, dotDiameter, dotY, screenBrightness, mean, modulation, chipSeconds, distanceCM, glasses, lighting, reuseExposure, probeCount, colorfulProbes, motionScale, probeDiameter, screenLevel, displayWidth, displayHeight, prefer4K, captureFPS, exposureMS, exposureISO, chipCount, transitionGuardMS, colorCode }
+    enum CodingKeys: String, CodingKey { case mode, dotDiameter, dotY, screenBrightness, mean, modulation, chipSeconds, distanceCM, glasses, lighting, reuseExposure, probeCount, colorfulProbes, motionScale, probeDiameter, screenLevel, displayWidth, displayHeight, prefer4K, captureFPS, exposureMS, exposureISO, chipCount, transitionGuardMS, colorCode, automaticDistance, screenWidthMM, screenHeightMM, screenSizeSource, cornealRadiusMM }
     /// 旧轮次缺少运动参数时仍可打开；保留旧强度，不能用新默认值改写旧实验条件。
     init(from decoder: Decoder) throws {
         let v = try decoder.container(keyedBy: CodingKeys.self)
@@ -81,6 +87,11 @@ struct TrialConfiguration: Codable {
         screenLevel = try v.decodeIfPresent(Double.self,forKey: .screenLevel) ?? 0.7
         displayWidth = try v.decodeIfPresent(Double.self,forKey: .displayWidth) ?? 390
         displayHeight = try v.decodeIfPresent(Double.self,forKey: .displayHeight) ?? 844
+        automaticDistance = try v.decodeIfPresent(Bool.self,forKey: .automaticDistance) ?? false
+        screenWidthMM = try v.decodeIfPresent(Double.self,forKey: .screenWidthMM) ?? 65
+        screenHeightMM = try v.decodeIfPresent(Double.self,forKey: .screenHeightMM) ?? 140
+        screenSizeSource = try v.decodeIfPresent(String.self,forKey: .screenSizeSource) ?? "旧记录的屏幕尺寸假设"
+        cornealRadiusMM = try v.decodeIfPresent(Double.self,forKey: .cornealRadiusMM) ?? 7.8
     }
 }
 
@@ -165,6 +176,10 @@ struct FrameRecord: Codable {
     var nativeROI: LabRect?
     var landmarkFresh: Bool? = nil
     var landmarkAgeSeconds: Double? = nil
+    var distanceCM: Double? = nil
+    var focalLengthPx: Double? = nil
+    var distanceSource: String? = nil
+    var processingMS: Double? = nil
 }
 
 struct EyeAnalysis: Codable {
@@ -198,6 +213,7 @@ struct EyeAnalysis: Codable {
     var shiftRankFraction: Double? = nil
     var subpixelPoint: LabPoint? = nil
     var heldOutSubpixelPoint: LabPoint? = nil
+    var opticalPrediction: OpticalPrediction? = nil
 }
 
 enum CornealAnalyzer {

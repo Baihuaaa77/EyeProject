@@ -1,6 +1,6 @@
 import Foundation
 
-/// 来自主 App MediaPipe 虹膜几何；搜索半径与共用映光算法一致（虹膜半径的75%）。
+/// 来自主 App 的虹膜几何；新实验搜索完整虹膜与眼睑可见区的交集，旧记录保留当时半径。
 struct IrisRegion: Codable {
     var center: LabPoint
     var radiusX: Double

@@ -20,6 +20,11 @@ enum NativeEyeSnapshots {
             try image.pngData()?.write(to: directory.appendingPathComponent(eye+"_original.png"))
             let format = UIGraphicsImageRendererFormat(); format.scale = 1
             let size = EyeMediaExporter.size
+            let enlarged = UIGraphicsImageRenderer(size: size,format: format).image { graphics in
+                graphics.cgContext.interpolationQuality = .none
+                image.draw(in: CGRect(origin: .zero,size: size))
+            }
+            try enlarged.pngData()?.write(to: directory.appendingPathComponent(eye+"_enlarged.png"))
             let annotated = UIGraphicsImageRenderer(size: size,format: format).image { graphics in
                 image.draw(in: CGRect(origin: .zero,size: size))
                 let ctx = graphics.cgContext

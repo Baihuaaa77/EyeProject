@@ -11,7 +11,7 @@ struct TrialSummary: Codable, Identifiable {
     var stoppedEarly: Bool
     var results: [EyeAnalysis]
     var frameRecords: Int
-    var algorithmVersion: String = "corneal-feasibility-5-optical-budget"
+    var algorithmVersion: String = "corneal-feasibility-6-distance-full-iris"
     var eligibilityNotes: [String] = []
     var eyeMediaFiles: [String]? = nil
     var nativeSnapshots: Bool? = nil
@@ -23,7 +23,7 @@ final class LabModel: ObservableObject {
     enum Phase { case setup, warming, recording, analyzing }
     @Published var configuration = TrialConfiguration()
     @Published var phase = Phase.setup
-    @Published var preview: UIImage?
+    @Published var measuredDistanceCM: Double?
     @Published var cameraStatus = "先准备相机，检查双眼是否清晰"
     @Published var cameraReady = false
     @Published var error: String?
@@ -31,6 +31,7 @@ final class LabModel: ObservableObject {
     @Published var selected: TrialSummary?
     @Published var shareURLs: [URL] = []
     @Published var showingShare = false
+    @Published var exporting = false
     let driver = StimulusDriver()
     private let camera = LabCamera()
     private var warmupTask: DispatchWorkItem?
@@ -44,11 +45,13 @@ final class LabModel: ObservableObject {
     private var preparing = false
     private var generation = 0
     private var previousIdleTimerDisabled = false
+    private var distanceTimestamp = -Double.infinity
+    var captureSession: AVCaptureSession { camera.captureSession }
 
     var root: URL { FileManager.default.urls(for: .documentDirectory,in: .userDomainMask)[0].appendingPathComponent("CornealCodeLab",isDirectory: true) }
     init() {
-        camera.onPreview = { [weak self] image,status,ready in DispatchQueue.main.async {
-            self?.preview = image; self?.cameraStatus = status; self?.cameraReady = ready
+        camera.onPreview = { [weak self] status,ready,distance,time in DispatchQueue.main.async {
+            self?.cameraStatus = status; self?.cameraReady = ready; self?.measuredDistanceCM = distance; self?.distanceTimestamp = time
         } }
         camera.onError = { [weak self] error in DispatchQueue.main.async { self?.fail(error) } }
         driver.onEnd = { [weak self] in self?.stop(early: false) }
@@ -84,6 +87,7 @@ final class LabModel: ObservableObject {
 
     func begin() {
         guard phase == .setup, cameraReady else { return }
+        guard let measuredDistance = measuredDistanceCM,labHostTime()-distanceTimestamp<0.6 else { error = "自动测距尚未稳定，请正对相机并重新检查双眼"; return }
         if let plan = experimentPlan,planIndex>=plan.rounds.count { error = "实验清单已完成"; return }
         if let issue = configuration.validationError { error = issue; return }
         guard let prepared = preparedConfig,prepared.prefer4K == configuration.prefer4K,prepared.captureFPS == configuration.captureFPS,
@@ -92,7 +96,10 @@ final class LabModel: ObservableObject {
         generation += 1
         let currentGeneration = generation
         var config = configuration
+        config.automaticDistance = true; config.distanceCM = measuredDistance
         config.displayWidth = Double(UIScreen.main.bounds.width); config.displayHeight = Double(UIScreen.main.bounds.height)
+        let screen = DeviceOptics.screen(UIScreen.main)
+        config.screenWidthMM = screen.0; config.screenHeightMM = screen.1; config.screenSizeSource = screen.2
         activeConfig = config
         originalBrightness = UIScreen.main.brightness
         UIScreen.main.brightness = config.screenBrightness
@@ -153,16 +160,21 @@ final class LabModel: ObservableObject {
                         let delivered = Set(analyzed.map(\.index)).count
                         result.validFrameCoverage = Double(result.samples)/Double(max(1,delivered))
                         result.rejectionCounts = Dictionary(grouping: analyzed.filter { $0.status != "valid" },by: \.status).mapValues(\.count)
+                        result.opticalPrediction = OpticalPrediction.build(eye: eye,records: records,configuration: config,result: result)
                         return result
                     }
+                    var finalConfig = config
+                    if let medianDistance = OpticalPrediction.median(records.filter { $0.status == "valid" }.compactMap(\.distanceCM)) { finalConfig.distanceCM = medianDistance }
                     var summary = TrialSummary(id: directory.lastPathComponent,date: Date(),configuration: config,
                         startHostTime: start,stoppedEarly: early,results: results,frameRecords: records.count)
                     summary.planOrder = planOrder; summary.planSeed = planSeed
+                    summary.configuration = finalConfig
                     if early { summary.eligibilityNotes.append("提前停止，不能作为完整轮次") }
                     if Set(events.map(\.chip)).count != config.chipCount { summary.eligibilityNotes.append("显示码元日志不完整") }
                     if (info["videoStatus"] as? Int) != AVAssetWriter.Status.completed.rawValue { summary.eligibilityNotes.append("原始视频未成功完成写入") }
                     if results.contains(where: { $0.samples < 60 }) { summary.eligibilityNotes.append("至少一个眼区有效帧不足") }
                     if results.contains(where: { ($0.validFrameCoverage ?? 0)<0.6 }) { summary.eligibilityNotes.append("至少一个眼区的有效帧不足已分析帧的60%，单列低覆盖轮次") }
+                    if results.contains(where: { Double($0.opticalPrediction?.distanceSamples ?? 0)<Double(max(1,$0.samples))*0.6 }) { summary.eligibilityNotes.append("至少一个眼区自动测距覆盖不足60%，光学预算仅供有限参考") }
                     let brightness = events.map(\.screenBrightness)
                     if (brightness.max() ?? 0)-(brightness.min() ?? 0)>0.03 { summary.eligibilityNotes.append("采集期间系统屏幕亮度有变化") }
                     let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted,.sortedKeys]; encoder.dateEncodingStrategy = .iso8601
@@ -185,13 +197,14 @@ final class LabModel: ObservableObject {
                     let exposures = records.map(\.exposureSeconds),isoValues = records.map { Double($0.iso) }
                     if let lo = exposures.min(),let hi = exposures.max(),hi-lo>max(0.0001,lo*0.03) { summary.eligibilityNotes.append("采集期间曝光时间发生变化") }
                     if let lo = isoValues.min(),let hi = isoValues.max(),hi-lo>max(1,lo*0.03) { summary.eligibilityNotes.append("采集期间 ISO 发生变化") }
-                    metadata["geometryVersion"] = "近圆形亮点 / 旋转矩形与内部暗圆斑 v4"
+                    metadata["geometryVersion"] = "完整虹膜搜索 / 原生像素 / 自动虹膜测距 v6"
                     metadata["clock"] = "camera PTS converted from session masterClock to host clock; CADisplayLink targetTimestamp + host offset"
                     metadata["timingLimit"] = "No photodiode measurement; lag includes display/camera/ISP timing and rolling shutter."
                     metadata["detector"] = "MediaPipeTasksVision 1.0.0 / 主App相同模型、EyeCamera配置、LandmarkGeometry与EyeOpticalAlgorithm"
                     metadata["patchWidth"] = CornealAnalyzer.width; metadata["patchHeight"] = CornealAnalyzer.height
                     metadata["rgbPatchFormat"] = "interleaved UInt8 R,G,B; byte offsets rgbPatchOffset in frames.jsonl; all trial modes"
-                    metadata["patchFormat"] = "little-endian Float32, 128 columns x 64 rows, native 1:1 pixel grid, fixed-size EMA-centered ROI, gray=0.2126R+0.7152G+0.0722B; byte offsets in frames.jsonl"
+                    metadata["distanceMethod"] = "主App共用DepthFromIris，帧内参优先、视场角回退；未跨App读取个人校正系数"
+                    metadata["patchFormat"] = "little-endian Float32, 128 columns x 64 rows; native 1:1 when ROI=128x64, otherwise uniformly sampled from expanded ROI; gray=0.2126R+0.7152G+0.0722B; native scale in each frame ROI; byte offsets in frames.jsonl"
                     try JSONSerialization.data(withJSONObject: metadata,options: [.prettyPrinted,.sortedKeys]).write(to: directory.appendingPathComponent("camera.json"))
                     for result in results {
                         var image = images[result.eye]
@@ -237,5 +250,21 @@ final class LabModel: ObservableObject {
         let directory = root.appendingPathComponent(trial.id)
         shareURLs = (try? FileManager.default.contentsOfDirectory(at: directory,includingPropertiesForKeys: nil)) ?? []
         showingShare = true
+    }
+    func shareFile(_ trial: TrialSummary,name: String) {
+        let file = root.appendingPathComponent(trial.id).appendingPathComponent(name)
+        guard FileManager.default.fileExists(atPath: file.path) else { error = "本轮没有生成该文件"; return }
+        shareURLs = [file]; showingShare = true
+    }
+    func shareData(_ trial: TrialSummary,includePixels: Bool) {
+        guard !exporting else { return }
+        exporting = true
+        let directory = root.appendingPathComponent(trial.id)
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            do {
+                let file = try TrialDataExport.write(directory: directory,includePixels: includePixels)
+                DispatchQueue.main.async { self?.exporting = false; self?.shareURLs = [file]; self?.showingShare = true }
+            } catch { DispatchQueue.main.async { self?.exporting = false; self?.error = "数据合并失败："+error.localizedDescription } }
+        }
     }
 }

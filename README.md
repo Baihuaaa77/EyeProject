@@ -25,7 +25,7 @@ feature/        home / services / mine / testmodel（实验页，仅调试构建
 shared/         KMP 共用代码：领域模型、算法、四项自测引擎、同步契约（安卓、iOS、服务端共用）
 iosApp/         SwiftUI 应用（XcodeGen 工程，CocoaPods 引入 MediaPipe）
 backend/        Ktor 服务端与离线训练脚本
-experiments/CornealCodeLab/ 独立光码映光验证应用（v0.5.0，直接使用当前共享核心）
+experiments/CornealCodeLab/ 独立光码映光验证应用（v0.6.0，自动测距、完整虹膜搜索、交互视频与单文件数据导出）
 scripts/        图标、提示音生成脚本；scripts/ios 为 iOS 校验与打包脚本
 docs/           规范、设计与实录文档
 ```
@@ -60,10 +60,10 @@ python scripts/ios/check_project.py        # 双端令牌、模型、文档一�
 ## 当前主线
 
 唯一长期分支为 `master`，Android/iOS 主应用统一采用棕色深色界面（`DESIGN.md`）。
-主线保留自行遮眼引导、帮助弹窗暂停/继续、相机遮盖识别、v5 独立光码验证和 iPhone 自动截图任务。
+主线保留自行遮眼引导、帮助弹窗暂停/继续、相机遮盖识别、v6 独立光码验证和 iPhone 自动截图任务。
 
 - 主应用及共用算法：`.github/workflows/verify-dual-platform.yml`。
-- 光码验证 v5：`experiments/CornealCodeLab`，工作流 `.github/workflows/corneal-code-lab.yml`。
+- 光码验证 v6：`experiments/CornealCodeLab`，工作流 `.github/workflows/corneal-code-lab.yml`。
 - iPhone 页面截图：`.github/workflows/capture-ios-pages.yml`，支持在 `master` 手动运行和推送触发。
 - 本机 `光码映光独立验证程序/` 是被忽略的交付/真机资料目录；受 Git 管理的唯一开发源码是 `experiments/CornealCodeLab/`。
 

@@ -2,14 +2,15 @@ import AVFoundation
 import EyeScreening
 import UIKit
 import CoreImage
+import QuartzCore
 
 /// 所有采集、像素读取、MediaPipe 与视频写入都在同一个串行队列；缓冲不跨帧持有。
 final class LabCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
-    var onPreview: ((UIImage?, String, Bool) -> Void)?
+    var onPreview: ((String, Bool, Double?, Double) -> Void)?
     var onError: ((String) -> Void)?
     private let queue = DispatchQueue(label: "corneal.lab.camera", qos: .userInitiated, autoreleaseFrequency: .workItem)
     private let session = AVCaptureSession()
-    private let context = CIContext()
+    var captureSession: AVCaptureSession { session }
     private var device: AVCaptureDevice?
     private var configured = false
     private var detector: MainAppDetector?
@@ -40,6 +41,16 @@ final class LabCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
     private var stableCenters: [String: LabPoint] = [:]
     private var landmarkFresh = true
     private var observers: [NSObjectProtocol] = []
+    private var distanceCM: Double?
+    private var distanceTime = -Double.infinity
+    private var distanceSource = ""
+    private var focalLengthPx = 0.0
+    private var windowStart = 0.0
+    private var windowFrames = 0
+    private var observedFPS = 0.0
+    private var processingTotalMS = 0.0
+    private var processingFrames = 0
+    private var lastProcessingMS = 0.0
 
     /// 开始时再次读取本轮开关，避免准备相机后修改曝光设置却没有生效。
     func applyExposurePolicy(reuse: Bool, configuration: TrialConfiguration) {
@@ -114,6 +125,7 @@ final class LabCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
             if connection.isVideoOrientationSupported { connection.videoOrientation = .portrait }
             if connection.isVideoMirroringSupported { connection.automaticallyAdjustsVideoMirroring = false; connection.isVideoMirrored = false }
             if connection.isVideoStabilizationSupported { connection.preferredVideoStabilizationMode = .off }
+            if connection.isCameraIntrinsicMatrixDeliverySupported { connection.isCameraIntrinsicMatrixDeliveryEnabled = true }
         }
         try device.lockForConfiguration()
         if device.isLowLightBoostSupported { device.automaticallyEnablesLowLightBoostWhenAvailable = false }
@@ -141,7 +153,8 @@ final class LabCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
         device.automaticallyAdjustsVideoHDREnabled = false
         if format.isVideoHDRSupported { device.isVideoHDREnabled = false }
         device.isGlobalToneMappingEnabled = false
-        cachedFace = nil; stableCenters = [:]
+        cachedFace = nil; stableCenters = [:]; distanceCM = nil; distanceTime = -Double.infinity
+        windowStart = 0; windowFrames = 0; observedFPS = 0
     }
 
     private func effectState(_ device: AVCaptureDevice) -> [String:Bool] {
@@ -187,7 +200,8 @@ final class LabCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
                     "requestedExposureMS": self.trialConfig.exposureMS,"requestedISO": self.trialConfig.exposureISO,
                     "videoHDR": device.isVideoHDREnabled,"globalToneMapping": device.isGlobalToneMappingEnabled,
                     "ISP说明": "关闭HDR与全局映射不代表关闭局部ISP处理", "systemEffects": self.effectState(device),
-                    "patchGrid": "固定128x64原生像素，中心EMA；不缩小眼区", "landmarkReuseMaxSeconds": 0.08,
+                    "patchGrid": "128x64分析网格，中心EMA；虹膜较大时扩大原生裁剪窗并等比采样，原生PNG不缩小", "landmarkReuseMaxSeconds": 0.08,
+                    "inferenceMaxDimension": 1280,"preview": "原生AVCaptureVideoPreviewLayer，独立于分析回调",
                     "videoMirrored": false, "orientation": "portrait buffers / MediaPipe up", "reusedExposure": self.reusedExposure]
                 completion(.success(self.cameraInfo))
             } catch { completion(.failure(error)) }
@@ -205,6 +219,7 @@ final class LabCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
                 self.captureColor = true; self.rgbData = Data()
                 self.samples = []; self.records = []; self.patchData = Data(); self.eyeImages = [:]; self.lastPoints = [:]; self.stableCenters = [:]
                 self.dropped = 0; self.writeDropped = 0; self.frame = 0; self.startTime = max(start,labHostTime()+0.3); self.recording = true
+                self.processingTotalMS = 0; self.processingFrames = 0
                 completion(.success(self.startTime))
             } catch { completion(.failure(error)) }
         }
@@ -219,6 +234,9 @@ final class LabCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
             info["captureDroppedFrames"] = self.dropped; info["videoWriteDroppedFrames"] = self.writeDropped
             info["videoStartPTS"] = self.videoStartPTS.map { $0 as Any } ?? NSNull()
             info["receivedFrames"] = self.frame
+            info["averageProcessingMS"] = self.processingTotalMS/Double(max(1,self.processingFrames))
+            info["lastDeliveryFPS"] = self.observedFPS
+            info["inferenceBackend"] = self.detector?.usingGPU == true ? "GPU" : "CPU"
             let writer = self.writer
             self.writerInput?.markAsFinished()
             self.writer = nil; self.writerInput = nil
@@ -255,6 +273,14 @@ final class LabCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
         let clock = session.masterClock ?? CMClockGetHostTimeClock()
         let host = CMTimeGetSeconds(CMSyncConvertTime(pts, from: clock, to: CMClockGetHostTimeClock()))
         guard host.isFinite else { return }
+        let processingStart = CACurrentMediaTime()
+        defer {
+            lastProcessingMS = (CACurrentMediaTime()-processingStart)*1000
+            if recording { processingTotalMS += lastProcessingMS; processingFrames += 1 }
+        }
+        if windowStart == 0 { windowStart = host }
+        windowFrames += 1
+        if host-windowStart>=1 { observedFPS = Double(windowFrames)/max(0.001,host-windowStart); windowFrames = 0; windowStart = host }
         let width = CVPixelBufferGetWidth(pixels), height = CVPixelBufferGetHeight(pixels)
         let saving = recording && host >= startTime
         if recording && !saving { return }
@@ -289,7 +315,8 @@ final class LabCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
             records.append(FrameRecord(index: frame, pts: CMTimeGetSeconds(pts), hostTime: host,
                 exposureSeconds: CMTimeGetSeconds(device.exposureDuration), iso: device.iso, width: width, height: height,
                 status: status, eye: sample?.eye ?? rejectedEye, roi: sample?.roi, pupil: sample?.pupil,
-                rawCandidate: sample?.rawCandidate, saturation: sample?.saturation, patchOffset: offset,iris: sample?.iris,rgbPatchOffset: rgbOffset,nuisance: sample?.nuisance,baselinePupil: sample?.baselinePupil,baselineReason: sample?.baselineReason,nativeOffset: nativeOffset,nativeROI: nativeROI,landmarkFresh: landmarkFresh,landmarkAgeSeconds: host-cachedFaceTime))
+                rawCandidate: sample?.rawCandidate, saturation: sample?.saturation, patchOffset: offset,iris: sample?.iris,rgbPatchOffset: rgbOffset,nuisance: sample?.nuisance,baselinePupil: sample?.baselinePupil,baselineReason: sample?.baselineReason,nativeOffset: nativeOffset,nativeROI: nativeROI,landmarkFresh: landmarkFresh,landmarkAgeSeconds: host-cachedFaceTime,
+                distanceCM: host-distanceTime<=0.2 ? distanceCM : nil,focalLengthPx: focalLengthPx,distanceSource: distanceSource,processingMS: (CACurrentMediaTime()-processingStart)*1000))
         }
         if saving && frame % 30 == 0 && self.effectState(device).values.contains(true) { record("system_effect_active"); onError?("采集中系统视频效果被开启，本轮停止"); return }
         let face: FaceMetrics
@@ -310,7 +337,7 @@ final class LabCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
         var eyes: [(LabPoint,Double,[LabPoint],Double,OpticalEyeMeasurement?)] = []
         for landmarks in [face.leftEye,face.rightEye] {
             // 每个交付帧都用当前像素重算相同Kotlin基线；仅关键点允许短暂复用。
-            let optical = EyeOpticalAlgorithm.shared.measure(bitmap: opticalGray,eye: landmarks)
+            let optical = saving ? EyeOpticalAlgorithm.shared.measureFullIris(bitmap: opticalGray,eye: landmarks) : nil
             guard let landmarks = landmarks, let center = MainAppDetector.point(landmarks.irisPoints.first), landmarks.irisDiameterPx>=12 else { continue }
             let contour = landmarks.earPoints.map { LabPoint(x: Double($0.x),y: Double($0.y)) }
             let eyeWidth = (contour.map(\.x).max() ?? 0)-(contour.map(\.x).min() ?? 0)
@@ -320,6 +347,17 @@ final class LabCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
         }
         eyes.sort { $0.0.x<$1.0.x }
         guard eyes.count == 2 else { record("iris_landmarks_unavailable"); preview(pixels,time: host,text: "虹膜关键点不足或闭眼",ready: false); return }
+        let focal = DeviceOptics.focal(buffer,device: device,width: width,height: height)
+        focalLengthPx = focal.0; distanceSource = focal.1
+        let measured = Double(DepthFromIris.shared.distanceCm(irisDiameterPx: Float(eyes.map { $0.3 }.reduce(0,+)/2),focalLengthPx: Float(focalLengthPx)))
+        if measured.isFinite && (15...100).contains(measured) {
+            distanceCM = measured; distanceTime = host
+        } else { distanceCM = nil }
+        // 准备与预适应阶段只需几何、测距和原生预览，省掉两眼像素提取与序列分配。
+        if !saving {
+            preview(pixels,time: host,text: statusText(irisPixels: eyes.map { $0.3 }.min() ?? 0),ready: distanceCM != nil)
+            return
+        }
         CVPixelBufferLockBaseAddress(pixels, .readOnly)
         defer { CVPixelBufferUnlockBaseAddress(pixels, .readOnly) }
         guard let base = CVPixelBufferGetBaseAddress(pixels)?.assumingMemoryBound(to: UInt8.self) else { record("pixel_buffer_missing"); return }
@@ -327,7 +365,8 @@ final class LabCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
         var irisCount = 0
         for (index, eye) in eyes.enumerated() {
             let name = index == 0 ? "image_left" : "image_right"
-            let p = eye.0, w = 128.0, h = 64.0
+            // 窗口至少容纳完整虹膜；近距离4K虹膜可能高于64像素，不能在上下边缘裁掉。
+            let p = eye.0,h = max(64,ceil(eye.3*1.25)),w = h*2
             let previousCenter = stableCenters[name] ?? p
             let smoothed = landmarkFresh ? LabPoint(x: previousCenter.x*0.65+p.x*0.35,y: previousCenter.y*0.65+p.y*0.35) : previousCenter
             stableCenters[name] = smoothed
@@ -340,22 +379,26 @@ final class LabCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
             var patch = [Float](repeating: 0, count: CornealAnalyzer.count)
             var rgb = captureColor ? [UInt8](repeating: 0,count: CornealAnalyzer.count*3) : []
             for y in 0..<CornealAnalyzer.height { for x in 0..<CornealAnalyzer.width {
-                let sx = rect.x+(Double(x)+0.5)/Double(CornealAnalyzer.width)*w-0.5
-                let sy = rect.y+(Double(y)+0.5)/Double(CornealAnalyzer.height)*h-0.5
-                let ix = max(0,min(width-2,Int(floor(sx)))), iy = max(0,min(height-2,Int(floor(sy))))
-                let fx = max(0,min(1,sx-Double(ix))), fy = max(0,min(1,sy-Double(iy)))
-                var channels = [Float](repeating: 0,count: 3)
-                for channel in 0..<3 {
-                    let offset = 2-channel
-                    let a = Double(base[iy*stride+ix*4+offset]), b = Double(base[iy*stride+(ix+1)*4+offset])
-                    let c = Double(base[(iy+1)*stride+ix*4+offset]), d = Double(base[(iy+1)*stride+(ix+1)*4+offset])
-                    channels[channel] = Float((a*(1-fx)+b*fx)*(1-fy)+(c*(1-fx)+d*fx)*fy)
-                    if captureColor { rgb[(y*CornealAnalyzer.width+x)*3+channel] = UInt8(max(0,min(255,channels[channel]))) }
+                let i = y*CornealAnalyzer.width+x
+                let r: Float,g: Float,b: Float
+                if w == 128 {
+                    let source = (Int(rect.y)+y)*stride+(Int(rect.x)+x)*4
+                    r = Float(base[source+2]); g = Float(base[source+1]); b = Float(base[source])
+                } else {
+                    let sx = rect.x+(Double(x)+0.5)*w/128-0.5,sy = rect.y+(Double(y)+0.5)*h/64-0.5
+                    let ix = Int(floor(sx)),iy = Int(floor(sy)),fx = Float(sx-Double(ix)),fy = Float(sy-Double(iy))
+                    func channel(_ offset: Int) -> Float {
+                        let a = Float(base[iy*stride+ix*4+offset]),b = Float(base[iy*stride+(ix+1)*4+offset])
+                        let c = Float(base[(iy+1)*stride+ix*4+offset]),d = Float(base[(iy+1)*stride+(ix+1)*4+offset])
+                        return (a*(1-fx)+b*fx)*(1-fy)+(c*(1-fx)+d*fx)*fy
+                    }
+                    r = channel(2); g = channel(1); b = channel(0)
                 }
-                patch[y*CornealAnalyzer.width+x] = 0.2126*channels[0]+0.7152*channels[1]+0.0722*channels[2]
+                patch[i] = 0.2126*r+0.7152*g+0.0722*b
+                if captureColor { rgb[i*3] = UInt8(max(0,min(255,r))); rgb[i*3+1] = UInt8(max(0,min(255,g))); rgb[i*3+2] = UInt8(max(0,min(255,b))) }
             } }
             let eyelid = eye.2.map { LabPoint(x: ($0.x-rect.x)/w,y: ($0.y-rect.y)/h) }
-            let iris = IrisRegion(center: LabPoint(x: (p.x-rect.x)/w,y: (p.y-rect.y)/h),radiusX: eye.3*0.5*0.75/w,radiusY: eye.3*0.5*0.75/h,confidence: 1,eyelid: eyelid,
+            let iris = IrisRegion(center: LabPoint(x: (p.x-rect.x)/w,y: (p.y-rect.y)/h),radiusX: eye.3*0.5/w,radiusY: eye.3*0.5/h,confidence: 1,eyelid: eyelid,
                 boundaryRadiusX: eye.3*0.5/w,boundaryRadiusY: eye.3*0.5/h)
             irisCount += 1
             func relative(_ point: Point2f?) -> LabPoint? {
@@ -373,20 +416,19 @@ final class LabCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
                 baselinePupil: baselinePupil,baselineReason: eye.4?.rejectionReason)
             if saving {
                 record(saturation > 0.15 ? "saturated_excluded" : "valid", sample: sample)
-                if saturation <= 0.15 { eyeImages[name] = Self.patchImage(patch) }
             }
         }
-        let irisPixels = eyes.map { $0.3 }.min() ?? 0
-        let predictedDot = irisPixels/11.7*65*3.9/(trialConfig.distanceCM*10+3.9)*trialConfig.dotDiameter/trialConfig.displayWidth
-        preview(pixels,time: host,text: "双眼可见 · 虹膜 \(Int(irisPixels)) px · 估计目标 \(String(format: "%.2f",predictedDot)) px · ISO \(Int(device.iso))",ready: true)
+        preview(pixels,time: host,text: statusText(irisPixels: eyes.map { $0.3 }.min() ?? 0),ready: distanceCM != nil)
     }
 
+    private func statusText(irisPixels: Double) -> String {
+        let distance = distanceCM.map { String(format: "%.1f cm",$0) } ?? "测距不可用，请保持15–100 cm"
+        return "\(distance) · 虹膜 \(Int(irisPixels)) px · 采集 \(Int(observedFPS.rounded())) fps · 分析 \(Int(lastProcessingMS)) ms · \(detector?.usingGPU == true ? "GPU" : "CPU")"
+    }
     private func preview(_ buffer: CVPixelBuffer, time: Double, text: String, ready: Bool) {
-        guard !recording, time-lastPreview > 0.35 else { return }
+        guard !recording, time-lastPreview > 0.2 else { return }
         lastPreview = time
-        let image = CIImage(cvPixelBuffer: buffer)
-        let cg = context.createCGImage(image, from: image.extent)
-        onPreview?(cg.map { UIImage(cgImage: $0) }, text, ready)
+        onPreview?(text,ready,time-distanceTime<=0.2 ? distanceCM : nil,time)
     }
 
     private func appendVideo(_ buffer: CMSampleBuffer, width: Int, height: Int, pts: CMTime) {

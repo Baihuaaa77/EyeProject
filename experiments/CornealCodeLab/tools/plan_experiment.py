@@ -21,7 +21,7 @@ def plan(protocol, blocks, seed):
     for block in range(1,blocks+1):
         group=conditions(protocol)
         for config in group:
-            config.update(prefer4K=True,captureFPS=30,screenBrightness=1.0,exposureMS=20,exposureISO=100,distanceCM=25,
+            config.update(prefer4K=True,captureFPS=30,screenBrightness=1.0,exposureMS=20,exposureISO=100,automaticDistance=True,
                           chipSeconds=0.1,chipCount=320,transitionGuardMS=40)
         rng.shuffle(group)
         for config in group:
