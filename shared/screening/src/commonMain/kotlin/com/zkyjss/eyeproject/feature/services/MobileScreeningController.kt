@@ -126,6 +126,7 @@ class MobileScreeningController(
             "pushStart" -> screening.startPushTrial()
             "blur" -> screening.markPushBlur()
             "cover" -> screening.markCover()
+            "retryCover" -> screening.retryCoverDetection()
             "farStart" -> screening.startFarCountdown()
             "calibrate" -> screening.retryGazeCalibration()
             "extended" -> dry.startExtended()
@@ -306,6 +307,7 @@ class MobileScreeningController(
                 put("targetDiameterMm",StrabismusProtocol.targetDiameterMm(s.fields["年龄"]?.toIntOrNull()))
                 put("farTargetM",StrabismusProtocol.FAR_TARGET_M); put("farWaiting",s.farWaiting)
                 put("coverSelf",usesSelfCover(s.fields)); put("coverHolding",s.coverHolding)
+                put("coverRetryAvailable",s.coverRetryAvailable)
                 put("coverDone",s.coverMarks.size); put("coverNext",StrabismusProtocol.COVER_SEQUENCE.getOrNull(s.coverMarks.size)?.label)
                 put("coverRemainingMs",screening.coverRemainingMs())
                 StrabismusProtocol.COVER_SEQUENCE.getOrNull(s.coverMarks.size - 1)?.let { put("coverCurrent",it.label); put("coverHoldMs",it.holdMs) }

@@ -2,6 +2,8 @@
 
 > 2026-11-12 棕色界面：棕色版本：服务首页改为本周用屏卡与居中图标的四项自测网格。ServicesViewModel 从 core:data 的 Flow 读取系统用屏统计；方法示范收进可展开区域，测试内教学照常。护眼操经 app 注入回调进入 home 路由，不增加 feature 依赖。 以下历史章节中的旧配色和布局描述由根目录 DESIGN.md 取代。
 
+> 2026-11-13 遮盖恢复：识别与保持逻辑在 shared/screening 修复。等待指定遮盖动作超过 8 秒后提供「重新识别本段」，仅重新建立基线、清除本段旧记录，不用点击标记替代相机证据；之前的注视与看远数据保留。详细证据窗口与回归边界见 shared/SHARED.md。
+
 
 三项协议、状态、问卷模型、状态机、计算规则、注视监督和语音指令解析已迁到 `shared/screening/src/commonMain/kotlin`。安卓 ViewModel 仅连接 `AndroidScreeningPlatform`；修改规则必须修改共享目录。iOS 工程与当前验收边界见 `docs/iOS适配与双端构建.md`。
 

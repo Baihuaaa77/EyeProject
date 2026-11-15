@@ -16,13 +16,15 @@ object EyeOpticalAlgorithm {
         eye ?: return null
         val iris = eye.irisPoints.firstOrNull() ?: return null
         val diameter = eye.irisDiameterPx
-        if (diameter < 12f) return rejected(diameter, "虹膜像素不足")
+        // 光学测量拒判与遮盖像素证据分开：被遮后预测虹膜缩小，仍可能有足够的眼区可见性像素。
+        fun reject(reason: String) = rejected(diameter, reason).copy(irisVisibilityContrast = visibilityContrast(bitmap, eye, null))
+        if (diameter < 12f) return reject("虹膜像素不足")
         val radius = diameter * 0.5f
         val x0 = (iris.x - radius).roundToInt().coerceAtLeast(0)
         val x1 = (iris.x + radius).roundToInt().coerceAtMost(bitmap.width - 1)
         val y0 = (iris.y - radius).roundToInt().coerceAtLeast(0)
         val y1 = (iris.y + radius).roundToInt().coerceAtMost(bitmap.height - 1)
-        if (x1 - x0 < 10 || y1 - y0 < 10) return rejected(diameter, "虹膜区域被裁切")
+        if (x1 - x0 < 10 || y1 - y0 < 10) return reject("虹膜区域被裁切")
 
         val width = x1 - x0 + 1
         val height = y1 - y0 + 1
@@ -34,7 +36,7 @@ object EyeOpticalAlgorithm {
             if (d <= radius * 0.8f) irisValues.add(gray[y * width + x])
             if (d <= radius * 0.52f) central.add(gray[y * width + x])
         }
-        if (central.size < 15 || irisValues.size < 30) return rejected(diameter, "眼区像素不足")
+        if (central.size < 15 || irisValues.size < 30) return reject("眼区像素不足")
         central.sort(); irisValues.sort()
         val dark = central[(central.size * 0.30f).toInt()]
         val median = irisValues[irisValues.size / 2]
@@ -93,11 +95,12 @@ object EyeOpticalAlgorithm {
     }
 
     /** 只比较同一帧的局部灰度，不保存眼区图像；反光点缺失不等于被遮盖。 */
-    private fun visibilityContrast(bitmap: GrayImage, eye: EyeLandmarks, irisDark: Int): Float? {
+    private fun visibilityContrast(bitmap: GrayImage, eye: EyeLandmarks, irisDark: Int?): Float? {
         val iris = eye.irisPoints.firstOrNull() ?: return null
         val a = eye.earPoints.getOrNull(0) ?: return null
         val b = eye.earPoints.getOrNull(3) ?: return null
         val radius = eye.irisDiameterPx * 0.5f
+        if (!radius.isFinite() || radius < 3f) return null
         val x0 = minOf(a.x, b.x).roundToInt().coerceIn(0, bitmap.width - 1)
         val x1 = maxOf(a.x, b.x).roundToInt().coerceIn(0, bitmap.width - 1)
         val y0 = (iris.y - radius * 0.25f).roundToInt().coerceIn(0, bitmap.height - 1)
@@ -105,9 +108,14 @@ object EyeOpticalAlgorithm {
         if (x1 <= x0 || y1 <= y0) return null
         val width = x1 - x0 + 1
         val gray = bitmap.grayRegion(x0, y0, width, y1 - y0 + 1)
+        val dark = irisDark ?: run {
+            val center = gray.indices.filter { kotlin.math.abs(it % width + x0 - iris.x) <= radius * 0.52f }.map { gray[it] }.sorted()
+            if (center.size < 6) return null
+            center[(center.size * 0.30f).toInt()]
+        }
         val sides = gray.indices.filter { kotlin.math.abs(it % width + x0 - iris.x) > radius * 1.1f }.map { gray[it] }.sorted()
         if (sides.size < 12) return null
-        return (sides[sides.size / 2] - irisDark).coerceAtLeast(0).toFloat()
+        return (sides[sides.size / 2] - dark).coerceAtLeast(0).toFloat()
     }
 
     private fun rejected(diameter: Float, reason: String) =

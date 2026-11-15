@@ -478,6 +478,7 @@ internal fun CoverContent(s: ScreeningState, vm: ScreeningTestViewModel) {
         }
     }
     EyeText(if (s.coverHolding) "相机已识别，请保持当前动作" else next?.let { "等待相机识别：${it.label}" } ?: "遮盖完成", typography.body, colors.textSecondary)
+    if (s.coverRetryAvailable) EyeButton("重新识别本段", EyeButtonRole.SECONDARY, vm::retryCoverDetection, Modifier.fillMaxWidth())
 }
 
 /** 当前动作需保持的时长（原文 2 秒 / 1 秒），到点后再进行下一动作。 */

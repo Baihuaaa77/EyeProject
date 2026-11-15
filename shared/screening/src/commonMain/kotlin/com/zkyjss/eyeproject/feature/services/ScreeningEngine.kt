@@ -68,6 +68,7 @@ class ScreeningEngine(platform: ScreeningPlatform, internal val scope: Coroutine
     internal var coverIndex = 0
     internal var coverStageStartMs = 0L
     internal var coverHoldJob: Job? = null
+    internal var coverMonitorJob: Job? = null
     internal var headStep: ScreeningStep? = null
     internal var faceCenterBaseline: Pair<Float, Float>? = null
     internal var cameraAttached = false
@@ -308,6 +309,7 @@ class ScreeningEngine(platform: ScreeningPlatform, internal val scope: Coroutine
             ScreeningStep.FIXATION -> retryGazeCalibration()
             ScreeningStep.PURSUIT -> runTimedStep(StrabismusProtocol.PURSUIT_SECONDS) { finish() }
             ScreeningStep.FAR_FIXATION -> _state.update { it.copy(farWaiting = true) }
+            ScreeningStep.COVER -> strabismus.monitorCover()
             else -> Unit
         }
     }
@@ -339,10 +341,12 @@ class ScreeningEngine(platform: ScreeningPlatform, internal val scope: Coroutine
 
     fun coverRemainingMs(): Long = strabismus.coverRemainingMs()
 
+    fun retryCoverDetection() = strabismus.retryCoverDetection()
+
     fun interruptTest() {
         val current = _state.value
         if (current.step == ScreeningStep.PROFILE || current.step == ScreeningStep.RESULT) return
-        timer?.cancel(); coverHoldJob?.cancel(); coverDetector.clear()
+        timer?.cancel(); coverHoldJob?.cancel(); coverMonitorJob?.cancel(); coverDetector.clear()
         stopCamera()
         samples.clear()
         gaze = null; gazeCalibration.clear(); renderedTargets.clear(); resetGazeWindow()
@@ -355,7 +359,7 @@ class ScreeningEngine(platform: ScreeningPlatform, internal val scope: Coroutine
     }
 
     fun restart() {
-        timer?.cancel(); coverHoldJob?.cancel(); stopCamera(); samples.clear(); distanceTracker.clear(); coverDetector.clear()
+        timer?.cancel(); coverHoldJob?.cancel(); coverMonitorJob?.cancel(); stopCamera(); samples.clear(); distanceTracker.clear(); coverDetector.clear()
         gaze = null; gazeCalibration.clear(); renderedTargets.clear(); resetGazeWindow()
         _state.value = ScreeningState(kind = _state.value.kind)
     }
@@ -389,6 +393,6 @@ class ScreeningEngine(platform: ScreeningPlatform, internal val scope: Coroutine
 
 
     fun close() {
-        timer?.cancel(); coverHoldJob?.cancel(); stopCamera(); frames.close()
+        timer?.cancel(); coverHoldJob?.cancel(); coverMonitorJob?.cancel(); stopCamera(); frames.close()
     }
 }

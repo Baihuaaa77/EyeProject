@@ -18,7 +18,17 @@ internal class ScreeningFrameProcessor(private val host: ScreeningEngine) {
             val face = frame.faces.singleOrNull()
             val left = face?.leftEye?.toNormalized()
             val right = face?.rightEye?.toNormalized()
-            val iris = listOfNotNull(face?.leftEye?.irisDiameterPx, face?.rightEye?.irisDiameterPx).filter { it > 0f }
+            val iris = if (step == ScreeningStep.COVER) {
+                // 手掌下的虹膜是关键点预测，直径可能失真；遮盖期间只让仍可见的睁眼参与测距。
+                val knownCovered = _state.value.coverMarks.lastOrNull()?.covered
+                listOf(Triple(face?.leftEye, face?.leftOptical, VisionEye.LEFT),
+                    Triple(face?.rightEye, face?.rightOptical, VisionEye.RIGHT)).mapNotNull { (eye, optical, which) ->
+                    // 可见性像素偶尔缺测时，已确认动作的未遮眼仍用于注视监督；缺测本身不成为新的遮盖证据。
+                    val visible = optical?.irisVisibilityContrast?.let { it >= 8f } ?: (knownCovered != null && knownCovered != which)
+                    eye?.irisDiameterPx?.takeIf { it > 0f && visible &&
+                        (BlinkDetector.ear(eye.earPoints) ?: 0f) >= 0.16f }
+                }
+            } else listOfNotNull(face?.leftEye?.irisDiameterPx, face?.rightEye?.irisDiameterPx).filter { it > 0f }
             val calibrationVersion = platform.cameraGeometry(frame.sourceWidth, frame.sourceHeight).version
             if (cachedFocalWidth != frame.sourceWidth || cachedGeometry?.imageHeight != frame.sourceHeight ||
                 cachedCalibrationVersion != calibrationVersion) {

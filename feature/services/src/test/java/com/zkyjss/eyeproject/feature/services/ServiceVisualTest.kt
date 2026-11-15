@@ -805,6 +805,29 @@ class ServiceVisualTest {
         capture("gaze-calibration")
     }
 
+    @Test fun coverRecoveryRemainsReachableAndRestartsWithoutMarkingAnAction() {
+        val context = compose.activity
+        val vm = ScreeningTestViewModel(context,
+            com.zkyjss.eyeproject.core.camera.CameraController(context),
+            com.zkyjss.eyeproject.core.camera.CameraIntrinsicsProvider(context), TestScreeningRecordRepository(context), TestSubjectRepository(), TestExplanationRepository())
+        @Suppress("UNCHECKED_CAST")
+        val state = ScreeningEngine::class.java.getDeclaredField("_state").apply { isAccessible = true }
+            .get(vm.engine) as kotlinx.coroutines.flow.MutableStateFlow<ScreeningState>
+        state.value = ScreeningState(kind = ScreeningKind.STRABISMUS, step = ScreeningStep.COVER,
+            coverRetryAvailable = true, warning = "暂未识别到指定动作，请保持头和手机不动。")
+        compose.setContent { EyeProjectTheme {
+            val s by vm.state.collectAsState()
+            TestSessionLayout("眼位自测", {}, {}, true) { CoverContent(s, vm) }
+        } }
+        compose.onNodeWithText("重新识别本段").performScrollTo().assertIsDisplayed()
+        capture("cover-recovery")
+        compose.onNodeWithText("重新识别本段").performClick()
+        compose.onNodeWithText("重新识别本段").assertDoesNotExist()
+        assertTrue(vm.state.value.coverMarks.isEmpty())
+        assertEquals(ScreeningStep.COVER, vm.state.value.step)
+        compose.runOnIdle { vm.engine.close() }
+    }
+
     private fun capture(name: String) {
         compose.mainClock.advanceTimeBy(700)
         val bitmap = compose.runOnIdle {
