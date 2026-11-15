@@ -33,8 +33,13 @@ final class EyeMediaTests: XCTestCase {
         writer.add(input); XCTAssertTrue(writer.startWriting()); writer.startSession(atSourceTime: .zero)
         var records: [FrameRecord] = []
         for i in 0..<12 {
-            let deadline = Date().addingTimeInterval(5)
-            while !input.isReadyForMoreMediaData,Date()<deadline { Thread.sleep(forTimeInterval: 0.001) }
+            // 云端模拟器冷启动编码器可能超过5秒；超时必须终止，不能继续向未就绪输入写帧。
+            let deadline = Date().addingTimeInterval(30)
+            while !input.isReadyForMoreMediaData,Date()<deadline,writer.status == .writing { Thread.sleep(forTimeInterval: 0.001) }
+            guard input.isReadyForMoreMediaData else {
+                writer.cancelWriting()
+                throw EyeMediaExporter.failure("合成视频编码器未在30秒内就绪")
+            }
             var pixel: CVPixelBuffer?
             XCTAssertEqual(CVPixelBufferCreate(kCFAllocatorDefault,64,32,kCVPixelFormatType_32BGRA,nil,&pixel),kCVReturnSuccess)
             let buffer = try XCTUnwrap(pixel)
