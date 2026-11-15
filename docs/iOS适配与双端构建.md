@@ -53,7 +53,7 @@ chmod +x gradlew scripts/ios/*.sh
 
 ## 免费真机测试（无 Mac、无开发者账号）
 
-每次推送到 `master` 或 `codex/**`，「双端回归与 iOS 编译」在模拟器测试通过后，用 Release 配置编译未签名的真机版本，上传为 artifact `ios-unsigned-ipa`（保留 14 天）。安装由 Windows 上的 Sideloadly 用个人 Apple ID 重新签名完成：
+每次推送到唯一主分支 `master`，「双端回归与 iOS 编译」在模拟器测试通过后，用 Release 配置编译未签名的真机版本，上传为 artifact `ios-unsigned-ipa`（保留 14 天）。安装由 Windows 上的 Sideloadly 用个人 Apple ID 重新签名完成：
 
 1. 安装苹果官网版 iTunes 与 iCloud（不要用微软商店版），再安装 Sideloadly（sideloadly.io）。
 2. 在 GitHub 该次运行页面底部下载 `ios-unsigned-ipa`，解压得到 `EyeProject-unsigned.ipa`。

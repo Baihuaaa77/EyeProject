@@ -201,13 +201,13 @@ private struct GuideStage: View {
                         VStack(spacing: 0) {
                             GuideDiagram(motion: scene.motion, phase: phase)
                             Text(guideDiagramLabel(scene.motion, phase)).font(EyeStyle.chip)
-                                .foregroundStyle(EyeStyle.text).multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
+                                .foregroundStyle(EyeStyle.ink).multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
                         }.frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
                 }
             }
             if portraitOnly || scene.motion == .near {
-                Text(scene.motion == .rest ? "闭眼休息" : pose.label).font(EyeStyle.chip).foregroundStyle(EyeStyle.text)
+                Text(scene.motion == .rest ? "闭眼休息" : pose.label).font(EyeStyle.chip).foregroundStyle(EyeStyle.ink)
             }
         }.padding(8).frame(height: height).frame(maxWidth: .infinity)
             .background(EyeStyle.guideBackground, in: RoundedRectangle(cornerRadius: EyeStyle.radiusLarge))

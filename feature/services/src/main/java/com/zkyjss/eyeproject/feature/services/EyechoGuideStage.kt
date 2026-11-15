@@ -55,11 +55,11 @@ internal fun GuideStage(scene: GuideScene, phase: () -> Float, description: Stri
                 Modifier.weight(if (portraitOnly) 1f else 2f).fillMaxHeight().clip(EyeShapes.medium))
             if (!portraitOnly) Column(Modifier.weight(1f).fillMaxHeight(), horizontalAlignment = Alignment.CenterHorizontally) {
                 GuideDiagram(scene.motion, phase, Modifier.weight(1f).fillMaxWidth())
-                EyeText(caption, style = type.chip, color = colors.textPrimary, textAlign = TextAlign.Center)
+                EyeText(caption, style = type.chip, color = colors.ink, textAlign = TextAlign.Center)
             }
         }
         if (portraitOnly || scene.motion == GuideMotion.NEAR) EyeText(if (scene.motion == GuideMotion.REST) "闭眼休息" else guidePoseLabel(pose),
-            style = type.chip, color = colors.textPrimary, textAlign = TextAlign.Center)
+            style = type.chip, color = colors.ink, textAlign = TextAlign.Center)
     }
 }
 

@@ -251,11 +251,21 @@ final class ScreenshotCatalogTests: XCTestCase {
 
     private func seedHome() {
         var report = CareReport()
-        report.loaded = true; report.level = "LOW"; report.score = 92; report.label = "轻松"; report.mood = "HAPPY"
+        report.loaded = true; report.level = "LOW"; report.score = 8; report.label = "轻松"; report.mood = "HAPPY"
         report.headline = "今天保持着不错的用眼节奏"; report.checkedInToday = true; report.checkInDays = 5
         report.signals = [.init(id: "blink", group: "BASIC", label: "眨眼频率", value: "18 次/分", status: "NORMAL", note: ""),
-                         .init(id: "distance", group: "BASIC", label: "平均距离", value: "39 cm", status: "NORMAL", note: "")]
-        report.days = (0..<7).map { .init(id: "capture-day-\($0)", label: "\($0 + 5)日", blinksPerMinute: Double(15 + $0), score: 72 + $0 * 3) }
+                         .init(id: "distance", group: "BASIC", label: "平均距离", value: "39 cm", status: "NORMAL", note: ""),
+                         .init(id: "light", group: "BASIC", label: "环境光", value: "适宜", status: "NORMAL", note: ""),
+                         .init(id: "screen", group: "BASIC", label: "今日用屏", value: "2 小时 18 分", status: "NORMAL", note: "")]
+        // 当前首页按 ISO 周和 yyyy-MM-dd 匹配趋势，示例日期须遵循同一契约。
+        var calendar = Calendar(identifier: .iso8601); calendar.timeZone = .current
+        let monday = calendar.dateInterval(of: .weekOfYear, for: Date())!.start
+        let formatter = DateFormatter(); formatter.dateFormat = "yyyy-MM-dd"
+        report.days = (0..<7).map { offset in
+            let date = calendar.date(byAdding: .day, value: offset, to: monday)!
+            return .init(id: formatter.string(from: date), label: "\(calendar.component(.day, from: date))日",
+                         blinksPerMinute: Double(15 + offset), score: 8 + offset * 3, screenMinutes: 90 + offset * 8)
+        }
         EyeCareStore.shared.capture(report)
     }
 
