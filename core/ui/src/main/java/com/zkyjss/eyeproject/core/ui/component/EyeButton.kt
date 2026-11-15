@@ -86,15 +86,6 @@ fun EyeButton(
                 alpha = if (enabled) 1f else 0.5f
             }
             .eyeSoftSurface(colors, EyeShapes.medium, SolidColor(backgroundColor), pressed = pressed && enabled, compact = true)
-            .drawBehind {
-                if (role != EyeButtonRole.DANGER && enabled) {
-                    val stroke = 1.2.dp.toPx()
-                    val inset = stroke * 1.5f
-                    drawDataGlowBorder(colors, 14.dp.toPx(), stroke)
-                    drawRoundRect(colors.borderBrush, Offset(inset, inset), Size(size.width - inset * 2, size.height - inset * 2),
-                        CornerRadius(14.dp.toPx()), alpha = if (role == EyeButtonRole.PRIMARY) 1f else 0.55f, style = Stroke(stroke))
-                }
-            }
             .clickable(
                 enabled = enabled,
                 role = Role.Button,

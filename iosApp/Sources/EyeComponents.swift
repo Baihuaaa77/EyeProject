@@ -49,7 +49,7 @@ struct SettingsGear: View {
     var body: some View {
         Button { EyeHaptics.tap(); action() } label: {
             Image(systemName: "gearshape.fill").font(.system(size: 18)).foregroundStyle(EyeStyle.primary)
-                .frame(width: 48, height: 48).eyeGlass(cornerRadius: EyeStyle.radiusMedium).contentShape(Rectangle())
+                .frame(width: 48, height: 48).eyeGlass(cornerRadius: 24).contentShape(Rectangle())
         }.buttonStyle(.plain).accessibilityLabel("系统设置")
     }
 }
@@ -63,28 +63,21 @@ struct ThemeToggleButton: View {
         let dark = scheme == .dark
         Button { EyeHaptics.tap(); themeMode = dark ? "light" : "dark" } label: {
             Image(systemName: dark ? "sun.max.fill" : "moon.fill").font(.system(size: 20)).foregroundStyle(EyeStyle.primary)
-                .frame(width: 48, height: 48).eyeGlass(cornerRadius: EyeStyle.radiusMedium)
+                .frame(width: 48, height: 48).eyeGlass(cornerRadius: 24)
         }.buttonStyle(.plain).accessibilityLabel(dark ? "切换到白天模式" : "切换到夜晚模式")
     }
 }
 
-/// 账户头像（顶层页右上角唯一的按钮）：登录后品牌蓝实心圆 + 白色首字母，未登录为浅填充圆 + 人像线稿；点开完整的账户页。
-/// 与安卓 EyeAccountButton 一致。
+/// 顶栏账户按钮：登录前后均显示高对比人像线稿；点开完整账户页，与安卓一致。
 struct AccountButton: View {
     @ObservedObject private var cloud = CloudModel.shared
     let action: () -> Void
     var body: some View {
         let email = cloud.bool("signedIn") ? cloud.string("email") : ""
         Button { EyeHaptics.tap(); action() } label: {
-            ZStack {
-                Color.clear
-                if email.isEmpty {
-                    EyeGlyphView(glyph: .person, color: EyeStyle.primary).frame(width: 20, height: 20)
-                } else {
-                    Text(String(email.prefix(1)).uppercased()).font(EyeStyle.subtitle).foregroundStyle(EyeStyle.onPrimary)
-                }
-            }
-            .frame(width: 48, height: 48).eyeGlass(cornerRadius: EyeStyle.radiusMedium).contentShape(Rectangle())
+            // 登录前后都保留人像线稿，避免深色首字母在暗色表面上不可见。
+            EyeGlyphView(glyph: .person, color: EyeStyle.secondary).frame(width: 20, height: 20)
+                .frame(width: 48, height: 48).eyeGlass(cornerRadius: 24).contentShape(Rectangle())
         }.buttonStyle(.plain).accessibilityLabel(email.isEmpty ? "账户（未登录）" : "账户（已登录）")
     }
 }
@@ -98,11 +91,11 @@ struct PageHeader: View {
     var body: some View {
         HStack(alignment: .center, spacing: 10) {
             VStack(alignment: .leading, spacing: 4) {
+                if let subtitle { Text(subtitle).font(EyeStyle.caption).foregroundStyle(EyeStyle.secondary) }
                 Text(title).font(EyeStyle.headline).foregroundStyle(EyeStyle.heading).lineLimit(1).minimumScaleFactor(0.7)
-                if let subtitle { Text(subtitle).font(EyeStyle.label).foregroundStyle(EyeStyle.secondary) }
             }.frame(maxWidth: .infinity, alignment: .leading)
             HStack(spacing: EyeSpacing.xs) {
-                ThemeToggleButton()
+                if let openAccount { AccountButton(action: openAccount) }
                 if let openSettings { SettingsGear(action: openSettings) }
             }
         }.padding(.top, 20).padding(.bottom, 12)
@@ -288,8 +281,8 @@ struct ListGroup<Content: View>: View {
     @ViewBuilder let content: Content
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if let title { Text(title).font(EyeStyle.title).foregroundStyle(EyeStyle.heading).padding(.leading, 4).padding(.top, 12).padding(.bottom, 8) }
-            VStack(spacing: EyeSpacing.sm) { content }
+            if let title { Text(title).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary).padding(.leading, 4).padding(.top, 12).padding(.bottom, 8) }
+            VStack(spacing: 0) { content }.eyeGlass()
         }.frame(maxWidth: .infinity, alignment: .leading)
     }
 }
@@ -340,7 +333,8 @@ struct ListRow: View {
             }
             .padding(.leading, 16 + indent).padding(.trailing, 16).padding(.vertical, 10).frame(minHeight: 56)
 
-        }.eyeGlass().eyeGlowBorder(strength: glowBorder ? EyeStyle.cardBorderSubtle : 0).contentShape(Rectangle())
+            if divider { Rectangle().fill(EyeStyle.borderSubtle).frame(height: 0.5).padding(.horizontal, 16) }
+        }.contentShape(Rectangle())
     }
 }
 

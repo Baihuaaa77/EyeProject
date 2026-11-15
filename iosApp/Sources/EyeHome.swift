@@ -15,47 +15,7 @@ private func levelColor(_ level: String) -> Color {
 struct HomePage: View {
     let navigate: (AppRoute) -> Void
     let openTest: (String) -> Void
-    @ObservedObject private var store = EyeCareStore.shared
-    @ObservedObject private var subjects = SubjectStore.shared
-    @StateObject private var reminder = EyeReminder()
-    @State private var exerciseOpen = false
-    @State private var liveRequests = 0
-    @State private var feelingEditing = false
-
-    private let today: String = {
-        let formatter = DateFormatter(); formatter.locale = Locale(identifier: "zh_CN"); formatter.dateFormat = "M月d日 EEEE"
-        return formatter.string(from: Date())
-    }()
-    private var selfId: String? { subjects.subjects.first { $0.relation == "SELF" }?.id }
-
-    var body: some View {
-        let report = store.report
-        ScrollViewReader { proxy in
-            PageScroll {
-                PageHeader(title: "今日", subtitle: today, openSettings: { navigate(.settings) })
-                HeroCard(report: report, openAccount: { navigate(.account) })
-                TodayData(report: report)
-                SectionTitle(text: "护眼工具")
-                ToolRow(navigate: navigate) { exerciseOpen = true }
-                EyechoCard(report: report, openChat: { navigate(.chat) }, checkIn: { store.checkIn($0) }) { feelingEditing = true }
-                Panel { LiveEyeSection(startRequests: liveRequests) }.id("live")
-                ReminderCard(reminder: reminder)
-            }
-        }
-        .onAppear { store.refresh() }
-        .onChange(of: reminder.enabled) { _ in store.refresh() }
-        .fullScreenCover(isPresented: $exerciseOpen) { EyeExerciseView() }
-        .overlay {
-            if feelingEditing {
-                let fine = report.todaySymptoms.isEmpty
-                FeelingSheet(initial: report.checkedInToday ? (fine ? [noDiscomfort] : report.todaySymptoms) : [],
-                             save: { picked in feelingEditing = false; store.checkIn(picked.filter { $0 != noDiscomfort }) },
-                             dismiss: { feelingEditing = false })
-                .transition(.opacity)
-            }
-        }
-        .animation(.easeOut(duration: 0.2), value: feelingEditing)
-    }
+    var body: some View { BrownHomePage(navigate: navigate, openTest: openTest) }
 }
 
 /// 分区标题（设计令牌的 22 号半粗），与上一块内容拉开 sectionGap。
@@ -210,7 +170,7 @@ private struct QuickChip: View {
 }
 
 /// 选择今天的感受：屏幕中间的弹窗，「没有不适」占一整行，其余等宽两列；选了才能保存。与安卓 FeelingDialog 一致。
-private struct FeelingSheet: View {
+struct FeelingSheet: View {
     let save: ([String]) -> Void
     let dismiss: () -> Void
     @State private var selected: [String]
@@ -366,7 +326,7 @@ private struct SignalCard: View {
 // MARK: - 功能卡与休息提醒
 
 /// 休息提醒：一行（图标 + 名称 + 间隔 + 开关），开启后下方可换间隔。不给出建议间隔。与安卓 ReminderCard 一致。
-private struct ReminderCard: View {
+struct ReminderCard: View {
     @ObservedObject var reminder: EyeReminder
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {

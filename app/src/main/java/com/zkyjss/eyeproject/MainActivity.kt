@@ -53,13 +53,8 @@ class MainActivity : ComponentActivity() {
         val coldStart = savedInstanceState == null
 
         setContent {
-            // 白天 / 夜晚：默认跟随系统；点过右上角太阳 / 月亮后固定为所选
-            val mode by themes.themeMode.collectAsState()
-            val darkTheme = when (mode) {
-                ThemeMode.SYSTEM -> isSystemInDarkTheme()
-                ThemeMode.LIGHT -> false
-                ThemeMode.DARK -> true
-            }
+            // 棕色版本固定深色，不读取旧主题偏好驱动界面。
+            val darkTheme = true
             // 状态栏、导航栏图标的深浅跟随应用主题（而不是系统主题）
             DisposableEffect(darkTheme) {
                 enableEdgeToEdge(
@@ -68,9 +63,7 @@ class MainActivity : ComponentActivity() {
                 )
                 onDispose {}
             }
-            val themeToggle = EyeThemeToggle(darkTheme) {
-                lifecycleScope.launch { themes.setThemeMode(if (darkTheme) ThemeMode.LIGHT else ThemeMode.DARK) }
-            }
+            val themeToggle = EyeThemeToggle(isDark = true)
             EyeProjectTheme(darkTheme = darkTheme) {
                 // 右上角账户按钮：登录后显示邮箱首字母
                 val badge by remember {

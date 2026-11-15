@@ -9,7 +9,7 @@ struct EyeProjectApp: App {
     var body: some Scene {
         WindowGroup {
             EyeRootView().tint(EyeStyle.primary)
-                .preferredColorScheme(themeMode == "light" ? .light : themeMode == "dark" ? .dark : nil)
+                .preferredColorScheme(.dark)
         }
     }
 }

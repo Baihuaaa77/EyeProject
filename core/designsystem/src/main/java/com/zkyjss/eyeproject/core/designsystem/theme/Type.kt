@@ -49,91 +49,91 @@ data class EyeTypography(
 
 val EyeTypographyDefaults = EyeTypography(
     label = TextStyle(fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.SemiBold,
-        fontSize = 16.sp, lineHeight = 24.sp),
+        fontSize = 13.sp, lineHeight = 20.sp),
     navigationTitle = TextStyle(fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.SemiBold,
-        fontSize = 18.sp, lineHeight = 26.sp),
-    healthScore = TextStyle(fontFamily = EyeScoreFamily, fontWeight = FontWeight.Black, fontSize = 60.sp,
+        fontSize = 15.sp, lineHeight = 22.sp),
+    healthScore = TextStyle(fontFamily = EyeScoreFamily, fontWeight = FontWeight.Black, fontSize = 42.sp,
         lineHeight = 68.sp, letterSpacing = (-1.2).sp, fontFeatureSettings = EYE_TABULAR_NUMBERS),
-    healthScoreCompact = TextStyle(fontFamily = EyeScoreFamily, fontWeight = FontWeight.Black, fontSize = 48.sp,
+    healthScoreCompact = TextStyle(fontFamily = EyeScoreFamily, fontWeight = FontWeight.Black, fontSize = 36.sp,
         lineHeight = 56.sp, letterSpacing = (-0.96).sp, fontFeatureSettings = EYE_TABULAR_NUMBERS),
     chatBody = TextStyle(fontFamily = FontFamily.SansSerif, fontSize = 18.sp, lineHeight = 28.sp),
     display = TextStyle(
         fontFamily = EyeNumberFamily,
         fontWeight = FontWeight.SemiBold,
-        fontSize = 60.sp,
-        lineHeight = 66.sp,
+        fontSize = 42.sp,
+        lineHeight = 50.sp,
         letterSpacing = (-1.2).sp,
         fontFeatureSettings = EYE_TABULAR_NUMBERS
     ),
     displayCompact = TextStyle(
         fontFamily = EyeNumberFamily,
         fontWeight = FontWeight.SemiBold,
-        fontSize = 48.sp,
-        lineHeight = 56.sp,
+        fontSize = 34.sp,
+        lineHeight = 42.sp,
         letterSpacing = (-0.96).sp,
         fontFeatureSettings = EYE_TABULAR_NUMBERS
     ),
     headline = TextStyle(
         fontFamily = FontFamily.SansSerif,
         fontWeight = FontWeight.SemiBold,
-        fontSize = 28.sp,
-        lineHeight = 36.sp,
+        fontSize = 34.sp,
+        lineHeight = 42.sp,
         letterSpacing = 0.sp
     ),
     title = TextStyle(
         fontFamily = FontFamily.SansSerif,
         fontWeight = FontWeight.SemiBold,
-        fontSize = 22.sp,
-        lineHeight = 30.sp
+        fontSize = 20.sp,
+        lineHeight = 28.sp
     ),
     subtitle = TextStyle(
         fontFamily = FontFamily.SansSerif,
         fontWeight = FontWeight.SemiBold,
-        fontSize = 20.sp,
-        lineHeight = 28.sp
+        fontSize = 17.sp,
+        lineHeight = 24.sp
     ),
     body = TextStyle(
         fontFamily = FontFamily.SansSerif,
         fontWeight = FontWeight.Normal,
-        fontSize = 16.sp,
-        lineHeight = 24.sp
+        fontSize = 15.sp,
+        lineHeight = 22.sp
     ),
     bodySecondary = TextStyle(
         fontFamily = FontFamily.SansSerif,
         fontWeight = FontWeight.Normal,
-        fontSize = 14.sp,
-        lineHeight = 22.sp
+        fontSize = 13.sp,
+        lineHeight = 20.sp
     ),
     metricValue = TextStyle(
         fontFamily = EyeNumberFamily,
         fontWeight = FontWeight.SemiBold,
-        fontSize = 30.sp,
-        lineHeight = 36.sp,
+        fontSize = 28.sp,
+        lineHeight = 34.sp,
         letterSpacing = (-0.6).sp,
         fontFeatureSettings = EYE_TABULAR_NUMBERS
     ),
     unit = TextStyle(
         fontFamily = FontFamily.SansSerif,
         fontWeight = FontWeight.Medium,
-        fontSize = 14.sp,
-        lineHeight = 20.sp
+        fontSize = 12.sp,
+        lineHeight = 18.sp
     ),
     chip = TextStyle(
         fontFamily = FontFamily.SansSerif,
         fontWeight = FontWeight.SemiBold,
-        fontSize = 13.sp,
+        fontSize = 12.sp,
         lineHeight = 18.sp
     ),
     button = TextStyle(
         fontFamily = FontFamily.SansSerif,
         fontWeight = FontWeight.SemiBold,
-        fontSize = 17.sp,
+        fontSize = 15.sp,
         lineHeight = 22.sp
     ),
     caption = TextStyle(
         fontFamily = FontFamily.SansSerif,
         fontWeight = FontWeight.SemiBold,
-        fontSize = 12.sp,
+        fontSize = 11.sp,
         lineHeight = 16.sp
     ),
     tab = TextStyle(

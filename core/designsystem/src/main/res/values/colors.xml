@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="eye_dark_background">#FF10110F</color>
+    <color name="eye_warm_primary">#FFF6A267</color>
+    <color name="eye_warm_brand_start">#FFFFD2AE</color>
+</resources>

@@ -34,14 +34,14 @@ fun EyeSwitch(
 ) {
     val colors = LocalEyeColors.current
     val trackColor by androidx.compose.animation.animateColorAsState(
-        if (checked) colors.primary else colors.borderSubtle,
+        if (checked) colors.primary else com.zkyjss.eyeproject.core.designsystem.theme.EyeBrown.rail,
         label = "eyeSwitchTrack"
     )
-    val thumbColor = colors.panelBackground
+    val thumbColor = if (checked) colors.onPrimary else colors.textPrimary
 
     // 滑块水平位移动画（轨道 52dp、滑块 28dp、两侧各 2dp padding）
     val thumbOffsetX by animateDpAsState(
-        targetValue = if (checked) 22.dp else 2.dp,
+        targetValue = if (checked) 20.dp else 2.dp,
         label = "eyeSwitchThumb"
     )
 
@@ -55,17 +55,17 @@ fun EyeSwitch(
                 }
             )
             .padding(vertical = 8.dp)
-            .size(width = 52.dp, height = 32.dp)
+            .size(width = 44.dp, height = 28.dp)
             .alpha(if (enabled) 1f else 0.5f)
-            .eyeSoftSurface(colors, RoundedCornerShape(16.dp), SolidColor(colors.surfaceVariant), pressed = true)
+            .eyeSoftSurface(colors, RoundedCornerShape(16.dp), SolidColor(trackColor), pressed = true)
 
     ) {
         Box(
             modifier = Modifier
                 .offset(x = thumbOffsetX, y = 2.dp)
-                .size(28.dp)
+                .size(24.dp)
                 .eyeSoftSurface(colors, CircleShape, compact = true)
-                .background(if (checked) colors.flowBrush else SolidColor(thumbColor))
+                .background(SolidColor(thumbColor))
         )
     }
 }

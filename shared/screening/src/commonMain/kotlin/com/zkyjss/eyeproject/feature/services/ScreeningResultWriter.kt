@@ -42,6 +42,7 @@ internal class ScreeningResultWriter(private val host: ScreeningEngine) {
                 runCatching {
                     val data = RecordObject().apply {
                         put("protocolVersion", if (s.kind == ScreeningKind.STRABISMUS) 7 else 4)
+                        if (s.kind == ScreeningKind.STRABISMUS) put("coverDetectionVersion", "camera-cover-2")
                         if (s.kind == ScreeningKind.STRABISMUS) {
                             put("gazeCalibrated", s.gazeCalibrated)
                             put("gazeCalibration", RecordArray().apply { capturedCalibration.forEach { c -> put(RecordObject().apply {

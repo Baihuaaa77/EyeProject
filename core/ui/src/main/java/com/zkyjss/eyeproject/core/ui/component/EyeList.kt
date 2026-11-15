@@ -90,9 +90,9 @@ fun EyeListGroup(modifier: Modifier = Modifier, title: String? = null, content: 
     val colors = LocalEyeColors.current
     Column(modifier.fillMaxWidth()) {
         if (title != null) {
-            EyeText(title, Modifier.padding(start = 4.dp, top = EyeSpacing.sm, bottom = EyeSpacing.md), style = LocalEyeTypography.current.title, color = colors.textHeading)
+            EyeText(title, Modifier.padding(start = 4.dp, top = EyeSpacing.sm, bottom = EyeSpacing.xs), style = LocalEyeTypography.current.bodySecondary, color = colors.textSecondary)
         }
-        Column(Modifier.fillMaxWidth(), verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(EyeSpacing.sm), content = content)
+        Column(Modifier.fillMaxWidth().eyeSoftSurface(colors, EyeShapes.card), content = content)
     }
 }
 
@@ -121,7 +121,7 @@ fun EyeListRow(
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val background by animateColorAsState(if (pressed) colors.surfaceVariant else colors.panelBackground, tween(EyeMotion.SHORT), label = "列表行按压")
-    Column(modifier.fillMaxWidth().eyeSoftSurface(colors, EyeShapes.card, pressed = pressed, compact = true).background(background).then(if (glowBorder) Modifier.eyeGlowBorder(colors, EyeShapes.card, EyeGlow.cardBorderSubtle) else Modifier)
+    Column(modifier.fillMaxWidth().background(background)
         .then(if (onClick != null) Modifier.clickable(enabled = enabled, interactionSource = interaction, indication = null, role = Role.Button) { haptics.tap(); onClick() } else Modifier)) {
         Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             if (leading != null) {
@@ -137,9 +137,10 @@ fun EyeListRow(
             }
             if (trailing != null) trailing() else {
                 if (value != null) EyeText(value, Modifier.padding(start = 8.dp), style = typography.body, color = valueColor ?: colors.textSecondary, maxLines = 1)
-                if (onClick != null) EyeIcon(painterResource(R.drawable.ic_arrow_right), null, Modifier.padding(start = 6.dp).size(14.dp), tint = colors.primary)
+                if (onClick != null) EyeIcon(painterResource(R.drawable.ic_arrow_right), null, Modifier.padding(start = 6.dp).size(14.dp), tint = colors.textTertiary)
             }
         }
+        if (divider) Box(Modifier.padding(horizontal = 16.dp).fillMaxWidth().height(0.5.dp).background(colors.borderSubtle))
     }
 }
 

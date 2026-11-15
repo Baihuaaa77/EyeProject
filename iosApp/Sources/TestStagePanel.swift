@@ -24,10 +24,10 @@ struct TestDistanceBanner: View {
     private var close: Bool { known && !moving && distance < target - tolerance }
     private var far: Bool { known && !moving && distance > target + tolerance }
     private var background: Color {
-        moving ? EyeStyle.primarySoft : !known ? EyeStyle.surfaceVariant : close ? EyeStyle.dangerSoft : far ? EyeStyle.primarySoft : EyeStyle.testReadySoft
+        moving ? EyeStyle.primarySoft : !known ? EyeStyle.surfaceVariant : close ? EyeStyle.dangerSoft : far ? EyeStyle.warningSoft : EyeStyle.testReadySoft
     }
     private var foreground: Color {
-        moving ? EyeStyle.primaryDark : !known ? EyeStyle.secondary : close ? EyeStyle.testTooClose : far ? EyeStyle.primaryDark : EyeStyle.testReady
+        moving ? EyeStyle.primaryDark : !known ? EyeStyle.secondary : close ? EyeStyle.testTooClose : far ? EyeStyle.tooFar : EyeStyle.testReady
     }
     private var title: String {
         moving ? "请移动到 \(Int(moveTo.rounded())) 厘米处" : !known ? "请正对屏幕" : close ? "太近了" : far ? "太远了" : "距离合适"
@@ -46,8 +46,8 @@ struct TestDistanceBanner: View {
                 .contentTransition(.opacity)
             VStack(alignment: .leading, spacing: 2) {
                 // 单行：文字变化不改变高度，避免挤动下方注视画布
-                Text(title).font(.headline).lineLimit(1)
-                Text(detail).font(.subheadline).monospacedDigit().lineLimit(1)
+                Text(title).font(.headline).foregroundStyle(far ? EyeStyle.testTooFarText : foreground).lineLimit(1)
+                Text(detail).font(.subheadline).foregroundStyle(EyeStyle.secondary).monospacedDigit().lineLimit(1)
             }.frame(maxWidth: .infinity, alignment: .leading)
             if known && tolerance > 0 { DistanceRuler(distance: distance, target: target, tolerance: tolerance, color: foreground) }
         }.foregroundStyle(foreground).padding(.horizontal, 16).padding(.vertical, 10)

@@ -348,6 +348,9 @@ private struct CoverPanel: View {
             if runtime.state["coverHolding"] as? Bool != true { Text(next.isEmpty ? "遮盖完成" : "下一步：\(next)").font(EyeStyle.title) }
             CoverSequenceStrip(done: done)
             Text(next.isEmpty ? "遮盖完成" : runtime.state["coverHolding"] as? Bool == true ? "相机已识别，请保持当前动作" : "等待相机识别：\(next)").font(EyeStyle.body).foregroundStyle(EyeStyle.secondary)
+            if runtime.state["coverRetryAvailable"] as? Bool == true {
+                Button("重新识别本段") { runtime.act("retryCover") }.buttonStyle(EyeButtonStyle(role: .secondary))
+            }
         }
     }
 }

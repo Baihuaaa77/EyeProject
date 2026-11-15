@@ -98,17 +98,17 @@ class ServiceVisualTest {
                     onOpenSettings = { destination = "settings" }, onOpenAccount = { destination = "account" })
             }
         } }
-        compose.onNodeWithContentDescription("切换到夜晚模式").performClick()
-        assertEquals("theme", destination)
-        compose.onNodeWithContentDescription("账户（未登录）").assertDoesNotExist()
+        compose.onNodeWithContentDescription("切换到夜晚模式").assertDoesNotExist()
+        compose.onNodeWithContentDescription("账户").performClick()
+        assertEquals("account", destination)
         compose.onNodeWithContentDescription("系统设置").performClick()
         assertEquals("settings", destination)
         capture("services-light")
         compose.onNodeWithText("干眼自测").performClick()
         assertEquals("dry", destination)
-        compose.onNodeWithText("老视自测").performClick()
+        compose.onNodeWithText("老视自测").performScrollTo().performClick()
         assertEquals("near", destination)
-        compose.onNodeWithText("眼位自测").performClick()
+        compose.onNodeWithText("眼位自测").performScrollTo().performClick()
         assertEquals("cover", destination)
     }
 
@@ -420,12 +420,19 @@ class ServiceVisualTest {
     @Test fun servicesHeroPlaysTestDemosAboveTheList() {
         var dark by mutableStateOf(false)
         compose.mainClock.autoAdvance = false
-        compose.setContent { EyeProjectTheme(darkTheme = dark) { ServicesScreen({}, {}, {}, onOpenAccount = {}) } }
+        compose.setContent { EyeProjectTheme(darkTheme = dark) { Box(Modifier.fillMaxSize().background(LocalEyeColors.current.appBackground)) {
+                    ServicesScreen({}, {}, {}, modifier = Modifier.padding(bottom = 88.dp), onOpenAccount = {}, week = listOf(132, 181, 141, 242, null, null, null), todayIndex = 3)
+                    EyeNavigationDock(listOf(
+                        EyeNavigationItem("首页",com.zkyjss.eyeproject.core.designsystem.R.drawable.ic_nav_home,com.zkyjss.eyeproject.core.designsystem.R.drawable.ic_nav_home_filled),
+                        EyeNavigationItem("服务",com.zkyjss.eyeproject.core.designsystem.R.drawable.ic_nav_services,com.zkyjss.eyeproject.core.designsystem.R.drawable.ic_nav_services_filled),
+                        EyeNavigationItem("我的",com.zkyjss.eyeproject.core.designsystem.R.drawable.ic_nav_mine,com.zkyjss.eyeproject.core.designsystem.R.drawable.ic_nav_mine_filled)
+                    ), 1, {}, Modifier.align(androidx.compose.ui.Alignment.BottomCenter).padding(16.dp))
+                } } }
         compose.mainClock.advanceTimeBy(1_500)
-        compose.onNodeWithText("示范：", substring = true).assertExists()
-        compose.onNodeWithText("全部自测").assertExists()
+        compose.onNodeWithText("手机使用时长").assertExists()
+        compose.onNodeWithText("选择一项自测").assertExists()
         compose.onNodeWithText("推荐").assertDoesNotExist()
-        capture("22-服务")
+        capture("brown-services")
         dark = true
         compose.mainClock.advanceTimeBy(1_500)
         capture("22b-服务-深色")
@@ -684,22 +691,27 @@ class ServiceVisualTest {
         capture("dry-eye-rest")
     }
 
-    @Test fun distanceBannersUseRedForNearAndBlueForFar() {
+    @Test fun distanceBannersUseRedForNearYellowForFarAndBlueForReady() {
+        var dark by mutableStateOf(false)
         compose.setContent {
-            EyeProjectTheme {
+            EyeProjectTheme(darkTheme = dark) {
                 Column(Modifier.fillMaxSize().background(LocalEyeColors.current.appBackground).padding(20.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     DistanceBanner(distanceStatus(28f, true, 40f, 5f))
                     DistanceBanner(distanceStatus(53f, true, 40f, 5f))
                     DistanceBanner(distanceStatus(41f, true, 40f, 5f))
                     DistanceBanner(distanceStatus(0f, false, 40f, 5f), compact = true)
-                    Box(Modifier.fillMaxWidth().height(220.dp)) { DistanceEdgeGlow(DistanceZone.TOO_CLOSE) }
+                    Box(Modifier.fillMaxWidth().height(100.dp)) { DistanceEdgeGlow(DistanceZone.TOO_CLOSE) }
+                    Box(Modifier.fillMaxWidth().height(100.dp)) { DistanceEdgeGlow(DistanceZone.TOO_FAR) }
                 }
             }
         }
         compose.onNodeWithText("把手机往远处移约 7 cm").assertExists()
         compose.onNodeWithText("把手机往近处移约 8 cm").assertExists()
         capture("distance-feedback")
+        dark = true
+        compose.waitForIdle()
+        capture("distance-feedback-dark")
     }
 
     @Test fun reportsUseHeroMetricsAndFindings() {
@@ -791,6 +803,29 @@ class ServiceVisualTest {
         compose.onNodeWithText("注视校准 · 4/9").assertIsDisplayed()
         compose.onNodeWithText("重试注视校准").assertIsDisplayed().assertIsEnabled()
         capture("gaze-calibration")
+    }
+
+    @Test fun coverRecoveryRemainsReachableAndRestartsWithoutMarkingAnAction() {
+        val context = compose.activity
+        val vm = ScreeningTestViewModel(context,
+            com.zkyjss.eyeproject.core.camera.CameraController(context),
+            com.zkyjss.eyeproject.core.camera.CameraIntrinsicsProvider(context), TestScreeningRecordRepository(context), TestSubjectRepository(), TestExplanationRepository())
+        @Suppress("UNCHECKED_CAST")
+        val state = ScreeningEngine::class.java.getDeclaredField("_state").apply { isAccessible = true }
+            .get(vm.engine) as kotlinx.coroutines.flow.MutableStateFlow<ScreeningState>
+        state.value = ScreeningState(kind = ScreeningKind.STRABISMUS, step = ScreeningStep.COVER,
+            coverRetryAvailable = true, warning = "暂未识别到指定动作，请保持头和手机不动。")
+        compose.setContent { EyeProjectTheme {
+            val s by vm.state.collectAsState()
+            TestSessionLayout("眼位自测", {}, {}, true) { CoverContent(s, vm) }
+        } }
+        compose.onNodeWithText("重新识别本段").performScrollTo().assertIsDisplayed()
+        capture("cover-recovery")
+        compose.onNodeWithText("重新识别本段").performClick()
+        compose.onNodeWithText("重新识别本段").assertDoesNotExist()
+        assertTrue(vm.state.value.coverMarks.isEmpty())
+        assertEquals(ScreeningStep.COVER, vm.state.value.step)
+        compose.runOnIdle { vm.engine.close() }
     }
 
     private fun capture(name: String) {

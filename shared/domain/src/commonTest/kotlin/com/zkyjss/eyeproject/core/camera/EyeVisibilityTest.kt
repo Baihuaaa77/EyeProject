@@ -20,5 +20,8 @@ class EyeVisibilityTest {
         assertTrue(assertNotNull(open.irisVisibilityContrast) > 80f, "仍可独立确认虹膜像素可见")
         val hidden = assertNotNull(EyeOpticalAlgorithm.measure(image(true), eye))
         assertEquals(0f, hidden.irisVisibilityContrast, "均匀遮挡物不会被关键点预测冒充可见虹膜")
+        val smallPrediction = assertNotNull(EyeOpticalAlgorithm.measure(image(true), eye.copy(irisDiameterPx = 8f)))
+        assertFalse(smallPrediction.usable, "虹膜像素不足仍拒绝光学测量")
+        assertEquals(0f, smallPrediction.irisVisibilityContrast, "光学拒判不丢掉独立的遮盖像素证据")
     }
 }

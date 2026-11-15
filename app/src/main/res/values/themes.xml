@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="Theme.EyeProject" parent="android:Theme.Material.Light.NoActionBar">
+    <style name="Theme.EyeProject" parent="android:Theme.Material.NoActionBar">
         <item name="android:colorAccent">@color/primary</item>
         <item name="android:windowNoTitle">true</item>
         <!-- 冷启动窗口底色与应用背景一致，避免白闪 -->

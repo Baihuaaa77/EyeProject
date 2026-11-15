@@ -44,53 +44,5 @@ object EyeLiquidGlass {
  * 透明填充、环境色染色、弯曲高光与双层镜片边缘组成的轻量模拟。
  * 所有画刷与轮廓按尺寸缓存，只有按压状态改变时更新，不引入持续动画或后台采集。
  */
-fun Modifier.eyeLiquidGlass(
-    colors: EyeColors,
-    shape: Shape,
-    tint: Color = colors.brandStart,
-    pressed: Boolean = false,
-): Modifier = dropShadow(shape, Shadow(radius = EyeLiquidGlass.shadowRadius,
-    color = colors.shadow.copy(alpha = colors.shadow.alpha * 0.65f), offset = EyeLiquidGlass.shadowOffset))
-    .clip(shape).drawWithCache {
-        fun outlinePath(inset: Float): Path = Path().apply {
-            when (val outline = shape.createOutline(Size((size.width - inset * 2).coerceAtLeast(0f),
-                (size.height - inset * 2).coerceAtLeast(0f)), layoutDirection, this@drawWithCache)) {
-                is Outline.Rectangle -> addRect(outline.rect)
-                is Outline.Rounded -> addRoundRect(outline.roundRect)
-                is Outline.Generic -> addPath(outline.path)
-            }
-            translate(Offset(inset, inset))
-        }
-        val reflection = (if (colors.isDark) EyeLiquidGlass.reflectionDark else EyeLiquidGlass.reflectionLight) +
-            if (pressed) EyeLiquidGlass.pressedBoost else 0f
-        val edge = if (colors.isDark) EyeLiquidGlass.edgeDark else EyeLiquidGlass.edgeLight
-        val innerEdge = if (colors.isDark) EyeLiquidGlass.innerEdgeDark else EyeLiquidGlass.innerEdgeLight
-        val fill = Brush.linearGradient(listOf(
-            lerp(colors.panelBackground, colors.white, if (colors.isDark) 0.06f else 0.60f)
-                .copy(alpha = if (colors.isDark) EyeLiquidGlass.fillDark else EyeLiquidGlass.fillLight),
-            lerp(colors.panelBackground, tint, if (colors.isDark) EyeLiquidGlass.tintDark else EyeLiquidGlass.tintLight),
-        ), Offset.Zero, Offset(size.width, size.height))
-        val lens = Brush.radialGradient(listOf(colors.white.copy(alpha = reflection), colors.white.copy(alpha = 0f)),
-            Offset(size.width * 0.18f, -size.height * 0.42f), size.maxDimension * 1.05f)
-        val sheen = Brush.linearGradient(0f to colors.white.copy(alpha = 0f),
-            0.45f to colors.white.copy(alpha = 0f), 0.50f to colors.white.copy(alpha = reflection * 0.16f),
-            0.70f to colors.white.copy(alpha = 0f), 1f to tint.copy(alpha = 0.035f),
-            start = Offset.Zero, end = Offset(size.width * 0.6f, size.height))
-        val rim = Brush.linearGradient(0f to colors.white.copy(alpha = edge),
-            0.25f to colors.white.copy(alpha = edge * 0.18f), 0.5f to tint.copy(alpha = edge * 0.22f),
-            0.75f to colors.white.copy(alpha = edge * 0.75f), 1f to tint.copy(alpha = edge * 0.40f),
-            start = Offset.Zero, end = Offset(size.width, size.height))
-        val innerRim = Brush.linearGradient(listOf(tint.copy(alpha = innerEdge), colors.white.copy(alpha = 0f),
-            colors.white.copy(alpha = innerEdge)), Offset.Zero, Offset(size.width, size.height))
-        val width = EyeLiquidGlass.rimWidth.toPx()
-        val outerPath = outlinePath(width / 2)
-        val innerPath = outlinePath(EyeLiquidGlass.innerRimInset.toPx())
-        onDrawWithContent {
-            drawRect(fill)
-            drawRect(lens)
-            drawRect(sheen)
-            drawContent()
-            drawPath(outerPath, rim, style = Stroke(width))
-            drawPath(innerPath, innerRim, style = Stroke(width * 0.6f))
-        }
-    }
+fun Modifier.eyeLiquidGlass(colors: EyeColors, shape: Shape, tint: Color = colors.brandStart,
+    pressed: Boolean = false): Modifier = eyeSoftSurface(colors, shape, pressed = pressed)

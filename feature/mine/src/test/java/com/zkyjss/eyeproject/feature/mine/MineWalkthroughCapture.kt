@@ -2,6 +2,13 @@ package com.zkyjss.eyeproject.feature.mine
 
 import android.graphics.Bitmap
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
+import com.zkyjss.eyeproject.core.ui.component.EyeNavigationDock
+import com.zkyjss.eyeproject.core.ui.component.EyeNavigationItem
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -54,22 +61,25 @@ class MineWalkthroughCapture {
                 androidx.compose.runtime.CompositionLocalProvider(LocalEyeAccountBadge provides EyeAccountBadge(true, "d"),
                     com.zkyjss.eyeproject.core.ui.component.LocalEyeThemeToggle provides
                         com.zkyjss.eyeproject.core.ui.component.EyeThemeToggle(isDark = false) { opened = "theme" }) {
+Box(Modifier.fillMaxSize().background(LocalEyeColors.current.appBackground)) {
                     MineContent(MineUiState.Ready(me, 3, 8, "demo@example.com", true, true, 6), MineNavigation(
-                        onOpenRecords = { opened = "records" }, onOpenAccount = { opened = "account" }, onOpenSettings = { opened = "settings" }))
+                        onOpenRecords = { opened = "records" }, onOpenAccount = { opened = "account" }, onOpenSettings = { opened = "settings" }), modifier = Modifier.padding(bottom = 88.dp))
+                    EyeNavigationDock(listOf(
+                        EyeNavigationItem("首页",com.zkyjss.eyeproject.core.designsystem.R.drawable.ic_nav_home,com.zkyjss.eyeproject.core.designsystem.R.drawable.ic_nav_home_filled),
+                        EyeNavigationItem("服务",com.zkyjss.eyeproject.core.designsystem.R.drawable.ic_nav_services,com.zkyjss.eyeproject.core.designsystem.R.drawable.ic_nav_services_filled),
+                        EyeNavigationItem("我的",com.zkyjss.eyeproject.core.designsystem.R.drawable.ic_nav_mine,com.zkyjss.eyeproject.core.designsystem.R.drawable.ic_nav_mine_filled)
+                    ), 2, {}, Modifier.align(androidx.compose.ui.Alignment.BottomCenter).padding(16.dp))
+                }
                 }
             }
         }
-        capture("12-我的-入口页")
+        capture("brown-mine")
         compose.onAllNodesWithText("测试记录").onFirst().performClick()
         assertEquals("records", opened)
-        // 「我的」右上角不再放按钮：账户从个人卡的账号一行进入
-        compose.onNodeWithContentDescription("账户（已登录）").assertDoesNotExist()
-        compose.onNodeWithText("账户").performClick()
+        compose.onNodeWithContentDescription("账户").performClick()
         assertEquals("account", opened)
-        // 日夜切换和系统设置统一放在顶栏；通用分组不再占列表空间。
-        compose.onNodeWithText("通用").assertDoesNotExist()
-        compose.onNodeWithContentDescription("切换到夜晚模式").performClick()
-        assertEquals("theme", opened)
+        compose.onNodeWithText("通用").assertExists()
+        compose.onNodeWithContentDescription("切换到夜晚模式").assertDoesNotExist()
         compose.onNodeWithContentDescription("系统设置").performClick()
         assertEquals("settings", opened)
     }
