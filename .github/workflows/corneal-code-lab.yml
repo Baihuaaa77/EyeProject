@@ -2,7 +2,7 @@ name: 光码映光独立实验 IPA
 on:
   workflow_dispatch:
   push:
-    branches: ["codex/**"]
+    branches: [master]
     paths:
       - "experiments/CornealCodeLab/**"
       - "core/designsystem/ios/CornealLabStyle.swift"

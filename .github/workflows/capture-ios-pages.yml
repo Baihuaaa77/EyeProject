@@ -2,7 +2,7 @@ name: iPhone 页面逐张截图
 on:
   workflow_dispatch:
   push:
-    branches: [codex/iphone-captures-20261111]
+    branches: [master]
 permissions:
   contents: read
 concurrency:
@@ -22,7 +22,7 @@ jobs:
       - uses: ruby/setup-ruby@v1
         with: {ruby-version: "3.3", working-directory: iosApp, bundler-cache: true}
       - run: brew install xcodegen
-      - name: 渲染浅色与深色页面及各测试状态
+      - name: 渲染主线页面与各测试状态
         env:
           EYE_SCREENSHOT_CAPTURE: "1"
         run: chmod +x gradlew scripts/ios/verify.sh && ./scripts/ios/verify.sh

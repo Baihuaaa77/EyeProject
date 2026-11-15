@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
   pull_request:
   push:
-    branches: [master, "codex/**", "!codex/iphone-captures-20261111"]
+    branches: [master]
 permissions:
   contents: read
 concurrency:
