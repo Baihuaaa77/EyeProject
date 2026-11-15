@@ -644,8 +644,10 @@ struct EyeExerciseView: View {
             .onReceive(ticker) { _ in tick(size: geo.size) }
         }
         .onAppear {
+#if !SCREENSHOT_CAPTURE
             let model = coach
             EyeLiveModel.shared.startExercise { face, time in model.onFace(face: face, timeMs: time) }
+#endif
         }
         .onDisappear { EyeLiveModel.shared.stopExercise() }
         // 护眼操固定深色页：令牌按深色取值
@@ -737,3 +739,12 @@ struct ExerciseCompletionView: View {
         }.frame(maxHeight: .infinity)
     }
 }
+
+#if SCREENSHOT_CAPTURE
+extension HomePage {
+    init(captureFeeling: Bool) {
+        navigate = { _ in }; openTest = { _ in }
+        _feelingEditing = State(initialValue: captureFeeling)
+    }
+}
+#endif

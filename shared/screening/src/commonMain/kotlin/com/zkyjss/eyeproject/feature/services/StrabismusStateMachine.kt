@@ -165,3 +165,121 @@ internal class StrabismusStateMachine(private val host: ScreeningEngine) {
                     if (_state.value.step == ScreeningStep.COVER && _state.value.coverMarks.size == marks.size && _state.value.coverHolding) {
                         if (coverDetector.matchesCover(action.covered, platform.nowMs())) completeHold(deadline)
                         else retryHeldAction("暂未看清保持动作，请重新${action.label}", platform.nowMs())
+                    }
+                }
+            }
+        }
+    }
+
+    fun startPursuit() {
+        with(host) {
+            resetGazeWindow()
+            stepStartMs = platform.nowMs()
+            _state.update { it.copy(step = ScreeningStep.PURSUIT, guidePending = true, secondsLeft = StrabismusProtocol.PURSUIT_SECONDS,
+                instruction = "只用眼睛跟随移动的圆点：水平 8 秒、垂直 8 秒、斜向 6 秒。", warning = null) }
+
+        }
+    }
+
+    fun retryGazeCalibration() {
+        with(host) {
+            if (_state.value.step != ScreeningStep.FIXATION && _state.value.step != ScreeningStep.GAZE_CALIBRATION) return
+            timer?.cancel(); gaze = null; gazeCalibration.clear(); renderedTargets.clear(); resetGazeWindow()
+            faceCenterBaseline = null
+            stepStartMs = platform.nowMs()
+            _state.update { it.copy(step = ScreeningStep.GAZE_CALIBRATION, guidePending = false,
+                gazeCalibrationIndex = 0, gazeCalibrationRound = 0, gazeCalibrationFailed = false, gazeCalibrated = false, gazeCalibrationPaused = false,
+                instruction = "只用眼睛依次看着圆点，头和手机保持不动。", warning = null) }
+            timer = scope.launch {
+                // 每点需累计 [StrabismusGaze.SAMPLE_MS] 的有效采样才换下一点：异常期间暂停计时、自动延长，
+                // 最长 [StrabismusGaze.CALIBRATION_POINT_MAX_MS]；仍不够的点交给补测或整体重试。
+                suspend fun show(points: List<Int>) = points.forEach { index ->
+                    calibrationPointStartMs = platform.nowMs()
+                    calibrationPausedSinceMs = null; calibrationResumeMs = 0L; calibrationTargetMovedMs = 0L
+                    calibrationSampledMs = 0L; lastCalibrationSampleMs = 0L
+                    _state.update { it.copy(gazeCalibrationIndex = index) }
+                    while (true) {
+                        helpSession.delay(100)
+                        val elapsed = platform.nowMs() - calibrationPointStartMs
+                        if (calibrationSampledMs >= StrabismusGaze.SAMPLE_MS && elapsed >= StrabismusGaze.CALIBRATION_POINT_MS) break
+                        if (elapsed >= StrabismusGaze.CALIBRATION_POINT_MAX_MS) break
+                    }
+                }
+                show(StrabismusGaze.calibrationTargets.indices.toList())
+                gaze = StrabismusGaze.calibrate(gazeCalibration)
+                // 少数点没看稳（眨眼、看晚了）时只重看这几个点，而不是整轮约 18 秒重来。
+                val retake = if (gaze == null) StrabismusGaze.pointsToRetake(gazeCalibration) else emptyList()
+                if (retake.isNotEmpty()) {
+                    gazeCalibration.removeAll { it.index in retake }
+                    _state.update { it.copy(gazeCalibrationRound = 1, instruction = "再看一次刚才没看稳的 ${retake.size} 个圆点。") }
+                    show(retake)
+                    gaze = StrabismusGaze.calibrate(gazeCalibration)
+                }
+                _state.update { it.copy(gazeCalibrationPaused = false, gazeWarning = null) }
+                if (gaze == null) {
+                    _state.update { it.copy(gazeCalibrationFailed = true,
+                        warning = "未获得可靠注视校准。" + StrabismusGaze.failureReason(gazeCalibration)) }
+                } else {
+                    stepStartMs = platform.nowMs(); resetGazeWindow(); faceCenterBaseline = null
+                    _state.update { it.copy(step = ScreeningStep.FIXATION, gazeCalibrated = true,
+                        instruction = "看着屏幕上方闪烁的圆点，头和手机保持不动。", targetX = 1f, targetY = 0f) }
+                    runTimedStep(StrabismusProtocol.FIXATION_SECONDS) { startFarFixation() }
+                }
+            }
+        }
+    }
+
+    fun reportGazeTarget(xPx: Float, yPx: Float) {
+        with(host) {
+            val s = _state.value
+            if (s.guidePending || s.step !in setOf(ScreeningStep.GAZE_CALIBRATION, ScreeningStep.FIXATION, ScreeningStep.COVER, ScreeningStep.PURSUIT)) return
+            val display = platform.display
+            val now = platform.nowMs()
+            val point = GazePoint(xPx / display.widthPixels, yPx / display.heightPixels)
+            // 同一校准点在屏幕上被挪动（布局变化）：此前看的位置已不是现在记录的位置，需重新稳定后再采样
+            renderedTargets.lastOrNull()?.takeIf { it.step == s.step && it.index == s.gazeCalibrationIndex }?.let { last ->
+                if (s.step == ScreeningStep.GAZE_CALIBRATION && (abs(last.point.x - point.x) > 0.01f || abs(last.point.y - point.y) > 0.01f))
+                    calibrationTargetMovedMs = now
+            }
+            renderedTargets.addLast(ScreeningEngine.RenderedTarget(now, s.step, s.gazeCalibrationIndex, point))
+            while (renderedTargets.isNotEmpty() && renderedTargets.first().timeMs < now - 2_000L) renderedTargets.removeFirst()
+        }
+    }
+
+    fun resetGazeWindow() {
+        with(host) {
+            gazeBadSinceMs = null; lastGazeFrameMs = 0L; lastPursuitCheckMs = 0L; pursuitFollowing = null
+            _state.update { it.copy(gazeWarning = null) }
+        }
+    }
+
+    fun runTimedStep(seconds: Int, after: () -> Unit) {
+        with(host) {
+            timer?.cancel()
+            timer = scope.launch {
+                while (isActive) {
+                    val elapsed = ((platform.nowMs() - stepStartMs).coerceAtLeast(0L) / 1_000f).coerceAtMost(seconds.toFloat())
+                    val target = if (_state.value.step == ScreeningStep.PURSUIT) StrabismusProtocol.pursuitTarget(elapsed).let { it.first to it.second }
+                        else (if ((elapsed * StrabismusProtocol.FLASH_HZ * 2f).toInt() % 2 == 0) 1f else -1f) to 0f
+                    _state.update { it.copy(secondsLeft = kotlin.math.ceil(seconds - elapsed).toInt().coerceAtLeast(0), targetX = target.first, targetY = target.second) }
+                    if (elapsed >= seconds) break
+                    helpSession.delay(50)
+                }
+                if (isActive) after()
+            }
+        }
+    }
+
+    fun reportPursuitCapacity(maxXDeg: Float, maxYDeg: Float) {
+        with(host) {
+            if (!maxXDeg.isFinite() || !maxYDeg.isFinite() || maxXDeg <= 0f || maxYDeg <= 0f) return
+            val previous = _state.value.pursuitMaxDeg
+            if (previous == null || abs(previous.first - maxXDeg) > 0.1f || abs(previous.second - maxYDeg) > 0.1f)
+                _state.update { it.copy(pursuitMaxDeg = maxXDeg to maxYDeg) }
+        }
+    }
+
+    fun coverRemainingMs(): Long = with(host) { if (_state.value.step != ScreeningStep.COVER) 0L else
+        ((coverSequence.getOrNull(coverIndex - 1)?.holdMs ?: 0L) - (platform.nowMs() - coverStageStartMs)).coerceAtLeast(0L)
+    }
+}
