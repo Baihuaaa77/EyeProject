@@ -8,7 +8,13 @@ final class GeometryTests: XCTestCase {
         PatchSample(eye: "image_left",hostTime: time,pixels: pixels,roi: LabRect(x: 0,y: 0,width: 128,height: 64),pupil: LabPoint(x: 64,y: 32),rawCandidate: nil,saturation: 0,iris: iris,nuisance: [0,0,0,0])
     }
     func spot(_ xRadius: Double = 2,_ yRadius: Double = 2,level: Double = 130) -> [Float] {
-        (0..<8192).map { i in Float(40+level*exp(-(pow((Double(i%128)+0.5-64)/xRadius,2)+pow((Double(i/128)+0.5-32)/yRadius,2))/2)) }
+        var pixels = [Float](repeating: 40,count: 8192)
+        for i in pixels.indices {
+            let x = (Double(i%128)+0.5-64)/xRadius
+            let y = (Double(i/128)+0.5-32)/yRadius
+            pixels[i] += Float(level*exp(-(x*x+y*y)/2))
+        }
+        return pixels
     }
     func testCircleAcceptedLineAndSinglePixelRejected() {
         XCTAssertTrue(SpotGeometry.shapes(pixels: spot(),iris: iris,roi: patch(spot()).roi).contains { $0.accepted })
