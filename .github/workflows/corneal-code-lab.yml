@@ -57,6 +57,13 @@ jobs:
           cp -R build/Device/Build/Products/Release-iphoneos/CornealCodeLab.app build/unsigned/Payload/
           (cd build/unsigned && zip -qry CornealCodeLab-unsigned.ipa Payload)
           shasum -a 256 build/unsigned/CornealCodeLab-unsigned.ipa > build/unsigned/SHA256.txt
+      - name: 导出模拟器复核图像
+        if: always()
+        working-directory: experiments/CornealCodeLab
+        run: |
+          if [ -d build/LabTests.xcresult ]; then
+            xcrun xcresulttool export attachments --path build/LabTests.xcresult --output-path build/screenshots
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: corneal-code-lab-unsigned-ipa
@@ -64,6 +71,12 @@ jobs:
             experiments/CornealCodeLab/build/unsigned/CornealCodeLab-unsigned.ipa
             experiments/CornealCodeLab/build/unsigned/SHA256.txt
           if-no-files-found: error
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: corneal-code-lab-screenshots
+          path: experiments/CornealCodeLab/build/screenshots
           retention-days: 14
       - uses: actions/upload-artifact@v4
         if: always()
