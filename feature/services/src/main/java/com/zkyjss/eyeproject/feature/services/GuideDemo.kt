@@ -1,12 +1,14 @@
 package com.zkyjss.eyeproject.feature.services
 
 /** 方法演示与正式测试时钟相互独立，左右均以被测者自身为准。 */
-internal enum class GuideMotion { POSTURE, ACUITY, FVA, BLINK, OPEN, NEAR, MOVE, CURVE, SWITCH, FIXATE, FAR, COVER, COVER_SELF, FOLLOW }
+internal enum class GuideMotion { POSTURE, ACUITY, FVA, BLINK, OPEN, NEAR, MOVE, CURVE, SWITCH, FIXATE, FAR, COVER, COVER_SELF, FOLLOW, REST, LIGHTING }
 internal data class GuideBeat(val start: Float, val label: String)
 internal data class GuideScene(val motion: GuideMotion, val cycleMs: Int, val beats: List<GuideBeat>, val keyframe: Float)
-internal enum class GuidePose { OPEN, BLINK, LEFT, RIGHT, HELPER_OPEN, HELPER_LEFT, HELPER_RIGHT }
+internal enum class GuidePose { OPEN, BLINK, LEFT, RIGHT, LIGHTING_OPEN, LIGHTING_LEFT, LIGHTING_RIGHT, SIDE_FAR, SIDE_NEAR }
 
 internal fun guideScene(motion: GuideMotion): GuideScene = when (motion) {
+    GuideMotion.LIGHTING -> GuideScene(motion, 5000, listOf(GuideBeat(0f, "① 手机固定在支架上，正对双眼"), GuideBeat(0.35f, "② 协助者在手机旁打光"), GuideBeat(0.7f, "③ 本人按提示遮眼，不压眼球")), 0.5f)
+    GuideMotion.REST -> GuideScene(motion, 4000, listOf(GuideBeat(0f, "① 轻轻闭眼，放松休息"), GuideBeat(0.5f, "② 倒计时结束后再睁眼")), 0.5f)
     GuideMotion.POSTURE -> GuideScene(motion, 5200, listOf(GuideBeat(0.0f, "① 正对屏幕，露出双眼"), GuideBeat(0.25f, "② 前后微调到提示的距离"), GuideBeat(0.6f, "③ 光线均匀，避免逆光")), 0.7f)
     GuideMotion.BLINK -> GuideScene(motion, 4200, listOf(GuideBeat(0.0f, "① 正对屏幕，保持放松"), GuideBeat(0.15f, "② 像平时一样自然眨眼"), GuideBeat(0.55f, "③ 应用自动记录眨眼")), 0.6f)
     GuideMotion.OPEN -> GuideScene(motion, 4800, listOf(GuideBeat(0.0f, "① 轻松睁开双眼"), GuideBeat(0.15f, "② 尽量保持睁眼，看着屏幕"), GuideBeat(0.86f, "③ 不舒服就眨眼，随时可停止")), 0.5f)
@@ -26,25 +28,23 @@ internal fun guideScene(motion: GuideMotion): GuideScene = when (motion) {
 /** 2 秒遮右 → 2 秒双眼 → 2 秒遮左 → 2 秒双眼 → 每眼 1 秒交替两轮。 */
 internal fun guidePoseAt(motion: GuideMotion, phase: Float): GuidePose {
     val p = phase.coerceIn(0f, 0.999999f)
+    if (motion == GuideMotion.REST) return GuidePose.BLINK
+    if (motion == GuideMotion.LIGHTING) return GuidePose.LIGHTING_OPEN
     if (motion == GuideMotion.COVER || motion == GuideMotion.COVER_SELF) {
         val second = (p * 12).toInt()
         val pose = when (second) {
-            0, 1, 8, 10 -> GuidePose.RIGHT
-            4, 5, 9, 11 -> GuidePose.LEFT
-            else -> GuidePose.OPEN
+            0, 1, 8, 10 -> GuidePose.LIGHTING_RIGHT
+            4, 5, 9, 11 -> GuidePose.LIGHTING_LEFT
+            else -> GuidePose.LIGHTING_OPEN
         }
-        return if (motion == GuideMotion.COVER) when (pose) {
-            GuidePose.RIGHT -> GuidePose.HELPER_RIGHT
-            GuidePose.LEFT -> GuidePose.HELPER_LEFT
-            else -> GuidePose.HELPER_OPEN
-        } else pose
+        return pose
     }
     if (motion == GuideMotion.NEAR) return when {
         p < 0.06f || p in 0.62f..0.68f || p >= 0.94f -> GuidePose.OPEN
         p < 0.62f -> GuidePose.LEFT
         else -> GuidePose.RIGHT
     }
-    if (motion == GuideMotion.MOVE) return GuidePose.LEFT
+    if (motion == GuideMotion.MOVE) return if (p in 0.45f..0.8f) GuidePose.SIDE_NEAR else GuidePose.SIDE_FAR
     val blinkTimes = when (motion) {
         GuideMotion.BLINK -> listOf(0.2f, 0.5f, 0.8f)
         GuideMotion.FVA -> if (p < 0.68f) listOf(0.2f, 0.45f) else emptyList()
@@ -58,9 +58,11 @@ internal fun guidePoseAt(motion: GuideMotion, phase: Float): GuidePose {
 internal fun guidePoseLabel(pose: GuidePose) = when (pose) {
     GuidePose.LEFT -> "遮左眼"
     GuidePose.RIGHT -> "遮右眼"
-    GuidePose.HELPER_LEFT -> "协助者遮左眼"
-    GuidePose.HELPER_RIGHT -> "协助者遮右眼"
-    GuidePose.HELPER_OPEN -> "移开遮挡 · 双眼注视"
+    GuidePose.LIGHTING_LEFT -> "本人遮左眼 · 协助者打光"
+    GuidePose.LIGHTING_RIGHT -> "本人遮右眼 · 协助者打光"
+    GuidePose.LIGHTING_OPEN -> "双眼注视 · 协助者打光"
+    GuidePose.SIDE_FAR -> "自己遮左眼 · 从远处开始"
+    GuidePose.SIDE_NEAR -> "保持遮眼 · 慢慢移近手机"
     GuidePose.BLINK -> "自然眨眼"
     GuidePose.OPEN -> "双眼注视"
 }
@@ -72,9 +74,9 @@ internal fun guideMotion(step: ScreeningStep, fields: Map<String, String> = empt
     ScreeningStep.PUSH_UP -> GuideMotion.MOVE
     ScreeningStep.DISTANCE_CURVE -> GuideMotion.CURVE
     ScreeningStep.FLIPPER -> GuideMotion.SWITCH
-    ScreeningStep.FIXATION -> GuideMotion.FIXATE
+    ScreeningStep.FIXATION, ScreeningStep.GAZE_CALIBRATION -> GuideMotion.FIXATE
     ScreeningStep.FAR_FIXATION -> GuideMotion.FAR
-    ScreeningStep.COVER -> if (usesSelfCover(fields)) GuideMotion.COVER_SELF else GuideMotion.COVER
+    ScreeningStep.COVER -> GuideMotion.COVER_SELF
     ScreeningStep.PURSUIT -> GuideMotion.FOLLOW
     else -> GuideMotion.POSTURE
 }

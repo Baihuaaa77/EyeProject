@@ -200,7 +200,7 @@ private struct DemoHeroCard: View {
     private struct Clip { let motion: GuideMotion; let name: String; let line: String }
     private static let clips = [
         Clip(motion: .blink, name: "干眼", line: "像平时一样自然眨眼"),
-        Clip(motion: .cover, name: "眼位", line: "遮住一只眼，再移开 · 需一位协助者"),
+        Clip(motion: .cover, name: "眼位", line: "本人遮眼，再移开 · 协助者在手机旁打光"),
         Clip(motion: .near, name: "老视", line: "看清 E 的开口朝哪边"),
     ]
     /// 每种示范连播的遍数。

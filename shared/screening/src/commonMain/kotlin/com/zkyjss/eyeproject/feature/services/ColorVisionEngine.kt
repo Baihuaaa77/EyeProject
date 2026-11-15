@@ -41,11 +41,15 @@ data class ColorVisionUiState(
 
 /** 色觉自测共用流程（不用相机）；平台只提供时间、反馈与记录保存。 */
 class ColorVisionEngine(
-    private val platform: ScreeningPlatform,
+    platform: ScreeningPlatform,
     private val scope: CoroutineScope,
     private val io: CoroutineDispatcher = Dispatchers.IO,
     private val recordScope: CoroutineScope = ScreeningPersistence.scope,
 ) {
+    private val helpSession = TestHelpSession(platform)
+    private val platform: ScreeningPlatform = helpSession
+    fun setHelpPresented(presented: Boolean) = helpSession.setPresented(presented)
+
     private val _uiState = MutableStateFlow(ColorVisionUiState())
     val uiState: StateFlow<ColorVisionUiState> = _uiState.asStateFlow()
     private var shownAtMs = 0L
@@ -72,7 +76,7 @@ class ColorVisionEngine(
     }
 
     /** 界面画出这张图后回报，反应时从这里算起。 */
-    fun markPlateShown(timestampMs: Long) { shownAtMs = timestampMs }
+    fun markPlateShown(timestampMs: Long) { shownAtMs = helpSession.presentationTime(timestampMs) }
 
     /** 选了一个选项（数字或「看不出」）。 */
     fun answer(option: String) {

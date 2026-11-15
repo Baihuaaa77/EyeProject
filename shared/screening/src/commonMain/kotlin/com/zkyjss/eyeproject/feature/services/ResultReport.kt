@@ -208,7 +208,7 @@ object ResultReports {
                     ResultRow("再注视中位偏移", "${fmt1(f["cover_refix_median_prism"])} Δ"),
                     ResultRow("可用事件", "${f["cover_refix_events"]?.toInt() ?: 0} 次"),
                     ResultRow("无遮盖时的抖动", f["cover_noise_floor_prism"]?.let { "${fmt1(it)} Δ" } ?: "—"),
-                    ResultRow("协助者点按", "${s.coverMarks.size}/${StrabismusProtocol.COVER_SEQUENCE.size} 个动作"),
+                    ResultRow("相机识别动作", "${s.coverMarks.size}/${StrabismusProtocol.COVER_SEQUENCE.size} 个动作"),
                 )))
                 add(ResultSection("跟随移动目标", listOf(
                     ResultRow("双眼对称性指数 BSI", f["bsi"]?.let { decimalString(it, 2) } ?: "—"),

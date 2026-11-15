@@ -201,6 +201,14 @@ class MobileScreeningController(
     fun reportTarget(xPx: Float,yPx: Float) = screening.reportGazeTarget(xPx,yPx)
     fun reportPursuitCapacity(xDeg: Float,yDeg: Float) = screening.reportPursuitCapacity(xDeg,yDeg)
     /** 与安卓一致：问卷和结果页切后台不丢内容，只有进行中的任务回到准备页。 */
+    fun setHelpPresented(presented: Boolean) {
+        when (kind) {
+            "DRY_EYE" -> dry.setHelpPresented(presented)
+            "COLOR_VISION" -> color.setHelpPresented(presented)
+            else -> screening.setHelpPresented(presented)
+        }
+    }
+
     fun interrupt() {
         if (kind == "COLOR_VISION") return
         if (kind == "DRY_EYE") {
@@ -310,6 +318,8 @@ class MobileScreeningController(
                 ResultReports.screening(s)?.let { put("report",it.toRecordObject()) }
             }
         }
+        val help = when (kind) { "DRY_EYE" -> dryEyeHelp(dry.uiState.value); "COLOR_VISION" -> colorVisionHelp(); else -> screeningHelp(screening.state.value) }
+        result.put("helpMotion", help.motion); result.put("helpTitle", help.title); result.put("helpCue", help.cue)
         return result.toString()
     }
 }

@@ -26,9 +26,11 @@ private fun GuidePose.image() = when (this) {
     GuidePose.BLINK -> R.drawable.eyecho_guide_blink
     GuidePose.LEFT -> R.drawable.eyecho_guide_left
     GuidePose.RIGHT -> R.drawable.eyecho_guide_right
-    GuidePose.HELPER_OPEN -> R.drawable.eyecho_guide_helper_open
-    GuidePose.HELPER_LEFT -> R.drawable.eyecho_guide_helper_left
-    GuidePose.HELPER_RIGHT -> R.drawable.eyecho_guide_helper_right
+    GuidePose.LIGHTING_OPEN -> R.drawable.eyecho_guide_lighting_open
+    GuidePose.LIGHTING_LEFT -> R.drawable.eyecho_guide_lighting_left
+    GuidePose.LIGHTING_RIGHT -> R.drawable.eyecho_guide_lighting_right
+    GuidePose.SIDE_FAR -> R.drawable.eyecho_guide_side_far
+    GuidePose.SIDE_NEAR -> R.drawable.eyecho_guide_side_near
 }
 
 /** 测试中的静态准备提示也使用同一套透明人物，避免混用卡通图。 */
@@ -40,12 +42,12 @@ internal fun EyechoGuidePortrait(pose: GuidePose, description: String, modifier:
 /** 爱科完整图片与操作示意分栏；不裁切头顶、手势或标识，也不镜像左右眼。 */
 @Composable
 internal fun GuideStage(scene: GuideScene, phase: () -> Float, description: String, modifier: Modifier = Modifier) {
-    val colors = LocalEyeColors.current
+    val colors = LightEyeColors
     val type = LocalEyeTypography.current
     val pose by remember(scene, phase) { derivedStateOf { guidePoseAt(scene.motion, phase()) } }
     val caption by remember(scene, phase) { derivedStateOf { guideDiagramLabel(scene.motion, phase()) } }
-    val portraitOnly = scene.motion in listOf(GuideMotion.COVER, GuideMotion.COVER_SELF, GuideMotion.BLINK, GuideMotion.OPEN)
-    Column(modifier.clip(EyeShapes.large).background(colors.surfaceVariant).padding(8.dp),
+    val portraitOnly = scene.motion in listOf(GuideMotion.COVER, GuideMotion.COVER_SELF, GuideMotion.BLINK, GuideMotion.OPEN, GuideMotion.REST, GuideMotion.LIGHTING, GuideMotion.MOVE)
+    Column(modifier.clip(EyeShapes.large).background(colors.guideBackground).padding(8.dp),
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(Modifier.weight(1f).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -56,7 +58,7 @@ internal fun GuideStage(scene: GuideScene, phase: () -> Float, description: Stri
                 EyeText(caption, style = type.chip, color = colors.textPrimary, textAlign = TextAlign.Center)
             }
         }
-        if (portraitOnly || scene.motion == GuideMotion.NEAR) EyeText(guidePoseLabel(pose),
+        if (portraitOnly || scene.motion == GuideMotion.NEAR) EyeText(if (scene.motion == GuideMotion.REST) "闭眼休息" else guidePoseLabel(pose),
             style = type.chip, color = colors.textPrimary, textAlign = TextAlign.Center)
     }
 }
@@ -79,7 +81,7 @@ internal fun guideDiagramLabel(motion: GuideMotion, phase: Float): String = when
 /** 保留手机、视标和目标的简图。这里的 E 只讲解操作，正式视标尺寸算法不变。 */
 @Composable
 private fun GuideDiagram(motion: GuideMotion, phase: () -> Float, modifier: Modifier) {
-    val colors = LocalEyeColors.current
+    val colors = LightEyeColors
     Canvas(modifier.semantics { contentDescription = "操作示意" }) {
         val p = phase().coerceIn(0f, 1f)
         val unit = minOf(size.width / 100f, size.height / 170f)

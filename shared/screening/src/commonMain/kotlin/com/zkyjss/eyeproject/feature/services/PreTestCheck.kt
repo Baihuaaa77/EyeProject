@@ -18,7 +18,7 @@ object PreTestCheck {
     private val eyeUse = Question("近期用眼情况", "这几天用眼比平时多吗？", listOf("比平时少", "差不多", "比平时多", "多很多"))
     private val eyeDrops = Question("近期眼部用药", "最近在用眼药水吗？", listOf("没有", "人工泪液", "其他眼药水", "不清楚"))
     private val doubleVision = Question("近期重影", "最近看东西会重影（一个看成两个）吗？", listOf("没有", "偶尔", "经常"))
-    private val helper = Question("协助测试者", "这次谁来帮忙遮眼？", listOf("家长", "医生或护士", "自己完成", "其他"))
+    private val helper = Question("协助测试者", "这次谁是协助者？", listOf("家长", "医生或护士", "自己完成", "其他"))
 
     /**
      * 某项测试的测前快问（全部题目，含按答案出现的追问）；空表示这项测试没有这一步。

@@ -116,6 +116,7 @@ internal fun TestSessionLayout(
     statusAtBottom: Boolean = false,
     scroll: ScrollState = rememberScrollState(),
     progress: TestProgress? = null,
+    onHelp: (() -> Unit)? = null,
     status: @Composable () -> Unit = {},
     overlay: @Composable BoxScope.() -> Unit = {},
     content: @Composable ColumnScope.() -> Unit,
@@ -127,10 +128,16 @@ internal fun TestSessionLayout(
     Column(modifier.fillMaxSize().background(colors.appBackground).navigationBarsPadding().imePadding().screenHorizontalPaddingLarge()) {
         Box {
             TopBackBar(title = title, noText = true, onBackClick = { if (confirmExit) asking = true else onBack() })
-            Box(Modifier.align(Alignment.BottomEnd).size(48.dp).semantics { contentDescription = "系统设置" }
+            Row(Modifier.align(Alignment.BottomEnd), verticalAlignment = Alignment.CenterVertically) {
+            if (onHelp != null) Box(Modifier.size(48.dp).semantics { contentDescription = "当前环节演示与说明" }
+                .clickable(role = Role.Button, onClick = onHelp), contentAlignment = Alignment.Center) {
+                EyeText("?", style = LocalEyeTypography.current.title, color = colors.primary)
+            }
+            Box(Modifier.size(48.dp).semantics { contentDescription = "系统设置" }
                 .clickable(role = Role.Button, onClick = onSettings), contentAlignment = Alignment.Center) {
                 EyeIcon(painterResource(com.zkyjss.eyeproject.core.designsystem.R.drawable.ic_settings_gear),
                     null, Modifier.size(24.dp), tint = colors.primary)
+            }
             }
         }
         TestProgressBar(progress)

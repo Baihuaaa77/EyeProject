@@ -2,7 +2,26 @@ import SwiftUI
 
 /// 测试前的方法演示：爱科数字人图片分镜与操作简图，和安卓保持一致。
 /// 只出现在准备阶段，不参与正式刺激呈现或计时；系统减弱动态效果时停在关键帧并展示全部步骤。
-enum GuideMotion { case posture, acuity, fva, blink, open, near, move, curve, flip, fixate, far, cover, coverSelf, follow
+enum GuideMotion { case posture, acuity, fva, blink, open, near, move, curve, flip, fixate, far, cover, coverSelf, follow, rest, lighting
+    static func forHelp(_ motion: String) -> GuideMotion {
+        switch motion {
+        case "ACUITY": .acuity
+        case "FVA": .fva
+        case "BLINK": .blink
+        case "OPEN": .open
+        case "REST": .rest
+        case "LIGHTING": .lighting
+        case "NEAR": .near
+        case "MOVE": .move
+        case "CURVE": .curve
+        case "SWITCH": .flip
+        case "FIXATE": .fixate
+        case "FAR": .far
+        case "COVER_SELF": .coverSelf
+        case "FOLLOW": .follow
+        default: .posture
+        }
+    }
     /// 与安卓 guideMotion(step) 相同的映射。
     static func forStep(_ step: String, selfCover: Bool = false) -> GuideMotion {
         switch step {
@@ -12,7 +31,7 @@ enum GuideMotion { case posture, acuity, fva, blink, open, near, move, curve, fl
         case "FLIPPER": .flip
         case "FIXATION", "GAZE_CALIBRATION": .fixate
         case "FAR_FIXATION": .far
-        case "COVER": selfCover ? .coverSelf : .cover
+        case "COVER": .coverSelf
         case "PURSUIT": .follow
         default: .posture
         }
@@ -95,6 +114,8 @@ struct GuideScene {
     let keyframe: Double
     static func scene(_ motion: GuideMotion) -> GuideScene {
         switch motion {
+        case .lighting: GuideScene(motion: motion, cycle: 5.0, beats: [.init(start: 0, label: "① 手机固定在支架上，正对双眼"), .init(start: 0.35, label: "② 协助者在手机旁打光"), .init(start: 0.7, label: "③ 本人按提示遮眼，不压眼球")], keyframe: 0.5)
+        case .rest: GuideScene(motion: motion, cycle: 4.0, beats: [.init(start: 0, label: "① 轻轻闭眼，放松休息"), .init(start: 0.5, label: "② 倒计时结束后再睁眼")], keyframe: 0.5)
         case .posture: GuideScene(motion: motion, cycle: 5.2, beats: [.init(start: 0.0, label: "① 正对屏幕，露出双眼"), .init(start: 0.25, label: "② 前后微调到提示的距离"), .init(start: 0.6, label: "③ 光线均匀，避免逆光")], keyframe: 0.7)
         case .blink: GuideScene(motion: motion, cycle: 4.2, beats: [.init(start: 0.0, label: "① 正对屏幕，保持放松"), .init(start: 0.15, label: "② 像平时一样自然眨眼"), .init(start: 0.55, label: "③ 应用自动记录眨眼")], keyframe: 0.6)
         case .open: GuideScene(motion: motion, cycle: 4.8, beats: [.init(start: 0.0, label: "① 轻松睁开双眼"), .init(start: 0.15, label: "② 尽量保持睁眼，看着屏幕"), .init(start: 0.86, label: "③ 不舒服就眨眼，随时可停止")], keyframe: 0.5)
@@ -115,7 +136,8 @@ struct GuideScene {
 
 private enum GuidePose: String {
     case open, blink, left, right
-    case helperOpen = "helper_open", helperLeft = "helper_left", helperRight = "helper_right"
+    case lightingOpen = "lighting_open", lightingLeft = "lighting_left", lightingRight = "lighting_right"
+    case sideFar = "side_far", sideNear = "side_near"
     var image: String { "eyecho_guide_" + rawValue }
     var label: String {
         switch self {
@@ -123,27 +145,24 @@ private enum GuidePose: String {
         case .blink: "自然眨眼"
         case .left: "遮左眼"
         case .right: "遮右眼"
-        case .helperOpen: "移开遮挡 · 双眼注视"
-        case .helperLeft: "协助者遮左眼"
-        case .helperRight: "协助者遮右眼"
+        case .lightingOpen: "双眼注视 · 协助者打光"
+        case .lightingLeft: "本人遮左眼 · 协助者打光"
+        case .lightingRight: "本人遮右眼 · 协助者打光"
+        case .sideFar: "自己遮左眼 · 从远处开始"
+        case .sideNear: "保持遮眼 · 慢慢移近手机"
         }
     }
     /// 与安卓相同的十二秒教学循环；左右以被测者自身为准，图片不做镜像。
     static func at(_ motion: GuideMotion, _ phase: Double) -> GuidePose {
         let p = min(0.999999, max(0, phase))
+        if motion == .rest { return .blink }
+        if motion == .lighting { return .lightingOpen }
         if motion == .cover || motion == .coverSelf {
             let pose: GuidePose
             switch Int(p * 12) {
-            case 0, 1, 8, 10: pose = .right
-            case 4, 5, 9, 11: pose = .left
-            default: pose = .open
-            }
-            if motion == .cover {
-                switch pose {
-                case .right: return .helperRight
-                case .left: return .helperLeft
-                default: return .helperOpen
-                }
+            case 0, 1, 8, 10: pose = .lightingRight
+            case 4, 5, 9, 11: pose = .lightingLeft
+            default: pose = .lightingOpen
             }
             return pose
         }
@@ -151,7 +170,7 @@ private enum GuidePose: String {
             if p < 0.06 || (p >= 0.62 && p <= 0.68) || p >= 0.94 { return .open }
             return p < 0.62 ? .left : .right
         }
-        if motion == .move { return .left }
+        if motion == .move { return p >= 0.45 && p <= 0.8 ? .sideNear : .sideFar }
         let times: [Double]
         switch motion {
         case .blink: times = [0.2, 0.5, 0.8]
@@ -168,7 +187,7 @@ private struct GuideStage: View {
     let scene: GuideScene
     let phase: Double
     var height: CGFloat = EyeStyle.guideStageHeight
-    private var portraitOnly: Bool { [.cover, .coverSelf, .blink, .open].contains(scene.motion) }
+    private var portraitOnly: Bool { [.cover, .coverSelf, .blink, .open, .rest, .lighting, .move].contains(scene.motion) }
     var body: some View {
         let pose = GuidePose.at(scene.motion, phase)
         VStack(spacing: 8) {
@@ -188,10 +207,11 @@ private struct GuideStage: View {
                 }
             }
             if portraitOnly || scene.motion == .near {
-                Text(pose.label).font(EyeStyle.chip).foregroundStyle(EyeStyle.text)
+                Text(scene.motion == .rest ? "闭眼休息" : pose.label).font(EyeStyle.chip).foregroundStyle(EyeStyle.text)
             }
         }.padding(8).frame(height: height).frame(maxWidth: .infinity)
-            .background(EyeStyle.surfaceVariant, in: RoundedRectangle(cornerRadius: EyeStyle.radiusLarge))
+            .background(EyeStyle.guideBackground, in: RoundedRectangle(cornerRadius: EyeStyle.radiusLarge))
+            .environment(\.colorScheme, .light)
     }
 }
 

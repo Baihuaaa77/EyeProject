@@ -11,9 +11,13 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
 
 /** 干眼共用流程。相机帧串行进入流程协程，眨眼仍按到达的逐帧序列判断。 */
-class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: CoroutineScope,
+class DryEyeEngine(platform: ScreeningPlatform, private val scope: CoroutineScope,
     private val recordScope: CoroutineScope = ScreeningPersistence.scope,
     private val recordDispatcher: CoroutineDispatcher = Dispatchers.IO) {
+    internal val helpSession = TestHelpSession(platform)
+    private val platform: ScreeningPlatform = helpSession
+    fun setHelpPresented(presented: Boolean) = helpSession.setPresented(presented)
+
     private val _uiState = MutableStateFlow(DryEyeTestUiState())
     val uiState: StateFlow<DryEyeTestUiState> = _uiState.asStateFlow()
 
@@ -89,7 +93,7 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
         platform.startCamera(frameObserver, errorObserver)
         watchdog = scope.launch {
             while (isActive) {
-                delay(1_000)
+                helpSession.delay(1_000)
                 if (platform.nowMs() - lastFrameMs > 2_500L) {
                     eyesVisible = false
                     _uiState.update { it.copy(faceDetected = false, distanceCm = 0f, gateReady = false) }
@@ -156,11 +160,12 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
 
     /** 界面完成 [trialId] 题的首帧绘制后回报（安卓两次 withFrameNanos、苹果两次 CADisplayLink）；旧题号与重复回报忽略。 */
     fun markTrialPresented(trialId: Int, timestampMs: Long) {
-        pendingPresentation?.takeIf { it.first == trialId }?.second?.complete(timestampMs)
+        pendingPresentation?.takeIf { it.first == trialId }?.second?.complete(helpSession.presentationTime(timestampMs))
     }
 
     /** 回答当前视标；只接受每题第一次作答。[direction] 为 -1 表示「看不清」（记为错误）。 */
     fun answer(direction: Int, byVoice: Boolean = false) {
+        if (helpSession.paused) return
         if (byVoice && !voiceGuard.accept(platform.nowMs())) return
         if (pendingAnswer?.takeIf { it.isActive }?.complete(direction to byVoice) == true)
             platform.feedback(ScreeningFeedbackCue.ANSWER)
@@ -209,7 +214,7 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
                         pausedTotal += now - pausedAt; pausedAt = 0L
                         loop = launch { trialLoop(DryEyeStage.PRACTICE, activeSec, trials) }
                     }
-                    delay(100); continue
+                    helpSession.delay(100); continue
                 }
                 val elapsed = now - start - pausedTotal
                 if (elapsed >= DryEyeProtocol.PRACTICE_SECONDS * 1000L) break
@@ -219,7 +224,7 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
                     continue
                 }
                 updateTimer(elapsed, DryEyeProtocol.PRACTICE_SECONDS)
-                delay(100)
+                helpSession.delay(100)
             }
             loop.cancel()
         }
@@ -239,7 +244,7 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
             val elapsed = platform.nowMs() - start
             if (elapsed >= DryEyeProtocol.REST_SECONDS * 1000L) break
             updateTimer(elapsed, DryEyeProtocol.REST_SECONDS)
-            delay(200)
+            helpSession.delay(200)
         }
     }
 
@@ -249,7 +254,7 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
         // 倒计时
         for (s in 3 downTo 1) {
             _uiState.update { it.copy(phase = DryEyePhase.Countdown, instruction = "建议佩戴最佳矫正眼镜，保持约 40 cm", remainingSeconds = s) }
-            delay(1000)
+            helpSession.delay(1000)
         }
         staircase = DryEyeStaircase(DryEyeProtocol.LEVELS.indexOf(baselineLevel).coerceAtLeast(0))
         // 上一段遗留的丢失计时与像素封顶标记不能带入本次正式测试。
@@ -292,7 +297,7 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
                         pausedTotal += now - pausedAt; pausedAt = 0L
                         loop = launch { trialLoop(DryEyeStage.NATURAL, activeSec, trials, naturalSeconds) }
                     }
-                    delay(100); continue
+                    helpSession.delay(100); continue
                 }
                 val elapsed = now - start - pausedTotal
                 if (elapsed >= totalMs) { completed = true; break }
@@ -331,7 +336,7 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
                         qualityWarning = qualityWarning(),
                     )
                 }
-                delay(100)
+                helpSession.delay(100)
             }
             loop.cancel()
             if (completed) finishFormal(naturalSeconds, trials, blinks, distances, frames, validFrames, inRange, turned, true, afterRest, pauses)
@@ -387,12 +392,12 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
             _uiState.update { it.copy(trialVisible = true, trialId = id, direction = direction, level = level, optotypePx = spec.sizePx) }
             // 界面真正画出本题后才开始计时（两端用显示刷新回调回报），渲染卡顿不再算进反应时、也不提前消耗 2 秒时限。
             // 回报前已作答或一直没有回报时（切后台、测试替身）以发出时刻计。
-            val presentedAt = if (deferred.isCompleted) null else withTimeoutOrNull(DryEyeProtocol.PRESENT_WAIT_MS) {
+            val presentedAt = if (deferred.isCompleted) null else helpSession.withTimeoutOrNull(DryEyeProtocol.PRESENT_WAIT_MS) {
                 select<Long?> { presented.onAwait { it }; deferred.onAwait { null } }
             }
             val onset = presentedAt?.coerceAtLeast(requestedAt) ?: requestedAt
             val remaining = (DryEyeProtocol.TRIAL_TIMEOUT_MS - (platform.nowMs() - onset)).coerceAtLeast(0L)
-            val answer = if (deferred.isCompleted) deferred.await() else withTimeoutOrNull(remaining) { deferred.await() }
+            val answer = if (deferred.isCompleted) deferred.await() else helpSession.withTimeoutOrNull(remaining) { deferred.await() }
             pendingPresentation = null
             val rt = if (answer != null) platform.nowMs() - onset else null
             val onsetSec = activeSec(onset)
@@ -406,7 +411,7 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
             out += trial
             staircase.record(trial.correct, maxIndex)
             _uiState.update { it.copy(trialVisible = false, lastAnswerCorrect = trial.correct) }
-            delay(DryEyeProtocol.INTER_TRIAL_MS)
+            helpSession.delay(DryEyeProtocol.INTER_TRIAL_MS)
         }
     }
 
@@ -488,6 +493,7 @@ class DryEyeEngine(private val platform: ScreeningPlatform, private val scope: C
 
     /** 分析线程回调：只写 字段；准备阶段按「翻转立即、否则 500ms 节流」刷新门禁状态。 */
     private fun handleFrame(frame: FaceLandmarkFrame) {
+        if (helpSession.paused) return
         lastFrameMs = platform.nowMs()
         val face = frame.faces.firstOrNull()
         val eyesDetected = face != null && face.leftEye != null && face.rightEye != null

@@ -27,7 +27,7 @@ object TestProgressEstimate {
     const val PUSH_UP_PER_TRIAL = 15f
     /** 每个距离约 2 级 × 3 题，含移动到位。 */
     const val CURVE_PER_DISTANCE = 25f
-    /** 9 个遮盖动作的保持时长约 12 秒，加上协助者操作。 */
+    /** 9 个遮盖动作的保持时长约 12 秒，加上本人换手与移开遮盖的时间。 */
     const val COVER_TOTAL = 30f
     /** 单题的大致耗时，用于在可变阶段内平滑推进。 */
     const val SECONDS_PER_ANSWER = 3.5f

@@ -63,6 +63,29 @@ class DryEyeTimingTest {
         engine.close()
     }
 
+    @Test fun reviewingHelpFreezesTheCurrentQuestionAndSampling() = runTest {
+        val platform = Platform { 1_000 + testScheduler.currentTime }
+        val engine = DryEyeEngine(platform, backgroundScope)
+        engine.skipProfile(); engine.startMonitoring()
+        backgroundScope.launch { while (true) { platform.onFrame?.invoke(frame(platform.nowMs())); delay(33) } }
+        advanceTimeBy(1_500); runCurrent()
+        engine.startTest(); engine.confirmPracticeGuide(); runCurrent()
+        val first = engine.uiState.value
+        engine.markTrialPresented(first.trialId, platform.nowMs()); runCurrent()
+        advanceTimeBy(500); runCurrent()
+        val before = engine.uiState.value
+        engine.setHelpPresented(true)
+        advanceTimeBy(8_000); runCurrent()
+        assertEquals(before, engine.uiState.value, "查看说明不推进计时、题目与质量状态")
+        engine.setHelpPresented(false)
+        advanceTimeBy(1_400); runCurrent()
+        assertTrue(engine.uiState.value.trialVisible && engine.uiState.value.trialId == first.trialId)
+        advanceTimeBy(150); runCurrent()
+        assertFalse(engine.uiState.value.trialVisible && engine.uiState.value.trialId == first.trialId)
+        assertFalse(engine.uiState.value.paused, "恢复相机不会把查看演示误判为丢失双眼")
+        engine.close()
+    }
+
     /** 方案二：看不到双眼持续 1 秒即暂停（计时冻结、收起视标），恢复后点「继续」才接着计时。 */
     @Test fun lostEyesPauseTheTimerUntilTheUserContinues() = runTest {
         val platform = Platform { 1_000 + testScheduler.currentTime }

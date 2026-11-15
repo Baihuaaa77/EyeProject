@@ -28,12 +28,12 @@ model = root / 'core/camera/src/main/assets/face_landmarker.task'
 # 数字字体由安卓资源目录与 iOS 工程共同引用，防止一端漏包后悄悄回退到系统字。
 score_font = root / 'core/designsystem/src/main/res/font/nunito_black.ttf'
 ios_project = (root / 'iosApp/project.yml').read_text(encoding='utf-8')
-# 两端直接打包同一份爱科分镜，避免 iOS 缺图或协助遮盖阶段退回自行遮盖。
+# 两端直接打包同一份爱科分镜，避免 iOS 缺图或退回已移除的协助者遮盖场景。
 guide_images = root / 'shared/guide/res/drawable-nodpi'
-for pose in ('open', 'blink', 'left', 'right', 'helper_open', 'helper_left', 'helper_right'):
+for pose in ('open', 'blink', 'left', 'right', 'lighting_open', 'lighting_left', 'lighting_right', 'side_far', 'side_near'):
     image = guide_images / ('eyecho_guide_' + pose + '.png')
     png = image.read_bytes() if image.exists() else b''
-    if len(png) < 26 or png[:8] != b'\x89PNG\r\n\x1a\n' or png[25] != 6:
+    if len(png) < 26 or png[:8] != b'\x89PNG\r\n\x1a\n' or png[25] not in (2, 6):
         errors.append('Missing or invalid Eyecho guide image: ' + pose)
 if '../shared/guide/res/drawable-nodpi' not in ios_project:
     errors.append('iOS must bundle the shared Eyecho guide images')

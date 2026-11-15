@@ -51,3 +51,6 @@ __pycache__/
 
 # 本机试用 AI 解读的大模型密钥（backend/server/llm.properties，见 SERVER.md）
 backend/server/llm.properties
+
+# 独立实验快照、真机数据和安装包（仅本机保存）
+/光码映光独立验证程序/

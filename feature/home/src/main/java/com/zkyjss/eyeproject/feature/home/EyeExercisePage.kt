@@ -208,6 +208,10 @@ internal fun EyeExercisePage(onClose: () -> Unit, viewModel: EyeExerciseViewMode
                         Box(Modifier.fillMaxWidth(state.progress).height(6.dp).clip(CircleShape).background(DarkEyeColors.flowBrush))
                     }
                 }
+                if (state.stage == EyeExerciseCoach.Stage.DONE) {
+                    val (total, seen) = viewModel.summary
+                    ExerciseCompletion(total, seen, viewModel.usedCamera, onClose, Modifier.weight(1f))
+                } else {
                 // 上半区：动作提示；中间：注视点；下半区：倒计时与提示语。上下等高，注视点正好在屏幕中央
                 Column(Modifier.weight(1f).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Bottom) {
@@ -227,8 +231,6 @@ internal fun EyeExercisePage(onClose: () -> Unit, viewModel: EyeExerciseViewMode
                         translationY = (m?.dy ?: 0) * f * heightPx * 0.45f
                         alpha = if (resting) 0.35f else 1f
                     }) { drawFixationTarget(DarkEyeColors, center, size.minDimension * 0.62f) }
-                } else {
-                    Canvas(Modifier.size(170.dp)) { drawProgressRing(DarkEyeColors, 1f, 8.dp.toPx()) }
                 }
                 Column(Modifier.weight(1f).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                     if (state.stage != EyeExerciseCoach.Stage.DONE) {
@@ -238,14 +240,8 @@ internal fun EyeExercisePage(onClose: () -> Unit, viewModel: EyeExerciseViewMode
                         Spacer(Modifier.weight(1f))
                         EyeText(if (state.faceVisible || viewModel.usedCamera) "头保持不动，只转眼睛" else "跟着提示转动眼睛就好",
                             style = typography.bodySecondary, color = colors.white.copy(alpha = 0.7f))
-                    } else {
-                        val (total, seen) = viewModel.summary
-                        Spacer(Modifier.height(16.dp))
-                        EyeText(if (viewModel.usedCamera) "共 $total 步，检测到你做到了 $seen 步" else "共 $total 步，做完啦",
-                            style = typography.body, color = colors.white, textAlign = TextAlign.Center)
-                        Spacer(Modifier.weight(1f))
-                        EyeButton("完成", EyeButtonRole.PRIMARY, onClose, Modifier.fillMaxWidth().heightIn(min = 52.dp))
                     }
+                }
                 }
                 Spacer(Modifier.height(16.dp))
             }
@@ -305,4 +301,21 @@ private fun flipTransition(move: EyeExerciseCoach.Move?): ContentTransform = whe
         slideOutHorizontally(tween(380)) { move.dx * it } + fadeOut()
     else -> slideInVertically(tween(380)) { -move.dy * it } + fadeIn() togetherWith
         slideOutVertically(tween(380)) { move.dy * it } + fadeOut()
+}
+
+/** 独立完成页布局：圆环、完成标题和统计各有留白，按钮固定在内容底部。 */
+@Composable
+internal fun ExerciseCompletion(total: Int, seen: Int, usedCamera: Boolean, onClose: () -> Unit, modifier: Modifier = Modifier) {
+    val type = LocalEyeTypography.current
+    Column(modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+        Spacer(Modifier.weight(1f))
+        Canvas(Modifier.size(170.dp)) { drawProgressRing(DarkEyeColors, 1f, 8.dp.toPx()) }
+        Spacer(Modifier.height(40.dp))
+        EyeText("完成啦！", style = type.displayCompact, color = DarkEyeColors.white)
+        Spacer(Modifier.height(16.dp))
+        EyeText(if (usedCamera) "共 $total 步，检测到你做到了 $seen 步" else "共 $total 步，做完啦",
+            style = type.body, color = DarkEyeColors.white.copy(alpha = 0.7f), textAlign = TextAlign.Center)
+        Spacer(Modifier.weight(1f))
+        EyeButton("完成", EyeButtonRole.PRIMARY, onClose, Modifier.fillMaxWidth().heightIn(min = 52.dp))
+    }
 }

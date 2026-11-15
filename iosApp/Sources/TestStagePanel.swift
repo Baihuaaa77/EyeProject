@@ -201,6 +201,7 @@ struct TestTopBar: View {
     let title: String
     let onBack: () -> Void
     let onSettings: () -> Void
+    var onHelp: (() -> Void)? = nil
     var body: some View {
         ZStack {
             Text(title).font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text).lineLimit(1)
@@ -210,6 +211,12 @@ struct TestTopBar: View {
                         .frame(width: 48, height: 48).contentShape(Rectangle())
                 }.accessibilityLabel("返回")
                 Spacer()
+                if let onHelp {
+                    Button(action: onHelp) {
+                        Image(systemName: "questionmark.circle").font(EyeStyle.subtitle)
+                            .frame(width: 48, height: 48).contentShape(Rectangle())
+                    }.accessibilityLabel("当前环节演示与说明")
+                }
                 Button(action: onSettings) {
                     Image(systemName: "gearshape.fill").font(.system(size: 22))
                         .frame(width: 48, height: 48).contentShape(Rectangle())

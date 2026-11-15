@@ -86,10 +86,10 @@ internal class StrabismusStateMachine(private val host: ScreeningEngine) {
             coverHoldJob?.cancel()
             coverHoldJob = scope.launch {
                 if (coverIndex >= coverSequence.size) {
-                    delay(StrabismusProtocol.REFIX_SEARCH_MS + 100L)
+                    helpSession.delay(StrabismusProtocol.REFIX_SEARCH_MS + 100L)
                     if (_state.value.step == ScreeningStep.COVER) startPursuit()
                 } else {
-                    delay((action.holdMs - (platform.nowMs() - observation.sinceMs)).coerceAtLeast(0L))
+                    helpSession.delay((action.holdMs - (platform.nowMs() - observation.sinceMs)).coerceAtLeast(0L))
                     if (_state.value.step == ScreeningStep.COVER && _state.value.coverMarks.size == marks.size) {
                         coverStageStartMs = platform.nowMs()
                         if (!coverDetector.matchesCover(action.covered, coverStageStartMs)) {
@@ -134,7 +134,7 @@ internal class StrabismusStateMachine(private val host: ScreeningEngine) {
                     calibrationSampledMs = 0L; lastCalibrationSampleMs = 0L
                     _state.update { it.copy(gazeCalibrationIndex = index) }
                     while (true) {
-                        delay(100)
+                        helpSession.delay(100)
                         val elapsed = platform.nowMs() - calibrationPointStartMs
                         if (calibrationSampledMs >= StrabismusGaze.SAMPLE_MS && elapsed >= StrabismusGaze.CALIBRATION_POINT_MS) break
                         if (elapsed >= StrabismusGaze.CALIBRATION_POINT_MAX_MS) break
@@ -198,7 +198,7 @@ internal class StrabismusStateMachine(private val host: ScreeningEngine) {
                         else (if ((elapsed * StrabismusProtocol.FLASH_HZ * 2f).toInt() % 2 == 0) 1f else -1f) to 0f
                     _state.update { it.copy(secondsLeft = kotlin.math.ceil(seconds - elapsed).toInt().coerceAtLeast(0), targetX = target.first, targetY = target.second) }
                     if (elapsed >= seconds) break
-                    delay(50)
+                    helpSession.delay(50)
                 }
                 if (isActive) after()
             }

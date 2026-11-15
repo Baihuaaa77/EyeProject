@@ -651,6 +651,9 @@ struct EyeExerciseView: View {
                             EyeStyle.chipShape.fill(EyeStyle.flowGradient).frame(width: max(0, (geo.size.width - 100) * CGFloat(state?.progress ?? 0)))
                         }.frame(height: 6)
                     }
+                    if isStage(.done) {
+                        ExerciseCompletionView(total: Int(state?.stepCount ?? 0), seen: Int(state?.detectedCount ?? 0), usedCamera: coach.usedCamera) { dismiss() }
+                    } else {
                     // 上半区：动作提示；中间：注视点；下半区：倒计时与提示语。上下等高，注视点正好在屏幕中央
                     VStack(spacing: 20) {
                         Spacer(minLength: 0)
@@ -664,8 +667,6 @@ struct EyeExerciseView: View {
                         .opacity(isStage(.rest) ? 0.35 : 1)
                         .offset(x: CGFloat(flyMove?.dx ?? 0) * fly * geo.size.width * 0.8,
                                 y: CGFloat(flyMove?.dy ?? 0) * fly * geo.size.height * 0.45)
-                    } else {
-                        ProgressRing(fraction: 1, lineWidth: 8).frame(width: 170, height: 170)
                     }
                     VStack(spacing: 0) {
                         if !isStage(.done) {
@@ -674,13 +675,9 @@ struct EyeExerciseView: View {
                             Spacer(minLength: 0)
                             Text(state?.faceVisible == true || coach.usedCamera ? "头保持不动，只转眼睛" : "跟着提示转动眼睛就好")
                                 .font(EyeStyle.bodySecondary).foregroundStyle(Color.white.opacity(0.7))
-                        } else {
-                            Text(coach.usedCamera ? "共 \(state?.stepCount ?? 0) 步，检测到你做到了 \(state?.detectedCount ?? 0) 步" : "共 \(state?.stepCount ?? 0) 步，做完啦")
-                                .font(EyeStyle.body).foregroundStyle(.white).multilineTextAlignment(.center).padding(.top, 16)
-                            Spacer(minLength: 0)
-                            Button("完成") { dismiss() }.buttonStyle(EyeButtonStyle())
                         }
                     }.frame(maxHeight: .infinity)
+                    }
                 }
                 .padding(.horizontal, 20).padding(.vertical, 12)
             }
@@ -758,5 +755,25 @@ struct EyeExerciseView: View {
 
     private func arrowName(_ move: EyeExerciseCoach.Move) -> String {
         move.dx < 0 ? "arrow.left" : move.dx > 0 ? "arrow.right" : move.dy < 0 ? "arrow.up" : "arrow.down"
+    }
+}
+
+/// 与安卓共用的完成页结构；专门留出圆环与标题的间距。
+struct ExerciseCompletionView: View {
+    let total: Int
+    let seen: Int
+    let usedCamera: Bool
+    let onClose: () -> Void
+    var body: some View {
+        VStack(spacing: 0) {
+            Spacer(minLength: 24)
+            ProgressRing(fraction: 1, lineWidth: 8).frame(width: 170, height: 170)
+            Text("完成啦！").font(EyeStyle.displayCompact).foregroundStyle(.white).padding(.top, 40)
+            Text(usedCamera ? "共 \(total) 步，检测到你做到了 \(seen) 步" : "共 \(total) 步，做完啦")
+                .font(EyeStyle.body).foregroundStyle(Color.white.opacity(0.7))
+                .multilineTextAlignment(.center).padding(.top, 16)
+            Spacer(minLength: 24)
+            Button("完成", action: onClose).buttonStyle(EyeButtonStyle())
+        }.frame(maxHeight: .infinity)
     }
 }
