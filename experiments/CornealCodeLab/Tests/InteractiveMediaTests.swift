@@ -21,7 +21,11 @@ final class InteractiveMediaTests: XCTestCase {
         XCTAssertFalse(brightness.confirmed); XCTAssertEqual(brightness.actual,0.4,accuracy: 0.001)
     }
     @MainActor func testStartingWithFocusedInputDismissesKeyboardBeforeCameraGuard() {
-        let window = UIWindow(frame: CGRect(x: 0,y: 0,width: 375,height: 812))
+        let window: UIWindow
+        if let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first {
+            window = UIWindow(windowScene: scene)
+            window.frame = CGRect(x: 0,y: 0,width: 375,height: 812)
+        } else { window = UIWindow(frame: CGRect(x: 0,y: 0,width: 375,height: 812)) }
         let controller = UIViewController(); window.rootViewController = controller; window.makeKeyAndVisible()
         let field = UITextField(frame: CGRect(x: 20,y: 100,width: 200,height: 44)); field.keyboardType = .decimalPad
         controller.view.addSubview(field); field.becomeFirstResponder()
@@ -36,13 +40,13 @@ final class InteractiveMediaTests: XCTestCase {
             let model = LabModel()
             let content = NavigationStack {
                 Form { CaptureConditionFields(model: model) }.scrollDismissesKeyboard(.interactively)
-            }.environment(\.dynamicTypeSize,category).environment(\.accessibilityReduceMotion,true).preferredColorScheme(.dark)
+            }.environment(\.dynamicTypeSize,category).preferredColorScheme(.dark)
             let controller = UIHostingController(rootView: content)
             let window = UIWindow(frame: CGRect(x: 0,y: 0,width: 375,height: 812))
             window.rootViewController = controller; window.makeKeyAndVisible()
             controller.view.frame = window.bounds; controller.view.layoutIfNeeded()
             let image = UIGraphicsImageRenderer(size: window.bounds.size).image { context in controller.view.layer.render(in: context.cgContext) }
-            let attachment = XCTAttachment(image: image); attachment.name = "白点参数-\(category)"; attachment.lifetime = .keepAlways; add(attachment)
+            let attachment = XCTAttachment(image: image); attachment.name = "白点参数-\(category)"; attachment.lifetime = XCTAttachment.Lifetime.keepAlways; add(attachment)
             XCTAssertEqual(image.size.width,375)
             window.isHidden = true
         }
