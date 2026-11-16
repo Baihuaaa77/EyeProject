@@ -197,8 +197,9 @@ enum NativeGlintTracking {
         let search = IrisRegion(center: convert(iris.center),radiusX: rx*IrisSearch.radiusFraction,radiusY: ry*IrisSearch.radiusFraction,confidence: iris.confidence,
             eyelid: iris.eyelid.map(convert),boundaryRadiusX: rx,boundaryRadiusY: ry)
         let diameter = rx*native.width*2
+        // 图案匹配移除后，历史图案按整体亮斑关联；不能仍拿外径20%的中心点尺寸惩罚真实反射。
         let expected = OpticalPrediction.diameter(distanceCM: row.distanceCM ?? c.distanceCM,irisPixels: diameter,
-            sourceMM: c.screenWidthMM*c.centerDiameter/c.displayWidth,radiusMM: c.cornealRadiusMM) ?? 3
+            sourceMM: c.screenWidthMM*c.dotDiameter/c.displayWidth,radiusMM: c.cornealRadiusMM) ?? 3
         return (gray,w,h,native,search,expected)
     }
 

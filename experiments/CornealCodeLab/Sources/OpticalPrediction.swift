@@ -48,7 +48,7 @@ struct OpticalPrediction: Codable {
         }
         guard let distance = median(distances),let iris = median(diameters),
               let low = distances.min(),let high = distances.max() else { return nil }
-        let sourceDiameter = c.mode.isPattern && result.tracking != nil ? c.centerDiameter : c.mode == .motion && result.tracking == nil ? c.probeDiameter : c.dotDiameter
+        let sourceDiameter = c.mode == .motion && result.tracking == nil ? c.probeDiameter : c.dotDiameter
         let sourceMM = c.screenWidthMM*sourceDiameter/c.displayWidth
         guard let expected = diameter(distanceCM: distance,irisPixels: iris,sourceMM: sourceMM,radiusMM: c.cornealRadiusMM),
               let screenW = diameter(distanceCM: distance,irisPixels: iris,sourceMM: c.screenWidthMM,radiusMM: c.cornealRadiusMM),
@@ -66,9 +66,9 @@ struct OpticalPrediction: Codable {
             reflectedScreenHeightPixels: screenH,expectedDiameterPixels: expected,expectedMinPixels: minimum,
             expectedMaxPixels: maximum,observedDiameterPixels: observed,observedToExpected: observed.map { $0/expected },
             distanceSamples: distances.count,
-            note: "虹膜直径假设11.7mm；曲率为群体球面假设，未测得个人曲率。新跟踪比较固定注视点的半高等效斑径；运动探针直径另存于刺激配置。范围为距离与曲率敏感性分析，不含失焦、像差、离轴、ISP及屏幕/镜头位置差。斑径不能直接验证个人曲率，尺寸只参与软评分，不硬性拒绝候选。")
+            note: "虹膜直径假设11.7mm；曲率为群体球面假设，未测得个人曲率。新跟踪比较白点或历史图案整体亮斑的半高等效斑径，后者不代表中心小点；运动探针直径另存于刺激配置。范围为距离与曲率敏感性分析，不含失焦、像差、离轴、ISP及屏幕/镜头位置差。斑径不能直接验证个人曲率，尺寸只参与软评分，不硬性拒绝候选。")
         if c.mode.isPattern {
-            prediction.expectedPatternDiameterPixels = expected/FixationPattern.centerFraction
+            prediction.expectedPatternDiameterPixels = expected
             prediction.matchedPatternDiameterPixels = result.tracking.flatMap { median($0.frames.filter { $0.source.measured && $0.patternMatch?.resolved == true }.compactMap { $0.patternMatch?.diameterPixels }) }
         }
         return prediction

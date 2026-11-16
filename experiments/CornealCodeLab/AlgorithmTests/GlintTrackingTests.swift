@@ -50,6 +50,19 @@ final class GlintTrackingTests: XCTestCase {
         let f = tracker.update(pixels: [Float](repeating: 40,count: 128*96),width: 128,height: 96,roi: roi,iris: iris,row: row(0),expectedDiameter: 2)
         XCTAssertEqual(f.source,.unavailable); XCTAssertEqual(f.confidence,0)
     }
+    func testHistoricalUnresolvedPatternTracksWholeBrightBlobRatherThanTinyCenter() throws {
+        var c = TrialConfiguration.pointDefault
+        c.mode = .patternCoded; c.dotDiameter = 192
+        var record = row(0)
+        record.distanceCM = 33; record.nativeOffset = 0; record.nativeROI = roi
+        let pixels = Data(image(x: 64,y: 38).map { UInt8(max(0,min(255,$0))) })
+        let tracks = NativeGlintTracking.track(records: [record],pixels: pixels,bytesPerPixel: 1,configuration: c,events: [],start: 0)
+        let frame = try XCTUnwrap(tracks.first?.frames.first)
+        let whole = try XCTUnwrap(OpticalPrediction.diameter(distanceCM: 33,irisPixels: 72,sourceMM: 65*192/390))
+        XCTAssertEqual(try XCTUnwrap(frame.expectedDiameterPixels),whole,accuracy: 1e-9)
+        XCTAssertTrue(frame.source.measured)
+        XCTAssertLessThan(hypot(frame.imagePoint!.x-64,frame.imagePoint!.y-38),1.5)
+    }
     func testKnownOffKeepsIndependentCandidateWithoutUpdatingObservation() throws {
         var independent = GlintTracker(),conditioned = GlintTracker()
         for i in 0..<5 {
