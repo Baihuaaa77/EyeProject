@@ -61,6 +61,7 @@ struct InteractiveMovieView: View {
             ZoomMovieSurface(playback: playback,overlay: overlay,zoom: $zoom).id(expanded).frame(height: 340).clipped()
                 .accessibilityLabel("可双指缩放和拖动的原视频")
             controls
+            TrackingPlaybackReadout(playback: playback)
             HStack {
                 Button("缩小") { zoom = max(1,zoom/1.5) }.disabled(zoom<=1)
                 Button("适合窗口") { zoom = 1 }
@@ -73,6 +74,7 @@ struct InteractiveMovieView: View {
             VStack(spacing: 12) {
                 HStack { Button("完成") { expanded = false }; Spacer(); Toggle("检测叠加",isOn: $overlay) }
                 ZoomMovieSurface(playback: playback,overlay: overlay,zoom: $zoom)
+                TrackingPlaybackReadout(playback: playback)
                 controls
                 HStack {
                     Button("缩小") { zoom = max(1,zoom/1.5) }

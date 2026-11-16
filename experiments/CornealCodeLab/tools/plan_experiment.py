@@ -6,6 +6,10 @@ import random
 
 
 def conditions(protocol):
+    if protocol == "pattern":
+        return [dict(mode=mode,targetPattern=pattern,dotDiameter=288,dotY=0.35,mean=1 if mode=="pattern" else 0.525,modulation=0.475)
+                for pattern in ["ringDot","crossDot"] for mode in ["pattern","patternCoded"]]
+    # 只为既有顺序文件保留历史生成函数，命令行不再提供白屏黑点实验。
     if protocol == "screen":
         return [dict(mode=mode,dotDiameter=size,dotY=y,screenLevel=0.7)
                 for size,y in [(96,0.25),(160,0.25),(160,0.5)]
@@ -31,7 +35,7 @@ def plan(protocol, blocks, seed):
 
 def main():
     p=argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--protocol",choices=["screen","coded"],default="screen")
+    p.add_argument("--protocol",choices=["pattern","coded"],default="pattern")
     p.add_argument("--blocks",type=int,default=3)
     p.add_argument("--seed",type=int,default=20261114)
     p.add_argument("--output",type=Path,default=Path("实验顺序.json"))

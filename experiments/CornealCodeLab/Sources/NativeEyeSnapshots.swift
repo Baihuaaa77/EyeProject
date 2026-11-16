@@ -2,6 +2,31 @@ import UIKit
 
 /// 原生彩色 PNG 直接来自相机 BGRA，不经过视频有损编码。只保留选中的参考图，删除临时像素文件。
 enum NativeEyeSnapshots {
+    static func annotateExisting(directory: URL,records: [FrameRecord],results: [EyeAnalysis],start: Double,output: URL) throws -> [String] {
+        let metadata = (try? JSONSerialization.jsonObject(with: Data(contentsOf: directory.appendingPathComponent("native_snapshots.json")))) as? [String:Any]
+        var names: [String] = []
+        for result in results where result.tracking != nil {
+            guard let image = UIImage(contentsOfFile: directory.appendingPathComponent(result.eye+"_original.png").path) else { continue }
+            let saved = metadata?[result.eye] as? [String:Any]
+            let time = saved?["hostTime"] as? Double ?? result.referenceHostTime ?? start
+            guard let row = records.filter({ $0.eye == result.eye && $0.roi != nil }).min(by: { abs($0.hostTime-time)<abs($1.hostTime-time) }),let roi = row.roi else { continue }
+            let rect = saved?["nativeROI"] as? [Double]
+            let native = rect?.count == 4 ? LabRect(x: rect![0],y: rect![1],width: rect![2],height: rect![3]) : roi
+            let format = UIGraphicsImageRendererFormat(); format.scale = 1
+            let size = EyeMediaExporter.size
+            let annotated = UIGraphicsImageRenderer(size: size,format: format).image { graphics in
+                image.draw(in: CGRect(origin: .zero,size: size))
+                let ctx = graphics.cgContext
+                ctx.translateBy(x: (roi.x-native.x)/native.width*size.width,y: (roi.y-native.y)/native.height*size.height)
+                ctx.scaleBy(x: roi.width/native.width,y: roi.height/native.height)
+                EyeMediaExporter.overlay(ctx,size: size,row: row,result: result,elapsed: row.hostTime-start)
+            }
+            let name = result.eye+"_tracking.png"
+            try annotated.pngData()?.write(to: output.appendingPathComponent(name)); names.append(name)
+        }
+        return names
+    }
+
     static func write(directory: URL,records: [FrameRecord],results: [EyeAnalysis],start: Double) throws -> Int {
         let url = directory.appendingPathComponent("temporary_eye_pixels.bgra")
         let file = try FileHandle(forReadingFrom: url)

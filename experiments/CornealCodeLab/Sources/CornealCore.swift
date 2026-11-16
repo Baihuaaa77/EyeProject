@@ -1,10 +1,13 @@
 import Foundation
 
 enum TrialMode: String, Codable, CaseIterable, Identifiable {
-    case steady, coded, dark, motion, screenTarget, screenBlank
+    case steady, coded, dark, motion, screenTarget, screenBlank, pattern, patternCoded
     var id: String { rawValue }
-    var title: String { switch self { case .steady: return "常亮白点（均值对照）"; case .coded: return "明暗编码白点"; case .dark: return "全黑阴性对照"; case .motion: return "固定注视＋移动光点"; case .screenTarget: return "恒亮全屏＋黑色注视点"; case .screenBlank: return "恒亮全屏（无黑点对照）" } }
+    var title: String { switch self { case .steady: return "常亮白点（均值对照）"; case .coded: return "明暗编码白点"; case .dark: return "全黑阴性对照"; case .motion: return "固定注视＋移动光点（历史）"; case .screenTarget: return "恒亮全屏＋黑色注视点（历史）"; case .screenBlank: return "恒亮全屏（历史对照）"; case .pattern: return "结构图案（常亮）"; case .patternCoded: return "结构图案（明暗编码）" } }
     var isScreen: Bool { self == .screenTarget || self == .screenBlank }
+    var isPattern: Bool { self == .pattern || self == .patternCoded }
+    var usesTemporalCode: Bool { self == .coded || self == .patternCoded }
+    static let available: [TrialMode] = [.pattern,.patternCoded,.coded,.steady,.dark]
 }
 
 struct TrialConfiguration: Codable {
@@ -38,10 +41,15 @@ struct TrialConfiguration: Codable {
     var screenHeightMM: Double = 140
     var screenSizeSource: String = "未识别，使用屏幕尺寸假设"
     var cornealRadiusMM: Double = 7.8
+    var targetPattern: FixationPattern = .ringDot
+    var centerDiameter: Double { mode.isPattern ? dotDiameter*FixationPattern.centerFraction : dotDiameter }
+    static var patternDefault: TrialConfiguration {
+        var c = TrialConfiguration(); c.mode = .pattern; c.dotDiameter = 288; c.dotY = 0.35; c.mean = 1; return c
+    }
     var validationError: String? {
         let values = [dotDiameter,dotY,screenBrightness,mean,modulation,chipSeconds,distanceCM,probeDiameter,motionScale,screenLevel,displayWidth,displayHeight,screenWidthMM,screenHeightMM,cornealRadiusMM]
         guard values.allSatisfy({ $0.isFinite }) else { return "实验参数包含无效数值" }
-        guard (8...160).contains(dotDiameter),(0.1...0.9).contains(dotY),(0.1...1).contains(screenBrightness),
+        guard (8...(mode.isPattern ? 320 : 160)).contains(dotDiameter),(0.1...0.9).contains(dotY),(0.1...1).contains(screenBrightness),
               (0.1...2).contains(chipSeconds),(15...100).contains(distanceCM),(1...3).contains(probeCount),
               (8...160).contains(probeDiameter),(0.1...1.5).contains(motionScale),(0.2...1).contains(screenLevel),
               displayWidth>=200,displayHeight>displayWidth,(0...1).contains(mean),modulation>=0,
@@ -49,12 +57,13 @@ struct TrialConfiguration: Codable {
         guard [30,60].contains(captureFPS),(1...30).contains(exposureMS),exposureMS<=1000/Double(captureFPS),
               exposureISO.isFinite,(20...1600).contains(exposureISO),(64...1024).contains(chipCount),chipCount%64 == 0,
               transitionGuardMS.isFinite,(0...50).contains(transitionGuardMS) else { return "曝光时长须小于帧周期，码元数须为64的倍数，ISO需在20–1600内" }
-        if mode == .coded && (mean-modulation<0 || mean+modulation>1) { return "编码亮度超出 0–100%" }
+        if mode.usesTemporalCode && (mean-modulation<0 || mean+modulation>1) { return "编码亮度超出 0–100%" }
+        if mode.isPattern && (dotDiameter>displayWidth*0.9 || dotY*displayHeight<dotDiameter/2+64 || (1-dotY)*displayHeight<dotDiameter/2+34) { return "图案超出安全显示范围，请缩小图案或向屏幕中央移动" }
         return nil
     }
     var duration: Double { Double(chipCount) * chipSeconds }
     init() {}
-    enum CodingKeys: String, CodingKey { case mode, dotDiameter, dotY, screenBrightness, mean, modulation, chipSeconds, distanceCM, glasses, lighting, reuseExposure, probeCount, colorfulProbes, motionScale, probeDiameter, screenLevel, displayWidth, displayHeight, prefer4K, captureFPS, exposureMS, exposureISO, chipCount, transitionGuardMS, colorCode, automaticDistance, screenWidthMM, screenHeightMM, screenSizeSource, cornealRadiusMM }
+    enum CodingKeys: String, CodingKey { case mode, dotDiameter, dotY, screenBrightness, mean, modulation, chipSeconds, distanceCM, glasses, lighting, reuseExposure, probeCount, colorfulProbes, motionScale, probeDiameter, screenLevel, displayWidth, displayHeight, prefer4K, captureFPS, exposureMS, exposureISO, chipCount, transitionGuardMS, colorCode, automaticDistance, screenWidthMM, screenHeightMM, screenSizeSource, cornealRadiusMM, targetPattern }
     /// 旧轮次缺少运动参数时仍可打开；保留旧强度，不能用新默认值改写旧实验条件。
     init(from decoder: Decoder) throws {
         let v = try decoder.container(keyedBy: CodingKeys.self)
@@ -92,6 +101,7 @@ struct TrialConfiguration: Codable {
         screenHeightMM = try v.decodeIfPresent(Double.self,forKey: .screenHeightMM) ?? 140
         screenSizeSource = try v.decodeIfPresent(String.self,forKey: .screenSizeSource) ?? "旧记录的屏幕尺寸假设"
         cornealRadiusMM = try v.decodeIfPresent(Double.self,forKey: .cornealRadiusMM) ?? 7.8
+        targetPattern = try v.decodeIfPresent(FixationPattern.self,forKey: .targetPattern) ?? .ringDot
     }
 }
 
@@ -118,8 +128,8 @@ enum StimulusCode {
         case .dark: return 0
         case .motion: return 1
         case .screenTarget, .screenBlank: return c.screenLevel
-        case .steady: return c.mean
-        case .coded: return c.mean + c.modulation * value(at: seconds, configuration: c)
+        case .steady,.pattern: return c.mean
+        case .coded,.patternCoded: return c.mean + c.modulation * value(at: seconds, configuration: c)
         }
     }
 }
@@ -214,6 +224,7 @@ struct EyeAnalysis: Codable {
     var subpixelPoint: LabPoint? = nil
     var heldOutSubpixelPoint: LabPoint? = nil
     var opticalPrediction: OpticalPrediction? = nil
+    var tracking: GlintTrackingResult? = nil
 }
 
 enum CornealAnalyzer {

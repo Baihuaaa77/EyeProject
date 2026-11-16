@@ -2,6 +2,11 @@ import Foundation
 import CornealAlgorithms
 
 do {
+    if CommandLine.arguments.count == 5,CommandLine.arguments[1] == "--track-native" {
+        try GlintReplay.run(trial: URL(fileURLWithPath: CommandLine.arguments[2]),nativeDirectory: URL(fileURLWithPath: CommandLine.arguments[3]),output: URL(fileURLWithPath: CommandLine.arguments[4]))
+        print("已使用手机同源算法在原生眼区逐帧复算。")
+        exit(0)
+    }
     guard CommandLine.arguments.count == 3 else {
         throw NSError(domain: "复算",code: 1,userInfo: [NSLocalizedDescriptionKey: "用法：corneal-replay 实验目录 新结果.json"])
     }

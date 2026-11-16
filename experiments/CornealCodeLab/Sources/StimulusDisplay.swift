@@ -12,6 +12,8 @@ final class StimulusDriver: NSObject {
     var onEnd: (() -> Void)?
     private weak var view: UIView?
     private let dot = CALayer()
+    private let patternLayer = CAShapeLayer()
+    private var patternGeometry = ""
     private let probeLayers = (0..<3).map { _ in CALayer() }
     private var link: CADisplayLink?
     private var start: Double?
@@ -24,6 +26,7 @@ final class StimulusDriver: NSObject {
         view.backgroundColor = LabStyle.stimulusBackground
         dot.actions = ["backgroundColor": NSNull(), "position": NSNull(), "bounds": NSNull()]
         view.layer.addSublayer(dot)
+        patternLayer.actions = dot.actions; view.layer.addSublayer(patternLayer); patternGeometry = ""
         // SwiftUI 会重建承载视图；复用的所有图层必须一起迁移，不能留在旧视图上。
         for layer in probeLayers { layer.actions = dot.actions; view.layer.addSublayer(layer) }
         render(StimulusCode.intensity(at: renderedTime,configuration: configuration),time: renderedTime)
@@ -43,7 +46,7 @@ final class StimulusDriver: NSObject {
     }
     func advance(to planned: Double) {
         guard let start = start, planned >= start else {
-            render(configuration.mode == .coded ? configuration.mean : StimulusCode.intensity(at: 0,configuration: configuration)); return
+            render(configuration.mode.usesTemporalCode ? configuration.mean : StimulusCode.intensity(at: 0,configuration: configuration)); return
         }
         let elapsed = planned-start
         if elapsed >= configuration.duration { stop(); render(0); onEnd?(); return }
@@ -66,7 +69,17 @@ final class StimulusDriver: NSObject {
         let probes = moving && intensity>0 ? MotionStimulus.probes(at: time,configuration: configuration,width: Double(view.bounds.width),height: Double(view.bounds.height),topInset: max(64,Double(view.window?.safeAreaInsets.top ?? 0)),bottomInset: max(34,Double(view.window?.safeAreaInsets.bottom ?? 0))) : []
         CATransaction.begin(); CATransaction.setDisableActions(true)
         view.backgroundColor = configuration.mode.isScreen ? UIColor(white: intensity,alpha: 1) : LabStyle.stimulusBackground
-        dot.isHidden = configuration.mode == .screenBlank
+        dot.isHidden = configuration.mode == .screenBlank || configuration.mode.isPattern
+        patternLayer.isHidden = !configuration.mode.isPattern
+        if configuration.mode.isPattern {
+            let center = CGPoint(x: view.bounds.width/2,y: view.bounds.height*configuration.dotY)
+            let key = "\(configuration.targetPattern.rawValue)/\(diameter)/\(center.x)/\(center.y)"
+            if key != patternGeometry {
+                patternLayer.path = FixationPatternDisplay.path(configuration.targetPattern,diameter: diameter,center: center)
+                patternGeometry = key
+            }
+            patternLayer.fillColor = UIColor(white: intensity,alpha: 1).cgColor
+        }
         dot.bounds = CGRect(x: 0,y: 0,width: diameter,height: diameter)
         dot.cornerRadius = diameter/2
         dot.position = CGPoint(x: Double(view.bounds.width)/2,y: Double(view.bounds.height)*configuration.dotY)

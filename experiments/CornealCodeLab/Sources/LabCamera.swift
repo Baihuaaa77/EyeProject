@@ -6,7 +6,7 @@ import QuartzCore
 
 /// 所有采集、像素读取、MediaPipe 与视频写入都在同一个串行队列；缓冲不跨帧持有。
 final class LabCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
-    var onPreview: ((String, Bool, Double?, Double) -> Void)?
+    var onPreview: ((String, Bool, Double?, Double, Double?) -> Void)?
     var onError: ((String) -> Void)?
     private let queue = DispatchQueue(label: "corneal.lab.camera", qos: .userInitiated, autoreleaseFrequency: .workItem)
     private let session = AVCaptureSession()
@@ -43,6 +43,7 @@ final class LabCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
     private var landmarkFresh = true
     private var observers: [NSObjectProtocol] = []
     private var distanceCM: Double?
+    private var irisDiameterPixels: Double?
     private var distanceTime = -Double.infinity
     private var distanceSource = ""
     private var focalLengthPx = 0.0
@@ -359,6 +360,7 @@ final class LabCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
         eyes.sort { $0.0.x<$1.0.x }
         guard eyes.count == 2 else { record("iris_landmarks_unavailable"); preview(pixels,time: host,text: "虹膜关键点不足或闭眼",ready: false); return }
         let focal = DeviceOptics.focal(buffer,device: device,width: width,height: height)
+        irisDiameterPixels = eyes.map { $0.3 }.min()
         focalLengthPx = focal.0; distanceSource = focal.1
         let measured = Double(DepthFromIris.shared.distanceCm(irisDiameterPx: Float(eyes.map { $0.3 }.reduce(0,+)/2),focalLengthPx: Float(focalLengthPx)))
         if measured.isFinite && (15...100).contains(measured) {
@@ -409,7 +411,7 @@ final class LabCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
                 if captureColor { rgb[i*3] = UInt8(max(0,min(255,r))); rgb[i*3+1] = UInt8(max(0,min(255,g))); rgb[i*3+2] = UInt8(max(0,min(255,b))) }
             } }
             let eyelid = eye.2.map { LabPoint(x: ($0.x-rect.x)/w,y: ($0.y-rect.y)/h) }
-            let iris = IrisRegion(center: LabPoint(x: (p.x-rect.x)/w,y: (p.y-rect.y)/h),radiusX: eye.3*0.5/w,radiusY: eye.3*0.5/h,confidence: 1,eyelid: eyelid,
+            let iris = IrisRegion(center: LabPoint(x: (p.x-rect.x)/w,y: (p.y-rect.y)/h),radiusX: eye.3*0.4/w,radiusY: eye.3*0.4/h,confidence: 1,eyelid: eyelid,
                 boundaryRadiusX: eye.3*0.5/w,boundaryRadiusY: eye.3*0.5/h)
             irisCount += 1
             func relative(_ point: Point2f?) -> LabPoint? {
@@ -439,7 +441,7 @@ final class LabCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
     private func preview(_ buffer: CVPixelBuffer, time: Double, text: String, ready: Bool) {
         guard !recording, time-lastPreview > 0.2 else { return }
         lastPreview = time
-        onPreview?(text,ready,time-distanceTime<=0.2 ? distanceCM : nil,time)
+        onPreview?(text,ready,time-distanceTime<=0.2 ? distanceCM : nil,time,ready ? irisDiameterPixels : nil)
     }
 
     private func appendVideo(_ buffer: CMSampleBuffer, width: Int, height: Int, pts: CMTime) {

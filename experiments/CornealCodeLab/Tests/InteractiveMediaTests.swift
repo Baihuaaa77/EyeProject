@@ -4,6 +4,24 @@ import AVFoundation
 @testable import CornealCodeLab
 
 final class InteractiveMediaTests: XCTestCase {
+    @MainActor func testDistinctTargetPreviewsAndBudgetRender() {
+        let ring = FixationPatternDisplay.preview(.ringDot),cross = FixationPatternDisplay.preview(.crossDot)
+        XCTAssertNotEqual(ring.pngData(),cross.pngData())
+        XCTAssertTrue(TrialMode.available.contains(.pattern))
+        XCTAssertFalse(TrialMode.available.contains(.motion))
+        XCTAssertFalse(TrialMode.available.contains(.screenTarget))
+        let content = VStack {
+            HStack { FixationPatternPreview(pattern: .ringDot); FixationPatternPreview(pattern: .crossDot) }
+            PatternSetupView(configuration: .constant(.patternDefault),distance: 20,irisPixels: 150)
+        }.padding().background(LabStyle.background).foregroundStyle(LabStyle.text).preferredColorScheme(.dark)
+        let controller = UIHostingController(rootView: content)
+        let window = UIWindow(frame: CGRect(x: 0,y: 0,width: 375,height: 812)); window.rootViewController = controller; window.makeKeyAndVisible()
+        controller.view.frame = window.bounds; controller.view.layoutIfNeeded()
+        let image = UIGraphicsImageRenderer(size: window.bounds.size).image { graphics in controller.view.layer.render(in: graphics.cgContext) }
+        let attachment = XCTAttachment(image: image); attachment.name = "新注视图案与像素预算"; attachment.lifetime = .keepAlways; add(attachment)
+        window.isHidden = true
+    }
+
     func testInactivePreviewDoesNotReportACaptureFailure() {
         let camera = LabCamera()
         let error = expectation(description: "未开始采集时不显示相机故障"); error.isInverted = true

@@ -45,7 +45,9 @@ enum EyeMediaExporter {
     }
     static func failure(_ message: String) -> NSError { NSError(domain: "EyeMedia",code: 1,userInfo: [NSLocalizedDescriptionKey: message]) }
 
-    static func export(directory: URL,records: [FrameRecord],results: [EyeAnalysis],start: Double,videoStartPTS: Double) throws -> [String] {
+    static func export(directory: URL,records: [FrameRecord],results: [EyeAnalysis],start: Double,videoStartPTS: Double,trackingOnly: Bool = false,outputDirectory: URL? = nil) throws -> [String] {
+        let destination = outputDirectory ?? directory
+        let fullName = trackingOnly ? "camera_tracking.mov" : "camera_overlay.mov"
         let asset = AVURLAsset(url: directory.appendingPathComponent("camera.mov"))
         guard let track = asset.tracks(withMediaType: .video).first else { throw failure("原始视频没有画面轨道") }
         let reader = try AVAssetReader(asset: asset)
@@ -55,10 +57,10 @@ enum EyeMediaExporter {
         for eye in ["image_left","image_right"] {
             qualityRows[eye] = records.filter { $0.eye == nil || $0.eye == eye }.sorted { $0.pts<$1.pts }
             let rows = records.filter { $0.eye == eye && $0.roi != nil }.sorted { $0.pts<$1.pts }
-            if !rows.isEmpty { eyeRows[eye] = rows; writers += try streams(directory: directory,eye: eye) }
+            if !rows.isEmpty && !trackingOnly { eyeRows[eye] = rows; writers += try streams(directory: destination,eye: eye) }
         }
         let fullSize = track.naturalSize
-        writers.append(try stream(directory: directory,name: "camera_overlay.mov",eye: "full",overlay: true,size: fullSize))
+        writers.append(try stream(directory: destination,name: fullName,eye: "full",overlay: true,size: fullSize))
         var complete = false
         defer { if !complete { reader.cancelReading(); writers.forEach { $0.writer.cancelWriting() } } }
         guard reader.startReading() else { throw reader.error ?? failure("无法读取原始视频") }
@@ -130,9 +132,9 @@ enum EyeMediaExporter {
         for stream in writers { stream.input.markAsFinished(); group.enter(); stream.writer.finishWriting { group.leave() } }
         guard group.wait(timeout: .now()+30) == .success,writers.allSatisfy({ $0.writer.status == .completed }) else { throw failure("眼区视频未成功完成") }
         let media: [String:Any] = ["输出尺寸": [640,320],"帧数": frameCounts,"说明": "彩色原图为原视频原生像素裁剪；眼区视频裁剪后放大并以H.264重新编码，不增加光学分辨率。关键点丢失时沿用最近裁剪窗口，隐藏检测叠加。", "参考图与目标时间差秒": bestReference]
-        try JSONSerialization.data(withJSONObject: media,options: [.prettyPrinted,.sortedKeys]).write(to: directory.appendingPathComponent("eye_media.json"))
+        try JSONSerialization.data(withJSONObject: media,options: [.prettyPrinted,.sortedKeys]).write(to: destination.appendingPathComponent(trackingOnly ? "tracking_media.json" : "eye_media.json"))
         complete = true
-        return writers.map { $0.eye == "full" ? "camera_overlay.mov" : $0.eye+($0.overlay ? "_overlay.mov" : "_original.mov") }
+        return writers.map { $0.eye == "full" ? fullName : $0.eye+($0.overlay ? "_overlay.mov" : "_original.mov") }
     }
 
     static func drawFull(on buffer: CVPixelBuffer,rows: [FrameRecord],results: [EyeAnalysis],videoTime: Double,videoStartPTS: Double,start: Double) {
@@ -152,7 +154,16 @@ enum EyeMediaExporter {
             ctx.scaleBy(x: canvasSize.width/CGFloat(row.width),y: canvasSize.height/CGFloat(row.height))
             ctx.translateBy(x: roi.x,y: roi.y)
             ctx.clip(to: CGRect(x: 0,y: 0,width: roi.width,height: roi.height))
-            overlay(ctx,size: CGSize(width: roi.width,height: roi.height),row: row,result: results.first { $0.eye == eye },elapsed: row.hostTime-start)
+            overlay(ctx,size: CGSize(width: roi.width,height: roi.height),row: row,result: results.first { $0.eye == eye },elapsed: row.hostTime-start,includeTracking: false)
+            ctx.restoreGState()
+        }
+        guard let dimensions = rows.first,dimensions.width>0,dimensions.height>0 else { return }
+        for result in results {
+            guard let sample = result.tracking?.nearest(pts: videoStartPTS+videoTime),abs(sample.pts-videoStartPTS-videoTime)<=0.08,
+                  let p = sample.imagePoint else { continue }
+            ctx.saveGState()
+            ctx.scaleBy(x: canvasSize.width/CGFloat(dimensions.width),y: canvasSize.height/CGFloat(dimensions.height))
+            trackingMark(ctx,point: CGPoint(x: p.x,y: p.y),sample: sample,font: LabStyle.overlayFullFont,scale: 2)
             ctx.restoreGState()
         }
     }
@@ -163,7 +174,7 @@ enum EyeMediaExporter {
         ctx.translateBy(x: 0,y: size.height); ctx.scaleBy(x: 1,y: -1)
         overlay(ctx,size: size,row: row,result: result,elapsed: elapsed)
     }
-    static func overlay(_ ctx: CGContext,size: CGSize,row: FrameRecord,result: EyeAnalysis?,elapsed: Double) {
+    static func overlay(_ ctx: CGContext,size: CGSize,row: FrameRecord,result: EyeAnalysis?,elapsed: Double,includeTracking: Bool = true) {
         func ring(_ p: LabPoint,_ radius: Double,_ color: UIColor) {
             ctx.setStrokeColor(color.cgColor); ctx.setLineWidth(2)
             ctx.strokeEllipse(in: CGRect(x: p.x*size.width-radius,y: p.y*size.height-radius,width: radius*2,height: radius*2))
@@ -172,10 +183,19 @@ enum EyeMediaExporter {
             ctx.setStrokeColor(UIColor(LabStyle.primary).cgColor); ctx.setLineWidth(2)
             ctx.strokeEllipse(in: CGRect(x: (iris.center.x-(iris.boundaryRadiusX ?? iris.radiusX))*size.width,y: (iris.center.y-(iris.boundaryRadiusY ?? iris.radiusY))*size.height,width: (iris.boundaryRadiusX ?? iris.radiusX)*2*size.width,height: (iris.boundaryRadiusY ?? iris.radiusY)*2*size.height))
             ctx.setLineDash(phase: 0,lengths: [5,4])
-            ctx.strokeEllipse(in: CGRect(x: (iris.center.x-iris.radiusX)*size.width,y: (iris.center.y-iris.radiusY)*size.height,width: iris.radiusX*2*size.width,height: iris.radiusY*2*size.height))
+            let rx = result?.tracking == nil ? iris.radiusX : (iris.boundaryRadiusX ?? iris.radiusX)*0.8
+            let ry = result?.tracking == nil ? iris.radiusY : (iris.boundaryRadiusY ?? iris.radiusY)*0.8
+            ctx.strokeEllipse(in: CGRect(x: (iris.center.x-rx)*size.width,y: (iris.center.y-ry)*size.height,width: rx*2*size.width,height: ry*2*size.height))
             ctx.setLineDash(phase: 0,lengths: [])
         }
         if let pupil = row.baselinePupil { ring(pupil,3,UIColor(LabStyle.landmark)) }
+        if let tracking = result?.tracking {
+            if includeTracking,let sample = tracking.nearest(hostTime: row.hostTime),abs(sample.hostTime-row.hostTime)<=0.08,
+               let p = sample.imagePoint,let roi = row.roi {
+                trackingMark(ctx,point: CGPoint(x: (p.x-roi.x)/roi.width*size.width,y: (p.y-roi.y)/roi.height*size.height),sample: sample,font: LabStyle.overlayFont)
+            }
+            return
+        }
         if let point = row.rawCandidate { ring(point,6,UIColor(LabStyle.baseline)) }
         if let screen = result?.screenResult,let observation = screen.observations.min(by: { abs($0.hostTime-row.hostTime)<abs($1.hostTime-row.hostTime) }),abs(observation.hostTime-row.hostTime)<=0.12 {
             ctx.setStrokeColor(UIColor(LabStyle.candidate).cgColor); ctx.setLineWidth(2)
@@ -195,5 +215,19 @@ enum EyeMediaExporter {
         } else if result?.codingApplied == true,let point = result?.point,row.iris?.contains(point) == true {
             ring(point,10,UIColor(result?.codedEvidence == true ? LabStyle.coded : LabStyle.candidate))
         }
+    }
+
+    static func trackingMark(_ ctx: CGContext,point: CGPoint,sample: GlintEstimate,font: UIFont,scale: CGFloat = 1) {
+        let color = UIColor(sample.source == .observed ? LabStyle.coded : sample.source == .weak ? LabStyle.candidate : sample.source == .predicted ? LabStyle.baseline : LabStyle.secondary)
+        ctx.saveGState(); defer { ctx.restoreGState() }
+        ctx.setStrokeColor(color.cgColor); ctx.setLineWidth(2*scale)
+        if !sample.source.measured { ctx.setLineDash(phase: 0,lengths: [4*scale,3*scale]) }
+        let radius: CGFloat = 6*scale
+        ctx.strokeEllipse(in: CGRect(x: point.x-radius,y: point.y-radius,width: radius*2,height: radius*2))
+        ctx.setLineDash(phase: 0,lengths: [])
+        let title = "\(sample.source.title) \(String(format: "%.2f",sample.confidence))"
+        UIGraphicsPushContext(ctx)
+        (title as NSString).draw(at: CGPoint(x: point.x+radius+4,y: point.y-radius-font.pointSize),withAttributes: [.font:font,.foregroundColor:color,.backgroundColor:UIColor(LabStyle.background)])
+        UIGraphicsPopContext()
     }
 }

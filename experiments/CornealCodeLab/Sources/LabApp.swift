@@ -45,7 +45,7 @@ struct LabRootView: View {
     private var setup: some View {
         Form {
             Section {
-                Text("屏幕白点 → 前摄眼区 → 映光定位").font(LabStyle.title)
+                Text("注视图案 → 前摄眼区 → 映光核查").font(LabStyle.title)
                 Text("验证光学信号，不输出斜视诊断。采集时点屏幕任意位置停止。").font(LabStyle.detail)
             }
             Section("实验清单") {
@@ -70,32 +70,27 @@ struct LabRootView: View {
                     model.configuration.chipSeconds = fast ? 0.1 : 0.5; model.configuration.chipCount = fast ? 320 : 64
                     model.configuration.transitionGuardMS = fast ? 40 : 0
                 }))
-                Toggle("红绿差通道编码（需实测色亮度）",isOn: $model.configuration.colorCode)
+                if !model.configuration.mode.isPattern { Toggle("红绿差通道编码（需实测色亮度）",isOn: $model.configuration.colorCode) }
                 Picker("照明",selection: $model.configuration.mode) {
-                    ForEach(TrialMode.allCases) { mode in Text(mode.title).tag(mode) }
+                    ForEach(TrialMode.available) { mode in Text(mode.title).tag(mode) }
+                }.onChange(of: model.configuration.mode) { mode in
+                    if mode.isPattern {
+                        if model.configuration.dotDiameter<192 { model.configuration.dotDiameter = 288 }
+                        if model.configuration.dotY<0.25 { model.configuration.dotY = 0.35 }
+                        model.configuration.colorCode = false
+                    } else { model.configuration.dotDiameter = min(160,model.configuration.dotDiameter) }
+                    model.configuration.mean = mode.usesTemporalCode ? 1-model.configuration.modulation : 1
                 }
-                Picker("固定注视点直径",selection: $model.configuration.dotDiameter) {
-                    ForEach([16.0,32,64,96,128,160],id: \.self) { Text("\(Int($0)) pt").tag($0) }
+                Picker(model.configuration.mode.isPattern ? "图案外径" : "固定注视点直径",selection: $model.configuration.dotDiameter) {
+                    ForEach(model.configuration.mode.isPattern ? [192.0,256,288,320] : [16.0,32,64,96,128,160],id: \.self) { Text("\(Int($0)) pt").tag($0) }
                 }
                 Picker("固定注视点位置",selection: $model.configuration.dotY) {
-                    Text("上方，靠近前摄").tag(0.15); Text("上四分之一").tag(0.25); Text("屏幕中央").tag(0.50)
+                    if !model.configuration.mode.isPattern { Text("上方，靠近前摄").tag(0.15) }; Text("上四分之一").tag(0.25); Text("上部居中").tag(0.35); Text("屏幕中央").tag(0.50)
                 }
-                if model.configuration.mode == .motion {
-                    Picker("移动光点直径",selection: $model.configuration.probeDiameter) {
-                        ForEach([16.0,32,64,96],id: \.self) { Text("\(Int($0)) pt").tag($0) }
-                    }
-                    Stepper("移动光点 \(model.configuration.probeCount) 个",value: $model.configuration.probeCount,in: 1...3)
-                    Toggle("移动光点使用红 / 绿 / 蓝",isOn: $model.configuration.colorfulProbes)
-                    Picker("移动范围",selection: $model.configuration.motionScale) {
-                        Text("小").tag(0.5); Text("标准").tag(1.0); Text("大").tag(1.3)
-                    }
-                    Text("始终盯住静止的小白点。其他光点在外围移动，不要追看；固定点与移动点的直径分别由上方设置决定。").font(LabStyle.detail)
-                } else if model.configuration.mode.isScreen {
-                    Picker("全屏恒亮灰度",selection: $model.configuration.screenLevel) {
-                        Text("50%").tag(0.5); Text("70%").tag(0.7); Text("100%").tag(1.0)
-                    }
-                    Text(model.configuration.mode == .screenTarget ? "全屏恒亮，盯住黑点。先匹配屏幕轮廓，再检查内部暗圆斑；小黑点可能无法在原始像素中分辨。" : "全屏恒亮但不画黑点。保持上一轮视线，检查算法是否把环境暗纹误认成黑点。").font(LabStyle.detail)
-                } else if model.configuration.mode == .coded || model.configuration.mode == .steady {
+                if model.configuration.mode.isPattern {
+                    PatternSetupView(configuration: $model.configuration,distance: model.measuredDistanceCM,irisPixels: model.measuredIrisPixels)
+                }
+                if model.configuration.mode.usesTemporalCode || model.configuration.mode == .steady {
                     Picker("明暗变化",selection: Binding(get: { model.configuration.modulation },set: { value in
                         model.configuration.modulation = value
                         model.configuration.mean = value == 0.15 ? 0.8 : 1-value
@@ -116,7 +111,7 @@ struct LabRootView: View {
             }
             .disabled(model.experimentPlan != nil)
             Section("3 · 采集") {
-                Text("先比较明暗编码与均值常亮对照。运动验证先用一个白色移动点，再试多个点和彩色点。每轮 32 秒，开始前 2.5 秒恒亮预适应。").font(LabStyle.detail)
+                Text("先试常亮图案，始终看中心点；外围缺口或短尾用于辨认结构。可切换图案明暗编码作时序核查。每轮32秒，开始前2.5秒预适应。").font(LabStyle.detail)
                 if let issue = model.configuration.validationError { Text(issue).foregroundStyle(LabStyle.candidate) }
                 Button("开始 \(model.configuration.mode.title)",action: model.begin).disabled(!model.cameraReady || model.configuration.validationError != nil)
                 Text("成人先做短时台架验证。编码仅改变小点灰度，码元速率由上方设置；如感到不适，立即点屏幕停止。实验数据只保存在本机。").font(LabStyle.detail)
@@ -129,7 +124,7 @@ struct LabRootView: View {
                         VStack(alignment: .leading) {
                             Text("\(trial.configuration.mode.title) · \(Int(trial.configuration.dotDiameter)) pt")
                             Text(trial.date.formatted(date: .abbreviated,time: .shortened)).font(LabStyle.detail)
-                            Text(trial.stoppedEarly ? "提前停止，不计完整对照" : trial.configuration.mode.isScreen ? "\(trial.results.filter { $0.screenResult?.structuralEvidence == true }.count) 眼区通过空间模板检查" : "\(trial.results.filter(\.codedEvidence).count) 眼区通过编码独立验证").font(LabStyle.detail)
+                            Text(trial.statusTitle).font(LabStyle.detail)
                         }
                     }
                 }
@@ -143,17 +138,23 @@ struct TrialResultView: View {
     @ObservedObject var model: LabModel
     private var directory: URL { model.root.appendingPathComponent(trial.id) }
     var body: some View {
+        let trial = model.saved.first { $0.id == self.trial.id } ?? self.trial
         ScrollView {
             VStack(alignment: .leading,spacing: 20) {
                 Text(trial.configuration.mode.title).font(LabStyle.title)
                 Text("\(Int(trial.configuration.dotDiameter)) pt · \(trial.configuration.automaticDistance ? "自动" : "记录")距离 \(String(format: "%.1f",trial.configuration.distanceCM)) cm · \(trial.configuration.glasses) · \(trial.configuration.lighting)").font(LabStyle.detail)
                 if trial.stoppedEarly { Text("本轮提前停止，不作为完整条件比较。").foregroundStyle(LabStyle.candidate) }
                 ForEach(trial.eligibilityNotes,id: \.self) { Text($0).foregroundStyle(LabStyle.candidate) }
-                InteractiveMovieView(directory: directory,trial: trial)
+                InteractiveMovieView(directory: directory,trial: trial).id(trial.algorithmVersion)
+                if !trial.configuration.mode.isScreen && trial.results.allSatisfy({ $0.tracking == nil }) {
+                    Button("用原视频逐帧重新分析") { model.reanalyze(trial) }.buttonStyle(.bordered).frame(minHeight: 44).disabled(model.reanalyzing)
+                }
+                if model.reanalyzing { ProgressView("正在配准、双向跟踪并生成可视化视频") }
                 HStack {
                     Button("导出原视频") { model.shareFile(trial,name: "camera.mov") }
-                    if FileManager.default.fileExists(atPath: directory.appendingPathComponent("camera_overlay.mov").path) {
-                        Button("导出可视化视频") { model.shareFile(trial,name: "camera_overlay.mov") }
+                    let visualized = FileManager.default.fileExists(atPath: directory.appendingPathComponent("camera_tracking.mov").path) ? "camera_tracking.mov" : "camera_overlay.mov"
+                    if FileManager.default.fileExists(atPath: directory.appendingPathComponent(visualized).path) {
+                        Button("导出可视化视频") { model.shareFile(trial,name: visualized) }
                     }
                 }.buttonStyle(.bordered).frame(minHeight: 44)
                 VStack(alignment: .leading,spacing: 8) {
@@ -170,8 +171,11 @@ struct TrialResultView: View {
                             Text("分析采样图（旧记录或彩色资料尚未生成）").font(LabStyle.detail)
                             Image(uiImage: image).resizable().interpolation(.none).aspectRatio(2,contentMode: .fit)
                         }
-                        Text(eye.message).font(LabStyle.body)
                         if let prediction = eye.opticalPrediction { OpticalEvidenceView(prediction: prediction) }
+                        if let tracking = eye.tracking {
+                            GlintTrackingView(result: tracking)
+                        } else {
+                        Text(eye.message).font(LabStyle.body)
                         Text("有效眼区 \(eye.samples) 帧 · 基础亮点候选率 \(Int(eye.rawCandidateRate*100))%").font(LabStyle.detail)
                         if let coverage = eye.validFrameCoverage { Text("有效眼区占已分析帧 \(Int(coverage*100))%").font(LabStyle.detail) }
                         if let screen = eye.screenResult {
@@ -201,10 +205,11 @@ struct TrialResultView: View {
                             Text("局部高通信号与编码参考（分别归一化）").font(LabStyle.subheading)
                             SignalView(signal: eye.traceSignal,code: eye.traceCode,time: eye.traceTime,duration: trial.configuration.duration).frame(height: 100)
                         }
+                        }
                     }.padding().background(LabStyle.background).clipShape(RoundedRectangle(cornerRadius: LabStyle.radius))
                 }
-                Text("新实验使用完整虹膜搜索与共享光学算法；旧记录保留当时范围。放大图片和视频不增加原始光学分辨率。").font(LabStyle.detail)
-                Text("叠加图：橙色为虹膜边界，虚线为搜索范围；青色为瞳孔/虹膜参考中心，黄色为主 App 基础映光候选；绿色大圈为通过编码验证的候选，橙色大圈为未通过的候选。仍须人工确认角膜来源。").font(LabStyle.detail)
+                Text("新跟踪搜索虹膜半径80%与眼睑的交集。坐标属于相机图像；需要额外标定才能推算屏幕注视位置。放大不增加光学分辨率。").font(LabStyle.detail)
+                Text(trial.results.contains(where: { $0.tracking != nil }) ? "跟踪叠加：实线圆为图像观测或弱观测，虚线圆为预测或无可靠观测；文字标明状态与质量分。绿色表示定位质量较高，不等同于通过光码验证。" : "旧版叠加：橙色虹膜边界，虚线搜索范围，青色中心，黄色基础候选；大圈表示旧版验证结果。").font(LabStyle.detail)
                 DisclosureGroup("参数与判定边界") {
                     Text("运动轮：仅前半段选择轨迹、空间映射与延迟，固定参数验证后半段。增益为相对仅含眼动/头动模型的误差下降比例，要求前半段≥0.45、后半段≥0.30、比错轨迹高0.20、位移≥0.18采样像素、覆盖≥60%，并排除严重运动混杂。明暗轮：只用前半段选择位置与延迟，固定后在后半段验证。参考门槛：前半段 r≥0.35、后半段 r≥0.30、后半段比错码至少高 0.15，局部响应≥0.5 灰度级。这些是工程门槛，不是经临床验证的阈值。延迟不是纯硬件延迟。").font(LabStyle.detail)
                     Text((try? String(contentsOf: directory.appendingPathComponent("camera.json"),encoding: .utf8)) ?? "无相机参数").font(LabStyle.code)
@@ -236,7 +241,8 @@ struct EyeMediaSection: View {
     var body: some View {
         VStack(alignment: .leading,spacing: 10) {
             Picker("彩色资料",selection: $annotated) { Text("彩色原始内容").tag(false); Text("检测结果叠加").tag(true) }.pickerStyle(.segmented)
-            let suffix = annotated ? "_overlay" : "_original"
+            let overlayName = FileManager.default.fileExists(atPath: directory.appendingPathComponent(eye+"_tracking.png").path) ? "_tracking" : "_overlay"
+            let suffix = annotated ? overlayName : "_original"
             if let image = UIImage(contentsOfFile: directory.appendingPathComponent(eye+suffix+".png").path) {
                 Text(annotated ? "彩色原图上的检测结果" : (nativeSnapshot ? "眼部彩色原图（相机原生像素、无损PNG）" : "原视频彩色帧（眼区裁剪）")).font(LabStyle.detail)
                 EyePhotoView(image: image)
@@ -244,10 +250,10 @@ struct EyeMediaSection: View {
             }
             let enlarged = eye+"_enlarged.png"
             Button("导出放大眼部图片") { shareFile(FileManager.default.fileExists(atPath: directory.appendingPathComponent(enlarged).path) ? enlarged : eye+"_original.png") }.buttonStyle(.bordered).frame(minHeight: 44)
-            Button("导出眼部可视化图片") { shareFile(eye+"_overlay.png") }.buttonStyle(.bordered).frame(minHeight: 44)
+            Button("导出眼部可视化图片") { shareFile(eye+overlayName+".png") }.buttonStyle(.bordered).frame(minHeight: 44)
             DisclosureGroup("眼区视频导出") {
                 Button("导出眼区原内容视频") { shareFile(eye+"_original.mov") }.frame(minHeight: 44)
-                Button("导出眼区可视化视频") { shareFile(eye+"_overlay.mov") }.frame(minHeight: 44)
+                Button("导出眼区可视化视频（采集时版本）") { shareFile(eye+"_overlay.mov") }.frame(minHeight: 44)
             }
         }
     }
@@ -261,6 +267,10 @@ struct OpticalEvidenceView: View {
             Text("光学尺寸核查").font(LabStyle.subheading)
             Text("自动距离 \(number(prediction.distanceCM)) cm · 光点直径约 \(number(prediction.stimulusDiameterMM)) mm").font(LabStyle.detail)
             Text("预测反射直径 \(number(prediction.expectedDiameterPixels)) px（\(number(prediction.expectedMinPixels))–\(number(prediction.expectedMaxPixels))）").font(LabStyle.body)
+            if let pattern = prediction.expectedPatternDiameterPixels {
+                Text("上方尺寸指中心点；整个图案预计外径 \(number(pattern)) px，细线约 \(number(pattern*0.16)) px").font(LabStyle.detail)
+                if let observed = prediction.matchedPatternDiameterPixels { Text("模板匹配外径中位数 \(number(observed)) px").font(LabStyle.detail) }
+            }
             if let observed = prediction.observedDiameterPixels {
                 Text("候选等效直径 \(number(observed)) px · 预测的 \(number(prediction.observedToExpected ?? 0)) 倍").font(LabStyle.detail)
             }

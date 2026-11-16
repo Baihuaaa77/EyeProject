@@ -28,7 +28,7 @@ enum TrialDataExport {
         do {
             let header: [String:Any] = ["format":"corneal-lab-bundle-1","documents":documents,
                 "pixelEncoding":"base64","includesPixels":includePixels,
-                "说明":"结构化数据合为一个JSON；完整文件内嵌原始分析像素，可无损恢复。视频与PNG由各自按钮单独分享。"]
+                "说明":"结构化数据含逐帧跟踪合为一个JSON；完整文件内嵌原128×64分析像素，可无损恢复。原生分辨率跟踪复算还需单独导出的camera.mov；视频与PNG由各自按钮分享。"]
             var bytes = try JSONSerialization.data(withJSONObject: header,options: [.sortedKeys])
             bytes.removeLast()
             try file.write(contentsOf: bytes); try file.write(contentsOf: Data(",\"binaryFiles\":{".utf8))

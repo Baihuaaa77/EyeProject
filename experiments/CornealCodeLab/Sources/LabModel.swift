@@ -11,19 +11,30 @@ struct TrialSummary: Codable, Identifiable {
     var stoppedEarly: Bool
     var results: [EyeAnalysis]
     var frameRecords: Int
-    var algorithmVersion: String = "corneal-feasibility-6-distance-full-iris"
+    var algorithmVersion: String = "corneal-tracking-7-iris80-temporal"
     var eligibilityNotes: [String] = []
     var eyeMediaFiles: [String]? = nil
     var nativeSnapshots: Bool? = nil
     var planOrder: Int? = nil
     var planSeed: Int? = nil
+    var statusTitle: String {
+        if stoppedEarly { return "提前停止，不计完整对照" }
+        if results.contains(where: { $0.tracking != nil }) {
+            if configuration.mode.isPattern { return "\(results.reduce(0) { $0+($1.tracking?.patternMatchedFrames ?? 0) }) 个眼区帧支持图案结构" }
+            if configuration.mode.usesTemporalCode { return "\(results.filter { $0.tracking?.codeVerified == true }.count) 眼区通过编码时序核查" }
+            return "已生成逐帧轨迹与质量记录"
+        }
+        if configuration.mode.isScreen { return "\(results.filter { $0.screenResult?.structuralEvidence == true }.count) 眼区通过历史空间模板检查" }
+        return "\(results.filter(\.codedEvidence).count) 眼区通过历史编码验证"
+    }
 }
 
 final class LabModel: ObservableObject {
     enum Phase { case setup, warming, recording, analyzing }
-    @Published var configuration = TrialConfiguration()
+    @Published var configuration = TrialConfiguration.patternDefault
     @Published var phase = Phase.setup
     @Published var measuredDistanceCM: Double?
+    @Published var measuredIrisPixels: Double?
     @Published var cameraStatus = "先准备相机，检查双眼是否清晰"
     @Published var cameraReady = false
     @Published var error: String?
@@ -32,6 +43,7 @@ final class LabModel: ObservableObject {
     @Published var shareURLs: [URL] = []
     @Published var showingShare = false
     @Published var exporting = false
+    @Published var reanalyzing = false
     let driver = StimulusDriver()
     private let camera = LabCamera()
     private var warmupTask: DispatchWorkItem?
@@ -50,8 +62,8 @@ final class LabModel: ObservableObject {
 
     var root: URL { FileManager.default.urls(for: .documentDirectory,in: .userDomainMask)[0].appendingPathComponent("CornealCodeLab",isDirectory: true) }
     init() {
-        camera.onPreview = { [weak self] status,ready,distance,time in DispatchQueue.main.async {
-            self?.cameraStatus = status; self?.cameraReady = ready; self?.measuredDistanceCM = distance; self?.distanceTimestamp = time
+        camera.onPreview = { [weak self] status,ready,distance,time,iris in DispatchQueue.main.async {
+            self?.cameraStatus = status; self?.cameraReady = ready; self?.measuredDistanceCM = distance; self?.distanceTimestamp = time; self?.measuredIrisPixels = iris
         } }
         camera.onError = { [weak self] error in DispatchQueue.main.async { self?.fail(error) } }
         driver.onEnd = { [weak self] in self?.stop(early: false) }
@@ -65,6 +77,7 @@ final class LabModel: ObservableObject {
         do {
             let data = try Data(contentsOf: url); guard data.count<=2_000_000 else { throw ExperimentPlan.PlanError.invalid }
             let plan = try JSONDecoder().decode(ExperimentPlan.self,from: data); try plan.validate()
+            guard plan.rounds.allSatisfy({ TrialMode.available.contains($0.configuration.mode) }) else { throw ExperimentPlan.PlanError.invalid }
             experimentPlan = plan; planIndex = 0; applyPlanRound(); try savePlan()
         } catch { self.error = "实验清单无法读取或参数无效："+error.localizedDescription }
     }
@@ -78,15 +91,16 @@ final class LabModel: ObservableObject {
     }
     private func restorePlan() {
         guard let data = try? Data(contentsOf: planURL),let progress = try? JSONDecoder().decode(PlanProgress.self,from: data),
-              (try? progress.plan.validate()) != nil,progress.index>=0,progress.index<=progress.plan.rounds.count else { return }
+              (try? progress.plan.validate()) != nil,progress.plan.rounds.allSatisfy({ TrialMode.available.contains($0.configuration.mode) }),progress.index>=0,progress.index<=progress.plan.rounds.count else { return }
         experimentPlan = progress.plan; planIndex = progress.index; applyPlanRound()
     }
     func leavePlan() { experimentPlan = nil; planIndex = 0; try? FileManager.default.removeItem(at: planURL) }
 
-    func prepare() { guard phase == .setup else { return }; error = nil; cameraReady = false; preparedConfig = configuration; camera.prepare(reuseExposure: configuration.reuseExposure,configuration: configuration) }
+    func prepare() { guard phase == .setup,!reanalyzing else { return }; error = nil; cameraReady = false; preparedConfig = configuration; camera.prepare(reuseExposure: configuration.reuseExposure,configuration: configuration) }
 
     func begin() {
-        guard phase == .setup, cameraReady else { return }
+        guard phase == .setup, cameraReady,!reanalyzing else { return }
+        guard TrialMode.available.contains(configuration.mode) else { error = "该模式已移除，仅可查看历史记录"; return }
         guard let measuredDistance = measuredDistanceCM,labHostTime()-distanceTimestamp<0.6 else { error = "自动测距尚未稳定，请正对相机并重新检查双眼"; return }
         if let plan = experimentPlan,planIndex>=plan.rounds.count { error = "实验清单已完成"; return }
         if let issue = configuration.validationError { error = issue; return }
@@ -154,12 +168,16 @@ final class LabModel: ObservableObject {
             self?.camera.stop()
             DispatchQueue.global(qos: .userInitiated).async {
                 do {
+                    let raw = try Data(contentsOf: directory.appendingPathComponent("temporary_eye_pixels.bgra"),options: .mappedIfSafe)
+                    let tracks = config.mode.isScreen ? [] : NativeGlintTracking.track(records: records,pixels: raw,bytesPerPixel: 4,configuration: config,events: events,start: start)
                     let results = ["image_left","image_right"].map { eye -> EyeAnalysis in
                         var result = CornealAnalyzer.analyze(eye: eye,samples: samples,events: events,start: start,configuration: config)
                         let analyzed = records.filter { $0.status != "not_analyzed" && ($0.eye == nil || $0.eye == eye) }
                         let delivered = Set(analyzed.map(\.index)).count
                         result.validFrameCoverage = Double(result.samples)/Double(max(1,delivered))
                         result.rejectionCounts = Dictionary(grouping: analyzed.filter { $0.status != "valid" },by: \.status).mapValues(\.count)
+                        result.tracking = tracks.first { $0.eye == eye }
+                        if let reference = result.tracking?.frames.filter({ $0.source == .observed }).max(by: { $0.confidence<$1.confidence }) { result.referenceHostTime = reference.hostTime }
                         result.opticalPrediction = OpticalPrediction.build(eye: eye,records: records,configuration: config,result: result)
                         return result
                     }
@@ -179,6 +197,7 @@ final class LabModel: ObservableObject {
                     if (brightness.max() ?? 0)-(brightness.min() ?? 0)>0.03 { summary.eligibilityNotes.append("采集期间系统屏幕亮度有变化") }
                     let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted,.sortedKeys]; encoder.dateEncodingStrategy = .iso8601
                     try encoder.encode(events).write(to: directory.appendingPathComponent("display_events.json"))
+                    if !tracks.isEmpty { try encoder.encode(tracks).write(to: directory.appendingPathComponent("glint_tracks.json")) }
                     let rowEncoder = JSONEncoder()
                     let rows = try records.map { record -> String in
                         var row = record; row.nativeOffset = nil
@@ -197,7 +216,8 @@ final class LabModel: ObservableObject {
                     let exposures = records.map(\.exposureSeconds),isoValues = records.map { Double($0.iso) }
                     if let lo = exposures.min(),let hi = exposures.max(),hi-lo>max(0.0001,lo*0.03) { summary.eligibilityNotes.append("采集期间曝光时间发生变化") }
                     if let lo = isoValues.min(),let hi = isoValues.max(),hi-lo>max(1,lo*0.03) { summary.eligibilityNotes.append("采集期间 ISO 发生变化") }
-                    metadata["geometryVersion"] = "完整虹膜搜索 / 原生像素 / 自动虹膜测距 v6"
+                    metadata["geometryVersion"] = "80%虹膜半径与眼睑交集 / 原生像素 / 双向时序关联 v7"
+                    metadata["trackingPixelSource"] = "相机原生BGRA眼区，录像结束后分析，不占采集回调"
                     metadata["clock"] = "camera PTS converted from session masterClock to host clock; CADisplayLink targetTimestamp + host offset"
                     metadata["timingLimit"] = "No photodiode measurement; lag includes display/camera/ISP timing and rolling shutter."
                     metadata["detector"] = "MediaPipeTasksVision 1.0.0 / 主App相同模型、EyeCamera配置、LandmarkGeometry与EyeOpticalAlgorithm"
@@ -250,6 +270,50 @@ final class LabModel: ObservableObject {
         let directory = root.appendingPathComponent(trial.id)
         shareURLs = (try? FileManager.default.contentsOfDirectory(at: directory,includingPropertiesForKeys: nil)) ?? []
         showingShare = true
+    }
+    func reanalyze(_ trial: TrialSummary) {
+        guard !reanalyzing,phase == .setup,!trial.configuration.mode.isScreen else { return }
+        reanalyzing = true; error = nil
+        let directory = root.appendingPathComponent(trial.id)
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let stage = directory.appendingPathComponent("tracking-"+UUID().uuidString,isDirectory: true)
+            defer { try? FileManager.default.removeItem(at: stage) }
+            do {
+                try FileManager.default.createDirectory(at: stage,withIntermediateDirectories: false)
+                let decoder = JSONDecoder()
+                let records = try String(contentsOf: directory.appendingPathComponent("frames.jsonl"),encoding: .utf8).split(whereSeparator: \.isNewline).map { try decoder.decode(FrameRecord.self,from: Data($0.utf8)) }
+                let events = try decoder.decode([DisplayEvent].self,from: Data(contentsOf: directory.appendingPathComponent("display_events.json")))
+                let camera = try JSONSerialization.jsonObject(with: Data(contentsOf: directory.appendingPathComponent("camera.json"))) as? [String:Any]
+                let videoStart = camera?["videoStartPTS"] as? Double ?? records.first?.pts ?? 0
+                let pixelsURL = stage.appendingPathComponent("eyes.u8")
+                let nativeRows = try VideoGlintTracking.prepare(directory: directory,records: records,videoStartPTS: videoStart,output: pixelsURL)
+                let pixels = try Data(contentsOf: pixelsURL,options: .mappedIfSafe)
+                let tracks = NativeGlintTracking.track(records: nativeRows,pixels: pixels,bytesPerPixel: 1,configuration: trial.configuration,events: events,start: trial.startHostTime)
+                var updated = trial
+                for i in updated.results.indices {
+                    updated.results[i].tracking = tracks.first { $0.eye == updated.results[i].eye }
+                    updated.results[i].opticalPrediction = OpticalPrediction.build(eye: updated.results[i].eye,records: records,configuration: trial.configuration,result: updated.results[i])
+                }
+                var files = try EyeMediaExporter.export(directory: directory,records: records,results: updated.results,start: trial.startHostTime,videoStartPTS: videoStart,trackingOnly: true,outputDirectory: stage)
+                files += try NativeEyeSnapshots.annotateExisting(directory: directory,records: records,results: updated.results,start: trial.startHostTime,output: stage)
+                let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]; encoder.dateEncodingStrategy = .iso8601
+                try encoder.encode(tracks).write(to: stage.appendingPathComponent("glint_tracks.json"))
+                let provenance: [String:Any] = ["source":"camera.mov原生眼区解码，含原有H.264压缩","searchRadiusFraction":0.8,"algorithm":"corneal-tracking-7-iris80-temporal","说明":"原始帧日志与旧检测字段保留；时序结果单列，不能用逐帧坐标覆盖率代替检出率。"]
+                try JSONSerialization.data(withJSONObject: provenance,options: [.sortedKeys]).write(to: stage.appendingPathComponent("tracking_source.json"))
+                if !FileManager.default.fileExists(atPath: directory.appendingPathComponent("summary_before_tracking.json").path) {
+                    try FileManager.default.copyItem(at: directory.appendingPathComponent("summary.json"),to: directory.appendingPathComponent("summary_before_tracking.json"))
+                }
+                for name in files+["glint_tracks.json","tracking_source.json","tracking_media.json"] {
+                    let target = directory.appendingPathComponent(name)
+                    if FileManager.default.fileExists(atPath: target.path) { try FileManager.default.removeItem(at: target) }
+                    try FileManager.default.moveItem(at: stage.appendingPathComponent(name),to: target)
+                }
+                updated.algorithmVersion = "corneal-tracking-7-iris80-temporal"
+                updated.eyeMediaFiles = Array(Set((updated.eyeMediaFiles ?? [])+files)).sorted()
+                try encoder.encode(updated).write(to: directory.appendingPathComponent("summary.json"),options: .atomic)
+                DispatchQueue.main.async { self?.reanalyzing = false; self?.selected = updated; self?.loadSaved() }
+            } catch { DispatchQueue.main.async { self?.reanalyzing = false; self?.error = "逐帧复算失败："+error.localizedDescription } }
+        }
     }
     func shareFile(_ trial: TrialSummary,name: String) {
         let file = root.appendingPathComponent(trial.id).appendingPathComponent(name)

@@ -5,6 +5,21 @@ import UIKit
 @testable import CornealCodeLab
 
 final class EyeMediaTests: XCTestCase {
+    func testPerFramePredictionUsesVideoPTSWithDifferentHostClockAndRejectedROI() throws {
+        let row = FrameRecord(index: 0,pts: 900,hostTime: 500,exposureSeconds: 0.01,iso: 100,width: 200,height: 100,status: "iris_landmarks_unavailable")
+        let sample = GlintEstimate(frameIndex: 0,pts: 900,hostTime: 500,imagePoint: LabPoint(x: 70,y: 50),confidence: 0.15,source: .predicted,uncertaintyPixels: 3,ambiguity: 1)
+        var eye = CornealAnalyzer.analyze(eye: "image_left",samples: [],events: [],start: 500,configuration: TrialConfiguration())
+        eye.tracking = .make(eye: "image_left",frames: [sample])
+        let format = UIGraphicsImageRendererFormat(); format.scale = 1
+        func render(_ time: Double,_ results: [EyeAnalysis]) -> UIImage {
+            UIGraphicsImageRenderer(size: CGSize(width: 200,height: 100),format: format).image { graphics in
+                EyeMediaExporter.fullOverlay(graphics.cgContext,canvasSize: CGSize(width: 200,height: 100),rows: [row],results: results,videoTime: time,videoStartPTS: 900,start: 500)
+            }
+        }
+        XCTAssertNotEqual(render(0,[eye]).pngData(),render(0,[]).pngData())
+        XCTAssertEqual(render(0.2,[eye]).pngData(),render(0.2,[]).pngData())
+    }
+
     func testFullFrameOverlayMapsEyeROIAndHidesRejectedOrStaleRows() throws {
         var row = FrameRecord(index: 0,pts: 900,hostTime: 500,exposureSeconds: 0.01,iso: 100,width: 200,height: 100,status: "valid",eye: "image_left",
             roi: LabRect(x: 50,y: 20,width: 40,height: 20),baselinePupil: LabPoint(x: 0.5,y: 0.5))
@@ -82,6 +97,16 @@ final class EyeMediaTests: XCTestCase {
             XCTAssertEqual(times.count,sourceTimes.count,"\(file) 原片:\(sourceTimes) 派生:\(times)")
             for (a,b) in zip(times,sourceTimes) { XCTAssertEqual(a,b,accuracy: 0.001,file) }
         }
+        let nativeURL = directory.appendingPathComponent("replay.u8")
+        let nativeRows = try VideoGlintTracking.prepare(directory: directory,records: records,videoStartPTS: 900,output: nativeURL)
+        XCTAssertEqual(nativeRows.count,records.count)
+        let native = try Data(contentsOf: nativeURL)
+        XCTAssertEqual(native.count,records.count*32*16)
+        XCTAssertEqual(nativeRows.first?.nativeROI?.x,16)
+        XCTAssertEqual(nativeRows.first?.nativeROI?.y,4)
+        XCTAssertLessThanOrEqual(abs(Int(native[0])-70),5)
+        XCTAssertLessThanOrEqual(abs(Int(native[15*32])-42),5)
+        XCTAssertThrowsError(try VideoGlintTracking.prepare(directory: directory,records: records,videoStartPTS: 900,output: nativeURL))
     }
     private func decodedTimes(_ url: URL) throws -> [Double] {
         let asset = AVURLAsset(url: url), reader = try AVAssetReader(asset: asset)

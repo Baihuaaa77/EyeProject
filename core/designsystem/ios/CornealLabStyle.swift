@@ -12,6 +12,7 @@ enum LabStyle {
     static let landmark = Color.cyan
     static let baseline = Color.yellow
     static let stimulusBackground = UIColor.black
+    static let stimulusForeground = UIColor.white
     static let title = Font.title2.weight(.semibold)
     static let heading = Font.headline
     static let subheading = Font.subheadline
@@ -19,4 +20,6 @@ enum LabStyle {
     static let body = Font.body
     static let detail = Font.caption
     static let radius: CGFloat = 16
+    static let overlayFont = UIFont.monospacedSystemFont(ofSize: 14,weight: .medium)
+    static let overlayFullFont = UIFont.monospacedSystemFont(ofSize: 36,weight: .medium)
 }
