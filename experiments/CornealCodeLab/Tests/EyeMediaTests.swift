@@ -104,9 +104,26 @@ final class EyeMediaTests: XCTestCase {
         XCTAssertEqual(native.count,records.count*32*16)
         XCTAssertEqual(nativeRows.first?.nativeROI?.x,16)
         XCTAssertEqual(nativeRows.first?.nativeROI?.y,4)
-        XCTAssertLessThanOrEqual(abs(Int(native[0])-70),5)
-        XCTAssertLessThanOrEqual(abs(Int(native[15*32])-42),5)
+        // 编码器与解码器会转换色彩空间，核对实际解码像素而不是编码前的RGB常量。
+        let decoded = try firstDecodedGray(directory.appendingPathComponent("camera.mov"),points: [(16,4),(16,19)])
+        XCTAssertLessThanOrEqual(abs(Int(native[0])-decoded[0]),1)
+        XCTAssertLessThanOrEqual(abs(Int(native[15*32])-decoded[1]),1)
+        XCTAssertGreaterThan(Int(native[0]),Int(native[15*32])+10)
         XCTAssertThrowsError(try VideoGlintTracking.prepare(directory: directory,records: records,videoStartPTS: 900,output: nativeURL))
+    }
+    private func firstDecodedGray(_ url: URL,points: [(Int,Int)]) throws -> [Int] {
+        let asset = AVURLAsset(url: url),reader = try AVAssetReader(asset: asset)
+        let track = try XCTUnwrap(asset.tracks(withMediaType: .video).first)
+        let output = AVAssetReaderTrackOutput(track: track,outputSettings: [kCVPixelBufferPixelFormatTypeKey as String:kCVPixelFormatType_32BGRA])
+        reader.add(output); XCTAssertTrue(reader.startReading()); defer { reader.cancelReading() }
+        let sample = try XCTUnwrap(output.copyNextSampleBuffer()),buffer = try XCTUnwrap(CMSampleBufferGetImageBuffer(sample))
+        CVPixelBufferLockBaseAddress(buffer,.readOnly); defer { CVPixelBufferUnlockBaseAddress(buffer,.readOnly) }
+        let bytes = try XCTUnwrap(CVPixelBufferGetBaseAddress(buffer)).assumingMemoryBound(to: UInt8.self)
+        let stride = CVPixelBufferGetBytesPerRow(buffer)
+        return points.map { x,y in
+            let i = y*stride+x*4
+            return Int((0.0722*Double(bytes[i])+0.7152*Double(bytes[i+1])+0.2126*Double(bytes[i+2])).rounded())
+        }
     }
     private func decodedTimes(_ url: URL) throws -> [Double] {
         let asset = AVURLAsset(url: url), reader = try AVAssetReader(asset: asset)

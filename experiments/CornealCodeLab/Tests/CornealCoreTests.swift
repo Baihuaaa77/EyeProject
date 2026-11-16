@@ -207,31 +207,34 @@ final class CornealCoreTests: XCTestCase {
     }
 
     func testRemovedPeakModeAndHistoricalRecords() throws {
-        XCTAssertEqual(TrialMode.allCases.count,6)
+        XCTAssertEqual(TrialMode.available,[.pattern,.patternCoded,.coded,.steady,.dark])
         let old = try JSONDecoder().decode(TrialConfiguration.self,from: Data("{\"mode\":\"peak\",\"mean\":0.525}".utf8))
         XCTAssertEqual(old.mode,.steady); XCTAssertEqual(old.mean,1)
         let motion = try JSONDecoder().decode(TrialConfiguration.self,from: Data("{\"mode\":\"motion\",\"dotDiameter\":96}".utf8))
         XCTAssertEqual(motion.dotDiameter,24); XCTAssertEqual(motion.probeDiameter,96)
     }
 
-    @MainActor func testRemountKeepsAllMovingLayersAndHonorsBothSizes() throws {
+    @MainActor func testRemountKeepsPatternGeometryAndCenterTarget() throws {
         let driver = StimulusDriver()
-        var config = TrialConfiguration(); config.mode = .motion; config.probeCount = 3; config.colorfulProbes = true
-        config.dotDiameter = 32; config.probeDiameter = 96
+        let config = TrialConfiguration.patternDefault
         driver.warmup(config); defer { driver.stop() }
         let first = UIView(frame: CGRect(x: 0,y: 0,width: 390,height: 844)); driver.attach(first)
         driver.begin(at: 100); driver.advance(to: 100.1)
-        let fixed = try XCTUnwrap(first.layer.sublayers?.first).position
-        let positions = Array((first.layer.sublayers ?? []).dropFirst()).map(\.position)
+        let original = try XCTUnwrap(first.layer.sublayers?.first(where: { !$0.isHidden }) as? CAShapeLayer)
+        let originalPath = try XCTUnwrap(original.path)
         let second = UIView(frame: first.frame); driver.attach(second); driver.advance(to: 108.7)
-        let layers = try XCTUnwrap(second.layer.sublayers)
-        XCTAssertEqual(layers.count,4); XCTAssertEqual(first.layer.sublayers?.count ?? 0,0)
-        XCTAssertEqual(layers[0].position,fixed); XCTAssertEqual(layers[0].bounds.width,32)
-        XCTAssertTrue(layers.dropFirst().allSatisfy { !$0.isHidden && $0.bounds.width == 96 })
-        XCTAssertNotEqual(Array(layers.dropFirst()).map(\.position),positions)
-        XCTAssertEqual(driver.events.last?.probes?.count,3)
+        let visible = (second.layer.sublayers ?? []).filter { !$0.isHidden }
+        XCTAssertEqual(visible.count,1); XCTAssertEqual(first.layer.sublayers?.count ?? 0,0)
+        let layer = try XCTUnwrap(visible.first as? CAShapeLayer),path = try XCTUnwrap(layer.path)
+        XCTAssertEqual(path.boundingBox,originalPath.boundingBox)
+        XCTAssertEqual(path.boundingBox.width,config.dotDiameter,accuracy: 1)
+        let center = CGPoint(x: second.bounds.width/2,y: second.bounds.height*config.dotY)
+        XCTAssertTrue(path.contains(center),"正中央必须有定位点")
+        XCTAssertFalse(path.contains(CGPoint(x: center.x+config.dotDiameter*0.2,y: center.y)),"中心与外环之间必须保留暗隙")
+        XCTAssertTrue(path.contains(CGPoint(x: center.x-config.dotDiameter*0.42,y: center.y)),"外环需实际显示")
+        XCTAssertNil(driver.events.last?.probes)
         let image = UIGraphicsImageRenderer(size: second.bounds.size).image { ctx in second.layer.render(in: ctx.cgContext) }
-        let attachment = XCTAttachment(image: image); attachment.name = "重建后的三色运动刺激"; attachment.lifetime = .keepAlways; add(attachment)
+        let attachment = XCTAttachment(image: image); attachment.name = "重建后的缺口圆环注视图案"; attachment.lifetime = .keepAlways; add(attachment)
     }
 
     @MainActor func testMotionStimulusRendersFixedWhitePointAndThreeProbes() throws {
