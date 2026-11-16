@@ -120,10 +120,16 @@ final class EyeMediaTests: XCTestCase {
         CVPixelBufferLockBaseAddress(buffer,.readOnly); defer { CVPixelBufferUnlockBaseAddress(buffer,.readOnly) }
         let bytes = try XCTUnwrap(CVPixelBufferGetBaseAddress(buffer)).assumingMemoryBound(to: UInt8.self)
         let stride = CVPixelBufferGetBytesPerRow(buffer)
-        return points.map { x,y in
+        var result: [Int] = []
+        for (x,y) in points {
             let i = y*stride+x*4
-            return Int((0.0722*Double(bytes[i])+0.7152*Double(bytes[i+1])+0.2126*Double(bytes[i+2])).rounded())
+            let blue: Double = 0.0722*Double(bytes[i])
+            let green: Double = 0.7152*Double(bytes[i+1])
+            let red: Double = 0.2126*Double(bytes[i+2])
+            let gray: Double = blue+green+red
+            result.append(Int(gray.rounded()))
         }
+        return result
     }
     private func decodedTimes(_ url: URL) throws -> [Double] {
         let asset = AVURLAsset(url: url), reader = try AVAssetReader(asset: asset)
