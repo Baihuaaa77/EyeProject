@@ -6,16 +6,14 @@ import random
 
 
 def conditions(protocol):
-    if protocol == "pattern":
-        return [dict(mode=mode,targetPattern=pattern,dotDiameter=288,dotY=0.35,mean=1 if mode=="pattern" else 0.525,modulation=0.475)
-                for pattern in ["ringDot","crossDot"] for mode in ["pattern","patternCoded"]]
     # 只为既有顺序文件保留历史生成函数，命令行不再提供白屏黑点实验。
     if protocol == "screen":
         return [dict(mode=mode,dotDiameter=size,dotY=y,screenLevel=0.7)
                 for size,y in [(96,0.25),(160,0.25),(160,0.5)]
                 for mode in ["screenTarget","screenBlank"]]
-    return [dict(mode=mode,dotDiameter=64,dotY=0.25,mean=0.525,modulation=0.475)
-            for mode in ["steady","coded","dark"]]
+    return [dict(mode=mode,codingScheme=scheme,dotPlacement="nearCamera",dotDiameter=96,dotY=0.1,
+                 mean=(0.175 if scheme=="sparsePulse" else 0.5) if mode=="steady" else 0.5,modulation=0.5)
+            for scheme in ["mSequence","manchester","sparsePulse"] for mode in ["steady","coded","dark"]]
 
 
 def plan(protocol, blocks, seed):
@@ -26,7 +24,7 @@ def plan(protocol, blocks, seed):
         group=conditions(protocol)
         for config in group:
             config.update(prefer4K=True,captureFPS=30,screenBrightness=1.0,exposureMS=20,exposureISO=100,automaticDistance=True,
-                          chipSeconds=0.1,chipCount=320,transitionGuardMS=40)
+                          chipSeconds=0.5,chipCount=64,transitionGuardMS=0)
         rng.shuffle(group)
         for config in group:
             rows.append(dict(order=len(rows)+1,block=block,configuration=config))
@@ -35,7 +33,7 @@ def plan(protocol, blocks, seed):
 
 def main():
     p=argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--protocol",choices=["pattern","coded"],default="pattern")
+    p.add_argument("--protocol",choices=["coded"],default="coded")
     p.add_argument("--blocks",type=int,default=3)
     p.add_argument("--seed",type=int,default=20261114)
     p.add_argument("--output",type=Path,default=Path("实验顺序.json"))

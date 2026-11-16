@@ -11,7 +11,7 @@ struct TrialSummary: Codable, Identifiable {
     var stoppedEarly: Bool
     var results: [EyeAnalysis]
     var frameRecords: Int
-    var algorithmVersion: String = "corneal-tracking-7-iris80-temporal"
+    var algorithmVersion: String = "corneal-tracking-8-area60-emission"
     var eligibilityNotes: [String] = []
     var eyeMediaFiles: [String]? = nil
     var nativeSnapshots: Bool? = nil
@@ -20,7 +20,9 @@ struct TrialSummary: Codable, Identifiable {
     var statusTitle: String {
         if stoppedEarly { return "提前停止，不计完整对照" }
         if results.contains(where: { $0.tracking != nil }) {
-            if configuration.mode.isPattern { return "\(results.reduce(0) { $0+($1.tracking?.patternMatchedFrames ?? 0) }) 个眼区帧支持图案结构" }
+            if configuration.mode.isPattern {
+                return algorithmVersion.hasPrefix("corneal-tracking-8") ? "历史图案已按亮斑重新生成逐帧轨迹" : "\(results.reduce(0) { $0+($1.tracking?.patternMatchedFrames ?? 0) }) 个眼区帧支持图案结构"
+            }
             if configuration.mode.usesTemporalCode { return "\(results.filter { $0.tracking?.codeVerified == true }.count) 眼区通过编码时序核查" }
             return "已生成逐帧轨迹与质量记录"
         }
@@ -31,7 +33,7 @@ struct TrialSummary: Codable, Identifiable {
 
 final class LabModel: ObservableObject {
     enum Phase { case setup, warming, recording, analyzing }
-    @Published var configuration = TrialConfiguration.patternDefault
+    @Published var configuration = TrialConfiguration.pointDefault
     @Published var phase = Phase.setup
     @Published var measuredDistanceCM: Double?
     @Published var measuredIrisPixels: Double?
@@ -45,9 +47,9 @@ final class LabModel: ObservableObject {
     @Published var exporting = false
     @Published var reanalyzing = false
     let driver = StimulusDriver()
+    let brightness = ScreenBrightnessController()
     private let camera = LabCamera()
     private var warmupTask: DispatchWorkItem?
-    private var originalBrightness: CGFloat?
     private var activeConfig: TrialConfiguration?
     private var directory: URL?
     private var startTime = 0.0
@@ -67,6 +69,11 @@ final class LabModel: ObservableObject {
         } }
         camera.onError = { [weak self] error in DispatchQueue.main.async { self?.fail(error) } }
         driver.onEnd = { [weak self] in self?.stop(early: false) }
+        brightness.onExternalChange = { [weak self] value in
+            guard let self = self,self.phase == .setup else { return }
+            self.configuration.screenBrightness = max(0.1,value)
+            self.brightness.adoptReadback()
+        }
         loadSaved(); restorePlan()
     }
     private var planURL: URL { root.appendingPathComponent("active-plan.json") }
@@ -96,9 +103,17 @@ final class LabModel: ObservableObject {
     }
     func leavePlan() { experimentPlan = nil; planIndex = 0; try? FileManager.default.removeItem(at: planURL) }
 
-    func prepare() { guard phase == .setup,!reanalyzing else { return }; error = nil; cameraReady = false; preparedConfig = configuration; camera.prepare(reuseExposure: configuration.reuseExposure,configuration: configuration) }
+    func setBrightness(_ value: Double) { configuration.screenBrightness = value; brightness.apply(value) }
+    func prepare() {
+        LabKeyboard.dismiss()
+        guard phase == .setup,!reanalyzing else { return }
+        brightness.apply(configuration.screenBrightness)
+        error = nil; cameraReady = false; preparedConfig = configuration
+        camera.prepare(reuseExposure: configuration.reuseExposure,configuration: configuration)
+    }
 
     func begin() {
+        LabKeyboard.dismiss()
         guard phase == .setup, cameraReady,!reanalyzing else { return }
         guard TrialMode.available.contains(configuration.mode) else { error = "该模式已移除，仅可查看历史记录"; return }
         guard let measuredDistance = measuredDistanceCM,labHostTime()-distanceTimestamp<0.6 else { error = "自动测距尚未稳定，请正对相机并重新检查双眼"; return }
@@ -115,8 +130,9 @@ final class LabModel: ObservableObject {
         let screen = DeviceOptics.screen(UIScreen.main)
         config.screenWidthMM = screen.0; config.screenHeightMM = screen.1; config.screenSizeSource = screen.2
         activeConfig = config
-        originalBrightness = UIScreen.main.brightness
-        UIScreen.main.brightness = config.screenBrightness
+        brightness.apply(config.screenBrightness)
+        guard brightness.confirmed else { error = "系统亮度未达到目标，请重新设定并查看读回值"; return }
+        brightness.beginCapture()
         previousIdleTimerDisabled = UIApplication.shared.isIdleTimerDisabled
         UIApplication.shared.isIdleTimerDisabled = true
         phase = .warming; preparing = true
@@ -156,6 +172,7 @@ final class LabModel: ObservableObject {
         guard phase == .warming || phase == .recording else { return }
         generation += 1
         warmupTask?.cancel(); driver.stop(); restoreScreen()
+        let brightnessSamples = brightness.endCapture()
         if preparing { preparing = false; phase = .setup; camera.stop(); cameraReady = false; return }
         phase = .analyzing
         let events = driver.events, config = activeConfig ?? configuration, start = startTime
@@ -197,6 +214,7 @@ final class LabModel: ObservableObject {
                     if (brightness.max() ?? 0)-(brightness.min() ?? 0)>0.03 { summary.eligibilityNotes.append("采集期间系统屏幕亮度有变化") }
                     let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted,.sortedKeys]; encoder.dateEncodingStrategy = .iso8601
                     try encoder.encode(events).write(to: directory.appendingPathComponent("display_events.json"))
+                    try encoder.encode(brightnessSamples).write(to: directory.appendingPathComponent("brightness_log.json"))
                     if !tracks.isEmpty { try encoder.encode(tracks).write(to: directory.appendingPathComponent("glint_tracks.json")) }
                     let rowEncoder = JSONEncoder()
                     let rows = try records.map { record -> String in
@@ -216,7 +234,7 @@ final class LabModel: ObservableObject {
                     let exposures = records.map(\.exposureSeconds),isoValues = records.map { Double($0.iso) }
                     if let lo = exposures.min(),let hi = exposures.max(),hi-lo>max(0.0001,lo*0.03) { summary.eligibilityNotes.append("采集期间曝光时间发生变化") }
                     if let lo = isoValues.min(),let hi = isoValues.max(),hi-lo>max(1,lo*0.03) { summary.eligibilityNotes.append("采集期间 ISO 发生变化") }
-                    metadata["geometryVersion"] = "80%虹膜半径与眼睑交集 / 原生像素 / 双向时序关联 v7"
+                    metadata["geometryVersion"] = "60%虹膜面积与眼睑交集 / 原生像素 / 双向时序与亮灭先验 v8"
                     metadata["trackingPixelSource"] = "相机原生BGRA眼区，录像结束后分析，不占采集回调"
                     metadata["clock"] = "camera PTS converted from session masterClock to host clock; CADisplayLink targetTimestamp + host offset"
                     metadata["timingLimit"] = "No photodiode measurement; lag includes display/camera/ISP timing and rolling shutter."
@@ -252,10 +270,14 @@ final class LabModel: ObservableObject {
             }
         }
     }
-    func interrupted() { if phase == .warming || phase == .recording { error = "本轮因切到后台而提前停止，不作为完整对照。"; stop() } else { camera.stop(); cameraReady = false } }
+    func interrupted() {
+        LabKeyboard.dismiss()
+        if phase == .warming || phase == .recording { error = "本轮因切到后台而提前停止，不作为完整对照。"; stop() }
+        else { camera.stop(); cameraReady = false }
+        brightness.releaseControl()
+    }
     private func fail(_ message: String) { error = message; if phase == .warming || phase == .recording { stop() }; cameraReady = false }
     private func restoreScreen() {
-        if let brightness = originalBrightness { UIScreen.main.brightness = brightness }; originalBrightness = nil
         UIApplication.shared.isIdleTimerDisabled = previousIdleTimerDisabled
     }
     func loadSaved() {
@@ -298,7 +320,7 @@ final class LabModel: ObservableObject {
                 files += try NativeEyeSnapshots.annotateExisting(directory: directory,records: records,results: updated.results,start: trial.startHostTime,output: stage)
                 let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]; encoder.dateEncodingStrategy = .iso8601
                 try encoder.encode(tracks).write(to: stage.appendingPathComponent("glint_tracks.json"))
-                let provenance: [String:Any] = ["source":"camera.mov原生眼区解码，含原有H.264压缩","searchRadiusFraction":0.8,"algorithm":"corneal-tracking-7-iris80-temporal","说明":"原始帧日志与旧检测字段保留；时序结果单列，不能用逐帧坐标覆盖率代替检出率。"]
+                let provenance: [String:Any] = ["source":"camera.mov原生眼区解码，含原有H.264压缩","searchAreaFraction":IrisSearch.areaFraction,"searchRadiusFraction":IrisSearch.radiusFraction,"algorithm":"corneal-tracking-8-area60-emission","说明":"原始帧日志与旧检测字段保留；独立图像结果和亮灭先验抑制分别统计，不以门控后的检出率声称算法准确。"]
                 try JSONSerialization.data(withJSONObject: provenance,options: [.sortedKeys]).write(to: stage.appendingPathComponent("tracking_source.json"))
                 if !FileManager.default.fileExists(atPath: directory.appendingPathComponent("summary_before_tracking.json").path) {
                     try FileManager.default.copyItem(at: directory.appendingPathComponent("summary.json"),to: directory.appendingPathComponent("summary_before_tracking.json"))
@@ -308,7 +330,7 @@ final class LabModel: ObservableObject {
                     if FileManager.default.fileExists(atPath: target.path) { try FileManager.default.removeItem(at: target) }
                     try FileManager.default.moveItem(at: stage.appendingPathComponent(name),to: target)
                 }
-                updated.algorithmVersion = "corneal-tracking-7-iris80-temporal"
+                updated.algorithmVersion = "corneal-tracking-8-area60-emission"
                 updated.eyeMediaFiles = Array(Set((updated.eyeMediaFiles ?? [])+files)).sorted()
                 try encoder.encode(updated).write(to: directory.appendingPathComponent("summary.json"),options: .atomic)
                 DispatchQueue.main.async { self?.reanalyzing = false; self?.selected = updated; self?.loadSaved() }

@@ -29,6 +29,10 @@ jobs:
       - uses: ruby/setup-ruby@v1
         with: {ruby-version: "3.3", working-directory: iosApp, bundler-cache: true}
       - run: chmod +x gradlew
+      - name: 工程与Swift语法预检
+        run: |
+          python3 scripts/ios/check_project.py
+          swiftc -frontend -parse experiments/CornealCodeLab/Sources/*.swift experiments/CornealCodeLab/Tests/*.swift core/designsystem/ios/CornealLabStyle.swift
       - run: brew install xcodegen
       - name: 独立算法与离线审阅回归
         working-directory: experiments/CornealCodeLab
@@ -44,6 +48,8 @@ jobs:
         working-directory: experiments/CornealCodeLab
         run: |
           SIMULATOR_ID="$(xcrun simctl list devices available --json | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(x["udid"] for v in d["devices"].values() for x in v if x["name"].startswith("iPhone")))')"
+          xcrun simctl boot "$SIMULATOR_ID" || true
+          xcrun simctl bootstatus "$SIMULATOR_ID" -b
           xcodebuild test -workspace CornealCodeLab.xcworkspace -scheme CornealCodeLab -configuration Release \
             -destination "platform=iOS Simulator,id=$SIMULATOR_ID" -derivedDataPath build/Simulator \
             -resultBundlePath build/LabTests.xcresult CODE_SIGNING_ALLOWED=NO ENABLE_TESTABILITY=YES ONLY_ACTIVE_ARCH=YES ARCHS=arm64

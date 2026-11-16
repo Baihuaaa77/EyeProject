@@ -30,6 +30,18 @@ struct GlintEstimate: Codable {
     var expectedDiameterPixels: Double?
     var ambiguity: Double
     var patternMatch: PatternMatch? = nil
+    var candidatePoint: LabPoint? = nil
+    var candidateConfidence: Double? = nil
+    var candidateDiameter: Double? = nil
+    var emissionPhase: EmissionPhase? = nil
+    var independentImagePoint: LabPoint? = nil
+    var independentMeasurementPoint: LabPoint? = nil
+    var independentConfidence: Double? = nil
+    var independentSource: GlintSource? = nil
+    var independentSignal: Double? = nil
+    var candidateIrisRelative: LabPoint? = nil
+    var timingSuppressed: Bool? = nil
+    var temporalSupportFrames: Int? = nil
 }
 
 struct GlintTrackingResult: Codable {
@@ -47,6 +59,8 @@ struct GlintTrackingResult: Codable {
     var codeVerified: Bool
     var note: String
     var referenceRelative: LabPoint? = nil
+    var searchAreaFraction: Double? = nil
+    var emissionAudit: EmissionAudit? = nil
     var patternMatchedFrames: Int { frames.filter { $0.source.measured && $0.patternMatch?.resolved == true }.count }
 
     static func make(eye: String,frames: [GlintEstimate]) -> GlintTrackingResult {
@@ -244,7 +258,7 @@ struct GlintTracker {
         return results
     }
 
-    mutating func update(pixels: [Float],width: Int,height: Int,roi: LabRect,iris: IrisRegion,row: FrameRecord,expectedDiameter: Double,pattern: FixationPattern? = nil,expectedPatternDiameter: Double? = nil) -> GlintEstimate {
+    mutating func update(pixels: [Float],width: Int,height: Int,roi: LabRect,iris: IrisRegion,row: FrameRecord,expectedDiameter: Double,measurementAllowed: Bool = true) -> GlintEstimate {
         let center = LabPoint(x: roi.x+iris.center.x*roi.width,y: roi.y+iris.center.y*roi.height)
         let radius = max(1,iris.radiusX*roi.width)
         var prediction: LabPoint? = point.map { old in
@@ -253,7 +267,7 @@ struct GlintTracker {
             let dy = Self.clamp(center.y-origin.y,-radius*0.12,radius*0.12)
             return LabPoint(x: old.x*scale+dx+(1-scale)*origin.x,y: old.y*scale+dy+(1-scale)*origin.y)
         }
-        if let guess = prediction,let registered = register(pixels: pixels,width: width,height: height,roi: roi,guess: guess,expected: expectedDiameter,exclusion: expectedPatternDiameter.map { $0*0.65 }) {
+        if let guess = prediction,let registered = register(pixels: pixels,width: width,height: height,roi: roi,guess: guess,expected: expectedDiameter) {
             prediction = registered
         }
         let anchored = anchor.map { LabPoint(x: center.x+$0.x*radius,y: center.y+$0.y*radius) }
@@ -261,12 +275,6 @@ struct GlintTracker {
         var candidates = Self.candidates(pixels: pixels,width: width,height: height,iris: iris,expected: expectedDiameter)
         let gate = max(4,expectedDiameter*1.2,radius*0.075)
         for i in candidates.indices {
-            if let pattern = pattern,let diameter = expectedPatternDiameter {
-                let match = FixationPatternMatcher.match(pixels: pixels,width: width,height: height,center: candidates[i].point,expectedDiameter: diameter,pattern: pattern)
-                candidates[i].patternMatch = match
-                let margin = (match?.correlation ?? 0)-(match?.alternativeCorrelation ?? 1)
-                candidates[i].rank *= 0.05+3*max(0,margin+0.15)
-            }
             let p = LabPoint(x: roi.x+candidates[i].point.x,y: roi.y+candidates[i].point.y)
             if let prediction = prediction {
                 let distance = hypot(p.x-prediction.x,p.y-prediction.y)
@@ -301,7 +309,10 @@ struct GlintTracker {
         var estimate = GlintEstimate(frameIndex: row.index,pts: row.pts,hostTime: row.hostTime,imagePoint: prediction ?? center,
             measurementPoint: nil,irisRelative: nil,confidence: 0,source: .unavailable,uncertaintyPixels: radius,
             signal: nil,snr: best?.snr,observedDiameterPixels: nil,expectedDiameterPixels: expectedDiameter,ambiguity: ambiguity)
-        if let best = best,confidence>=0.25,best.snr>=3 {
+        estimate.candidatePoint = best.map { LabPoint(x: roi.x+$0.point.x,y: roi.y+$0.point.y) }
+        estimate.candidateIrisRelative = estimate.candidatePoint.map { LabPoint(x: ($0.x-center.x)/radius,y: ($0.y-center.y)/radius) }
+        estimate.candidateConfidence = confidence; estimate.candidateDiameter = best?.diameter
+        if measurementAllowed,let best = best,confidence>=0.25,best.snr>=3 {
             let measured = LabPoint(x: roi.x+best.point.x,y: roi.y+best.point.y)
             let distance = prediction.map { hypot(measured.x-$0.x,measured.y-$0.y) } ?? 0
             if prediction == nil || distance<=gate*1.5 {

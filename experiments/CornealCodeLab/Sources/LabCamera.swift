@@ -411,7 +411,7 @@ final class LabCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
                 if captureColor { rgb[i*3] = UInt8(max(0,min(255,r))); rgb[i*3+1] = UInt8(max(0,min(255,g))); rgb[i*3+2] = UInt8(max(0,min(255,b))) }
             } }
             let eyelid = eye.2.map { LabPoint(x: ($0.x-rect.x)/w,y: ($0.y-rect.y)/h) }
-            let iris = IrisRegion(center: LabPoint(x: (p.x-rect.x)/w,y: (p.y-rect.y)/h),radiusX: eye.3*0.4/w,radiusY: eye.3*0.4/h,confidence: 1,eyelid: eyelid,
+            let iris = IrisRegion(center: LabPoint(x: (p.x-rect.x)/w,y: (p.y-rect.y)/h),radiusX: eye.3*0.5*IrisSearch.radiusFraction/w,radiusY: eye.3*0.5*IrisSearch.radiusFraction/h,confidence: 1,eyelid: eyelid,
                 boundaryRadiusX: eye.3*0.5/w,boundaryRadiusY: eye.3*0.5/h)
             irisCount += 1
             func relative(_ point: Point2f?) -> LabPoint? {

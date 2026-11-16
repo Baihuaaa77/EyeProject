@@ -7,7 +7,7 @@ enum TrialMode: String, Codable, CaseIterable, Identifiable {
     var isScreen: Bool { self == .screenTarget || self == .screenBlank }
     var isPattern: Bool { self == .pattern || self == .patternCoded }
     var usesTemporalCode: Bool { self == .coded || self == .patternCoded }
-    static let available: [TrialMode] = [.pattern,.patternCoded,.coded,.steady,.dark]
+    static let available: [TrialMode] = [.coded,.steady,.dark]
 }
 
 struct TrialConfiguration: Codable {
@@ -42,9 +42,13 @@ struct TrialConfiguration: Codable {
     var screenSizeSource: String = "未识别，使用屏幕尺寸假设"
     var cornealRadiusMM: Double = 7.8
     var targetPattern: FixationPattern = .ringDot
+    var codingScheme: CodingScheme = .mSequence
+    var dotPlacement: DotPlacement = .legacyFraction
     var centerDiameter: Double { mode.isPattern ? dotDiameter*FixationPattern.centerFraction : dotDiameter }
-    static var patternDefault: TrialConfiguration {
-        var c = TrialConfiguration(); c.mode = .pattern; c.dotDiameter = 288; c.dotY = 0.35; c.mean = 1; return c
+    static var pointDefault: TrialConfiguration {
+        var c = TrialConfiguration(); c.mode = .coded; c.dotDiameter = 96; c.dotPlacement = .nearCamera
+        c.dotY = 0.1; c.mean = 0.5; c.modulation = 0.5
+        return c
     }
     mutating func selectMode(_ value: TrialMode) {
         mode = value
@@ -54,7 +58,10 @@ struct TrialConfiguration: Codable {
             colorCode = false
         } else { dotDiameter = min(160,dotDiameter) }
         if value == .pattern { mean = 1 }
-        else if value.usesTemporalCode || value == .steady { mean = modulation == 0.15 ? 0.8 : 1-modulation }
+        else if value.usesTemporalCode || value == .steady {
+            let base = modulation == 0.15 ? 0.8 : 1-modulation
+            mean = value == .steady ? base+modulation*(2*codingScheme.meanReference-1) : base
+        }
     }
     var validationError: String? {
         let values = [dotDiameter,dotY,screenBrightness,mean,modulation,chipSeconds,distanceCM,probeDiameter,motionScale,screenLevel,displayWidth,displayHeight,screenWidthMM,screenHeightMM,cornealRadiusMM]
@@ -73,7 +80,7 @@ struct TrialConfiguration: Codable {
     }
     var duration: Double { Double(chipCount) * chipSeconds }
     init() {}
-    enum CodingKeys: String, CodingKey { case mode, dotDiameter, dotY, screenBrightness, mean, modulation, chipSeconds, distanceCM, glasses, lighting, reuseExposure, probeCount, colorfulProbes, motionScale, probeDiameter, screenLevel, displayWidth, displayHeight, prefer4K, captureFPS, exposureMS, exposureISO, chipCount, transitionGuardMS, colorCode, automaticDistance, screenWidthMM, screenHeightMM, screenSizeSource, cornealRadiusMM, targetPattern }
+    enum CodingKeys: String, CodingKey { case mode, dotDiameter, dotY, screenBrightness, mean, modulation, chipSeconds, distanceCM, glasses, lighting, reuseExposure, probeCount, colorfulProbes, motionScale, probeDiameter, screenLevel, displayWidth, displayHeight, prefer4K, captureFPS, exposureMS, exposureISO, chipCount, transitionGuardMS, colorCode, automaticDistance, screenWidthMM, screenHeightMM, screenSizeSource, cornealRadiusMM, targetPattern, codingScheme, dotPlacement }
     /// 旧轮次缺少运动参数时仍可打开；保留旧强度，不能用新默认值改写旧实验条件。
     init(from decoder: Decoder) throws {
         let v = try decoder.container(keyedBy: CodingKeys.self)
@@ -112,6 +119,8 @@ struct TrialConfiguration: Codable {
         screenSizeSource = try v.decodeIfPresent(String.self,forKey: .screenSizeSource) ?? "旧记录的屏幕尺寸假设"
         cornealRadiusMM = try v.decodeIfPresent(Double.self,forKey: .cornealRadiusMM) ?? 7.8
         targetPattern = try v.decodeIfPresent(FixationPattern.self,forKey: .targetPattern) ?? .ringDot
+        codingScheme = try v.decodeIfPresent(CodingScheme.self,forKey: .codingScheme) ?? .mSequence
+        dotPlacement = try v.decodeIfPresent(DotPlacement.self,forKey: .dotPlacement) ?? .legacyFraction
     }
 }
 
@@ -131,7 +140,9 @@ enum StimulusCode {
     static func value(at seconds: Double, configuration: TrialConfiguration, shift: Int = 0) -> Double {
         guard seconds.isFinite,configuration.chipSeconds.isFinite,configuration.chipSeconds>0,seconds >= 0, seconds < configuration.duration else { return 0 }
         let index = Int(seconds / configuration.chipSeconds)
-        return bits[((index + shift % bits.count) % bits.count + bits.count) % bits.count]
+        let bit = bits[((index + shift % bits.count) % bits.count + bits.count) % bits.count]
+        let phase = seconds/configuration.chipSeconds-Double(index)
+        return configuration.codingScheme.value(bit: bit,phase: phase)
     }
     static func intensity(at seconds: Double, configuration c: TrialConfiguration) -> Double {
         switch c.mode {
@@ -152,6 +163,10 @@ struct DisplayEvent: Codable {
     let callbackHostTime: Double
     var screenBrightness: Double = 0
     var probes: [ProbeEvent]?
+    var elapsed: Double? = nil
+    var requestedBrightness: Double? = nil
+    var dotCenter: LabPoint? = nil
+    var viewport: LabPoint? = nil
 }
 
 struct LabPoint: Codable { var x: Double; var y: Double }

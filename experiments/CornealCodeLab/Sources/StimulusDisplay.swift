@@ -12,21 +12,19 @@ final class StimulusDriver: NSObject {
     var onEnd: (() -> Void)?
     private weak var view: UIView?
     private let dot = CALayer()
-    private let patternLayer = CAShapeLayer()
-    private var patternGeometry = ""
     private let probeLayers = (0..<3).map { _ in CALayer() }
     private var link: CADisplayLink?
     private var start: Double?
     private var lastChip = -999
     private var clockOffset = 0.0
     private var renderedTime = 0.0
+    private var actualDotCenter: LabPoint?
 
     func attach(_ view: UIView) {
         self.view = view
         view.backgroundColor = LabStyle.stimulusBackground
         dot.actions = ["backgroundColor": NSNull(), "position": NSNull(), "bounds": NSNull()]
         view.layer.addSublayer(dot)
-        patternLayer.actions = dot.actions; view.layer.addSublayer(patternLayer); patternGeometry = ""
         // SwiftUI 会重建承载视图；复用的所有图层必须一起迁移，不能留在旧视图上。
         for layer in probeLayers { layer.actions = dot.actions; view.layer.addSublayer(layer) }
         render(StimulusCode.intensity(at: renderedTime,configuration: configuration),time: renderedTime)
@@ -54,11 +52,13 @@ final class StimulusDriver: NSObject {
         let chip = Int(elapsed/configuration.chipSeconds)
         let intensity = StimulusCode.intensity(at: elapsed, configuration: configuration)
         let probes = render(intensity,time: elapsed)
-        if chip != lastChip || configuration.mode == .motion {
+        if chip != lastChip || configuration.mode == .motion || configuration.mode.usesTemporalCode {
             // 常亮/全黑轮也记下同一参考码，但实际显示强度恒定，供伪码阴性对照分析。
             events.append(DisplayEvent(hostTime: planned,intensity: intensity,
                 code: StimulusCode.value(at: elapsed,configuration: configuration),chip: chip,callbackHostTime: labHostTime(),
-                screenBrightness: Double(UIScreen.main.brightness),probes: configuration.mode == .motion ? probes : nil))
+                screenBrightness: Double(UIScreen.main.brightness),probes: configuration.mode == .motion ? probes : nil,
+                elapsed: elapsed,requestedBrightness: configuration.screenBrightness,dotCenter: actualDotCenter,
+                viewport: view.map { LabPoint(x: Double($0.bounds.width),y: Double($0.bounds.height)) }))
             lastChip = chip
         }
     }
@@ -69,20 +69,12 @@ final class StimulusDriver: NSObject {
         let probes = moving && intensity>0 ? MotionStimulus.probes(at: time,configuration: configuration,width: Double(view.bounds.width),height: Double(view.bounds.height),topInset: max(64,Double(view.window?.safeAreaInsets.top ?? 0)),bottomInset: max(34,Double(view.window?.safeAreaInsets.bottom ?? 0))) : []
         CATransaction.begin(); CATransaction.setDisableActions(true)
         view.backgroundColor = configuration.mode.isScreen ? UIColor(white: intensity,alpha: 1) : LabStyle.stimulusBackground
-        dot.isHidden = configuration.mode == .screenBlank || configuration.mode.isPattern
-        patternLayer.isHidden = !configuration.mode.isPattern
-        if configuration.mode.isPattern {
-            let center = CGPoint(x: view.bounds.width/2,y: view.bounds.height*configuration.dotY)
-            let key = "\(configuration.targetPattern.rawValue)/\(diameter)/\(center.x)/\(center.y)"
-            if key != patternGeometry {
-                patternLayer.path = FixationPatternDisplay.path(configuration.targetPattern,diameter: diameter,center: center)
-                patternGeometry = key
-            }
-            patternLayer.fillColor = UIColor(white: intensity,alpha: 1).cgColor
-        }
+        dot.isHidden = configuration.mode == .screenBlank
         dot.bounds = CGRect(x: 0,y: 0,width: diameter,height: diameter)
         dot.cornerRadius = diameter/2
-        dot.position = CGPoint(x: Double(view.bounds.width)/2,y: Double(view.bounds.height)*configuration.dotY)
+        let center = StimulusGeometry.center(configuration: configuration,width: Double(view.bounds.width),height: Double(view.bounds.height),
+            safeTop: Double(view.window?.safeAreaInsets.top ?? 0),safeBottom: Double(view.window?.safeAreaInsets.bottom ?? 0))
+        actualDotCenter = center; dot.position = CGPoint(x: center.x,y: center.y)
         if configuration.colorCode && (configuration.mode == .coded || configuration.mode == .steady) {
             let bit = (start == nil || configuration.mode == .steady) ? 0 : StimulusCode.value(at: time,configuration: configuration)
             dot.backgroundColor = UIColor(red: bit == 0 ? 0.5 : (bit>0 ? 1 : 0),green: bit == 0 ? 0.5 : (bit>0 ? 0 : 1),blue: 0,alpha: 1).cgColor

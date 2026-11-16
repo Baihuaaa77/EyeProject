@@ -6,12 +6,21 @@ enum NativeGlintTracking {
                       events: [DisplayEvent],start: Double) -> [GlintTrackingResult] {
         let rows = records.sorted { $0.hostTime<$1.hostTime }
         var trackers = ["image_left":GlintTracker(),"image_right":GlintTracker()]
-        var estimates: [String:[GlintEstimate]] = [:]
         struct Seed { var relative: LabPoint; var candidate: GlintTracker.Candidate; var weight: Double }
         var seeds: [String:[Seed]] = [:]
         var references: [String:LabPoint] = [:]
+        let seedRows = rows.filter { $0.index%3 == 0 && $0.hostTime-start>=0.4 && $0.hostTime-start<min(8,c.duration/2) }
+        // 亮暗样本数量不等时分别取均值，不能用未中心化的正负和抬高恒定反光。
+        var balance: [String:(positive: Int,negative: Int)] = [:]
+        for row in seedRows {
+            guard let eye = row.eye else { continue }
+            let code = events.last(where: { $0.hostTime<=row.hostTime-1.0/30 })?.code ?? 0
+            var count = balance[eye] ?? (0,0)
+            if code>0 { count.positive += 1 } else if code<0 { count.negative += 1 }
+            balance[eye] = count
+        }
         // 用前八秒建立持续亮点身份。光码轮以训练段亮暗差抵消恒定环境反光；后半段不参与选点。
-        for row in rows where row.index%3 == 0 && row.hostTime-start>=0.4 && row.hostTime-start<min(8,c.duration/2) {
+        for row in seedRows {
             guard let eye = row.eye,let extracted = extract(row: row,pixels: pixels,bytesPerPixel: bytesPerPixel,configuration: c) else { continue }
             let (gray,w,h,_,search,expected) = extracted
             let radius = search.radiusX*Double(w)
@@ -21,13 +30,13 @@ enum NativeGlintTracking {
                 let size = exp(-pow(log(max(0.5,b.diameter)/max(1,expected)),2)/0.8)
                 let prior = exp(-0.5*(relative.x*relative.x/0.36+pow((relative.y+0.3)/0.45,2)))
                 var weight = min(1,b.snr/15)*pow(b.shape,2)*size*prior
-                if c.mode.isPattern {
-                    let match = FixationPatternMatcher.match(pixels: gray,width: w,height: h,center: b.point,expectedDiameter: expected/FixationPattern.centerFraction,pattern: c.targetPattern)
-                    weight *= 0.05+3*max(0,(match?.correlation ?? 0)-(match?.alternativeCorrelation ?? 1)+0.15)
-                }
                 if c.mode.usesTemporalCode {
                     let code = events.last(where: { $0.hostTime<=row.hostTime-1.0/30 })?.code ?? 0
-                    weight *= code*min(2,b.signal/60)
+                    let count = balance[eye] ?? (0,0)
+                    guard count.positive>0,count.negative>0 else { continue }
+                    let total = Double(count.positive+count.negative)/2
+                    let balanced = code>0 ? total/Double(count.positive) : -total/Double(count.negative)
+                    weight *= balanced*min(2,b.signal/60)
                 }
                 if c.mode == .motion,let probes = events.last(where: { $0.hostTime<=row.hostTime-1.0/30 })?.probes,!probes.isEmpty {
                     // 用已知外围光源的相对布局辅助区分固定白点；允许成像方向和尺度存在误差。
@@ -65,28 +74,74 @@ enum NativeGlintTracking {
             references[eye] = center
         }
         let initialTrackers = trackers
-        for row in rows {
-            guard let eye = row.eye,let extracted = extract(row: row,pixels: pixels,bytesPerPixel: bytesPerPixel,configuration: c) else { continue }
-            let (gray,w,h,native,search,expected) = extracted
-            let result = trackers[eye,default: GlintTracker()].update(pixels: gray,width: w,height: h,roi: native,iris: search,row: row,expectedDiameter: expected,
-                pattern: c.mode.isPattern ? c.targetPattern : nil,expectedPatternDiameter: c.mode.isPattern ? expected/FixationPattern.centerFraction : nil)
-            estimates[eye,default: []].append(result)
+        func run(windows: [String:[Int:EmissionWindow]] = [:]) -> [String:[GlintEstimate]] {
+            var forwardTrackers = initialTrackers,reverseTrackers = initialTrackers
+            var forward: [String:[GlintEstimate]] = [:],backward: [String:[Int:GlintEstimate]] = [:]
+            for row in rows {
+                guard let eye = row.eye,let extracted = extract(row: row,pixels: pixels,bytesPerPixel: bytesPerPixel,configuration: c) else { continue }
+                let (gray,w,h,native,search,expected) = extracted
+                let allowed = !(windows[eye]?[row.index]?.phase.inhibitsMeasurement ?? false)
+                let result = forwardTrackers[eye,default: GlintTracker()].update(pixels: gray,width: w,height: h,roi: native,iris: search,row: row,expectedDiameter: expected,measurementAllowed: allowed)
+                forward[eye,default: []].append(result)
+            }
+            for original in rows.reversed() {
+                guard let eye = original.eye,let extracted = extract(row: original,pixels: pixels,bytesPerPixel: bytesPerPixel,configuration: c) else { continue }
+                let (gray,w,h,native,search,expected) = extracted
+                var row = original; row.hostTime = -original.hostTime
+                let allowed = !(windows[eye]?[original.index]?.phase.inhibitsMeasurement ?? false)
+                var result = reverseTrackers[eye,default: GlintTracker()].update(pixels: gray,width: w,height: h,roi: native,iris: search,row: row,expectedDiameter: expected,measurementAllowed: allowed)
+                result.hostTime = original.hostTime
+                backward[eye,default: [:]][original.index] = result
+            }
+            return Dictionary(uniqueKeysWithValues: ["image_left","image_right"].map { eye in
+                let joined = (forward[eye] ?? []).map { f in backward[eye]?[f.frameIndex].map { fuse(f,$0) } ?? f }
+                return (eye,complete(joined,records: records))
+            })
         }
-        var reverseTrackers = initialTrackers,backward: [String:[Int:GlintEstimate]] = [:]
-        for original in rows.reversed() {
-            guard let eye = original.eye,let extracted = extract(row: original,pixels: pixels,bytesPerPixel: bytesPerPixel,configuration: c) else { continue }
-            let (gray,w,h,native,search,expected) = extracted
-            var row = original; row.hostTime = -original.hostTime
-            var result = reverseTrackers[eye,default: GlintTracker()].update(pixels: gray,width: w,height: h,roi: native,iris: search,row: row,expectedDiameter: expected,
-                pattern: c.mode.isPattern ? c.targetPattern : nil,expectedPatternDiameter: c.mode.isPattern ? expected/FixationPattern.centerFraction : nil)
-            result.hostTime = original.hostTime
-            backward[eye,default: [:]][original.index] = result
-        }
-        return ["image_left","image_right"].map { eye in
-            let joint = (estimates[eye] ?? []).map { forward in backward[eye]?[forward.frameIndex].map { fuse(forward,$0) } ?? forward }
-            var result = GlintTrackingResult.make(eye: eye,frames: complete(joint,records: records))
-            result.referenceRelative = references[eye]
+        let independent = run()
+        var diagnostics: [String:GlintTrackingResult] = [:]
+        for eye in ["image_left","image_right"] {
+            var result = GlintTrackingResult.make(eye: eye,frames: independent[eye] ?? [])
             validateCode(&result,events: events,start: start,configuration: c)
+            diagnostics[eye] = result
+        }
+        let timeline = EmissionTimeline(events: events)
+        var windows: [String:[Int:EmissionWindow]] = [:],lags: [String:Double] = [:]
+        for eye in ["image_left","image_right"] {
+            let diagnostic = diagnostics[eye]!
+            let fitted = diagnostic.codeLagSeconds
+            let lag = (diagnostic.codeTrainCorrelation ?? 0)>=0.6 && fitted.map({ (0...0.15).contains($0) }) == true ? fitted : nil
+            lags[eye] = lag
+            for row in rows where row.eye == nil || row.eye == eye {
+                windows[eye,default: [:]][row.index] = timeline.window(time: row.hostTime,exposure: row.exposureSeconds,fps: c.captureFPS,lag: lag,chipSeconds: c.chipSeconds)
+            }
+        }
+        let conditioned = c.mode.usesTemporalCode || c.mode == .dark ? run(windows: windows) : independent
+        return ["image_left","image_right"].map { eye in
+            let original = diagnostics[eye]!,byFrame = Dictionary(uniqueKeysWithValues: original.frames.map { ($0.frameIndex,$0) })
+            var frames = conditioned[eye] ?? []
+            for i in frames.indices {
+                let baseline = byFrame[frames[i].frameIndex]
+                let phase = windows[eye]?[frames[i].frameIndex]?.phase ?? .unknown
+                frames[i].emissionPhase = phase
+                frames[i].independentImagePoint = baseline?.imagePoint
+                frames[i].independentMeasurementPoint = baseline?.measurementPoint
+                frames[i].independentConfidence = baseline?.confidence
+                frames[i].independentSource = baseline?.source
+                frames[i].independentSignal = baseline?.signal
+                frames[i].timingSuppressed = phase.inhibitsMeasurement && baseline?.source.measured == true
+                if phase.inhibitsMeasurement {
+                    frames[i].source = frames[i].confidence>0 ? .predicted : .unavailable
+                    frames[i].confidence = min(0.2,frames[i].confidence)
+                    frames[i].measurementPoint = nil; frames[i].observedDiameterPixels = nil
+                }
+            }
+            frames = TemporalGlintSupport.refine(frames)
+            var result = GlintTrackingResult.make(eye: eye,frames: frames)
+            result.referenceRelative = references[eye]; result.searchAreaFraction = IrisSearch.areaFraction
+            result.codeTrainCorrelation = original.codeTrainCorrelation; result.codeHeldOutCorrelation = original.codeHeldOutCorrelation
+            result.codeWrongCorrelation = original.codeWrongCorrelation; result.codeLagSeconds = original.codeLagSeconds; result.codeVerified = original.codeVerified
+            result.emissionAudit = EmissionAudit.build(frames,lag: lags[eye])
             return result
         }
     }
@@ -111,7 +166,10 @@ enum NativeGlintTracking {
         } else if result.source.measured {
             result.confidence *= distance<=gate ? 0.8 : 0.5
         }
-        if result.source.measured { result.source = result.confidence>=0.6 ? .observed : .weak }
+        if result.source.measured {
+            if result.confidence<0.25 { result.source = .predicted; result.measurementPoint = nil; result.observedDiameterPixels = nil }
+            else { result.source = result.confidence>=0.6 ? .observed : .weak }
+        }
         else { result.confidence = min(0.25,result.confidence) }
         result.uncertaintyPixels = max(result.uncertaintyPixels,distance/2)
         return result
@@ -136,7 +194,7 @@ enum NativeGlintTracking {
         }
         let rx = (iris.boundaryRadiusX ?? iris.radiusX)*roi.width/native.width
         let ry = (iris.boundaryRadiusY ?? iris.radiusY)*roi.height/native.height
-        let search = IrisRegion(center: convert(iris.center),radiusX: rx*0.8,radiusY: ry*0.8,confidence: iris.confidence,
+        let search = IrisRegion(center: convert(iris.center),radiusX: rx*IrisSearch.radiusFraction,radiusY: ry*IrisSearch.radiusFraction,confidence: iris.confidence,
             eyelid: iris.eyelid.map(convert),boundaryRadiusX: rx,boundaryRadiusY: ry)
         let diameter = rx*native.width*2
         let expected = OpticalPrediction.diameter(distanceCM: row.distanceCM ?? c.distanceCM,irisPixels: diameter,
@@ -182,7 +240,10 @@ enum NativeGlintTracking {
             var low = 0,high = events.count
             while low<high { let middle = (low+high)/2; if events[middle].hostTime<=time { low = middle+1 } else { high = middle } }
             guard low>0,time-events[low-1].hostTime<=c.chipSeconds+0.1 else { return 0 }
-            return shift == 0 ? events[low-1].code : StimulusCode.bits[(events[low-1].chip%64+shift)%64]
+            if shift == 0 { return events[low-1].code }
+            let event = events[low-1]
+            let elapsed = event.elapsed ?? Double(event.chip)*c.chipSeconds
+            return StimulusCode.value(at: elapsed,configuration: c,shift: shift)
         }
         let train = result.frames.filter { $0.hostTime-start<c.duration/2 && $0.signal != nil }
         let test = result.frames.filter { $0.hostTime-start>=c.duration/2 && $0.signal != nil }

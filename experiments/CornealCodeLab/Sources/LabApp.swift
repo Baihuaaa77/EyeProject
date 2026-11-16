@@ -45,7 +45,7 @@ struct LabRootView: View {
     private var setup: some View {
         Form {
             Section {
-                Text("注视图案 → 前摄眼区 → 映光核查").font(LabStyle.title)
+                Text("白点编码 → 前摄眼区 → 映光核查").font(LabStyle.title)
                 Text("验证光学信号，不输出斜视诊断。采集时点屏幕任意位置停止。").font(LabStyle.detail)
             }
             Section("实验清单") {
@@ -62,49 +62,11 @@ struct LabRootView: View {
                 Button("准备相机 / 重新检查双眼",action: model.prepare)
             }
             Section("2 · 本轮条件") {
-                Toggle("优先4K（不支持时记录实际回退）",isOn: $model.configuration.prefer4K)
-                Picker("采集帧率",selection: $model.configuration.captureFPS) { Text("30 fps").tag(30); Text("60 fps").tag(60) }
-                Picker("手动曝光",selection: $model.configuration.exposureMS) { Text("20 ms").tag(20.0); Text("10 ms").tag(10.0); Text("5 ms").tag(5.0) }
-                TextField("ISO",value: $model.configuration.exposureISO,format: .number).keyboardType(.decimalPad)
-                Toggle("快速码（100 ms，320码元，32秒）",isOn: Binding(get: { model.configuration.chipSeconds == 0.1 },set: { fast in
-                    model.configuration.chipSeconds = fast ? 0.1 : 0.5; model.configuration.chipCount = fast ? 320 : 64
-                    model.configuration.transitionGuardMS = fast ? 40 : 0
-                }))
-                if !model.configuration.mode.isPattern { Toggle("红绿差通道编码（需实测色亮度）",isOn: $model.configuration.colorCode) }
-                Picker("照明",selection: Binding(get: { model.configuration.mode },set: { model.configuration.selectMode($0) })) {
-                    ForEach(TrialMode.available) { mode in Text(mode.title).tag(mode) }
-                }
-                Picker(model.configuration.mode.isPattern ? "图案外径" : "固定注视点直径",selection: $model.configuration.dotDiameter) {
-                    ForEach(model.configuration.mode.isPattern ? [192.0,256,288,320] : [16.0,32,64,96,128,160],id: \.self) { Text("\(Int($0)) pt").tag($0) }
-                }
-                Picker("固定注视点位置",selection: $model.configuration.dotY) {
-                    if !model.configuration.mode.isPattern { Text("上方，靠近前摄").tag(0.15) }; Text("上四分之一").tag(0.25); Text("上部居中").tag(0.35); Text("屏幕中央").tag(0.50)
-                }
-                if model.configuration.mode.isPattern {
-                    PatternSetupView(configuration: $model.configuration,distance: model.measuredDistanceCM,irisPixels: model.measuredIrisPixels)
-                }
-                if model.configuration.mode.usesTemporalCode || model.configuration.mode == .steady {
-                    Picker("明暗变化",selection: Binding(get: { model.configuration.modulation },set: { value in
-                        model.configuration.modulation = value
-                        model.configuration.mean = value == 0.15 ? 0.8 : 1-value
-                    })) {
-                        Text("弱：65% ↔ 95%（旧版）").tag(0.15)
-                        Text("中：20% ↔ 100%").tag(0.4)
-                        Text("强：5% ↔ 100%").tag(0.475)
-                        Text("全幅：0% ↔ 100%").tag(0.5)
-                    }
-                    Text("均值对照恒亮值：\(Int((model.configuration.mean*100).rounded()))%。百分比为输出通道值，不是实测物理亮度。").font(LabStyle.detail)
-                }
-                HStack { Text("屏幕亮度"); Slider(value: $model.configuration.screenBrightness,in: 0.3...1); Text("\(Int(model.configuration.screenBrightness*100))%") }
-                LabeledContent("自动距离",value: model.measuredDistanceCM.map { String(format: "%.1f cm",$0) } ?? "等待双眼定位")
-                Picker("眼镜",selection: $model.configuration.glasses) { ForEach(["未戴镜","框架眼镜","隐形眼镜"],id: \.self) { Text($0) } }
-                Picker("环境",selection: $model.configuration.lighting) { ForEach(["室内普通光","暗室","背窗","外置点光源阳性对照"],id: \.self) { Text($0) } }
-                Toggle("沿用上一轮锁定曝光",isOn: $model.configuration.reuseExposure)
-                Text("对照轮保持白点大小、位置、距离和曝光一致。首次使用或更换环境后关闭沿用，再点准备相机。").font(LabStyle.detail)
+                CaptureConditionFields(model: model)
             }
             .disabled(model.experimentPlan != nil)
             Section("3 · 采集") {
-                Text("先试常亮图案，始终看中心点；外围缺口或短尾用于辨认结构。可切换图案明暗编码作时序核查。每轮32秒，开始前2.5秒预适应。").font(LabStyle.detail)
+                Text("注视白点。每轮32秒，开始前2.5秒预适应；系统亮度与白点编码强度分别记录。").font(LabStyle.detail)
                 if let issue = model.configuration.validationError { Text(issue).foregroundStyle(LabStyle.candidate) }
                 Button("开始 \(model.configuration.mode.title)",action: model.begin).disabled(!model.cameraReady || model.configuration.validationError != nil)
                 Text("成人先做短时台架验证。编码仅改变小点灰度，码元速率由上方设置；如感到不适，立即点屏幕停止。实验数据只保存在本机。").font(LabStyle.detail)
@@ -122,7 +84,7 @@ struct LabRootView: View {
                     }
                 }
             }
-        }.navigationTitle("光码映光验证")
+        }.scrollDismissesKeyboard(.interactively).navigationTitle("光码映光验证")
     }
 }
 
@@ -139,8 +101,8 @@ struct TrialResultView: View {
                 if trial.stoppedEarly { Text("本轮提前停止，不作为完整条件比较。").foregroundStyle(LabStyle.candidate) }
                 ForEach(trial.eligibilityNotes,id: \.self) { Text($0).foregroundStyle(LabStyle.candidate) }
                 InteractiveMovieView(directory: directory,trial: trial).id(trial.algorithmVersion)
-                if !trial.configuration.mode.isScreen && trial.results.allSatisfy({ $0.tracking == nil }) {
-                    Button("用原视频逐帧重新分析") { model.reanalyze(trial) }.buttonStyle(.bordered).frame(minHeight: 44).disabled(model.reanalyzing)
+                if !trial.configuration.mode.isScreen && (trial.algorithmVersion != "corneal-tracking-8-area60-emission" || trial.results.allSatisfy({ $0.tracking == nil })) {
+                    Button("用新版逐帧重新分析原视频") { model.reanalyze(trial) }.buttonStyle(.bordered).frame(minHeight: 44).disabled(model.reanalyzing)
                 }
                 if model.reanalyzing { ProgressView("正在配准、双向跟踪并生成可视化视频") }
                 HStack {
@@ -201,8 +163,8 @@ struct TrialResultView: View {
                         }
                     }.padding().background(LabStyle.background).clipShape(RoundedRectangle(cornerRadius: LabStyle.radius))
                 }
-                Text("新跟踪搜索虹膜半径80%与眼睑的交集。坐标属于相机图像；需要额外标定才能推算屏幕注视位置。放大不增加光学分辨率。").font(LabStyle.detail)
-                Text(trial.results.contains(where: { $0.tracking != nil }) ? "跟踪叠加：实线圆为图像观测或弱观测，虚线圆为预测或无可靠观测；文字标明状态与质量分。绿色表示定位质量较高，不等同于通过光码验证。" : "旧版叠加：橙色虹膜边界，虚线搜索范围，青色中心，黄色基础候选；大圈表示旧版验证结果。").font(LabStyle.detail)
+                Text("新跟踪搜索虹膜内60%面积与眼睑可见区域的交集。坐标属于相机图像；需要额外标定才能推算屏幕注视位置。放大不增加光学分辨率。").font(LabStyle.detail)
+                Text(trial.results.contains(where: { $0.tracking != nil }) ? "跟踪叠加：实线圆为图像观测或弱观测，虚线为预测或无可靠观测，灭灯/低电平用叉号；文字标明状态与质量分。绿色表示定位质量较高，不等同于通过光码验证。" : "旧版叠加：橙色虹膜边界，虚线搜索范围，青色中心，黄色基础候选；大圈表示旧版验证结果。").font(LabStyle.detail)
                 DisclosureGroup("参数与判定边界") {
                     Text("运动轮：仅前半段选择轨迹、空间映射与延迟，固定参数验证后半段。增益为相对仅含眼动/头动模型的误差下降比例，要求前半段≥0.45、后半段≥0.30、比错轨迹高0.20、位移≥0.18采样像素、覆盖≥60%，并排除严重运动混杂。明暗轮：只用前半段选择位置与延迟，固定后在后半段验证。参考门槛：前半段 r≥0.35、后半段 r≥0.30、后半段比错码至少高 0.15，局部响应≥0.5 灰度级。这些是工程门槛，不是经临床验证的阈值。延迟不是纯硬件延迟。").font(LabStyle.detail)
                     Text((try? String(contentsOf: directory.appendingPathComponent("camera.json"),encoding: .utf8)) ?? "无相机参数").font(LabStyle.code)

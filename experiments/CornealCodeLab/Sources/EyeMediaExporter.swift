@@ -183,8 +183,9 @@ enum EyeMediaExporter {
             ctx.setStrokeColor(UIColor(LabStyle.primary).cgColor); ctx.setLineWidth(2)
             ctx.strokeEllipse(in: CGRect(x: (iris.center.x-(iris.boundaryRadiusX ?? iris.radiusX))*size.width,y: (iris.center.y-(iris.boundaryRadiusY ?? iris.radiusY))*size.height,width: (iris.boundaryRadiusX ?? iris.radiusX)*2*size.width,height: (iris.boundaryRadiusY ?? iris.radiusY)*2*size.height))
             ctx.setLineDash(phase: 0,lengths: [5,4])
-            let rx = result?.tracking == nil ? iris.radiusX : (iris.boundaryRadiusX ?? iris.radiusX)*0.8
-            let ry = result?.tracking == nil ? iris.radiusY : (iris.boundaryRadiusY ?? iris.radiusY)*0.8
+            let fraction = result?.tracking?.searchAreaFraction.map(sqrt) ?? 0.8
+            let rx = result?.tracking == nil ? iris.radiusX : (iris.boundaryRadiusX ?? iris.radiusX)*fraction
+            let ry = result?.tracking == nil ? iris.radiusY : (iris.boundaryRadiusY ?? iris.radiusY)*fraction
             ctx.strokeEllipse(in: CGRect(x: (iris.center.x-rx)*size.width,y: (iris.center.y-ry)*size.height,width: rx*2*size.width,height: ry*2*size.height))
             ctx.setLineDash(phase: 0,lengths: [])
         }
@@ -223,9 +224,12 @@ enum EyeMediaExporter {
         ctx.setStrokeColor(color.cgColor); ctx.setLineWidth(2*scale)
         if !sample.source.measured { ctx.setLineDash(phase: 0,lengths: [4*scale,3*scale]) }
         let radius: CGFloat = 6*scale
-        ctx.strokeEllipse(in: CGRect(x: point.x-radius,y: point.y-radius,width: radius*2,height: radius*2))
+        if sample.emissionPhase?.inhibitsMeasurement == true {
+            ctx.move(to: CGPoint(x: point.x-radius,y: point.y-radius)); ctx.addLine(to: CGPoint(x: point.x+radius,y: point.y+radius))
+            ctx.move(to: CGPoint(x: point.x-radius,y: point.y+radius)); ctx.addLine(to: CGPoint(x: point.x+radius,y: point.y-radius)); ctx.strokePath()
+        } else { ctx.strokeEllipse(in: CGRect(x: point.x-radius,y: point.y-radius,width: radius*2,height: radius*2)) }
         ctx.setLineDash(phase: 0,lengths: [])
-        let title = "\(sample.source.title) \(String(format: "%.2f",sample.confidence))"
+        let title = "\(sample.emissionPhase?.title ?? "") \(sample.source.title) \(String(format: "%.2f",sample.confidence))"
         UIGraphicsPushContext(ctx)
         (title as NSString).draw(at: CGPoint(x: point.x+radius+4,y: point.y-radius-font.pointSize),withAttributes: [.font:font,.foregroundColor:color,.backgroundColor:UIColor(LabStyle.background)])
         UIGraphicsPopContext()

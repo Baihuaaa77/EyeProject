@@ -10,6 +10,11 @@ struct GlintTrackingView: View {
             GlintQualityTimeline(result: result).frame(height: 64)
                 .accessibilityLabel("逐帧质量分；实线表示图像观测，虚线表示预测")
             Text("实线：图像观测 / 弱观测；虚线：预测。质量分0–1，未校准为正确概率。").font(LabStyle.detail)
+            if let audit = result.emissionAudit {
+                Text("稳定灭灯 \(audit.stableOffFrames) 帧 · 低电平 \(audit.stableDimFrames) 帧 · 切换/曝光混合 \(audit.transitionFrames) 帧").font(LabStyle.detail)
+                Text("图像单独定位：灭灯候选 \(audit.independentOffMeasurements)，低电平候选 \(audit.independentDimMeasurements)；时序抑制 \(audit.suppressedMeasurements) 帧。").font(LabStyle.detail)
+                Text("抑制数不等同人工确认误检数；光码相关由抑制前的图像信号计算。").font(LabStyle.detail)
+            }
             if result.frames.contains(where: { $0.patternMatch != nil }) {
                 Text("外围图案可分辨且优于竞争模板：\(result.patternMatchedFrames) 帧").font(LabStyle.detail)
                 Text("同时比较另一图案与单独圆点；结构不清晰时只保留中心候选，不计为图案验证。").font(LabStyle.detail)
@@ -45,7 +50,7 @@ struct TrackingPlaybackReadout: View {
         VStack(alignment: .leading,spacing: 6) {
             ForEach(playback.results.filter { $0.tracking != nil },id: \.eye) { result in
                 if let sample = result.tracking?.nearest(pts: playback.videoStartPTS+playback.time),let p = sample.imagePoint {
-                    Text("\(result.eye == "image_left" ? "画面左" : "画面右") · \(sample.source.title) · Q \(String(format: "%.2f",sample.confidence))\n(\(String(format: "%.1f",p.x)), \(String(format: "%.1f",p.y))) px · 不确定度约 \(String(format: "%.1f",sample.uncertaintyPixels)) px")
+                    Text("\(result.eye == "image_left" ? "画面左" : "画面右") · \(sample.emissionPhase?.title ?? "历史记录") · \(sample.source.title) · Q \(String(format: "%.2f",sample.confidence))\n(\(String(format: "%.1f",p.x)), \(String(format: "%.1f",p.y))) px · 定位尺度约 \(String(format: "%.1f",sample.uncertaintyPixels)) px")
                         .font(LabStyle.code).foregroundStyle(LabStyle.text)
                     if let match = sample.patternMatch {
                         Text("图案 \(match.resolved ? "结构支持" : "待核查") · r \(String(format: "%.2f",match.correlation)) · 竞争 r \(String(format: "%.2f",match.alternativeCorrelation))")

@@ -4,22 +4,48 @@ import AVFoundation
 @testable import CornealCodeLab
 
 final class InteractiveMediaTests: XCTestCase {
-    @MainActor func testDistinctTargetPreviewsAndBudgetRender() {
-        let ring = FixationPatternDisplay.preview(.ringDot),cross = FixationPatternDisplay.preview(.crossDot)
-        XCTAssertNotEqual(ring.pngData(),cross.pngData())
-        XCTAssertTrue(TrialMode.available.contains(.pattern))
-        XCTAssertFalse(TrialMode.available.contains(.motion))
-        XCTAssertFalse(TrialMode.available.contains(.screenTarget))
-        let content = VStack {
-            HStack { FixationPatternPreview(pattern: .ringDot); FixationPatternPreview(pattern: .crossDot) }
-            PatternSetupView(configuration: .constant(.patternDefault),distance: 20,irisPixels: 150)
-        }.padding().background(LabStyle.background).foregroundStyle(LabStyle.text).preferredColorScheme(.dark)
-        let controller = UIHostingController(rootView: content)
-        let window = UIWindow(frame: CGRect(x: 0,y: 0,width: 375,height: 812)); window.rootViewController = controller; window.makeKeyAndVisible()
-        controller.view.frame = window.bounds; controller.view.layoutIfNeeded()
-        let image = UIGraphicsImageRenderer(size: window.bounds.size).image { graphics in controller.view.layer.render(in: graphics.cgContext) }
-        let attachment = XCTAttachment(image: image); attachment.name = "新注视图案与像素预算"; attachment.lifetime = .keepAlways; add(attachment)
+    @MainActor func testBrightnessWriteReadbackMonitoringAndRestore() {
+        var actual = 0.4
+        let brightness = ScreenBrightnessController(read: { actual },write: { value in actual = value },monitor: false)
+        brightness.apply(1)
+        XCTAssertEqual(actual,1,accuracy: 0.001); XCTAssertTrue(brightness.confirmed)
+        brightness.beginCapture(); actual = 0.65; brightness.refresh(reason: "手动调整")
+        XCTAssertFalse(brightness.confirmed)
+        let log = brightness.endCapture()
+        XCTAssertGreaterThanOrEqual(log.count,2); XCTAssertEqual(log.last!.actual,0.65,accuracy: 0.001)
+        brightness.releaseControl(); XCTAssertEqual(actual,0.4,accuracy: 0.001)
+    }
+    @MainActor func testRejectedBrightnessWriteCannotClaimConfirmation() {
+        let brightness = ScreenBrightnessController(read: { 0.4 },write: { _ in },monitor: false)
+        brightness.apply(1)
+        XCTAssertFalse(brightness.confirmed); XCTAssertEqual(brightness.actual,0.4,accuracy: 0.001)
+    }
+    @MainActor func testStartingWithFocusedInputDismissesKeyboardBeforeCameraGuard() {
+        let window = UIWindow(frame: CGRect(x: 0,y: 0,width: 375,height: 812))
+        let controller = UIViewController(); window.rootViewController = controller; window.makeKeyAndVisible()
+        let field = UITextField(frame: CGRect(x: 20,y: 100,width: 200,height: 44)); field.keyboardType = .decimalPad
+        controller.view.addSubview(field); field.becomeFirstResponder()
+        XCTAssertTrue(field.isFirstResponder,"先确认键盘焦点已建立")
+        let model = LabModel(); model.begin()
+        XCTAssertFalse(field.isFirstResponder)
         window.isHidden = true
+    }
+
+    @MainActor func testPointControlsRenderAtSmallWidthAndLargeType() {
+        for category in [DynamicTypeSize.large,.accessibility3] {
+            let model = LabModel()
+            let content = NavigationStack {
+                Form { CaptureConditionFields(model: model) }.scrollDismissesKeyboard(.interactively)
+            }.environment(\.dynamicTypeSize,category).environment(\.accessibilityReduceMotion,true).preferredColorScheme(.dark)
+            let controller = UIHostingController(rootView: content)
+            let window = UIWindow(frame: CGRect(x: 0,y: 0,width: 375,height: 812))
+            window.rootViewController = controller; window.makeKeyAndVisible()
+            controller.view.frame = window.bounds; controller.view.layoutIfNeeded()
+            let image = UIGraphicsImageRenderer(size: window.bounds.size).image { context in controller.view.layer.render(in: context.cgContext) }
+            let attachment = XCTAttachment(image: image); attachment.name = "白点参数-\(category)"; attachment.lifetime = .keepAlways; add(attachment)
+            XCTAssertEqual(image.size.width,375)
+            window.isHidden = true
+        }
     }
 
     func testInactivePreviewDoesNotReportACaptureFailure() {
