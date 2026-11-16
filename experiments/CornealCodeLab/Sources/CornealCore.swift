@@ -46,6 +46,16 @@ struct TrialConfiguration: Codable {
     static var patternDefault: TrialConfiguration {
         var c = TrialConfiguration(); c.mode = .pattern; c.dotDiameter = 288; c.dotY = 0.35; c.mean = 1; return c
     }
+    mutating func selectMode(_ value: TrialMode) {
+        mode = value
+        if value.isPattern {
+            if dotDiameter<192 { dotDiameter = 288 }
+            if dotY<0.25 { dotY = 0.35 }
+            colorCode = false
+        } else { dotDiameter = min(160,dotDiameter) }
+        if value == .pattern { mean = 1 }
+        else if value.usesTemporalCode || value == .steady { mean = modulation == 0.15 ? 0.8 : 1-modulation }
+    }
     var validationError: String? {
         let values = [dotDiameter,dotY,screenBrightness,mean,modulation,chipSeconds,distanceCM,probeDiameter,motionScale,screenLevel,displayWidth,displayHeight,screenWidthMM,screenHeightMM,cornealRadiusMM]
         guard values.allSatisfy({ $0.isFinite }) else { return "实验参数包含无效数值" }

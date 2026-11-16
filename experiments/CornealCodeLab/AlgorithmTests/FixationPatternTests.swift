@@ -58,4 +58,14 @@ final class FixationPatternTests: XCTestCase {
         var clipped = c; clipped.dotY = 0.1
         XCTAssertNotNil(clipped.validationError)
     }
+    func testSwitchingToMeanControlPreservesCodedMeanIncludingLegacyWeakCode() {
+        var c = TrialConfiguration.patternDefault
+        for modulation in [0.15,0.4,0.475,0.5] {
+            c.modulation = modulation; c.selectMode(.coded)
+            let mean = c.mean
+            c.selectMode(.steady)
+            XCTAssertEqual(c.mean,mean)
+            XCTAssertEqual(c.mean,modulation == 0.15 ? 0.8 : 1-modulation)
+        }
+    }
 }

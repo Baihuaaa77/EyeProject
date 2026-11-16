@@ -65,4 +65,11 @@ final class GlintTrackingTests: XCTestCase {
         XCTAssertLessThanOrEqual(joint.confidence,0.25)
         XCTAssertNil(joint.measurementPoint)
     }
+    func testFusedPixelAndRelativeCoordinatesUseTheSameWeights() {
+        var tracker = GlintTracker()
+        let a = tracker.update(pixels: image(x: 64,y: 38),width: 128,height: 96,roi: roi,iris: iris,row: row(0),expectedDiameter: 3)
+        var b = a; b.imagePoint!.x += 2; b.irisRelative!.x += 2/36.0; b.confidence *= 0.8
+        let joint = NativeGlintTracking.fuse(a,b)
+        XCTAssertEqual(joint.irisRelative!.x,(joint.imagePoint!.x-64)/36,accuracy: 1e-9)
+    }
 }

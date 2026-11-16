@@ -100,6 +100,9 @@ enum NativeGlintTracking {
             if distance<=gate {
                 let weight = max(0.001,a.confidence+b.confidence)
                 result.imagePoint = LabPoint(x: (pa.x*a.confidence+pb.x*b.confidence)/weight,y: (pa.y*a.confidence+pb.y*b.confidence)/weight)
+                if let ra = a.irisRelative,let rb = b.irisRelative {
+                    result.irisRelative = LabPoint(x: (ra.x*a.confidence+rb.x*b.confidence)/weight,y: (ra.y*a.confidence+rb.y*b.confidence)/weight)
+                }
                 result.confidence = sqrt(a.confidence*b.confidence)*exp(-0.15*pow(distance/gate,2))
             } else {
                 result.confidence *= 0.4

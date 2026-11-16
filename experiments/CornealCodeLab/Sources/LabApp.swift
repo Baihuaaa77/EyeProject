@@ -71,15 +71,8 @@ struct LabRootView: View {
                     model.configuration.transitionGuardMS = fast ? 40 : 0
                 }))
                 if !model.configuration.mode.isPattern { Toggle("红绿差通道编码（需实测色亮度）",isOn: $model.configuration.colorCode) }
-                Picker("照明",selection: $model.configuration.mode) {
+                Picker("照明",selection: Binding(get: { model.configuration.mode },set: { model.configuration.selectMode($0) })) {
                     ForEach(TrialMode.available) { mode in Text(mode.title).tag(mode) }
-                }.onChange(of: model.configuration.mode) { mode in
-                    if mode.isPattern {
-                        if model.configuration.dotDiameter<192 { model.configuration.dotDiameter = 288 }
-                        if model.configuration.dotY<0.25 { model.configuration.dotY = 0.35 }
-                        model.configuration.colorCode = false
-                    } else { model.configuration.dotDiameter = min(160,model.configuration.dotDiameter) }
-                    model.configuration.mean = mode.usesTemporalCode ? 1-model.configuration.modulation : 1
                 }
                 Picker(model.configuration.mode.isPattern ? "图案外径" : "固定注视点直径",selection: $model.configuration.dotDiameter) {
                     ForEach(model.configuration.mode.isPattern ? [192.0,256,288,320] : [16.0,32,64,96,128,160],id: \.self) { Text("\(Int($0)) pt").tag($0) }
