@@ -25,7 +25,8 @@ final class ScreenBrightnessController: ObservableObject {
     private(set) var samples: [BrightnessSample] = []
 
     init(read: @escaping () -> Double = { Double(UIScreen.main.brightness) },write: @escaping (Double) -> Void = { UIScreen.main.brightness = CGFloat($0) },monitor: Bool = true) {
-        self.read = read; self.write = write; actual = read(); requested = actual
+        let initial = read()
+        self.read = read; self.write = write; actual = initial; requested = initial
         if monitor {
             observer = NotificationCenter.default.addObserver(forName: UIScreen.brightnessDidChangeNotification,object: nil,queue: .main) { [weak self] _ in self?.refresh(reason: "系统亮度通知") }
             let timer = Timer(timeInterval: 0.25,repeats: true) { [weak self] _ in self?.refresh(reason: "定时读回") }

@@ -3,8 +3,6 @@ import QuartzCore
 import CoreMedia
 import SwiftUI
 
-func labHostTime() -> Double { CMTimeGetSeconds(CMClockGetTime(CMClockGetHostTimeClock())) }
-
 /// 仅显示实验光点。运动轮固定注视白点，外围光源独立运动，逐显示帧记实际位置。
 final class StimulusDriver: NSObject {
     var configuration = TrialConfiguration()
