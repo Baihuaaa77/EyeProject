@@ -24,6 +24,21 @@ class StrabismusDiagnosticRecorder(private val root: File, private val palette: 
     private val credits=AtomicInteger(0)
     @Volatile private var submitted=-1L
     private var session: Session?=null
+    private val copies = mutableListOf<Bitmap>()
+    private val availableCopies = mutableListOf<Bitmap>()
+    private fun releaseCopy(bitmap: Bitmap) = synchronized(copies) {
+        if (!bitmap.isRecycled && bitmap !in availableCopies) availableCopies.add(bitmap)
+    }
+    private fun prepareCopies(width: Int, height: Int) = synchronized(copies) {
+        // 首次大图分配也在后台完成；两幅缓冲分别用于编码与等待同帧诊断。
+        availableCopies.filter { it.width != width || it.height != height }.toList().forEach {
+            availableCopies.remove(it); copies.remove(it); it.recycle()
+        }
+        repeat((2 - copies.count { it.width == width && it.height == height }).coerceAtLeast(0)) {
+            val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+            copies.add(bitmap); availableCopies.add(bitmap)
+        }
+    }
 
     fun event(json: String) {
         val row=runCatching { JSONObject(json) }.getOrNull() ?: return
@@ -47,9 +62,21 @@ class StrabismusDiagnosticRecorder(private val root: File, private val palette: 
 
     fun capture(bitmap: Bitmap, time: Long) {
         if(!active.get() || submitted>=0 && time-submitted<83 || !credits.compareAndSet(0,1)) return
+        val copy = synchronized(copies) {
+            availableCopies.firstOrNull { it.width == bitmap.width && it.height == bitmap.height }?.also { availableCopies.remove(it) }
+        }
+        if (copy == null) {
+            val width = bitmap.width; val height = bitmap.height
+            executor.execute {
+                try { prepareCopies(width, height) }
+                catch (error: Throwable) { session?.let { fail(it, error) } }
+                finally { credits.set(0) }
+            }
+            return
+        }
         submitted=time
-        val copy=runCatching { bitmap.copy(Bitmap.Config.ARGB_8888,false) }.getOrNull()
-        if(copy==null) { credits.set(0); return }
+        try { Canvas(copy).drawBitmap(bitmap, 0f, 0f, null) }
+        catch (error: Throwable) { releaseCopy(copy); credits.set(0); return }
         executor.execute {
             try {
                 val s=session ?: return@execute
@@ -69,7 +96,7 @@ class StrabismusDiagnosticRecorder(private val root: File, private val palette: 
                 }
             } catch(error: Throwable) { session?.let { fail(it,error) } }
             finally {
-                if(session?.pending?.values?.any { it===copy }!=true && !copy.isRecycled) copy.recycle()
+                if(session?.pending?.values?.any { it===copy }!=true) releaseCopy(copy)
                 credits.set(0)
             }
         }
@@ -81,7 +108,7 @@ class StrabismusDiagnosticRecorder(private val root: File, private val palette: 
             if(time<=s.last) { s.dropped++; return }
             val composite=s.renderer.render(bitmap,row,(time-s.base)/1000.0)
             s.video?.append(composite,(time-s.base).coerceAtLeast(0)); s.last=time; s.frames++
-        } finally { if(!bitmap.isRecycled) bitmap.recycle() }
+        } finally { releaseCopy(bitmap) }
     }
     private fun fail(s: Session,error: Throwable) {
         active.set(false); s.manifest.put("error",error.message ?: error.javaClass.simpleName)
@@ -185,7 +212,8 @@ internal class DiagnosticPanelRenderer(private val p: DiagnosticVideoPalette) : 
         paint.style=Paint.Style.FILL
         text("实心：实际目标   青/粉：左/右注视估计",334f,640f,p.target,15f)
         val calibration=if(row.optBoolean("calibrated")) "已标定" else "未获得可靠标定，不绘制估计"
-        text("%.2f s  %s  %s  距离 %.1f cm".format(elapsed,(mapOf("GAZE_CALIBRATION" to "注视标定", "FIXATION" to "定点映光", "FAR_FIXATION" to "看远", "COVER" to "交替遮盖", "PURSUIT" to "移动点注视")[row.optString("phase")] ?: row.optString("phase")),calibration,row.optDouble("distanceCm")),16f,675f)
+        text("%.2f s  %s  %s  距离 %.1f cm".format(elapsed,(mapOf("GAZE_CALIBRATION" to "注视标定", "FIXATION" to "定点映光", "FAR_FIXATION" to "看远", "COVER" to "交替遮盖", "PURSUIT" to "移动点注视")[row.optString("phase")] ?: row.optString("phase")),calibration,row.optDouble("distanceCm")),16f,658f)
+        text(row.optString("warning").takeUnless { it == "null" }.orEmpty(),16f,682f,p.secondary,14f)
         val reasons=row.optJSONArray("reasons")
         text(if(reasons==null || reasons.length()==0) "质量门控通过；标注只是诊断观测" else (0 until reasons.length()).joinToString("；") { reasons.optString(it) },16f,705f,p.secondary,14f)
         return output

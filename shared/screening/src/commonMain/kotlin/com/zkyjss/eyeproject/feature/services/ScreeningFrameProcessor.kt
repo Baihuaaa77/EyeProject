@@ -178,7 +178,7 @@ internal class ScreeningFrameProcessor(private val host: ScreeningEngine) {
             if (_state.value.kind == ScreeningKind.STRABISMUS) diagnostics.frame(frame,
                 _state.value.copy(distanceCm = smoothedDistance), valid, opticalReady, rendered?.point,
                 gaze?.estimate(gazeLeft, gazeRight), gazeOnTarget, gaze != null, coding, time,
-                gazeLeft, gazeRight, gazeCalibration.size, gazeCalibration.size > calibrationCountBefore)
+                gazeLeft, gazeRight, gazeCalibration.size, gazeCalibration.size > calibrationCountBefore, rendered?.timeMs)
             if (!_state.value.stabilityInterrupted && !_state.value.guidePending && !_state.value.farWaiting && step == _state.value.step && time >= stepStartMs && step != ScreeningStep.PROFILE && step != ScreeningStep.ENVIRONMENT && step != ScreeningStep.RESULT && step != ScreeningStep.GAZE_CALIBRATION) {
                 totalFrames++
                 // 看远另行评估（数据不足时只是不评估看远），不拉低整体有效帧率

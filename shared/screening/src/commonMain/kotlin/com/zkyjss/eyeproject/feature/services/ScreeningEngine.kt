@@ -357,7 +357,7 @@ class ScreeningEngine(platform: ScreeningPlatform, internal val scope: Coroutine
 
     /** 平台绘制亮点后回报实际明暗，解码不把计划时刻当作显示证据。 */
     fun reportReflectionLight(on: Boolean) {
-        diagnostics.reflectionLightOn = on
+        diagnostics.reportLight(platform.nowMs(), on)
         if (_state.value.step == ScreeningStep.FIXATION && !_state.value.guidePending)
             reflectionCode.present(platform.nowMs(), on, platform.nowMs()-stepStartMs)
     }

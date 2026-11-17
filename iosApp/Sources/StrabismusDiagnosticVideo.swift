@@ -268,9 +268,10 @@ enum DiagnosticPanelRenderer {
             let phaseKey = row["phase"] as? String ?? "未知阶段"
             let phase = ["GAZE_CALIBRATION": "注视标定", "FIXATION": "定点映光", "FAR_FIXATION": "看远", "COVER": "交替遮盖", "PURSUIT": "移动点注视"][phaseKey] ?? phaseKey
             let calibrated = row["calibrated"] as? Bool == true ? "已标定" : "未获得可靠标定，不绘制估计"
-            text(String(format: "%.2f s  %@  %@  距离 %.1f cm", elapsed, phase, calibrated, (row["distanceCm"] as? NSNumber)?.doubleValue ?? 0), CGRect(x: 16, y: 657, width: 1230, height: 24))
+            text(String(format: "%.2f s  %@  %@  距离 %.1f cm", elapsed, phase, calibrated, (row["distanceCm"] as? NSNumber)?.doubleValue ?? 0), CGRect(x: 16, y: 646, width: 1230, height: 24))
+            text(row["warning"] as? String ?? "", CGRect(x: 16, y: 672, width: 1240, height: 22), UIColor(EyeStyle.secondary), size: 14)
             let reasons = (row["reasons"] as? [String] ?? []).joined(separator: "；")
-            text(reasons.isEmpty ? "质量门控通过；标注只是诊断观测" : reasons, CGRect(x: 16, y: 684, width: 1240, height: 30), UIColor(EyeStyle.secondary), size: 14)
+            text(reasons.isEmpty ? "质量门控通过；标注只是诊断观测" : reasons, CGRect(x: 16, y: 696, width: 1240, height: 24), UIColor(EyeStyle.secondary), size: 14)
         }
     }
 }

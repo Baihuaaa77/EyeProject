@@ -20,7 +20,10 @@ import java.io.File
 /** 使用真实系统编码器检验原画、拼接、时间轴和结束延迟；合成图不作为检测准确性证据。 */
 @RunWith(AndroidJUnit4::class)
 class StrabismusDiagnosticAndroidTest {
-    @Test fun encodesAlignedMoviesAndFinishesWithoutWholeVideoReprocessing() {
+    @Test fun encodesAlignedMoviesAndFinishesWithoutWholeVideoReprocessing() = exercise(640, 480, 24)
+    @Test fun portraitLongClipKeepsCaptureAndFinalizationBounded() = exercise(1080, 1920, 180)
+
+    private fun exercise(sourceWidth: Int, sourceHeight: Int, count: Int) {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val root = File(context.filesDir, "diagnostic-encoding-test").apply { mkdirs() }
         val id = "strabismus_${System.currentTimeMillis()}_0"
@@ -29,16 +32,21 @@ class StrabismusDiagnosticAndroidTest {
             Color.LTGRAY, Color.rgb(255, 140, 40), Color.CYAN, Color.MAGENTA, Color.GREEN, Color.WHITE))
         fun event(type: String) = JSONObject().put("event", type).put("sessionId", id)
         recorder.event(event("start").put("createdAtMs", System.currentTimeMillis()).toString())
-        val source = Bitmap.createBitmap(640, 480, Bitmap.Config.ARGB_8888)
+        val source = Bitmap.createBitmap(sourceWidth, sourceHeight, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(source)
         val paint = Paint()
         val lid = JSONArray("[[210,190],[230,180],[260,180],[280,190],[260,200],[230,200]]")
-        for (i in 0 until 24) {
+        var captureMaxNs = 0L
+        var captureTotalNs = 0L
+        for (i in 0 until count) {
             // 上红下蓝，能发现编码画面倒置；每帧不同以发现停帧。
-            canvas.drawColor(Color.BLUE); paint.color = Color.RED; canvas.drawRect(0f, 0f, 640f, 240f, paint)
-            paint.color = Color.WHITE; canvas.drawCircle(80f + i * 10, 120f, 16f, paint)
+            canvas.drawColor(Color.BLUE); paint.color = Color.RED; canvas.drawRect(0f, 0f, sourceWidth.toFloat(), sourceHeight / 2f, paint)
+            paint.color = Color.WHITE; canvas.drawCircle(80f + i % 40 * 10, 120f, 16f, paint)
             val time = 10_000L + i * 100
+            val captureStart = SystemClock.elapsedRealtimeNanos()
             recorder.capture(source, time)
+            val captureNs = SystemClock.elapsedRealtimeNanos() - captureStart
+            captureMaxNs = maxOf(captureMaxNs, captureNs); captureTotalNs += captureNs
             val eye = JSONObject().put("lid", lid).put("iris", JSONArray("[[245,190],[240,190],[245,185],[250,190],[245,195]]"))
                 .put("pupil", JSONArray("[245,190]")).put("glint", JSONArray("[249,189]")).put("rejection", "合成画面")
             recorder.event(event("frame").put("captureTimeMs", time).put("phase", "PURSUIT")
@@ -60,7 +68,7 @@ class StrabismusDiagnosticAndroidTest {
         val waitMs = SystemClock.elapsedRealtime() - finishStart
         assertEquals(manifest.toString(), "ready", manifest.optString("state"))
         assertTrue("编码帧过少：$manifest", manifest.getInt("frames") >= 8)
-        for ((name, width, height) in listOf(Triple("original.mp4", 640, 480), Triple("comparison.mp4", 1280, 720))) {
+        for ((name, width, height) in listOf(Triple("original.mp4", sourceWidth, sourceHeight), Triple("comparison.mp4", 1280, 720))) {
             val reader = MediaMetadataRetriever()
             try {
                 reader.setDataSource(File(directory, name).absolutePath)
@@ -70,12 +78,12 @@ class StrabismusDiagnosticAndroidTest {
                 val frame = reader.getFrameAtTime(500_000, MediaMetadataRetriever.OPTION_CLOSEST)!!
                 if (name == "original.mp4") {
                     assertTrue("原画上下倒置", Color.red(frame.getPixel(20, 20)) > 180)
-                    assertTrue("原画上下倒置", Color.blue(frame.getPixel(20, 460)) > 180)
+                    assertTrue("原画上下倒置", Color.blue(frame.getPixel(20, sourceHeight - 20)) > 180)
                 } else File(directory, "preview.png").outputStream().use { frame.compress(Bitmap.CompressFormat.PNG, 100, it) }
                 frame.recycle()
             } finally { reader.release() }
         }
-        assertEquals(26, File(directory, "frames.jsonl").readLines().size)
-        File(directory, "performance.txt").writeText("结束等待 ${waitMs}ms；视频帧数 ${manifest.getInt("frames")}；测试源 640x480/10fps")
+        assertEquals(count + 2, File(directory, "frames.jsonl").readLines().size)
+        File(directory, "performance.txt").writeText("结束等待 ${waitMs}ms；视频帧数 ${manifest.getInt("frames")}；测试源 ${sourceWidth}x${sourceHeight}/10fps；采集入口平均 ${captureTotalNs/count/1_000_000.0}ms，峰值 ${captureMaxNs/1_000_000.0}ms")
     }
 }

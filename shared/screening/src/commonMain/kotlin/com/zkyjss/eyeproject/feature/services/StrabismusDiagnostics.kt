@@ -8,7 +8,11 @@ internal class StrabismusDiagnostics(private val platform: ScreeningPlatform) {
     var sessionId: String? = null
         private set
     private var active = false
-    var reflectionLightOn = true
+    private val lights = ArrayDeque<Pair<Long, Boolean>>()
+    fun reportLight(timeMs: Long, on: Boolean) {
+        lights.addLast(timeMs to on)
+        while (lights.size > 256) lights.removeFirst()
+    }
     private var serial = 0
     private val reasons = mutableMapOf<String, Int>()
     private val phases = mutableMapOf<String, Int>()
@@ -16,7 +20,7 @@ internal class StrabismusDiagnostics(private val platform: ScreeningPlatform) {
     fun start() {
         if (active) return
         sessionId = "strabismus_${platform.epochMs()}_${serial++}"
-        active = true; reasons.clear(); phases.clear()
+        active = true; reasons.clear(); phases.clear(); lights.clear()
         emit(RecordObject().apply {
             put("event", "start"); put("createdAtMs", platform.epochMs()); put("version", 1)
             put("displayWidth", platform.display.widthPixels); put("displayHeight", platform.display.heightPixels)
@@ -26,7 +30,7 @@ internal class StrabismusDiagnostics(private val platform: ScreeningPlatform) {
     fun frame(frame: FaceLandmarkFrame, state: ScreeningState, valid: Boolean, opticalReady: Boolean,
               target: GazePoint?, estimates: Pair<GazePoint?, GazePoint?>?, onTarget: Boolean?,
               calibrated: Boolean, coding: Boolean, sessionTime: Long,
-              inputLeft: GazePoint? = null, inputRight: GazePoint? = null, calibrationSamples: Int = 0, sampleAccepted: Boolean = false) {
+              inputLeft: GazePoint? = null, inputRight: GazePoint? = null, calibrationSamples: Int = 0, sampleAccepted: Boolean = false, targetRenderTimeMs: Long? = null) {
         if (!active || state.kind != ScreeningKind.STRABISMUS) return
         val face = frame.faces.singleOrNull()
         val pose = face?.headPose
@@ -55,7 +59,11 @@ internal class StrabismusDiagnostics(private val platform: ScreeningPlatform) {
             put("sessionTimeMs", sessionTime); put("phase", state.step.name)
             put("imageWidth", frame.sourceWidth); put("imageHeight", frame.sourceHeight)
             put("displayWidth", platform.display.widthPixels); put("displayHeight", platform.display.heightPixels)
-            put("targetVisible", state.step !in setOf(ScreeningStep.FIXATION, ScreeningStep.COVER, ScreeningStep.FAR_FIXATION) || reflectionLightOn && !state.guidePending)
+            put("targetRenderTimeMs", targetRenderTimeMs)
+            val light = lights.lastOrNull { it.first <= sessionTime }
+            put("lightRenderTimeMs", light?.first)
+            put("targetVisible", target != null && !state.guidePending &&
+                (state.step !in setOf(ScreeningStep.FIXATION, ScreeningStep.COVER, ScreeningStep.FAR_FIXATION) || light?.second == true))
             put("targetColor", if (state.step in setOf(ScreeningStep.FIXATION, ScreeningStep.COVER, ScreeningStep.FAR_FIXATION)) "white" else "orange")
             put("target", point(target)); put("leftGaze", point(estimates?.first)); put("rightGaze", point(estimates?.second))
             put("calibrated", calibrated); put("gazeOnTarget", onTarget)
