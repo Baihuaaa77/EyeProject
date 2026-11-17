@@ -26,6 +26,14 @@ final class StrabismusDiagnosticVideoTests: XCTestCase {
                 bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue))
             ctx.setFillColor(UIColor.red.cgColor); ctx.fill(CGRect(x: 0, y: 0, width: 640, height: 480))
             ctx.setFillColor(UIColor.white.cgColor); ctx.fill(CGRect(x: CGFloat(30 + i*10), y: 100, width: 30, height: 30))
+            // 直接写入原始行，避免测试图本身的Quartz坐标方向掩盖编码倒置。
+            let bytes = CVPixelBufferGetBaseAddress(pixel)!.assumingMemoryBound(to: UInt8.self)
+            let stride = CVPixelBufferGetBytesPerRow(pixel)
+            for y in 0..<480 { for x in 0..<640 {
+                let offset = y * stride + x * 4
+                bytes[offset] = y < 240 ? 0 : 255; bytes[offset + 1] = 0
+                bytes[offset + 2] = y < 240 ? 255 : 0; bytes[offset + 3] = 255
+            }}
             CVPixelBufferUnlockBaseAddress(pixel, [])
             recorder.capture(pixel, face: nil, time: Int64(10_000 + i*100))
             try send("frame", ["captureTimeMs": 10_000 + i*100, "phase": "PURSUIT", "calibrated": true,
@@ -51,6 +59,23 @@ final class StrabismusDiagnosticVideoTests: XCTestCase {
             XCTAssertEqual(actualSize, size)
             let duration = try await asset.load(.duration)
             XCTAssertGreaterThan(duration.seconds, 0.7)
+            let generator = AVAssetImageGenerator(asset: asset)
+            let image = try generator.copyCGImage(at: CMTime(value: 500, timescale: 1000), actualTime: nil)
+            func color(_ x: Int, _ y: Int) throws -> [UInt8] {
+                let pixel = try XCTUnwrap(image.cropping(to: CGRect(x: x, y: y, width: 1, height: 1)))
+                var rgba = [UInt8](repeating: 0, count: 4)
+                try rgba.withUnsafeMutableBytes { raw in
+                    let context = try XCTUnwrap(CGContext(data: raw.baseAddress, width: 1, height: 1,
+                        bitsPerComponent: 8, bytesPerRow: 4, space: CGColorSpaceCreateDeviceRGB(),
+                        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue))
+                    context.draw(pixel, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+                }
+                return rgba
+            }
+            let top = try color(30, file == "original.mp4" ? 20 : 240)
+            let bottom = try color(30, file == "original.mp4" ? 460 : 420)
+            XCTAssertGreaterThan(top[0], 180, "上半原画应为红色：\(file)")
+            XCTAssertGreaterThan(bottom[2], 180, "下半原画应为蓝色：\(file)")
         }
         let data = try String(contentsOf: directory.appendingPathComponent("frames.jsonl"), encoding: .utf8)
         XCTAssertEqual(data.split(separator: "\n").count, 26)

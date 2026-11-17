@@ -47,7 +47,11 @@ final class StrabismusDiagnosticVideo {
                     s.manifest["audit"] = row
                     finish(s, reason: row["reason"] as? String ?? "测试结束"); session = nil
                 }
-            } catch { s.manifest["error"] = error.localizedDescription; s.saveManifest() }
+            } catch {
+                s.manifest["error"] = error.localizedDescription
+                lock.lock(); accepting = false; lock.unlock()
+                finish(s, reason: "诊断写入失败，测试本身继续"); session = nil
+            }
         }
     }
 

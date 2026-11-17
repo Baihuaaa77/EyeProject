@@ -11,8 +11,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.zkyjss.eyeproject.core.ui.component.*
 import java.text.SimpleDateFormat
@@ -23,6 +21,7 @@ import java.util.Locale
 @Composable
 internal fun DiagnosticVideoLibrary(viewModel: RecordsViewModel, sessionId: String? = null, onClose: () -> Unit) {
     val sessions by viewModel.diagnosticSessions.collectAsStateWithLifecycle()
+    val colors = com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors.current
     val typography = com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography.current
     val context=LocalContext.current
     var playing by remember { mutableStateOf<String?>(null) }
@@ -41,17 +40,17 @@ internal fun DiagnosticVideoLibrary(viewModel: RecordsViewModel, sessionId: Stri
         }
     }
     DisposableEffect(Unit) { onDispose { video?.stopPlayback() } }
-    Dialog(onDismissRequest=onClose,properties=DialogProperties(usePlatformDefaultWidth=false)) {
+    EyeFullScreenPage(onDismiss = onClose) {
         EyeSubPage("斜视诊断视频",onClose) {
-            if(sessions.none { sessionId == null || it.id == sessionId }) EyeText("暂无斜视诊断视频", style = typography.body)
+            if(sessions.none { sessionId == null || it.id == sessionId }) EyeText("暂无斜视诊断视频", style = typography.body, color = colors.textSecondary)
             for(session in sessions.filter { sessionId == null || it.id == sessionId }) {
-                EyeText(SimpleDateFormat("yyyy-MM-dd HH:mm:ss",Locale.CHINA).format(Date(session.createdAtMs)), style = typography.subtitle)
+                EyeText(SimpleDateFormat("yyyy-MM-dd HH:mm:ss",Locale.CHINA).format(Date(session.createdAtMs)), style = typography.subtitle, color = colors.textPrimary)
                 EyeText(when(session.state) {
                     "ready" -> "已保存 · ${session.frames} 帧"
                     "finishing" -> "正在收尾保存"
                     "recording" -> "录制中或上次未正常结束，可导出诊断数据"
                     else -> "未完整保存：${session.error ?: "没有可编码的画面"}"
-                }, style = typography.bodySecondary)
+                }, style = typography.bodySecondary, color = colors.textSecondary)
                 if(session.videoUri!=null) {
                     EyeButton("回看拼接视频",EyeButtonRole.PRIMARY,{ playing=session.id },Modifier.fillMaxWidth())
                     if(playing==session.id) key(session.id) { AndroidView(factory={ c -> VideoView(c).also {
