@@ -254,11 +254,9 @@ object ScreeningAssessmentModel {
             if (m.refixations.size < 2) add("解除遮盖后的可用事件不足 2 次")
         }
         val riskScope = "看近（33 cm）与看远眼位偏斜及双眼协调"
-        // 完成性优先：质量不足仍给出探索性结果，限制项单独列出，不把用户卡在“重新测试”。
-        if (qualityReasons.isNotEmpty()) return ScreeningAssessment(VERSION, "有限", ScreeningRiskLevel.UNKNOWN,
-            riskScope, "本次已完成，数据有限", features,
-            listOf("本次流程已完成，但部分阶段数据有限。") + qualityReasons,
-            listOf("结果仅供筛查参考；如有复视、眼位明显不对称或持续不适，请到眼科检查。"))
+        if (qualityReasons.isNotEmpty()) return ScreeningAssessment(VERSION, "不足", ScreeningRiskLevel.UNKNOWN,
+            riskScope, "测试质量不佳，请重新测试", features, qualityReasons,
+            listOf("请在光线均匀处、保持 33 cm、头部正对后重新测试。"))
 
         val h = abs(m.hdePrism ?: 0.0)
         val v = abs(m.vdePrism ?: 0.0)

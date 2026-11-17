@@ -229,8 +229,8 @@ internal class ScreeningFrameProcessor(private val host: ScreeningEngine) {
                     } else gazeBadSinceMs = null
                     // 遮盖阶段家长的手在脸前，判断不了注视很正常：只在确实看偏时提醒；其余阶段也放宽等待时间
                     val gazeWarning = when {
-                        gazeOnTarget == false && gazeBadSinceMs?.let { time - it >= 6_000L } == true ->
-                            if (step == ScreeningStep.PURSUIT) "眼睛跟着圆点移动即可" else "轻松看着白点即可"
+                        gazeOnTarget != true && gazeBadSinceMs?.let { time - it >= 2_500L } == true ->
+                            if (step == ScreeningStep.PURSUIT) "跟随未检测到，请眼睛跟着圆点移动即可" else "注视明显偏离，轻松看着屏幕上的圆点即可"
                         else -> null
                     }
                     _state.update { it.copy(gazeWarning = gazeWarning) }
