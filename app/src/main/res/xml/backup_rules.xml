@@ -3,4 +3,5 @@
 <full-backup-content>
     <exclude domain="sharedpref" path="eyeproject_session.xml" />
     <exclude domain="file" path="screening_outbox.json" />
+        <exclude domain="file" path="strabismus-diagnostics/" />
 </full-backup-content>

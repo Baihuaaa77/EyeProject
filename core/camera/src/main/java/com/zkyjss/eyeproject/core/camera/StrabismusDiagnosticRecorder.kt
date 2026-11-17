@@ -217,7 +217,7 @@ internal class DiagnosticPanelRenderer(private val p: DiagnosticVideoPalette) : 
         paint.style=Paint.Style.FILL
         text("实心：实际目标   青/粉：左/右注视估计",334f,640f,p.target,15f)
         val calibration=if(row.optBoolean("calibrated")) "已标定" else "未获得可靠标定，不绘制估计"
-        text("%.2f s  %s  %s  距离 %.1f cm".format(elapsed,(mapOf("GAZE_CALIBRATION" to "注视标定", "FIXATION" to "定点映光", "FAR_FIXATION" to "看远", "COVER" to "交替遮盖", "PURSUIT" to "移动点注视")[row.optString("phase")] ?: row.optString("phase")),calibration,row.optDouble("distanceCm")),16f,658f)
+        text("%.2f s  %s  %s  距离 %.1f cm  分析 %.1f 帧/秒".format(elapsed,(mapOf("GAZE_CALIBRATION" to "注视标定", "FIXATION" to "定点映光", "FAR_FIXATION" to "看远", "COVER" to "交替遮盖", "PURSUIT" to "移动点注视")[row.optString("phase")] ?: row.optString("phase")),calibration,row.optDouble("distanceCm"),row.optDouble("fps")),16f,658f)
         text(row.optString("warning").takeUnless { it == "null" }.orEmpty(),16f,682f,p.secondary,14f)
         val reasons=row.optJSONArray("reasons")
         text(if(reasons==null || reasons.length()==0) "质量门控通过；标注只是诊断观测" else (0 until reasons.length()).joinToString("；") { reasons.optString(it) },16f,705f,p.secondary,14f)

@@ -9,16 +9,19 @@ final class StrabismusDiagnosticVideo {
     private let queue = DispatchQueue(label: "eye.strabismus.video", qos: .utility, autoreleaseFrequency: .workItem)
     private let lock = NSLock()
     private var accepting = false
-    private var credits = 0
+    private struct Source { let buffer: CVPixelBuffer; let face: FaceMetrics?; let time: Int64; let id: String }
+    private var latest: Source?
+    private var draining = false
+    private var captureId = ""
     private var lastSubmitted: Int64 = -1
     private var session: Session?
-    private let ci = CIContext(options: [.cacheIntermediates: false])
+    private let ci = CIContext(options: [.useSoftwareRenderer: true, .cacheIntermediates: false])
 
     func event(_ json: String) {
         guard let data = json.data(using: .utf8), let row = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return }
         let type = row["event"] as? String ?? ""
         if type == "start" || type == "end" {
-            lock.lock(); accepting = type == "start"; if accepting { lastSubmitted = -1 }; lock.unlock()
+            lock.lock(); accepting = type == "start"; if accepting { lastSubmitted = -1; captureId = row["sessionId"] as? String ?? "" }; lock.unlock()
         }
         queue.async { [self] in
             if type == "start" {
@@ -45,6 +48,11 @@ final class StrabismusDiagnosticVideo {
                     while s.rows.count > 24, let first = s.rows.keys.min() { s.rows.removeValue(forKey: first) }
                 } else if type == "end" {
                     s.manifest["audit"] = row
+                    lock.lock()
+                    let last = latest?.id == s.id ? latest : nil
+                    if last != nil { latest = nil }
+                    lock.unlock()
+                    if let last { process(last) }
                     finish(s, reason: row["reason"] as? String ?? "测试结束"); session = nil
                 }
             } catch {
@@ -58,68 +66,90 @@ final class StrabismusDiagnosticVideo {
     /// 仅使用当前帧：原视频不叠标注，眼区直接裁原像素，不做插值定位。
     func capture(_ buffer: CVPixelBuffer, face: FaceMetrics?, time: Int64) {
         lock.lock()
-        guard accepting, credits < 2, lastSubmitted < 0 || time - lastSubmitted >= 83 else { lock.unlock(); return }
-        credits += 1; lastSubmitted = time; lock.unlock()
-        queue.async { [self] in
-            defer { lock.lock(); credits -= 1; lock.unlock() }
-            guard let s = session else { return }
-            do {
-                if s.raw == nil {
-                    s.base = time
-                    s.raw = try DiagnosticMovie.original(url: s.directory.appendingPathComponent("original.mp4"), width: CVPixelBufferGetWidth(buffer), height: CVPixelBufferGetHeight(buffer))
-                    s.composite = try DiagnosticMovie(url: s.directory.appendingPathComponent("comparison.mp4"), width: 1280, height: 720, bitrate: 3_000_000)
-                    s.manifest["sourceWidth"] = CVPixelBufferGetWidth(buffer); s.manifest["sourceHeight"] = CVPixelBufferGetHeight(buffer)
-                }
-                let pts = CMTime(value: max(0, time - s.base), timescale: 1000)
-                let image = CIImage(cvPixelBuffer: buffer)
-                guard let raw = s.raw else { return }
-                s.manifest["originalWidth"] = raw.width; s.manifest["originalHeight"] = raw.height
-                var originalBuffer = buffer
-                if raw.width != CVPixelBufferGetWidth(buffer) || raw.height != CVPixelBufferGetHeight(buffer) {
-                    s.manifest["encodingNote"] = "原画编码降采样至\(raw.width)×\(raw.height)；眼区仍裁原像素"
-                    guard let scaled = raw.pixelBuffer() else { s.dropped += 1; return }
-                    ci.render(image.transformed(by: CGAffineTransform(scaleX: CGFloat(raw.width) / image.extent.width,
-                        y: CGFloat(raw.height) / image.extent.height)), to: scaled)
-                    originalBuffer = scaled
-                }
-                guard raw.append(originalBuffer, at: pts) else {
-                    if raw.writer.status == .failed { throw raw.writer.error ?? NSError(domain: "诊断编码", code: 3) }
-                    s.dropped += 1; return
-                }
-                let scale = min(1, 720 / max(image.extent.width, image.extent.height))
-                guard let full = ci.createCGImage(image.transformed(by: CGAffineTransform(scaleX: scale, y: scale)), from: CGRect(x: 0, y: 0, width: image.extent.width * scale, height: image.extent.height * scale)) else { return }
-                func crop(_ eye: EyeLandmarks?, previous: DiagnosticCrop?) -> DiagnosticCrop? {
-                    let points = eye?.earPoints ?? []
-                    let rect: CGRect
-                    if points.count >= 4 {
-                        let xs = points.map { CGFloat($0.x) }, ys = points.map { CGFloat($0.y) }
-                        let width = max(8, (xs.max() ?? 0) - (xs.min() ?? 0))
-                        rect = CGRect(x: (xs.min() ?? 0) - width * 0.4, y: (ys.min() ?? 0) - width * 0.4,
-                                      width: width * 1.8, height: ((ys.max() ?? 0) - (ys.min() ?? 0)) + width * 0.8).intersection(image.extent)
-                    } else if let previous { rect = previous.rect } else { return nil }
-                    guard rect.width > 1, rect.height > 1 else { return nil }
-                    let bottomRect = CGRect(x: rect.minX, y: image.extent.height - rect.maxY, width: rect.width, height: rect.height)
-                    guard let cg = ci.createCGImage(image, from: bottomRect) else { return nil }
-                    return DiagnosticCrop(rect: rect, image: cg, inherited: points.count < 4)
-                }
-                let left = crop(face?.leftEye, previous: s.lastLeft), right = crop(face?.rightEye, previous: s.lastRight)
-                s.lastLeft = left; s.lastRight = right
-                let images = DiagnosticImages(time: time, full: full, left: left, right: right)
-                if let row = s.rows.removeValue(forKey: time) { append(s, images, row) }
-                else { s.pending[time] = images }
-                while s.pending.count > 2, let first = s.pending.keys.min(), let old = s.pending.removeValue(forKey: first) {
-                    append(s, old, ["phase": "无对应分析信息", "reasons": ["帮助暂停、分析缺失或处理延迟"], "valid": false])
-                }
-            } catch {
-                s.manifest["error"] = error.localizedDescription; s.saveManifest()
-                lock.lock(); accepting = false; lock.unlock()
-                finish(s, reason: "诊断录制失败，测试本身继续"); session = nil
+        guard accepting, lastSubmitted < 0 || time - lastSubmitted >= 83 else { lock.unlock(); return }
+        lastSubmitted = time
+        // 忙时覆盖待处理槽；最多保留正在处理与最新一幅，结束时也能留下真实末帧。
+        latest = Source(buffer: buffer, face: face, time: time, id: captureId)
+        let launch = !draining; draining = true
+        lock.unlock()
+        if launch { queue.async { [self] in drainLatest() } }
+    }
+    private func drainLatest() {
+        lock.lock()
+        guard let source = latest else { draining = false; lock.unlock(); return }
+        latest = nil; lock.unlock()
+        process(source)
+        queue.async { [self] in drainLatest() }
+    }
+    private func process(_ source: Source) {
+        guard let s = session, source.id == s.id else { return }
+        let buffer = source.buffer, face = source.face, time = source.time
+        let started = ProcessInfo.processInfo.systemUptime
+        defer {
+            let elapsed = (ProcessInfo.processInfo.systemUptime - started) * 1000
+            s.processingTotal += elapsed; s.processingCount += 1; s.processingMax = max(s.processingMax, elapsed)
+        }
+        do {
+            if s.raw == nil {
+                s.base = time
+                s.raw = try DiagnosticMovie.original(url: s.directory.appendingPathComponent("original.mp4"), width: CVPixelBufferGetWidth(buffer), height: CVPixelBufferGetHeight(buffer))
+                s.composite = try DiagnosticMovie(url: s.directory.appendingPathComponent("comparison.mp4"), width: 1280, height: 720, bitrate: 3_000_000)
+                s.manifest["sourceWidth"] = CVPixelBufferGetWidth(buffer); s.manifest["sourceHeight"] = CVPixelBufferGetHeight(buffer)
             }
+            let pts = CMTime(value: max(0, time - s.base), timescale: 1000)
+            let image = CIImage(cvPixelBuffer: buffer)
+            guard let raw = s.raw else { return }
+            s.manifest["originalWidth"] = raw.width; s.manifest["originalHeight"] = raw.height
+            var originalBuffer = buffer
+            if raw.width != CVPixelBufferGetWidth(buffer) || raw.height != CVPixelBufferGetHeight(buffer) {
+                s.manifest["encodingNote"] = "原画编码降采样至\(raw.width)×\(raw.height)；眼区仍裁原像素"
+                guard let scaled = raw.pixelBuffer() else { s.dropped += 1; return }
+                ci.render(image.transformed(by: CGAffineTransform(scaleX: CGFloat(raw.width) / image.extent.width,
+                    y: CGFloat(raw.height) / image.extent.height)), to: scaled)
+                originalBuffer = scaled
+            }
+            guard raw.append(originalBuffer, at: pts) else {
+                if raw.writer.status == .failed { throw raw.writer.error ?? NSError(domain: "诊断编码", code: 3) }
+                s.dropped += 1; return
+            }
+            let scale = min(1, 720 / max(image.extent.width, image.extent.height))
+            guard let full = ci.createCGImage(image.transformed(by: CGAffineTransform(scaleX: scale, y: scale)), from: CGRect(x: 0, y: 0, width: image.extent.width * scale, height: image.extent.height * scale)) else { return }
+            func crop(_ eye: EyeLandmarks?, previous: DiagnosticCrop?) -> DiagnosticCrop? {
+                let points = eye?.earPoints ?? []
+                let rect: CGRect
+                if points.count >= 4 {
+                    let xs = points.map { CGFloat($0.x) }, ys = points.map { CGFloat($0.y) }
+                    let width = max(8, (xs.max() ?? 0) - (xs.min() ?? 0))
+                    rect = CGRect(x: (xs.min() ?? 0) - width * 0.4, y: (ys.min() ?? 0) - width * 0.4,
+                                  width: width * 1.8, height: ((ys.max() ?? 0) - (ys.min() ?? 0)) + width * 0.8).intersection(image.extent)
+                } else if let previous { rect = previous.rect } else { return nil }
+                guard rect.width > 1, rect.height > 1 else { return nil }
+                let bottomRect = CGRect(x: rect.minX, y: image.extent.height - rect.maxY, width: rect.width, height: rect.height)
+                guard let cg = ci.createCGImage(image, from: bottomRect) else { return nil }
+                return DiagnosticCrop(rect: rect, image: cg, inherited: points.count < 4)
+            }
+            let left = crop(face?.leftEye, previous: s.lastLeft), right = crop(face?.rightEye, previous: s.lastRight)
+            s.lastLeft = left; s.lastRight = right
+            let images = DiagnosticImages(time: time, full: full, left: left, right: right)
+            if let row = s.rows.removeValue(forKey: time) { append(s, images, row) }
+            else { s.pending[time] = images }
+            while s.pending.count > 2, let first = s.pending.keys.min(), let old = s.pending.removeValue(forKey: first) {
+                append(s, old, ["phase": "无对应分析信息", "reasons": ["帮助暂停、分析缺失或处理延迟"], "valid": false])
+            }
+        } catch {
+            s.manifest["error"] = error.localizedDescription; s.saveManifest()
+            lock.lock(); accepting = false; lock.unlock()
+            finish(s, reason: "诊断录制失败，测试本身继续"); session = nil
         }
     }
 
     private func append(_ s: Session, _ images: DiagnosticImages, _ row: [String: Any]) {
         guard images.time > s.lastComposite else { s.dropped += 1; return }
+        let started = ProcessInfo.processInfo.systemUptime
+        defer {
+            let elapsed = (ProcessInfo.processInfo.systemUptime - started) * 1000
+            s.compositionTotal += elapsed; s.compositionCount += 1; s.compositionMax = max(s.compositionMax, elapsed)
+        }
         var panelRow = row; panelRow["encodingNote"] = s.manifest["encodingNote"]
         let rendered = DiagnosticPanelRenderer.render(images, row: panelRow, elapsed: Double(images.time - s.base) / 1000)
         guard let cg = rendered.cgImage, let movie = s.composite, let buffer = movie.pixelBuffer() else { s.dropped += 1; return }
@@ -136,6 +166,10 @@ final class StrabismusDiagnosticVideo {
         }
         s.pending.removeAll(); s.rows.removeAll()
         try? s.log?.close(); s.log = nil
+        s.manifest["processingMeanMs"] = s.processingTotal / Double(max(1, s.processingCount))
+        s.manifest["processingMaxMs"] = s.processingMax
+        s.manifest["compositionMeanMs"] = s.compositionTotal / Double(max(1, s.compositionCount))
+        s.manifest["compositionMaxMs"] = s.compositionMax
         s.manifest["state"] = "finishing"; s.manifest["reason"] = reason; s.saveManifest()
         let group = DispatchGroup()
         for movie in [s.raw, s.composite].compactMap({ $0 }) { group.enter(); movie.finish { group.leave() } }
@@ -161,11 +195,16 @@ final class StrabismusDiagnosticVideo {
         var raw: DiagnosticMovie?; var composite: DiagnosticMovie?
         var base: Int64 = 0; var lastComposite: Int64 = -1; var frames = 0; var dropped = 0; var finishing = false
         var pending: [Int64: DiagnosticImages] = [:]; var rows: [Int64: [String: Any]] = [:]
+        var processingTotal = 0.0, processingMax = 0.0, compositionTotal = 0.0, compositionMax = 0.0
+        var processingCount = 0, compositionCount = 0
         var lastLeft: DiagnosticCrop?; var lastRight: DiagnosticCrop?
         init(_ row: [String: Any]) throws {
             id = row["sessionId"] as? String ?? UUID().uuidString
             directory = StrabismusDiagnosticVideo.root.appendingPathComponent(id, isDirectory: true)
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            var backupRoot = StrabismusDiagnosticVideo.root
+            var resources = URLResourceValues(); resources.isExcludedFromBackup = true
+            try backupRoot.setResourceValues(resources)
             manifest = row; manifest["state"] = "recording"; manifest["maxRecordingFps"] = 12
             let url = directory.appendingPathComponent("frames.jsonl")
             FileManager.default.createFile(atPath: url.path, contents: nil)
@@ -302,7 +341,7 @@ enum DiagnosticPanelRenderer {
             let phaseKey = row["phase"] as? String ?? "未知阶段"
             let phase = ["GAZE_CALIBRATION": "注视标定", "FIXATION": "定点映光", "FAR_FIXATION": "看远", "COVER": "交替遮盖", "PURSUIT": "移动点注视"][phaseKey] ?? phaseKey
             let calibrated = row["calibrated"] as? Bool == true ? "已标定" : "未获得可靠标定，不绘制估计"
-            text(String(format: "%.2f s  %@  %@  距离 %.1f cm", elapsed, phase, calibrated, (row["distanceCm"] as? NSNumber)?.doubleValue ?? 0), CGRect(x: 16, y: 646, width: 1230, height: 24))
+            text(String(format: "%.2f s  %@  %@  距离 %.1f cm  分析 %.1f 帧/秒", elapsed, phase, calibrated, (row["distanceCm"] as? NSNumber)?.doubleValue ?? 0, (row["fps"] as? NSNumber)?.doubleValue ?? 0), CGRect(x: 16, y: 646, width: 1230, height: 24))
             text(row["warning"] as? String ?? "", CGRect(x: 16, y: 672, width: 1240, height: 22), UIColor(EyeStyle.secondary), size: 14)
             let reasons = (row["reasons"] as? [String] ?? []).joined(separator: "；")
             text(reasons.isEmpty ? "质量门控通过；标注只是诊断观测" : reasons, CGRect(x: 16, y: 696, width: 1240, height: 24), UIColor(EyeStyle.secondary), size: 14)

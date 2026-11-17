@@ -52,6 +52,8 @@ final class StrabismusDiagnosticVideoTests: XCTestCase {
             try await Task.sleep(nanoseconds: 50_000_000)
         }
         let readyWait = Date().timeIntervalSince(began)
+        let backup = try StrabismusDiagnosticVideo.root.resourceValues(forKeys: [.isExcludedFromBackupKey])
+        XCTAssertEqual(backup.isExcludedFromBackup, true)
         XCTAssertEqual(manifest["state"] as? String, "ready", "\(manifest)")
         XCTAssertGreaterThanOrEqual(manifest["frames"] as? Int ?? 0, 8)
         for (file, size) in [("original.mp4", CGSize(width: manifest["originalWidth"] as? Int ?? width, height: manifest["originalHeight"] as? Int ?? height)), ("comparison.mp4", CGSize(width: 1280, height: 720))] {
@@ -61,7 +63,7 @@ final class StrabismusDiagnosticVideoTests: XCTestCase {
             let actualSize = try await track.load(.naturalSize)
             XCTAssertEqual(actualSize, size)
             let duration = try await asset.load(.duration)
-            XCTAssertGreaterThan(duration.seconds, 0.7)
+            XCTAssertGreaterThan(duration.seconds, Double(count - 4) / 10)
             let generator = AVAssetImageGenerator(asset: asset)
             let image = try generator.copyCGImage(at: CMTime(value: 500, timescale: 1000), actualTime: nil)
             func color(_ x: Int, _ y: Int) throws -> [UInt8] {
@@ -83,6 +85,7 @@ final class StrabismusDiagnosticVideoTests: XCTestCase {
         }
         let data = try String(contentsOf: directory.appendingPathComponent("frames.jsonl"), encoding: .utf8)
         XCTAssertEqual(data.split(separator: "\n").count, count + 2)
+        print("渲染性能：\(manifest)")
         print("诊断视频 \(width)×\(height) 结束等待 \(readyWait) 秒，封装 \(manifest["finalizationMs"] ?? 0)ms，帧数 \(manifest["frames"] ?? 0)")
     }
 

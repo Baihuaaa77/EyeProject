@@ -5,7 +5,7 @@ import EyeScreening
 
 /// 快照只用于界面呈现；所有作答、阶段切换和分级事件进入同一 Kotlin 引擎。
 final class EyeRuntime: ObservableObject {
-    private let diagnosticVideo = StrabismusDiagnosticVideo()
+    private let diagnosticVideo: StrabismusDiagnosticVideo?
     @Published var state: [String: Any] = [:]
     @Published var error: String?
     /// 相机因发热降帧或可能暂停时的说明（优先于引擎的「未收到相机数据」显示）。
@@ -60,12 +60,13 @@ final class EyeRuntime: ObservableObject {
     private var frames: FrameMailbox<CameraSample>!
     init(kind: String) {
         self.kind = kind
+        diagnosticVideo = kind == "STRABISMUS" ? StrabismusDiagnosticVideo() : nil
         // 干眼只用关键点与眨眼，不做瞳孔 / 角膜反光测量
         camera.measureOptics = kind == "STRABISMUS"
         camera.opticalPrecision = kind == "STRABISMUS"
         if kind == "STRABISMUS" {
-            controller.setDiagnosticObserver(observer: { [weak self] json in self?.diagnosticVideo.event(json) })
-            camera.onAnalyzedFrame = { [weak self] buffer, face, time in self?.diagnosticVideo.capture(buffer, face: face, time: time) }
+            controller.setDiagnosticObserver(observer: { [weak self] json in self?.diagnosticVideo?.event(json) })
+            camera.onAnalyzedFrame = { [weak self] buffer, face, time in self?.diagnosticVideo?.capture(buffer, face: face, time: time) }
         }
         frames = FrameMailbox<CameraSample>(limit: 8) { [weak self] batch in
             guard let self = self, !self.closed else { return }
