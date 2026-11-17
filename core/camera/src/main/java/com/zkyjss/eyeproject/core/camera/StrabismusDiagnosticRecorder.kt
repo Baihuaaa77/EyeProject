@@ -216,7 +216,8 @@ internal class DiagnosticPanelRenderer(private val p: DiagnosticVideoPalette) : 
         }
         paint.style=Paint.Style.FILL
         text("实心：实际目标   青/粉：左/右注视估计",334f,640f,p.target,15f)
-        val calibration=if(row.optBoolean("calibrated")) "已标定" else "未获得可靠标定，不绘制估计"
+        val calibration = if (row.optString("phase") == "GAZE_CALIBRATION" && !row.optBoolean("calibrationFailed")) "标定中 · 入样 ${row.optInt("calibrationSamples")}"
+            else if(row.optBoolean("calibrated")) "已标定" else "未获得可靠标定，不绘制估计"
         text("%.2f s  %s  %s  距离 %.1f cm  分析 %.1f 帧/秒".format(elapsed,(mapOf("GAZE_CALIBRATION" to "注视标定", "FIXATION" to "定点映光", "FAR_FIXATION" to "看远", "COVER" to "交替遮盖", "PURSUIT" to "移动点注视")[row.optString("phase")] ?: row.optString("phase")),calibration,row.optDouble("distanceCm"),row.optDouble("fps")),16f,658f)
         text(row.optString("warning").takeUnless { it == "null" }.orEmpty(),16f,682f,p.secondary,14f)
         val reasons=row.optJSONArray("reasons")

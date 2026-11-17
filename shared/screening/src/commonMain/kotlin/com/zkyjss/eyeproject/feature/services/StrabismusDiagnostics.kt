@@ -8,6 +8,13 @@ internal class StrabismusDiagnostics(private val platform: ScreeningPlatform) {
     var sessionId: String? = null
         private set
     private var active = false
+    private data class PresentedTarget(val step: ScreeningStep, val time: Long, val point: GazePoint)
+    private val targets = ArrayDeque<PresentedTarget>()
+    fun reportTarget(step: ScreeningStep, x: Float, y: Float, time: Long) {
+        if (!active) return
+        targets.addLast(PresentedTarget(step, time, GazePoint(x / platform.display.widthPixels, y / platform.display.heightPixels)))
+        while (targets.size > 256) targets.removeFirst()
+    }
     private val lights = ArrayDeque<Pair<Long, Boolean>>()
     fun reportLight(timeMs: Long, on: Boolean) {
         lights.addLast(timeMs to on)
@@ -20,7 +27,7 @@ internal class StrabismusDiagnostics(private val platform: ScreeningPlatform) {
     fun start() {
         if (active) return
         sessionId = "strabismus_${platform.epochMs()}_${serial++}"
-        active = true; reasons.clear(); phases.clear(); lights.clear()
+        active = true; reasons.clear(); phases.clear(); lights.clear(); targets.clear()
         emit(RecordObject().apply {
             put("event", "start"); put("createdAtMs", platform.epochMs()); put("version", 1)
             put("displayWidth", platform.display.widthPixels); put("displayHeight", platform.display.heightPixels)
@@ -32,6 +39,8 @@ internal class StrabismusDiagnostics(private val platform: ScreeningPlatform) {
               calibrated: Boolean, coding: Boolean, sessionTime: Long,
               inputLeft: GazePoint? = null, inputRight: GazePoint? = null, calibrationSamples: Int = 0, sampleAccepted: Boolean = false, targetRenderTimeMs: Long? = null) {
         if (!active || state.kind != ScreeningKind.STRABISMUS) return
+        val presented = targets.lastOrNull { it.step == state.step && it.time <= sessionTime }
+        val actualTarget = if (targets.isEmpty()) target else presented?.point
         val face = frame.faces.singleOrNull()
         val pose = face?.headPose
         val rejected = buildList {
@@ -41,11 +50,13 @@ internal class StrabismusDiagnostics(private val platform: ScreeningPlatform) {
             if (pose == null) add("头姿不可用")
             if (pose != null && (abs(pose.yawDeg) > 25f || abs(pose.pitchDeg) > (if (state.step == ScreeningStep.FAR_FIXATION) 30f else 25f) || abs(pose.rollDeg) > 20f)) add("头姿偏离")
             if (!valid) add("采样质量门控未通过")
+            if (inputLeft == null && inputRight == null) add("无可用睁眼注视输入")
+            if (actualTarget == null) add("目标绘制位置缺失")
             if (state.guidePending) add("方法演示中，不采样")
             if (state.stabilityInterrupted) add("稳定性中断")
             if (state.farWaiting) add("等待看远开始")
             if (coding) add("起始光码段，不计正式映光")
-            if (!calibrated) add("无可靠注视标定")
+            if (!calibrated) add(if (state.step == ScreeningStep.GAZE_CALIBRATION && !state.gazeCalibrationFailed) "标定进行中，暂未建立映射" else "无可靠注视标定")
             if (onTarget == false) add("估计注视偏离目标")
             if (!opticalReady) add("双眼映光不完整")
         }
@@ -59,13 +70,13 @@ internal class StrabismusDiagnostics(private val platform: ScreeningPlatform) {
             put("sessionTimeMs", sessionTime); put("phase", state.step.name)
             put("imageWidth", frame.sourceWidth); put("imageHeight", frame.sourceHeight)
             put("displayWidth", platform.display.widthPixels); put("displayHeight", platform.display.heightPixels)
-            put("targetRenderTimeMs", targetRenderTimeMs)
+            put("targetRenderTimeMs", presented?.time ?: targetRenderTimeMs)
             val light = lights.lastOrNull { it.first <= sessionTime }
             put("lightRenderTimeMs", light?.first)
-            put("targetVisible", target != null && !state.guidePending &&
+            put("targetVisible", actualTarget != null && !state.guidePending &&
                 (state.step !in setOf(ScreeningStep.FIXATION, ScreeningStep.COVER, ScreeningStep.FAR_FIXATION) || light?.second == true))
             put("targetColor", if (state.step in setOf(ScreeningStep.FIXATION, ScreeningStep.COVER, ScreeningStep.FAR_FIXATION)) "white" else "orange")
-            put("target", point(target)); put("leftGaze", point(estimates?.first)); put("rightGaze", point(estimates?.second))
+            put("target", point(actualTarget)); put("leftGaze", point(estimates?.first)); put("rightGaze", point(estimates?.second))
             put("calibrated", calibrated); put("gazeOnTarget", onTarget)
             put("valid", valid); put("opticalReady", opticalReady); put("coding", coding)
             put("guidePending", state.guidePending); put("calibrationIndex", state.gazeCalibrationIndex)

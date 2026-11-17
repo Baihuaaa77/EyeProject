@@ -340,7 +340,9 @@ enum DiagnosticPanelRenderer {
             text("实心：实际目标   青/粉：左/右注视估计", CGRect(x: 334, y: 623, width: 890, height: 24), UIColor(EyeStyle.primary), size: 15)
             let phaseKey = row["phase"] as? String ?? "未知阶段"
             let phase = ["GAZE_CALIBRATION": "注视标定", "FIXATION": "定点映光", "FAR_FIXATION": "看远", "COVER": "交替遮盖", "PURSUIT": "移动点注视"][phaseKey] ?? phaseKey
-            let calibrated = row["calibrated"] as? Bool == true ? "已标定" : "未获得可靠标定，不绘制估计"
+            let calibrated = phaseKey == "GAZE_CALIBRATION" && row["calibrationFailed"] as? Bool != true
+                ? "标定中 · 入样 \(row["calibrationSamples"] as? Int ?? 0)"
+                : (row["calibrated"] as? Bool == true ? "已标定" : "未获得可靠标定，不绘制估计")
             text(String(format: "%.2f s  %@  %@  距离 %.1f cm  分析 %.1f 帧/秒", elapsed, phase, calibrated, (row["distanceCm"] as? NSNumber)?.doubleValue ?? 0, (row["fps"] as? NSNumber)?.doubleValue ?? 0), CGRect(x: 16, y: 646, width: 1230, height: 24))
             text(row["warning"] as? String ?? "", CGRect(x: 16, y: 672, width: 1240, height: 22), UIColor(EyeStyle.secondary), size: 14)
             let reasons = (row["reasons"] as? [String] ?? []).joined(separator: "；")

@@ -256,6 +256,7 @@ internal class StrabismusStateMachine(private val host: ScreeningEngine) {
     fun reportGazeTarget(xPx: Float, yPx: Float) {
         with(host) {
             val s = _state.value
+            diagnostics.reportTarget(s.step, xPx, yPx, platform.nowMs())
             if (s.guidePending || s.stabilityInterrupted || s.step !in setOf(ScreeningStep.GAZE_CALIBRATION, ScreeningStep.FIXATION, ScreeningStep.FAR_FIXATION, ScreeningStep.COVER, ScreeningStep.PURSUIT)) return
             val display = platform.display
             val now = platform.nowMs()

@@ -40,6 +40,19 @@ class StrabismusDiagnosticsTest {
         assertEquals(id, platform.rows.last()["sessionId"]!!.jsonPrimitive.content)
         audit.start(); assertNotEquals(id, audit.sessionId)
     }
+    @Test fun renderedTargetIsAuditedEvenWhenFormalAcquisitionIsInterrupted() {
+        val platform = Platform(); val audit = StrabismusDiagnostics(platform); audit.start()
+        audit.reportTarget(ScreeningStep.PURSUIT, 108f, 240f, 1000)
+        audit.reportTarget(ScreeningStep.PURSUIT, 972f, 2160f, 2000)
+        val frame = FaceLandmarkFrame(emptyList(), 640, 480, 1500, 0, 10f, analysisElapsedRealtimeMs = 1500)
+        audit.frame(frame, ScreeningState(kind = ScreeningKind.STRABISMUS, step = ScreeningStep.PURSUIT, stabilityInterrupted = true),
+            false, false, GazePoint(0.5f, 0.5f), null, null, false, false, 1500)
+        val row = platform.rows.last()
+        assertEquals(0.1f, row["target"]!!.jsonArray[0].jsonPrimitive.float)
+        assertEquals(0.1f, row["target"]!!.jsonArray[1].jsonPrimitive.float)
+        assertEquals(1000, row["targetRenderTimeMs"]!!.jsonPrimitive.long)
+        assertFalse(row["valid"]!!.jsonPrimitive.boolean)
+    }
     @Test fun recordDeepLinkSurvivesBothCatalogFormats() {
         val record = """{"kind":"STRABISMUS","diagnosticSessionId":"strabismus_2000_0","assessment":{"riskLevel":"UNKNOWN"}}"""
         val parsed = LocalRecordCatalog.entry("strabismus_2000.json", record)!!
