@@ -20,6 +20,15 @@ struct EyeGlassModifier: ViewModifier {
 }
 
 extension View {
+    /// 输入框底色和文字均来自设计令牌，避免浅色系统下原生白底与浅色字叠在一起。
+    func eyeInputField() -> some View {
+        textFieldStyle(.plain)
+            .font(EyeStyle.body).foregroundStyle(EyeStyle.text).tint(EyeStyle.primary)
+            .padding(EyeSpacing.sm)
+            .background(EyeStyle.surfaceVariant, in: RoundedRectangle(cornerRadius: EyeStyle.radiusSmall))
+            .overlay { RoundedRectangle(cornerRadius: EyeStyle.radiusSmall).stroke(EyeStyle.borderSubtle, lineWidth: 1).allowsHitTesting(false) }
+    }
+
     func eyeLiquidGlass(cornerRadius: CGFloat = EyeStyle.radius) -> some View {
         modifier(EyeLiquidGlassModifier(cornerRadius: cornerRadius))
     }

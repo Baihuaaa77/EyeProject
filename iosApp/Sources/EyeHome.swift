@@ -189,7 +189,9 @@ struct FeelingSheet: View {
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
                     ForEach([noDiscomfort,"眼睛干涩","眼睛酸胀","眼睛疲劳"], id: \.self) { option($0) }
                 }
-                TextField("补充说明（可选）",text: $note,axis: .vertical).font(EyeStyle.body).lineLimit(2...4).textFieldStyle(.roundedBorder)
+                TextField("补充说明（可选）",text: $note,
+                          prompt: Text("补充说明（可选）").foregroundColor(EyeStyle.secondary),axis: .vertical)
+                    .lineLimit(2...4).eyeInputField()
                 Button("保存") { EyeHaptics.success(); if let saveNote { saveNote(selected,String(note.prefix(500))) } else { save(selected) } }.buttonStyle(EyeButtonStyle())
                     .disabled(selected.isEmpty).padding(.top, 4)
             }

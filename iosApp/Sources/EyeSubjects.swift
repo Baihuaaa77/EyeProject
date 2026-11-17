@@ -161,7 +161,9 @@ struct SubjectEditView: View {
         ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     card("成员") {
-                        TextField(draft.relation == "SELF" ? "小林" : "称呼，如：小明、妈妈", text: $draft.nickname).textFieldStyle(.roundedBorder)
+                        TextField("称呼", text: $draft.nickname,
+                                  prompt: Text(draft.relation == "SELF" ? "小林" : "称呼，如：小明、妈妈").foregroundColor(EyeStyle.secondary))
+                            .eyeInputField()
                         if draft.relation != "SELF" {
                             Text("与你的关系").font(EyeStyle.subtitle)
                             // 关系代码与共用 SubjectProfiles.RELATIONS 一致（「本人」不可选）
@@ -244,7 +246,8 @@ struct SubjectEditView: View {
             } else {
                 let inputKind = q["inputKind"] as? String ?? "TEXT"
                 let limit = q["maxLength"] as? Int ?? 200
-                TextField(key == "出生年份" ? "如：1980" : (q["placeholder"] as? String ?? "请输入"), text: Binding(get: { draft.fields[key] ?? "" },
+                let placeholder = key == "出生年份" ? "如：1980" : (q["placeholder"] as? String ?? "请输入")
+                TextField(placeholder, text: Binding(get: { draft.fields[key] ?? "" },
                     set: { text in
                         let filtered = text.filter { char in
                             switch inputKind {
@@ -255,10 +258,10 @@ struct SubjectEditView: View {
                             }
                         }
                         draft.fields[key] = String(filtered.prefix(limit))
-                    }))
+                    }), prompt: Text(placeholder).foregroundColor(EyeStyle.secondary))
                     // 度数要输入正负号、日期要输入「-」：用带符号的数字键盘
                     .keyboardType(inputKind == "INTEGER" ? .numberPad : inputKind == "TEXT" ? .default : .numbersAndPunctuation)
-                    .textFieldStyle(.roundedBorder)
+                    .eyeInputField()
             }
         }
     }
