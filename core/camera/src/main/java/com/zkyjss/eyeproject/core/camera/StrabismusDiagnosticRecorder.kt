@@ -80,13 +80,17 @@ class StrabismusDiagnosticRecorder(private val root: File, private val palette: 
         executor.execute {
             try {
                 val s=session ?: return@execute
-                if(s.raw==null) {
+                val first = s.raw == null
+                if(first) {
                     s.base=time; s.egl=DiagnosticEgl()
-                    s.raw=DiagnosticVideoEncoder(File(s.directory,"original.mp4"),copy.width,copy.height,8_000_000,s.egl!!)
+                    s.raw=originalDiagnosticEncoder(File(s.directory,"original.mp4"),copy,s.egl!!)
                     s.video=DiagnosticVideoEncoder(File(s.directory,"comparison.mp4"),1280,720,3_000_000,s.egl!!)
                     s.manifest.put("sourceWidth",copy.width).put("sourceHeight",copy.height)
+                        .put("originalWidth",s.raw!!.width).put("originalHeight",s.raw!!.height)
+                    s.originalScaled = s.raw!!.width != copy.width || s.raw!!.height != copy.height
+                    if (s.originalScaled) s.manifest.put("encodingNote", "原画编码器回退至${s.raw!!.width}×${s.raw!!.height}；眼区仍裁原像素")
                 }
-                s.raw!!.append(copy,(time-s.base).coerceAtLeast(0))
+                if (!first) s.raw!!.append(copy,(time-s.base).coerceAtLeast(0))
                 val row=s.rows.remove(time)
                 if(row!=null) append(s,copy,row,time)
                 else {
@@ -106,7 +110,7 @@ class StrabismusDiagnosticRecorder(private val root: File, private val palette: 
     private fun append(s: Session, bitmap: Bitmap, row: JSONObject, time: Long) {
         try {
             if(time<=s.last) { s.dropped++; return }
-            val composite=s.renderer.render(bitmap,row,(time-s.base)/1000.0)
+            val composite=s.renderer.render(bitmap,row,(time-s.base)/1000.0, s.originalScaled)
             s.video?.append(composite,(time-s.base).coerceAtLeast(0)); s.last=time; s.frames++
         } finally { releaseCopy(bitmap) }
     }
@@ -137,6 +141,7 @@ class StrabismusDiagnosticRecorder(private val root: File, private val palette: 
         val log=File(directory,"frames.jsonl").bufferedWriter()
         val renderer=DiagnosticPanelRenderer(palette)
         var egl: DiagnosticEgl?=null; var raw: DiagnosticVideoEncoder?=null; var video: DiagnosticVideoEncoder?=null
+        var originalScaled = false
         var base=0L; var last=-1L; var frames=0; var dropped=0; var finishing=false
         val pending=linkedMapOf<Long,Bitmap>(); val rows=linkedMapOf<Long,JSONObject>()
         init { save() }
@@ -157,9 +162,9 @@ internal class DiagnosticPanelRenderer(private val p: DiagnosticVideoPalette) : 
         val scale=minOf(rect.width()/width.coerceAtLeast(1f),rect.height()/height.coerceAtLeast(1f))
         return RectF(rect.centerX()-width*scale/2,rect.centerY()-height*scale/2,rect.centerX()+width*scale/2,rect.centerY()+height*scale/2)
     }
-    fun render(source: Bitmap,row: JSONObject,elapsed: Double): Bitmap {
+    fun render(source: Bitmap,row: JSONObject,elapsed: Double, originalScaled: Boolean = false): Bitmap {
         canvas.drawColor(p.background)
-        text("原视频 · 不镜像",16f,30f)
+        text(if (originalScaled) "原画 · 编码降采样 · 不镜像" else "原视频 · 不镜像",16f,30f)
         val full=fit(source.width.toFloat(),source.height.toFloat(),RectF(16f,48f,316f,618f))
         canvas.drawBitmap(source,null,full,paint)
         text("原始眼区放大",334f,30f); text("同帧检测：眼睑 / 虹膜 / 参照点 / 映光",334f,345f)
@@ -172,9 +177,9 @@ internal class DiagnosticPanelRenderer(private val p: DiagnosticVideoPalette) : 
                 val points=(0 until lid!!.length()).mapNotNull { lid.optJSONArray(it)?.let { a -> a.optDouble(0).toFloat() to a.optDouble(1).toFloat() } }
                 val width=(points.maxOf { it.first }-points.minOf { it.first }).coerceAtLeast(8f)
                 RectF(points.minOf { it.first }-width*.4f,points.minOf { it.second }-width*.4f,
-                    points.maxOf { it.first }+width*.4f,points.maxOf { it.second }+width*.4f).apply {
-                    intersect(0f,0f,source.width.toFloat(),source.height.toFloat()); lastCrop[key]=RectF(this)
-                }
+                    points.maxOf { it.first }+width*.4f,points.maxOf { it.second }+width*.4f).takeIf {
+                    it.intersect(0f,0f,source.width.toFloat(),source.height.toFloat())
+                }?.also { lastCrop[key]=RectF(it) }
             } else lastCrop[key]
             if(crop==null || crop.width()<=0 || crop.height()<=0) { text("眼区不可定位",x,160f); continue }
             val raw=fit(crop.width(),crop.height(),RectF(x,78f,x+286,303f)); val overlay=RectF(raw).apply { offset(0f,280f) }

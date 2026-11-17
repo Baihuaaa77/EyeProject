@@ -716,9 +716,6 @@ struct ColorVisionContent: View {
             plate
         } else if phase == "Result" {
             ResultReportView(runtime: runtime)
-            if runtime.kind == "STRABISMUS" {
-                Button("回看诊断视频") { diagnosticsOpen = true }.buttonStyle(EyeButtonStyle(role: .secondary))
-            }
         }
     }
 

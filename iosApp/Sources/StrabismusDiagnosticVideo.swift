@@ -66,13 +66,26 @@ final class StrabismusDiagnosticVideo {
             do {
                 if s.raw == nil {
                     s.base = time
-                    s.raw = try DiagnosticMovie(url: s.directory.appendingPathComponent("original.mp4"), width: CVPixelBufferGetWidth(buffer), height: CVPixelBufferGetHeight(buffer), bitrate: 8_000_000)
+                    s.raw = try DiagnosticMovie.original(url: s.directory.appendingPathComponent("original.mp4"), width: CVPixelBufferGetWidth(buffer), height: CVPixelBufferGetHeight(buffer))
                     s.composite = try DiagnosticMovie(url: s.directory.appendingPathComponent("comparison.mp4"), width: 1280, height: 720, bitrate: 3_000_000)
                     s.manifest["sourceWidth"] = CVPixelBufferGetWidth(buffer); s.manifest["sourceHeight"] = CVPixelBufferGetHeight(buffer)
                 }
                 let pts = CMTime(value: max(0, time - s.base), timescale: 1000)
-                guard s.raw?.append(buffer, at: pts) == true else { s.dropped += 1; return }
                 let image = CIImage(cvPixelBuffer: buffer)
+                guard let raw = s.raw else { return }
+                s.manifest["originalWidth"] = raw.width; s.manifest["originalHeight"] = raw.height
+                var originalBuffer = buffer
+                if raw.width != CVPixelBufferGetWidth(buffer) || raw.height != CVPixelBufferGetHeight(buffer) {
+                    s.manifest["encodingNote"] = "原画编码降采样至\(raw.width)×\(raw.height)；眼区仍裁原像素"
+                    guard let scaled = raw.pixelBuffer() else { s.dropped += 1; return }
+                    ci.render(image.transformed(by: CGAffineTransform(scaleX: CGFloat(raw.width) / image.extent.width,
+                        y: CGFloat(raw.height) / image.extent.height)), to: scaled)
+                    originalBuffer = scaled
+                }
+                guard raw.append(originalBuffer, at: pts) else {
+                    if raw.writer.status == .failed { throw raw.writer.error ?? NSError(domain: "诊断编码", code: 3) }
+                    s.dropped += 1; return
+                }
                 let scale = min(1, 720 / max(image.extent.width, image.extent.height))
                 guard let full = ci.createCGImage(image.transformed(by: CGAffineTransform(scaleX: scale, y: scale)), from: CGRect(x: 0, y: 0, width: image.extent.width * scale, height: image.extent.height * scale)) else { return }
                 func crop(_ eye: EyeLandmarks?, previous: DiagnosticCrop?) -> DiagnosticCrop? {
@@ -107,7 +120,8 @@ final class StrabismusDiagnosticVideo {
 
     private func append(_ s: Session, _ images: DiagnosticImages, _ row: [String: Any]) {
         guard images.time > s.lastComposite else { s.dropped += 1; return }
-        let rendered = DiagnosticPanelRenderer.render(images, row: row, elapsed: Double(images.time - s.base) / 1000)
+        var panelRow = row; panelRow["encodingNote"] = s.manifest["encodingNote"]
+        let rendered = DiagnosticPanelRenderer.render(images, row: panelRow, elapsed: Double(images.time - s.base) / 1000)
         guard let cg = rendered.cgImage, let movie = s.composite, let buffer = movie.pixelBuffer() else { s.dropped += 1; return }
         ci.render(CIImage(cgImage: cg), to: buffer)
         if movie.append(buffer, at: CMTime(value: max(0, images.time - s.base), timescale: 1000)) { s.lastComposite = images.time; s.frames += 1 }
@@ -165,13 +179,17 @@ final class StrabismusDiagnosticVideo {
 }
 
 private final class DiagnosticMovie {
+    let width: Int; let height: Int
     let writer: AVAssetWriter; let input: AVAssetWriterInput; let adaptor: AVAssetWriterInputPixelBufferAdaptor
     var completed: Bool { writer.status == .completed }
     var error: String? { writer.error?.localizedDescription }
     init(url: URL, width: Int, height: Int, bitrate: Int) throws {
+        self.width = width; self.height = height
         writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
-        input = AVAssetWriterInput(mediaType: .video, outputSettings: [AVVideoCodecKey: AVVideoCodecType.h264,
-            AVVideoWidthKey: width, AVVideoHeightKey: height, AVVideoCompressionPropertiesKey: [AVVideoAverageBitRateKey: bitrate, AVVideoMaxKeyFrameIntervalKey: 24]])
+        let settings: [String: Any] = [AVVideoCodecKey: AVVideoCodecType.h264,
+            AVVideoWidthKey: width, AVVideoHeightKey: height, AVVideoCompressionPropertiesKey: [AVVideoAverageBitRateKey: bitrate, AVVideoMaxKeyFrameIntervalKey: 24]]
+        guard writer.canApply(outputSettings: settings, forMediaType: .video) else { throw NSError(domain: "诊断编码", code: 4) }
+        input = AVAssetWriterInput(mediaType: .video, outputSettings: settings)
         input.expectsMediaDataInRealTime = true
         adaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: input, sourcePixelBufferAttributes: [
             kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA, kCVPixelBufferWidthKey as String: width,
@@ -180,6 +198,18 @@ private final class DiagnosticMovie {
         writer.add(input)
         guard writer.startWriting() else { throw writer.error ?? NSError(domain: "诊断视频", code: 2) }
         writer.startSession(atSourceTime: .zero)
+    }
+    static func original(url: URL, width: Int, height: Int) throws -> DiagnosticMovie {
+        var failure: Error = NSError(domain: "诊断编码", code: 5)
+        var attempted = Set<String>()
+        for limit in [max(width, height), 1920, 1280] {
+            let scale = min(1, Double(limit) / Double(max(width, height)))
+            let w = Int(Double(width) * scale) / 2 * 2, h = Int(Double(height) * scale) / 2 * 2
+            guard attempted.insert("\(w)×\(h)").inserted else { continue }
+            do { return try DiagnosticMovie(url: url, width: w, height: h, bitrate: 8_000_000) }
+            catch { failure = error; try? FileManager.default.removeItem(at: url) }
+        }
+        throw failure
     }
     func append(_ buffer: CVPixelBuffer, at time: CMTime) -> Bool {
         guard writer.status == .writing, input.isReadyForMoreMediaData else { return false }
@@ -212,7 +242,7 @@ enum DiagnosticPanelRenderer {
                 let k = min(rect.width / max(1, size.width), rect.height / max(1, size.height))
                 return CGRect(x: rect.midX - size.width*k/2, y: rect.midY-size.height*k/2, width: size.width*k, height: size.height*k)
             }
-            text("原视频 · 不镜像", CGRect(x: 16, y: 12, width: 300, height: 28))
+            text(row["encodingNote"] == nil ? "原视频 · 不镜像" : "原画 · 编码降采样 · 不镜像", CGRect(x: 16, y: 12, width: 300, height: 28))
             let full = fit(CGSize(width: images.full.width, height: images.full.height), CGRect(x: 16, y: 48, width: 300, height: 570))
             UIImage(cgImage: images.full).draw(in: full)
             text("原始眼区放大", CGRect(x: 334, y: 12, width: 590, height: 28))

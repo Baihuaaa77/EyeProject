@@ -78,7 +78,7 @@ internal class DiagnosticEgl : AutoCloseable {
     }
 }
 
-internal class DiagnosticVideoEncoder(file: File, private val width: Int, private val height: Int, bitrate: Int, private val egl: DiagnosticEgl) : AutoCloseable {
+internal class DiagnosticVideoEncoder(file: File, val width: Int, val height: Int, bitrate: Int, private val egl: DiagnosticEgl) : AutoCloseable {
     private val codec=MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
     private val muxer=MediaMuxer(file.absolutePath,MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
     private lateinit var surface: android.view.Surface
@@ -86,6 +86,7 @@ internal class DiagnosticVideoEncoder(file: File, private val width: Int, privat
     private var texture: Int = 0
     private var track = -1; private var muxing=false; private var eos=false; private var closed=false
     private val info=MediaCodec.BufferInfo()
+    private var writtenFrames = 0
     init {
         val format=MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC,width,height).apply {
             setInteger(MediaFormat.KEY_COLOR_FORMAT,MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
@@ -104,6 +105,15 @@ internal class DiagnosticVideoEncoder(file: File, private val width: Int, privat
         }
     }
     fun append(bitmap: Bitmap, timeMs: Long) { check(!closed); drain(false); egl.draw(window,texture,bitmap,width,height,timeMs*1000); drain(false) }
+    fun prime(bitmap: Bitmap) {
+        append(bitmap, 0)
+        val deadline = SystemClock.elapsedRealtime() + 1_000
+        while (writtenFrames == 0) {
+            drain(false)
+            check(SystemClock.elapsedRealtime() < deadline) { "首帧编码超时 ${width}×${height}" }
+            if (writtenFrames == 0) Thread.sleep(5)
+        }
+    }
     private fun drain(finishing: Boolean) {
         val deadline=SystemClock.elapsedRealtime()+3_000
         while (!eos) {
@@ -113,7 +123,7 @@ internal class DiagnosticVideoEncoder(file: File, private val width: Int, privat
                 else -> if (index>=0) {
                     val buffer=codec.getOutputBuffer(index)
                     if (info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG !=0) info.size=0
-                    if (info.size>0) { check(muxing); requireNotNull(buffer).position(info.offset); buffer.limit(info.offset+info.size); muxer.writeSampleData(track,buffer,info) }
+                    if (info.size>0) { check(muxing); requireNotNull(buffer).position(info.offset); buffer.limit(info.offset+info.size); muxer.writeSampleData(track,buffer,info); writtenFrames++ }
                     eos=info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM !=0; codec.releaseOutputBuffer(index,false)
                 }
             }
@@ -124,4 +134,27 @@ internal class DiagnosticVideoEncoder(file: File, private val width: Int, privat
         try { codec.signalEndOfInputStream(); drain(true) }
         finally { runCatching { codec.stop() }; codec.release(); egl.destroy(window); surface.release(); if(muxing) runCatching { muxer.stop() }; muxer.release() }
     }
+}
+
+/** 首选源尺寸；系统编码器拒绝时回退编码尺寸，眼区仍直接从源像素取样。 */
+internal fun originalDiagnosticEncoder(file: File, bitmap: Bitmap, egl: DiagnosticEgl): DiagnosticVideoEncoder {
+    val width = bitmap.width; val height = bitmap.height
+    var failure: Throwable? = null
+    val attempted = mutableSetOf<Pair<Int, Int>>()
+    for (limit in listOf(maxOf(width, height), 1920, 1280)) {
+        val scale = minOf(1.0, limit.toDouble() / maxOf(width, height))
+        val w = (width * scale).toInt() / 2 * 2
+        val h = (height * scale).toInt() / 2 * 2
+        if (!attempted.add(w to h)) continue
+        var candidate: DiagnosticVideoEncoder? = null
+        try {
+            candidate = DiagnosticVideoEncoder(file, w, h, 8_000_000, egl)
+            candidate.prime(bitmap)
+            return candidate
+        } catch (error: Throwable) {
+            failure = error
+            runCatching { candidate?.close() }
+        }
+    }
+    throw IllegalStateException("系统编码器拒绝原画与兼容尺寸 ${attempted.joinToString()}", failure)
 }

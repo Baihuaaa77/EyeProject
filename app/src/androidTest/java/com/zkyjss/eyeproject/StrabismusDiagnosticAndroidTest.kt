@@ -23,6 +23,8 @@ class StrabismusDiagnosticAndroidTest {
     @Test fun encodesAlignedMoviesAndFinishesWithoutWholeVideoReprocessing() = exercise(640, 480, 24)
     @Test fun portraitLongClipKeepsCaptureAndFinalizationBounded() = exercise(1080, 1920, 180)
 
+    @Test fun unsupported4kEncoderFallsBackAndKeepsNativeSourceMetadata() = exercise(2160, 3840, 60)
+
     private fun exercise(sourceWidth: Int, sourceHeight: Int, count: Int) {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val root = File(context.filesDir, "diagnostic-encoding-test").apply { mkdirs() }
@@ -67,8 +69,10 @@ class StrabismusDiagnosticAndroidTest {
         }
         val waitMs = SystemClock.elapsedRealtime() - finishStart
         assertEquals(manifest.toString(), "ready", manifest.optString("state"))
+        assertEquals(sourceWidth, manifest.getInt("sourceWidth"))
+        assertEquals(sourceHeight, manifest.getInt("sourceHeight"))
         assertTrue("编码帧过少：$manifest", manifest.getInt("frames") >= 8)
-        for ((name, width, height) in listOf(Triple("original.mp4", sourceWidth, sourceHeight), Triple("comparison.mp4", 1280, 720))) {
+        for ((name, width, height) in listOf(Triple("original.mp4", manifest.getInt("originalWidth"), manifest.getInt("originalHeight")), Triple("comparison.mp4", 1280, 720))) {
             val reader = MediaMetadataRetriever()
             try {
                 reader.setDataSource(File(directory, name).absolutePath)
@@ -78,7 +82,7 @@ class StrabismusDiagnosticAndroidTest {
                 val frame = reader.getFrameAtTime(500_000, MediaMetadataRetriever.OPTION_CLOSEST)!!
                 if (name == "original.mp4") {
                     assertTrue("原画上下倒置", Color.red(frame.getPixel(20, 20)) > 180)
-                    assertTrue("原画上下倒置", Color.blue(frame.getPixel(20, sourceHeight - 20)) > 180)
+                    assertTrue("原画上下倒置", Color.blue(frame.getPixel(20, height - 20)) > 180)
                 } else File(directory, "preview.png").outputStream().use { frame.compress(Bitmap.CompressFormat.PNG, 100, it) }
                 frame.recycle()
             } finally { reader.release() }
