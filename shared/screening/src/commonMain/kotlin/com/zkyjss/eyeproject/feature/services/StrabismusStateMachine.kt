@@ -60,7 +60,11 @@ internal class StrabismusStateMachine(private val host: ScreeningEngine) {
         }
     }
 
-    fun markCover() = with(host) { Unit
+    /** 识别困难时由用户确认已完成动作；单独标注来源，不冒充相机证据。 */
+    fun markCover() = with(host) {
+        val s = _state.value
+        if (s.step != ScreeningStep.COVER || s.guidePending || s.coverHolding || !s.coverRetryAvailable) return@with
+        acceptCover(platform.nowMs(), platform.nowMs(), "USER_CONFIRMED")
     }
 
     /** 超时只提供恢复入口，不把等待时间或点击当成真实遮盖动作。 */
@@ -71,12 +75,15 @@ internal class StrabismusStateMachine(private val host: ScreeningEngine) {
             while (isActive && _state.value.step == ScreeningStep.COVER) {
                 helpSession.delay(250L)
                 val s = _state.value
-                if (s.step == ScreeningStep.COVER && !s.guidePending &&
+                if (s.step == ScreeningStep.COVER && !s.guidePending && !s.coverHolding &&
                     coverIndex < coverSequence.size && platform.nowMs() - actionWaitStartMs >= 8_000L && !s.coverRetryAvailable) {
                     _state.update { it.copy(coverRetryAvailable = true, warning =
                         if (!coverDetector.hasBaseline) "请先移开遮盖、睁开双眼约 1 秒，再按提示遮眼。"
-                        else "暂未识别到指定动作。请露出另一只眼、保持头和手机不动，不要挡住摄像头；也可以重新识别本段。") }
+                        else "请露出另一只眼；已做好动作也可以确认继续。") }
                 }
+                // 每个动作最多等候 15 秒；未识别时跳过该动作并记录缺测，保证能到达结果。
+                if (!s.guidePending && !s.coverHolding && platform.nowMs() - actionWaitStartMs >= 15_000L)
+                    acceptCover(platform.nowMs(), platform.nowMs(), "TIMEOUT")
             }
         }
     }
@@ -142,34 +149,37 @@ internal class StrabismusStateMachine(private val host: ScreeningEngine) {
             if (observation.covered != action.covered || observation.sinceMs < coverStageStartMs) return
             val release = action.uncovered?.let { observation.releasedAtMs[it] }
             val eventTime = release?.takeIf { it >= coverStageStartMs } ?: observation.sinceMs
+            acceptCover(eventTime, observation.confirmedAtMs, "CAMERA")
+        }
+    }
+
+    private fun acceptCover(eventTime: Long, confirmedAt: Long, source: String) = with(host) {
+            val current = _state.value
+            val action = coverSequence.getOrNull(coverIndex) ?: return@with
+            if (current.step != ScreeningStep.COVER || current.coverHolding) return@with
             val marks = current.coverMarks + CoverMark(action.label, eventTime, action.uncovered, action.covered,
-                source = "CAMERA", confirmedAtMs = observation.confirmedAtMs)
+                source = source, confirmedAtMs = confirmedAt)
             platform.feedback(ScreeningFeedbackCue.ANSWER)
             coverIndex++
-            coverStageStartMs = observation.sinceMs
-            lastHeldEvidenceMs = observation.confirmedAtMs
+            // 进度条从动作证据首帧起算，确认延迟不会额外拖慢流程；用户看到的是剩余保持进度。
+            coverStageStartMs = eventTime
+            lastHeldEvidenceMs = confirmedAt
             _state.update { it.copy(coverMarks = marks, coverHolding = action.holdMs > 0,
-                instruction = "保持：${action.label}", warning = null) }
+                coverRetryAvailable = false, instruction = "保持：${action.label}", warning = null) }
             coverHoldJob?.cancel()
             coverHoldJob = scope.launch {
                 if (coverIndex >= coverSequence.size) {
                     helpSession.delay(StrabismusProtocol.REFIX_SEARCH_MS + 100L)
                     if (_state.value.step == ScreeningStep.COVER) startPursuit()
                 } else {
-                    helpSession.delay((action.holdMs - (platform.nowMs() - observation.sinceMs)).coerceAtLeast(0L))
-                    val deadline = observation.sinceMs + action.holdMs
-                    // 保持结束时恰逢眨眼/坏帧，先等新证据；无新证据绝不按墙钟直接放行。
-                    while (_state.value.step == ScreeningStep.COVER && _state.value.coverMarks.size == marks.size && _state.value.coverHolding &&
-                        !coverDetector.matchesCover(action.covered, platform.nowMs()) && platform.nowMs() - deadline < 1_200L) {
-                        helpSession.delay(100L)
-                    }
+                    helpSession.delay((action.holdMs - (platform.nowMs() - eventTime)).coerceAtLeast(0L))
+                    val deadline = coverStageStartMs + action.holdMs
                     if (_state.value.step == ScreeningStep.COVER && _state.value.coverMarks.size == marks.size && _state.value.coverHolding) {
                         if (coverDetector.matchesCover(action.covered, platform.nowMs())) completeHold(deadline)
-                        else retryHeldAction("暂未看清保持动作，请重新${action.label}", platform.nowMs())
+                        else retryHeldAction("保持证据暂时中断，请重新${action.label}", platform.nowMs())
                     }
                 }
             }
-        }
     }
 
     fun startPursuit() {
@@ -209,7 +219,7 @@ internal class StrabismusStateMachine(private val host: ScreeningEngine) {
                 show(StrabismusGaze.calibrationTargets.indices.toList())
                 gaze = StrabismusGaze.calibrate(gazeCalibration)
                 // 少数点没看稳（眨眼、看晚了）时只重看这几个点，而不是整轮约 18 秒重来。
-                val retake = if (gaze == null) StrabismusGaze.pointsToRetake(gazeCalibration) else emptyList()
+                val retake = emptyList<Int>()
                 if (retake.isNotEmpty()) {
                     gazeCalibration.removeAll { it.index in retake }
                     _state.update { it.copy(gazeCalibrationRound = 1, instruction = "再看一次刚才没看稳的 ${retake.size} 个圆点。") }
@@ -219,15 +229,27 @@ internal class StrabismusStateMachine(private val host: ScreeningEngine) {
                 _state.update { it.copy(gazeCalibrationPaused = false, gazeWarning = null) }
                 if (gaze == null) {
                     _state.update { it.copy(gazeCalibrationFailed = true,
-                        warning = "未获得可靠注视校准。" + StrabismusGaze.failureReason(gazeCalibration)) }
-                } else {
+                        warning = "未获得可靠注视校准，将继续测试并把注视监督降级为提示。" + StrabismusGaze.failureReason(gazeCalibration)) }
+                } else run {
                     stepStartMs = platform.nowMs(); resetGazeWindow(); faceCenterBaseline = null
-                    _state.update { it.copy(step = ScreeningStep.FIXATION, gazeCalibrated = true,
+                    reflectionCode.clear()
+                    _state.update { it.copy(step = ScreeningStep.FIXATION, gazeCalibrated = gaze != null,
                         instruction = "看着屏幕上方的白色亮点，头和手机保持不动。", targetX = 1f, targetY = 0f) }
                     runTimedStep(StrabismusProtocol.FIXATION_SECONDS) { startFarFixation() }
                 }
             }
         }
+    }
+
+    /** 校准失败时仍允许完成流程；眼位采集不再依赖注视模型硬门控。 */
+    fun continueWithoutCalibration() = with(host) {
+        val s = _state.value
+        if (s.step != ScreeningStep.GAZE_CALIBRATION || !s.gazeCalibrationFailed) return@with
+        timer?.cancel(); stepStartMs = platform.nowMs(); resetGazeWindow(); faceCenterBaseline = null
+        reflectionCode.clear()
+        _state.update { it.copy(step = ScreeningStep.FIXATION, gazeCalibrated = false, gazeCalibrationFailed = false,
+            instruction = "看着屏幕上方的白色亮点即可，头和手机保持大致稳定。", warning = null) }
+        runTimedStep(StrabismusProtocol.FIXATION_SECONDS) { startFarFixation() }
     }
 
     fun reportGazeTarget(xPx: Float, yPx: Float) {

@@ -143,6 +143,10 @@ struct EyeTestView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text(darkStageCaption)
                     .font(EyeStyle.subtitle).foregroundStyle(EyeStyle.reflectionTarget)
+                if phase == "COVER", runtime.bool("coverHolding"), runtime.number("coverHoldMs") > 0 {
+                    HoldProgress(key: Int(runtime.number("coverDone")), holdMs: runtime.number("coverHoldMs"),
+                                 remainingMs: runtime.number("coverRemainingMs"), label: "保持当前动作", dark: true)
+                }
                 if runtime.bool("stabilityInterrupted") {
                     Text(runtime.string("stabilityReason")).font(EyeStyle.body).foregroundStyle(EyeStyle.testTooClose)
                     Button(runtime.bool("stabilityReady") ? "已稳定，重新开始本段" : "请回到原位并保持稳定") { runtime.act("restartStableStage") }
@@ -151,6 +155,7 @@ struct EyeTestView: View {
                 } else if runtime.bool("farWaiting") {
                     Button("已在看远处，开始") { runtime.act("farStart") }.buttonStyle(EyeButtonStyle())
                 } else if runtime.bool("coverRetryAvailable") {
+                    Button("已做好动作，继续") { runtime.act("cover") }.buttonStyle(EyeButtonStyle())
                     Button("重新识别本段") { runtime.act("retryCover") }.buttonStyle(EyeButtonStyle(role: .secondary))
                 }
                 TestDistanceBanner(runtime: runtime)
@@ -284,7 +289,10 @@ struct EyeTestView: View {
                     .buttonStyle(EyeButtonStyle()).disabled(!runtime.bool("stabilityReady"))
                 Button("重新开始整个测试") { runtime.act("restart") }.buttonStyle(EyeButtonStyle(role: .secondary))
             }
-            if runtime.bool("gazeCalibrationFailed") { Button("重试注视校准") { runtime.act("calibrate") }.buttonStyle(EyeButtonStyle()) }
+            if runtime.bool("gazeCalibrationFailed") {
+                Button("继续测试") { runtime.act("continueWithoutCalibration") }.buttonStyle(EyeButtonStyle())
+                Button("重试注视校准") { runtime.act("calibrate") }.buttonStyle(EyeButtonStyle(role: .secondary))
+            }
             if phase == "COVER" { CoverPanel(runtime: runtime) }
         } else if phase == "Countdown" {
             CountdownRing(seconds: Int(runtime.number("secondsLeft")))
@@ -433,13 +441,14 @@ private struct HoldProgress: View {
     let holdMs: Double
     let remainingMs: Double
     let label: String
+    var dark: Bool = false
     @State private var progress = 0.0
     @State private var finished = false
     @State private var generation = 0
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(finished ? "可以进行下一步" : label).font(EyeStyle.body)
-                .foregroundStyle(finished ? EyeStyle.testReady : EyeStyle.secondary)
+                .foregroundStyle(dark ? EyeStyle.reflectionTarget : finished ? EyeStyle.testReady : EyeStyle.secondary)
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
                     EyeStyle.chipShape.fill(EyeStyle.surfaceVariant)
@@ -555,7 +564,8 @@ private struct GazeTargetView: View {
         GeometryReader { geometry in
             let size = geometry.size
             let phase = runtime.string("phase")
-            TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: phase != "PURSUIT" || runtime.bool("stabilityInterrupted"))) { _ in
+            TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: !["PURSUIT","FIXATION"].contains(phase) || runtime.bool("stabilityInterrupted"))) { _ in
+                let lightOn = runtime.controller.reflectionLightOn()
                 let trajectory = runtime.controller.pursuitTargetNow()
                 let point = target(in: size, trajectory: CGPoint(x: CGFloat(trajectory.x), y: CGFloat(trajectory.y)))
                 ZStack(alignment: .topLeading) {
@@ -566,7 +576,7 @@ private struct GazeTargetView: View {
                     } else {
                         let diameter = phase == "PURSUIT" ? CGFloat(10 * pixelsPerMm) / UIScreen.main.scale : CGFloat(runtime.number("targetDiameterMm") * Double(pixelsPerMm)) / UIScreen.main.scale
                         if reflection {
-                            Circle().fill(EyeStyle.reflectionTarget).frame(width: diameter, height: diameter).position(point)
+                            Circle().fill(EyeStyle.reflectionTarget).frame(width: diameter, height: diameter).opacity(lightOn ? 1 : 0).position(point)
                         } else {
                             Canvas { ctx, size in
                                 Cartoon.fixationTarget(ctx,center: CGPoint(x: size.width / 2,y: size.height / 2),size: min(size.width,size.height),color: EyeStyle.fixedPrimary)
@@ -574,7 +584,8 @@ private struct GazeTargetView: View {
                         }
                     }
                 }
-                    .onAppear { report(geometry, point) }
+                    .onAppear { report(geometry, point); runtime.controller.reportReflectionLight(on: lightOn) }
+                    .onChange(of: lightOn) { value in runtime.controller.reportReflectionLight(on: value) }
                     .onChange(of: point) { value in report(geometry, value) }
                     .onChange(of: runtime.stateKeyForTarget) { _ in report(geometry, point) }
                     .onChange(of: geometry.frame(in: .global).origin) { _ in report(geometry, point) }

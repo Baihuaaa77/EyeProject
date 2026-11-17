@@ -63,7 +63,9 @@ object EyeOpticalAlgorithm {
         val pupil = if (pupilContrast >= 12f && pupilWeight >= 8f) Point2f(pupilX / pupilWeight, pupilY / pupilWeight) else null
 
         // 仅接受虹膜内部很小的高亮连通域，避免把眼白、镜片反射或整屏亮斑当作角膜反光点。
-        val threshold = maxOf(205, median + 55, bright - 8)
+        // 屏幕白点在前置相机自动曝光下常落到 180~205 灰度；先缩小搜索区，再降低门槛，
+        // 让轻微失焦、眼镜反光和暗肤色场景仍有候选，最终由短光码与时序一致性确认。
+        val threshold = if (screenPoint) maxOf(180, median + 35, bright - 20) else maxOf(205, median + 55, bright - 8)
         val visited = BooleanArray(gray.size)
         var bestScore = Float.NEGATIVE_INFINITY
         var glint: Point2f? = null
@@ -108,7 +110,8 @@ object EyeOpticalAlgorithm {
             val candidate = Point2f(sumX / tail, sumY / tail)
             val contrast = sumBrightness / tail - median
             val score = contrast - 2f * hypot(candidate.x - iris.x, candidate.y - iris.y)
-            if (contrast >= 55f && score > bestScore) {
+            val minimumContrast = if (screenPoint) 35f else 55f
+            if (contrast >= minimumContrast && score > bestScore) {
                 bestScore = score; glint = candidate; glintContrast = contrast
             }
         }

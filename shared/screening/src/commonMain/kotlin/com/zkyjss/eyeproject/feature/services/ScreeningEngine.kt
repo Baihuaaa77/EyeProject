@@ -65,6 +65,7 @@ class ScreeningEngine(platform: ScreeningPlatform, internal val scope: Coroutine
     internal var qualityEligibleValidFrames = 0
     internal var lastUiFrameMs = 0L
     internal val coverDetector = CoverDetector()
+    internal val reflectionCode = ReflectionCodeVerifier()
     internal var coverIndex = 0
     internal var coverStageStartMs = 0L
     internal var coverHoldJob: Job? = null
@@ -134,7 +135,7 @@ class ScreeningEngine(platform: ScreeningPlatform, internal val scope: Coroutine
             while (isActive && cameraAttached) {
                 helpSession.delay(1_000)
                 if ((lastCameraFrameMs == 0L || platform.nowMs() - lastCameraFrameMs > 2_500) && _state.value.step != ScreeningStep.RESULT) {
-                    interruptStability("相机帧中断，请保持手机稳定并检查相机")
+                    _state.update { it.copy(stabilityReason = "相机帧短暂中断，继续保持当前动作") }
                     _state.update { it.copy(faceDetected = false, distanceCm = 0f, leftOpticalX = null, leftOpticalY = null,
                         rightOpticalX = null, rightOpticalY = null, opticalStatus = "相机帧中断", trackingStatus = "相机未收到新帧",
                         warning = "未收到相机数据，请检查相机权限并重试。") }
@@ -288,7 +289,7 @@ class ScreeningEngine(platform: ScreeningPlatform, internal val scope: Coroutine
 
     internal fun startCover() = strabismus.startCover()
 
-    /** 点按不再生成遮盖事件；仅相机的连续多帧证据可以推进动作。 */
+    /** 识别超时后可人工确认动作；记录来源与相机识别区分。 */
     fun markCover() = strabismus.markCover()
 
     internal fun observeCover(time: Long, face: FaceMetrics?, quality: Boolean, step: ScreeningStep) = strabismus.observeCover(time, face, quality, step)
@@ -319,8 +320,9 @@ class ScreeningEngine(platform: ScreeningPlatform, internal val scope: Coroutine
         }
     }
 
-    /** 校准不计入正式眼位测量；失败停留在本页，不能带着无效校准进入结果。 */
+    /** 校准只辅助注视监督，未通过也继续完成正式采集。 */
     fun retryGazeCalibration() = strabismus.retryGazeCalibration()
+    fun continueWithoutCalibration() = strabismus.continueWithoutCalibration()
 
     /** 记录实际画出的目标，而非未考虑画布缩放、滚动和布局位置的理论轨迹。 */
     fun reportGazeTarget(xPx: Float, yPx: Float) = strabismus.reportGazeTarget(xPx, yPx)
@@ -347,6 +349,16 @@ class ScreeningEngine(platform: ScreeningPlatform, internal val scope: Coroutine
     fun coverRemainingMs(): Long = strabismus.coverRemainingMs()
 
     fun retryCoverDetection() = strabismus.retryCoverDetection()
+
+    fun reflectionLightOn(): Boolean = _state.value.let { s ->
+        s.step != ScreeningStep.FIXATION || s.guidePending || ReflectionCodeVerifier.lightOn(platform.nowMs() - stepStartMs)
+    }
+
+    /** 平台绘制亮点后回报实际明暗，解码不把计划时刻当作显示证据。 */
+    fun reportReflectionLight(on: Boolean) {
+        if (_state.value.step == ScreeningStep.FIXATION && !_state.value.guidePending)
+            reflectionCode.present(platform.nowMs(), on, platform.nowMs()-stepStartMs)
+    }
 
     internal fun interruptStability(reason: String, timeMs: Long = platform.nowMs(), distanceCm: Float = _state.value.distanceCm) {
         val current = _state.value

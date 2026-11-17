@@ -133,6 +133,7 @@ class MobileScreeningController(
             "restartStableStage" -> screening.restartStableStage()
             "farStart" -> screening.startFarCountdown()
             "calibrate" -> screening.retryGazeCalibration()
+            "continueWithoutCalibration" -> screening.continueWithoutCalibration()
             "extended" -> dry.startExtended()
             "rest" -> dry.startRestRetest()
             "resume" -> dry.resumeFromPause()
@@ -186,6 +187,8 @@ class MobileScreeningController(
     fun markPresented(trialId: Int) {
         if (kind == "DRY_EYE") dry.markTrialPresented(trialId,platform.nowMs()) else screening.markTrialPresented(trialId,platform.nowMs())
     }
+    fun reflectionLightOn(): Boolean = screening.reflectionLightOn()
+    fun reportReflectionLight(on: Boolean) = screening.reportReflectionLight(on)
     fun feedbackJson(enabled: Boolean): String {
         val frame = when (kind) {
             "DRY_EYE" -> screeningFeedbackFrame(dry.uiState.value)

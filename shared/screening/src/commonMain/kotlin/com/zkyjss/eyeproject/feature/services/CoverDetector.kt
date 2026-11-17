@@ -38,32 +38,35 @@ internal class CoverDetector {
         val right = face?.rightOptical?.irisVisibilityContrast
         val leftEar = face?.leftEye?.let { BlinkDetector.ear(it.earPoints) }
         val rightEar = face?.rightEye?.let { BlinkDetector.ear(it.earPoints) }
-        if (!quality || left == null || right == null || !left.isFinite() || !right.isFinite() || left < 0f || right < 0f) {
+        if (!quality || face == null || (left == null && right == null) ||
+            left?.let { !it.isFinite() || it < 0f } == true || right?.let { !it.isFinite() || it < 0f } == true) {
             // 单帧关键点抖动不清除已确认动作；这类帧本身绝不提供新的确认时间。
             visibleSince.clear(); return null
         }
         val leftEyeOpen = leftEar != null && leftEar >= 0.16f
         val rightEyeOpen = rightEar != null && rightEar >= 0.16f
-        val balanced = leftBaseline?.let { lb -> rightBaseline?.let { rb ->
+        val balanced = if (left != null && right != null) leftBaseline?.let { lb -> rightBaseline?.let { rb ->
             val l = left / lb; val r = right / rb
             minOf(l, r) >= maxOf(l, r) * 0.7f
-        } } ?: true
+        } } ?: true else false
         // 学基线时必须双眼睁开；单眼对比突降时冻结基线，避免把手掌逐渐学成正常眼睛。
-        if (learn && leftEyeOpen && rightEyeOpen && left >= 8f && right >= 8f && balanced) {
+        if (learn && leftEyeOpen && rightEyeOpen && left != null && right != null && left >= 8f && right >= 8f && balanced) {
             leftBaseline = leftBaseline?.let { it * 0.95f + left * 0.05f } ?: left
             rightBaseline = rightBaseline?.let { it * 0.95f + right * 0.05f } ?: right
         }
         val lb = leftBaseline ?: return null
         val rb = rightBaseline ?: return null
-        val leftOpen = leftEyeOpen && left >= maxOf(4f, lb * 0.55f)
-        val rightOpen = rightEyeOpen && right >= maxOf(4f, rb * 0.55f)
+        val leftOpen = leftEyeOpen && left != null && left >= maxOf(4f, lb * 0.45f)
+        val rightOpen = rightEyeOpen && right != null && right >= maxOf(4f, rb * 0.45f)
         for ((eye, open) in listOf(VisionEye.LEFT to leftOpen, VisionEye.RIGHT to rightOpen)) {
             if (!open) visibleSince.remove(eye) else if (eye !in visibleSince) visibleSince[eye] = timeMs
         }
         val raw = when {
             leftOpen && rightOpen -> 0
-            left <= lb * 0.35f && rightOpen && left / lb < right / rb * 0.5f -> 1
-            right <= rb * 0.35f && leftOpen && right / rb < left / lb * 0.5f -> 2
+            rightOpen && ((left != null && left <= lb * 0.55f && left / lb < right!! / rb * 0.65f) ||
+                (left == null && !leftEyeOpen)) -> 1
+            leftOpen && ((right != null && right <= rb * 0.55f && right / rb < left!! / lb * 0.65f) ||
+                (right == null && !rightEyeOpen)) -> 2
             else -> null
         }
         if (raw == null) { visibleSince.clear(); return null }
@@ -72,8 +75,9 @@ internal class CoverDetector {
         lastEvidenceTime = timeMs
         // 被手遮住后关键点可能塌缩或消失，不再要求被遮眼仍被预测为睁眼。
         // 这时延长证据窗口，避免单侧短眨眼被当成遮盖；未遮眼始终必须睁开且像素可见。
-        val requiredMs = if (raw == 1 && !leftEyeOpen || raw == 2 && !rightEyeOpen) 700L else 350L
+        val requiredMs = if (raw == 1 && (left == null || !leftEyeOpen) || raw == 2 && (right == null || !rightEyeOpen)) 700L else 350L
         if (count < 3 || timeMs - since < requiredMs) return null
+        // debug
         confirmed = true
         return Observation(when (raw) { 1 -> VisionEye.LEFT; 2 -> VisionEye.RIGHT; else -> null }, since, timeMs, visibleSince.toMap())
     }

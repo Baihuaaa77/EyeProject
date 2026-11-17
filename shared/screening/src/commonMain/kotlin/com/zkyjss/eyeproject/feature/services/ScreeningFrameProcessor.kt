@@ -51,9 +51,9 @@ internal class ScreeningFrameProcessor(private val host: ScreeningEngine) {
                     "虹膜 ${decimalString(it.irisDiameterPx.toDouble(), 1)} px；瞳孔对比 ${decimalString(it.pupilContrast.toDouble(), 0)}；反光对比 ${decimalString(it.reflexContrast.toDouble(), 0)}"
                 } ?: "眼区像素不可用"
             val opticalReady = leftOptical?.usable == true && rightOptical?.usable == true
-            val pitchLimit = if (step == ScreeningStep.FAR_FIXATION) StrabismusProtocol.FAR_PITCH_LIMIT_DEG else 10f
-            val poseStable = pose != null && abs(pose.yawDeg) <= 10f &&
-                abs(pose.pitchDeg) <= pitchLimit && abs(pose.rollDeg) <= 8f
+            val pitchLimit = if (step == ScreeningStep.FAR_FIXATION) 30f else 25f
+            val poseStable = pose != null && abs(pose.yawDeg) <= 25f &&
+                abs(pose.pitchDeg) <= pitchLimit && abs(pose.rollDeg) <= 20f
             val opticalStatus = when {
                 face == null -> "等待人脸"
                 pose == null -> "头姿不可用"
@@ -114,21 +114,26 @@ internal class ScreeningFrameProcessor(private val host: ScreeningEngine) {
                         else eyeFramePosition(visibleEye,frame.sourceWidth,frame.sourceHeight)
                     }
                 val stabilityReading = stability.observe(time,step,positions,smoothedDistance,poseStable && headStable,before.stabilityInterrupted)
-                stabilityFrameGood = stabilityReading.ready
+                // 稳定性只作质量记录，不作为连续采集或动作识别的阻断条件。
+                stabilityFrameGood = true
                 if (before.stabilityInterrupted) _state.update {
                     val message = if (stabilityReading.ready) "距离与位置已稳定，请重新开始本段" else stabilityReading.reason ?: "正在确认稳定，请保持手机和注视稳定"
                     it.copy(stabilityReady = stabilityReading.ready,stabilityReason = message,instruction = message,gazeWarning = message)
                 }
-                else stabilityReading.reason?.let { interruptStability(it,time,smoothedDistance) }
+                // 轻微姿态、距离或手机移动仅记录质量提示，不再中断当前阶段。
+                else stabilityReading.reason?.let { _state.update { state -> state.copy(stabilityReason = it) } }
             }
             val valid = smoothedDistance in 10f..100f &&
                 !_state.value.stabilityInterrupted && stabilityFrameGood &&
                 (_state.value.kind != ScreeningKind.PRESBYOPIA || (left != null || right != null)) &&
                 (_state.value.kind != ScreeningKind.STRABISMUS ||
                     ((if (step == ScreeningStep.COVER) left != null || right != null else left != null && right != null) &&
-                        abs(smoothedDistance - StrabismusProtocol.DISTANCE_CM) <= StrabismusProtocol.DISTANCE_GATE_CM && headStable && poseStable)) &&
+                        smoothedDistance in 20f..55f && poseStable)) &&
                 (_state.value.kind == ScreeningKind.STRABISMUS || _state.value.lux == null || _state.value.lux!! >= 50f)
-            if (step == _state.value.step && !_state.value.guidePending && !_state.value.stabilityInterrupted) observeCover(time, face, valid && poseStable, step)
+            if (step == _state.value.step && !_state.value.guidePending && !_state.value.stabilityInterrupted)
+                observeCover(time, face, face != null && (pose == null || abs(pose.yawDeg) < 40f && abs(pose.pitchDeg) < 40f), step)
+            val coding = step == ScreeningStep.FIXATION && time-stepStartMs < ReflectionCodeVerifier.DURATION_MS
+            if (coding && !_state.value.guidePending) reflectionCode.observe(time, face)
             val rendered = renderedTargets.lastOrNull { it.timeMs <= time && it.step == step }
             val covered = if (step == ScreeningStep.COVER) {
                 if (coverDetector.hasObservation) coverDetector.coveredEye else _state.value.coverMarks.lastOrNull()?.covered
@@ -175,7 +180,7 @@ internal class ScreeningFrameProcessor(private val host: ScreeningEngine) {
                 val eligible = step != ScreeningStep.FAR_FIXATION && (step != ScreeningStep.COVER ||
                     _state.value.coverMarks.lastOrNull()?.label?.let { it.startsWith("移开") || it.startsWith("完全") } == true)
                 if (eligible) qualityEligibleFrames++
-                if (valid) {
+                if (valid && !coding) {
                     validFrames++
                     if (eligible) qualityEligibleValidFrames++
                     if (_state.value.kind == ScreeningKind.STRABISMUS && opticalReady) opticalValidFrames++
@@ -224,10 +229,8 @@ internal class ScreeningFrameProcessor(private val host: ScreeningEngine) {
                     } else gazeBadSinceMs = null
                     // 遮盖阶段家长的手在脸前，判断不了注视很正常：只在确实看偏时提醒；其余阶段也放宽等待时间
                     val gazeWarning = when {
-                        gazeOnTarget == null && step != ScreeningStep.COVER &&
-                            gazeBadSinceMs?.let { time - it >= 3_000L } == true -> "暂时无法确认注视，请保持头部稳定并看着屏幕目标"
-                        gazeOnTarget != null && gazeBadSinceMs?.let { time - it >= 2_500L } == true ->
-                            if (step == ScreeningStep.PURSUIT) "未检测到有效跟随，请只用眼睛跟随移动的圆点" else "注视明显偏离，请看着屏幕上的圆点"
+                        gazeOnTarget == false && gazeBadSinceMs?.let { time - it >= 6_000L } == true ->
+                            if (step == ScreeningStep.PURSUIT) "眼睛跟着圆点移动即可" else "轻松看着白点即可"
                         else -> null
                     }
                     _state.update { it.copy(gazeWarning = gazeWarning) }

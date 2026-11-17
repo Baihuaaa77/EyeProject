@@ -23,6 +23,7 @@ internal class ScreeningResultWriter(private val host: ScreeningEngine) {
             val result = assessment.displayLines() + metrics
             val capturedSamples = samples.toList()
             val capturedCalibration = gazeCalibration.toList()
+            val capturedReflectionCode = reflectionCode.record()
             val capturedTotal = totalFrames
             val capturedValid = validFrames
             val capturedQualityEligible = qualityEligibleFrames
@@ -41,18 +42,19 @@ internal class ScreeningResultWriter(private val host: ScreeningEngine) {
             recordScope.launch(recordDispatcher) {
                 runCatching {
                     val data = RecordObject().apply {
-                        put("protocolVersion", if (s.kind == ScreeningKind.STRABISMUS) 8 else 4)
+                        put("protocolVersion", if (s.kind == ScreeningKind.STRABISMUS) 9 else 4)
                         if (s.kind == ScreeningKind.STRABISMUS) {
-                            put("stimulusSource", "screen-white-dot-v1")
-                            put("acquisitionVersion", "eye-corner-stability-distance-2")
+                            put("stimulusSource", "brief-code-then-steady-dot-v2")
+                            put("acquisitionVersion", "completion-first-1")
                             put("opticsAlgorithm", "screen-point-baseline-60-area-lid-v1")
-                            put("sourceIdentityVerified", false)
+                            // 仅表示起始短光码的双眼候选通过核查，不代表后续每帧都已验证。
+                            put("sourceIdentityVerified", capturedReflectionCode)
                             put("stabilityInterruptions", s.stabilityInterruptions)
                             put("stabilityEvents", RecordArray(s.stabilityEvents.map { event -> RecordObject().apply {
                                 put("step",event.step.name); put("timeMs",event.timeMs); put("reason",event.reason); put("distanceCm",event.distanceCm)
                             } }))
                         }
-                        if (s.kind == ScreeningKind.STRABISMUS) put("coverDetectionVersion", "camera-cover-2")
+                        if (s.kind == ScreeningKind.STRABISMUS) put("coverDetectionVersion", "camera-cover-3-completion")
                         if (s.kind == ScreeningKind.STRABISMUS) {
                             put("gazeCalibrated", s.gazeCalibrated)
                             put("gazeCalibration", RecordArray().apply { capturedCalibration.forEach { c -> put(RecordObject().apply {

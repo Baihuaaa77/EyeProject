@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import com.zkyjss.eyeproject.core.designsystem.theme.*
 import com.zkyjss.eyeproject.core.ui.component.*
 import com.zkyjss.eyeproject.core.ui.component.EyeText as BaseEyeText
+import kotlinx.coroutines.delay
 
 /** 正式采集中，黑屏上的实心白点同时作为视标与映光光源；提示固定在底部，不挤动视标。 */
 @Composable
@@ -31,13 +32,21 @@ internal fun StrabismusDarkSession(s: ScreeningState, vm: ScreeningTestViewModel
     val density = LocalDensity.current
     var footerHeight by remember { mutableStateOf(230.dp) }
     val ppm = LocalContext.current.resources.displayMetrics.xdpi / 25.4f
+    var lightOn by remember { mutableStateOf(true) }
+    LaunchedEffect(s.step) {
+        while (true) {
+            lightOn = vm.engine.reflectionLightOn()
+            delay(40L)
+        }
+    }
     Box(Modifier.fillMaxSize().background(colors.black).navigationBarsPadding()) {
         Canvas(Modifier.fillMaxSize().statusBarsPadding().padding(bottom = footerHeight)
             .onGloballyPositioned { origin = it.positionInWindow() }) {
             val diameter = StrabismusProtocol.targetDiameterMm(s.fields["年龄"]?.toIntOrNull()) * ppm
             val radius = (diameter / 2f).coerceAtMost(minOf(size.width, size.height) / 4f)
             val point = Offset(center.x, radius + 4.dp.toPx())
-            drawCircle(colors.white, radius, point)
+            if (lightOn) drawCircle(colors.white, radius, point)
+            vm.engine.reportReflectionLight(lightOn)
             vm.reportGazeTarget(origin.x + point.x, origin.y + point.y)
         }
         Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().onSizeChanged { footerHeight = with(density) { it.height.toDp() } }.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -46,6 +55,10 @@ internal fun StrabismusDarkSession(s: ScreeningState, vm: ScreeningTestViewModel
                 ScreeningStep.FAR_FIXATION -> "越过手机看6米外 · ${s.secondsLeft}秒"
                 else -> "${s.secondsLeft}秒"
             }, style = typography.subtitle, color = colors.white)
+            val action = StrabismusProtocol.COVER_SEQUENCE.getOrNull(s.coverMarks.size - 1)
+            if (s.step == ScreeningStep.COVER && s.coverHolding && action != null && action.holdMs > 0) {
+                HoldTimer(s.coverMarks.size, action.holdMs, "保持当前动作", vm.engine.coverRemainingMs(), dark = true)
+            }
             if (s.stabilityInterrupted) {
                 BaseEyeText(s.stabilityReason.orEmpty(), style = typography.body, color = colors.tooClose)
                 EyeButton(if (s.stabilityReady) "已稳定，重新开始本段" else "请回到原位并保持稳定", EyeButtonRole.PRIMARY,
@@ -54,6 +67,7 @@ internal fun StrabismusDarkSession(s: ScreeningState, vm: ScreeningTestViewModel
             } else if (s.farWaiting) {
                 EyeButton("已在看远处，开始", EyeButtonRole.PRIMARY, vm::startFarCountdown, Modifier.fillMaxWidth())
             } else if (s.coverRetryAvailable) {
+                EyeButton("已做好动作，继续", EyeButtonRole.PRIMARY, vm::markCover, Modifier.fillMaxWidth())
                 EyeButton("重新识别本段", EyeButtonRole.SECONDARY, vm::retryCoverDetection, Modifier.fillMaxWidth())
             }
             distance()

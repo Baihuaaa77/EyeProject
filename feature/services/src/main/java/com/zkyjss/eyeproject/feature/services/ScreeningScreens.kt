@@ -464,7 +464,10 @@ internal fun GazeCalibrationContent(s: ScreeningState, vm: ScreeningTestViewMode
                 vm.reportGazeTarget(origin.x + point.x, origin.y + point.y)
             }
             StageCaption("注视校准 · ${s.gazeCalibrationIndex + 1}/${StrabismusGaze.calibrationTargets.size}")
-            if (s.gazeCalibrationFailed) EyeButton("重试注视校准", EyeButtonRole.PRIMARY, vm::retryGazeCalibration, Modifier.fillMaxWidth())
+            if (s.gazeCalibrationFailed) {
+                EyeButton("继续测试", EyeButtonRole.PRIMARY, vm::continueWithoutCalibration, Modifier.fillMaxWidth())
+                EyeButton("重试注视校准", EyeButtonRole.SECONDARY, vm::retryGazeCalibration, Modifier.fillMaxWidth())
+            }
         }
     }
 }
@@ -492,13 +495,13 @@ internal fun CoverContent(s: ScreeningState, vm: ScreeningTestViewModel) {
 
 /** 当前动作需保持的时长（原文 2 秒 / 1 秒），到点后再进行下一动作。 */
 @Composable
-private fun HoldTimer(key: Int, holdMs: Long, text: String, remainingMs: Long = holdMs) {
+internal fun HoldTimer(key: Int, holdMs: Long, text: String, remainingMs: Long = holdMs, dark: Boolean = false) {
     val colors = LocalEyeColors.current
     val progress = remember(key) { androidx.compose.animation.core.Animatable((1f - remainingMs.toFloat() / holdMs).coerceIn(0f, 1f)) }
     LaunchedEffect(key) { progress.animateTo(1f, androidx.compose.animation.core.tween(remainingMs.coerceAtLeast(0L).toInt(), easing = androidx.compose.animation.core.LinearEasing)) }
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         EyeText(if (progress.value >= 1f) "可以进行下一步" else text, LocalEyeTypography.current.body,
-            if (progress.value >= 1f) colors.testReady else colors.textSecondary)
+            if (dark) colors.white else if (progress.value >= 1f) colors.testReady else colors.textSecondary)
         androidx.compose.material3.LinearProgressIndicator(
             progress = { progress.value },
             modifier = Modifier.fillMaxWidth().height(6.dp).clip(EyeShapes.small),
