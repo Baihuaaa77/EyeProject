@@ -17,9 +17,11 @@ struct EyeProjectApp: App {
 /// 「我的 → 测试记录」完整页面：与安卓同一份列表（共用 LocalRecordCatalog 解析）。每张卡为测试名、时间 · 成员与结论徽标，
 /// 点开看当时的建议、要点、AI 解读与明细，并可导出报告或把完整记录（JSON）分享给医生或开发者。
 struct RecordsPage: View {
+    @State private var diagnosticsOpen = false
     private let records = RecordsPage.load()
 
     struct Entry: Identifiable {
+        let diagnosticSessionId: String?
         let url: URL, title: String, testedAt: Date?, level: String, badge: String, lines: [String]
         let version: String, subjectLabel: String, advice: String, qualityNotes: [String], sections: [ReportModel.Section], reportText: String
         var id: String { url.lastPathComponent }
@@ -27,6 +29,7 @@ struct RecordsPage: View {
 
     var body: some View {
         SubPage(title: "测试记录") {
+            Button("斜视诊断视频") { diagnosticsOpen = true }.buttonStyle(EyeButtonStyle(role: .secondary))
             if records.isEmpty {
                 VStack(spacing: 10) {
                     IconTile(glyph: .document, tone: .primary, size: 56)
@@ -36,6 +39,7 @@ struct RecordsPage: View {
             }
             ForEach(records) { RecordRow(entry: $0) }
         }
+        .sheet(isPresented: $diagnosticsOpen) { StrabismusDiagnosticLibrary() }
     }
 
     private static func load() -> [Entry] {
@@ -54,7 +58,7 @@ struct RecordsPage: View {
                     ReportModel.Row(id: j, label: row["label"] as? String ?? "", value: row["value"] as? String ?? "未记录")
                 })
             }
-            return Entry(url: url, title: e["title"] as? String ?? url.lastPathComponent,
+            return Entry(diagnosticSessionId: e["diagnosticSessionId"] as? String, url: url, title: e["title"] as? String ?? url.lastPathComponent,
                          testedAt: testedAt,
                          level: e["level"] as? String ?? "UNKNOWN", badge: e["badge"] as? String ?? "",
                          lines: e["lines"] as? [String] ?? [], version: e["version"] as? String ?? "未记录（旧版本）",
@@ -69,6 +73,7 @@ private struct RecordRow: View {
     let entry: RecordsPage.Entry
     @State private var expanded = false
     @State private var exportingReport = false
+    @State private var diagnosticOpen = false
     @State private var exportError: String?
     private static let formatter: DateFormatter = {
         let f = DateFormatter(); f.locale = Locale(identifier: "zh_CN"); f.dateFormat = "yyyy-MM-dd HH:mm"; return f
@@ -101,6 +106,7 @@ private struct RecordRow: View {
         }
         .padding(16).frame(maxWidth: .infinity, alignment: .leading)
         .eyeGlass(cornerRadius: EyeStyle.radiusLarge)
+        .sheet(isPresented: $diagnosticOpen) { StrabismusDiagnosticLibrary(sessionId: entry.diagnosticSessionId) }
         .fileExporter(isPresented: $exportingReport, document: RecordReportDocument(text: entry.reportText), contentType: .plainText,
                       defaultFilename: entry.url.deletingPathExtension().lastPathComponent + "_报告.txt") { result in
             if case .failure = result { exportError = "导出失败，请换个位置再试"; EyeHaptics.failure() } else { exportError = nil; EyeHaptics.success() }
@@ -112,6 +118,9 @@ private struct RecordRow: View {
             if !entry.advice.isEmpty { Text(entry.advice).font(EyeStyle.body).foregroundStyle(EyeStyle.text) }
             ForEach(Array(entry.lines.enumerated()), id: \.offset) { _, line in
                 Text("· \(line)").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
+            }
+            if entry.diagnosticSessionId != nil {
+                Button("回看本次诊断视频") { diagnosticOpen = true }.buttonStyle(EyeButtonStyle(role: .secondary))
             }
             AiExplanationView(fileName: entry.url.lastPathComponent, embedded: true)
             if !entry.qualityNotes.isEmpty {

@@ -113,6 +113,7 @@ internal fun TestSessionLayout(
     centered: Boolean,
     modifier: Modifier = Modifier,
     confirmExit: Boolean = false,
+    diagnosticSaved: Boolean = false,
     statusAtBottom: Boolean = false,
     scroll: ScrollState = rememberScrollState(),
     progress: TestProgress? = null,
@@ -124,7 +125,7 @@ internal fun TestSessionLayout(
     val colors = LocalEyeColors.current
     var asking by rememberSaveable { mutableStateOf(false) }
     BackHandler(enabled = confirmExit) { asking = true }
-    if (asking) TestExitDialog(onStay = { asking = false }, onExit = { asking = false; onBack() })
+    if (asking) TestExitDialog(diagnosticSaved = diagnosticSaved, onStay = { asking = false }, onExit = { asking = false; onBack() })
     Column(modifier.fillMaxSize().background(colors.appBackground).navigationBarsPadding().imePadding().screenHorizontalPaddingLarge()) {
         Box {
             TopBackBar(title = title, noText = true, onBackClick = { if (confirmExit) asking = true else onBack() })

@@ -10,6 +10,7 @@ struct EyeTestView: View {
     @State private var previousIdleDisabled = false
     @State private var settingsOpen = false
     @State private var helpOpen = false
+    @State private var diagnosticsOpen = false
     @State private var suspended = false
     @State private var confirmingExit = false
     @State private var darkControlsHeight: CGFloat = 230
@@ -77,7 +78,7 @@ struct EyeTestView: View {
         }.foregroundStyle(EyeStyle.text).tint(EyeStyle.primary)
             .overlay {
                 if confirmingExit {
-                    TestExitConfirm(stay: { confirmingExit = false }, exit: { confirmingExit = false; runtime.close(); dismiss() })
+                    TestExitConfirm(diagnosticSaved: runtime.kind == "STRABISMUS", stay: { confirmingExit = false }, exit: { confirmingExit = false; runtime.close(); dismiss() })
                 }
             }
             // 干眼测试中异常暂停（方案二）：盖住整页，恢复正常后点「继续测试」
@@ -93,6 +94,7 @@ struct EyeTestView: View {
             .fullScreenCover(isPresented: $settingsOpen) {
                 NavigationStack { SystemSettingsPage(voice: runtime.voice, feedback: runtime.feedback, inTest: true) }.tint(EyeStyle.primary)
             }
+            .sheet(isPresented: $diagnosticsOpen) { StrabismusDiagnosticLibrary() }
             .sheet(isPresented: $helpOpen, onDismiss: { runtime.setHelpPresented(false) }) {
                 TestHelpView(motion: .forHelp(runtime.string("helpMotion")), title: runtime.string("helpTitle"), cue: runtime.string("helpCue")) {
                     helpOpen = false; runtime.setHelpPresented(false)
@@ -179,7 +181,10 @@ struct EyeTestView: View {
             } else {
                 // 注视类任务的提示位放在舞台下方：舞台紧贴顶部，提示出现与否不挪动目标
                 if !isGazeTask && !isOpticTask { TestNotice(text: noticeText) }
-                if isProfile { SubjectPickerView(runtime: runtime) }
+                if isProfile {
+                    if runtime.kind == "STRABISMUS" { Text("诊断视频仅保存在本机，可在测试记录回看和导出。").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary) }
+                    SubjectPickerView(runtime: runtime)
+                }
                 else if runtime.kind == "COLOR_VISION" { ColorVisionContent(runtime: runtime) }
                 else if isRunning { VStack(spacing: EyeStyle.spacing) { testContent }.modifier(TestStagePanel(expanded: ["GAZE_CALIBRATION", "PURSUIT"].contains(phase))) }
                 else { testContent }
@@ -271,6 +276,9 @@ struct EyeTestView: View {
         } else if phase == "Result" || phase == "RESULT" {
             // 结论、关键指标、判断依据、本次数据与导出：与安卓共用 ResultReport 内容
             ResultReportView(runtime: runtime)
+            if runtime.kind == "STRABISMUS" {
+                Button("回看诊断视频") { diagnosticsOpen = true }.buttonStyle(EyeButtonStyle(role: .secondary))
+            }
         } else if phase == "FAR_FIXATION" {
             let meters = Int(runtime.number("farTargetM"))
             let waiting = runtime.bool("farWaiting")
@@ -528,6 +536,7 @@ private struct StageCaption: View {
 
 /// 测试中点返回：屏幕中间弹出确认框。「继续测试」关闭，「确认退出」才离开。与安卓 TestExitDialog 同一文案。
 private struct TestExitConfirm: View {
+    var diagnosticSaved = false
     let stay: () -> Void
     let exit: () -> Void
     var body: some View {
@@ -536,7 +545,7 @@ private struct TestExitConfirm: View {
             VStack(spacing: 0) {
                 VStack(spacing: 12) {
                     Text("确定要退出测试吗？").font(EyeStyle.title).foregroundStyle(EyeStyle.text)
-                    Text("退出后这次测试不会保存，下次要从头开始。").font(EyeStyle.body).foregroundStyle(EyeStyle.secondary)
+                    Text(diagnosticSaved ? "本次测试需重新开始；已录制的诊断可在测试记录回看。" : "退出后这次测试不会保存，下次要从头开始。").font(EyeStyle.body).foregroundStyle(EyeStyle.secondary)
                         .multilineTextAlignment(.center)
                     Button("继续测试") { EyeHaptics.tap(); stay() }.buttonStyle(EyeButtonStyle())
                     Button("确认退出") { EyeHaptics.tap(); exit() }.buttonStyle(EyeButtonStyle(role: .secondary))
@@ -707,6 +716,9 @@ struct ColorVisionContent: View {
             plate
         } else if phase == "Result" {
             ResultReportView(runtime: runtime)
+            if runtime.kind == "STRABISMUS" {
+                Button("回看诊断视频") { diagnosticsOpen = true }.buttonStyle(EyeButtonStyle(role: .secondary))
+            }
         }
     }
 

@@ -216,6 +216,7 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, onEditSubje
             confirmExit = s.step !in setOf(ScreeningStep.PROFILE, ScreeningStep.ENVIRONMENT, ScreeningStep.RESULT),
             // 斜视：距离条放到底部，注视目标紧贴顶栏下方
             statusAtBottom = kind == ScreeningKind.STRABISMUS,
+            diagnosticSaved = kind == ScreeningKind.STRABISMUS,
             // 注视类任务里距离条固定为单行，文字变化不改变高度，避免挤动画布
             status = { distance?.let { DistanceBanner(it, compact = true, singleLine = gazeTask) } },
             // 视标类任务（近视力、移近法、多距离视力、翻转拍）：提示浮在上方淡入，不把视标卡片往下挤
@@ -230,7 +231,10 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, onEditSubje
                 // 远近切换是可选的探索性检查
                 if (s.step == ScreeningStep.FLIPPER) EyeButton("跳过，查看结果", EyeButtonRole.SECONDARY, viewModel::skipFlipper, Modifier.fillMaxWidth())
             } else when (s.step) {
-                ScreeningStep.PROFILE -> ProfileContent(kind, s, viewModel, onEditSubject)
+                ScreeningStep.PROFILE -> {
+                    if (kind == ScreeningKind.STRABISMUS) EyeText("诊断视频仅保存在本机，可在测试记录回看和导出。", style = LocalEyeTypography.current.bodySecondary, color = LocalEyeColors.current.textSecondary)
+                    ProfileContent(kind, s, viewModel, onEditSubject)
+                }
                 ScreeningStep.ENVIRONMENT -> EnvironmentContent(kind, s, viewModel, retryCamera)
                 ScreeningStep.NEAR_VISION -> VisionContent(s, viewModel)
                 ScreeningStep.PUSH_UP -> PushUpContent(s, viewModel)

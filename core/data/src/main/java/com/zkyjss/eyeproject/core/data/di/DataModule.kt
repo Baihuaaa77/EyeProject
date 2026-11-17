@@ -30,6 +30,8 @@ import dagger.hilt.components.SingletonComponent
 @InstallIn(SingletonComponent::class)
 internal abstract class DataModule {
     @Binds
+    abstract fun bindDiagnosticVideoRepository(impl: com.zkyjss.eyeproject.core.data.record.LocalDiagnosticVideoRepository): com.zkyjss.eyeproject.core.data.record.DiagnosticVideoRepository
+    @Binds
     abstract fun bindAccountRepository(impl: DefaultAccountRepository): AccountRepository
 
     @Binds

@@ -43,6 +43,9 @@ class CameraController @Inject constructor(
     private var analyzer: FaceLandmarkerAnalyzer? = null
     private var analysisExecutor: ExecutorService? = null
     private val frameObservers = CopyOnWriteArrayList<(FaceLandmarkFrame) -> Unit>()
+    private val imageObservers = CopyOnWriteArrayList<(android.graphics.Bitmap, Long) -> Unit>()
+    fun addImageObserver(observer: (android.graphics.Bitmap, Long) -> Unit) { imageObservers.addIfAbsent(observer) }
+    fun removeImageObserver(observer: (android.graphics.Bitmap, Long) -> Unit) { imageObservers.remove(observer) }
     private val errorObservers = CopyOnWriteArrayList<(Throwable) -> Unit>()
 
     /**
@@ -97,6 +100,7 @@ class CameraController @Inject constructor(
                     val eyeAnalyzer = FaceLandmarkerAnalyzer(
                         context = context,
                         opticalPrecision = opticalPrecision,
+                        onSourceImage = { bitmap, time -> imageObservers.forEach { observer -> runCatching { observer(bitmap,time) } } },
                         onResult = { frame ->
                             runCatching { onFrame(frame) }
                             frameObservers.forEach { observer -> runCatching { observer(frame) } }

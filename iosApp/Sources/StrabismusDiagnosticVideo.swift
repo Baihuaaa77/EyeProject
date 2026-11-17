@@ -1,0 +1,276 @@
+import AVFoundation
+import CoreImage
+import UIKit
+import EyeScreening
+
+/// 实时增量编码，结束时仅封装MP4；队列最多保留两幅源图，不能拖住相机分析。
+final class StrabismusDiagnosticVideo {
+    static var root: URL { EyeRuntime.recordsDirectory.appendingPathComponent("strabismus-diagnostics", isDirectory: true) }
+    private let queue = DispatchQueue(label: "eye.strabismus.video", qos: .utility, autoreleaseFrequency: .workItem)
+    private let lock = NSLock()
+    private var accepting = false
+    private var credits = 0
+    private var lastSubmitted: Int64 = -1
+    private var session: Session?
+    private let ci = CIContext(options: [.cacheIntermediates: false])
+
+    func event(_ json: String) {
+        guard let data = json.data(using: .utf8), let row = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return }
+        let type = row["event"] as? String ?? ""
+        if type == "start" || type == "end" {
+            lock.lock(); accepting = type == "start"; if accepting { lastSubmitted = -1 }; lock.unlock()
+        }
+        queue.async { [self] in
+            if type == "start" {
+                if let old = session { finish(old, reason: "新测试开始") }
+                do { session = try Session(row) } catch {
+                    session = nil
+                    if let id = row["sessionId"] as? String {
+                        let directory = Self.root.appendingPathComponent(id, isDirectory: true)
+                        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                        var failed = row; failed["state"] = "failed"; failed["error"] = error.localizedDescription
+                        if let data = try? JSONSerialization.data(withJSONObject: failed) {
+                            try? data.write(to: directory.appendingPathComponent("manifest.json"), options: .atomic)
+                        }
+                    }
+                    lock.lock(); accepting = false; lock.unlock()
+                }
+            }
+            guard let s = session, row["sessionId"] as? String == s.id else { return }
+            do {
+                try s.log?.write(contentsOf: data + Data([10]))
+                if type == "frame", let stamp = (row["captureTimeMs"] as? NSNumber)?.int64Value {
+                    s.rows[stamp] = row
+                    if let image = s.pending.removeValue(forKey: stamp) { append(s, image, row) }
+                    while s.rows.count > 24, let first = s.rows.keys.min() { s.rows.removeValue(forKey: first) }
+                } else if type == "end" {
+                    s.manifest["audit"] = row
+                    finish(s, reason: row["reason"] as? String ?? "测试结束"); session = nil
+                }
+            } catch { s.manifest["error"] = error.localizedDescription; s.saveManifest() }
+        }
+    }
+
+    /// 仅使用当前帧：原视频不叠标注，眼区直接裁原像素，不做插值定位。
+    func capture(_ buffer: CVPixelBuffer, face: FaceMetrics?, time: Int64) {
+        lock.lock()
+        guard accepting, credits < 2, lastSubmitted < 0 || time - lastSubmitted >= 83 else { lock.unlock(); return }
+        credits += 1; lastSubmitted = time; lock.unlock()
+        queue.async { [self] in
+            defer { lock.lock(); credits -= 1; lock.unlock() }
+            guard let s = session else { return }
+            do {
+                if s.raw == nil {
+                    s.base = time
+                    s.raw = try DiagnosticMovie(url: s.directory.appendingPathComponent("original.mp4"), width: CVPixelBufferGetWidth(buffer), height: CVPixelBufferGetHeight(buffer), bitrate: 8_000_000)
+                    s.composite = try DiagnosticMovie(url: s.directory.appendingPathComponent("comparison.mp4"), width: 1280, height: 720, bitrate: 3_000_000)
+                    s.manifest["sourceWidth"] = CVPixelBufferGetWidth(buffer); s.manifest["sourceHeight"] = CVPixelBufferGetHeight(buffer)
+                }
+                let pts = CMTime(value: max(0, time - s.base), timescale: 1000)
+                guard s.raw?.append(buffer, at: pts) == true else { s.dropped += 1; return }
+                let image = CIImage(cvPixelBuffer: buffer)
+                let scale = min(1, 720 / max(image.extent.width, image.extent.height))
+                guard let full = ci.createCGImage(image.transformed(by: CGAffineTransform(scaleX: scale, y: scale)), from: CGRect(x: 0, y: 0, width: image.extent.width * scale, height: image.extent.height * scale)) else { return }
+                func crop(_ eye: EyeLandmarks?, previous: DiagnosticCrop?) -> DiagnosticCrop? {
+                    let points = eye?.earPoints ?? []
+                    let rect: CGRect
+                    if points.count >= 4 {
+                        let xs = points.map { CGFloat($0.x) }, ys = points.map { CGFloat($0.y) }
+                        let width = max(8, (xs.max() ?? 0) - (xs.min() ?? 0))
+                        rect = CGRect(x: (xs.min() ?? 0) - width * 0.4, y: (ys.min() ?? 0) - width * 0.4,
+                                      width: width * 1.8, height: ((ys.max() ?? 0) - (ys.min() ?? 0)) + width * 0.8).intersection(image.extent)
+                    } else if let previous { rect = previous.rect } else { return nil }
+                    guard rect.width > 1, rect.height > 1 else { return nil }
+                    let bottomRect = CGRect(x: rect.minX, y: image.extent.height - rect.maxY, width: rect.width, height: rect.height)
+                    guard let cg = ci.createCGImage(image, from: bottomRect) else { return nil }
+                    return DiagnosticCrop(rect: rect, image: cg, inherited: points.count < 4)
+                }
+                let left = crop(face?.leftEye, previous: s.lastLeft), right = crop(face?.rightEye, previous: s.lastRight)
+                s.lastLeft = left; s.lastRight = right
+                let images = DiagnosticImages(time: time, full: full, left: left, right: right)
+                if let row = s.rows.removeValue(forKey: time) { append(s, images, row) }
+                else { s.pending[time] = images }
+                while s.pending.count > 2, let first = s.pending.keys.min(), let old = s.pending.removeValue(forKey: first) {
+                    append(s, old, ["phase": "无对应分析信息", "reasons": ["帮助暂停、分析缺失或处理延迟"], "valid": false])
+                }
+            } catch {
+                s.manifest["error"] = error.localizedDescription; s.saveManifest()
+                lock.lock(); accepting = false; lock.unlock()
+                finish(s, reason: "诊断录制失败，测试本身继续"); session = nil
+            }
+        }
+    }
+
+    private func append(_ s: Session, _ images: DiagnosticImages, _ row: [String: Any]) {
+        guard images.time > s.lastComposite else { s.dropped += 1; return }
+        let rendered = DiagnosticPanelRenderer.render(images, row: row, elapsed: Double(images.time - s.base) / 1000)
+        guard let cg = rendered.cgImage, let movie = s.composite, let buffer = movie.pixelBuffer() else { s.dropped += 1; return }
+        ci.render(CIImage(cgImage: cg), to: buffer)
+        if movie.append(buffer, at: CMTime(value: max(0, images.time - s.base), timescale: 1000)) { s.lastComposite = images.time; s.frames += 1 }
+        else { s.dropped += 1 }
+    }
+
+    private func finish(_ s: Session, reason: String) {
+        guard !s.finishing else { return }; s.finishing = true
+        let finishStart = Date()
+        for stamp in s.pending.keys.sorted() {
+            if let image = s.pending[stamp] { append(s, image, s.rows[stamp] ?? ["phase": "分析缺失", "reasons": ["无同帧诊断信息"], "valid": false]) }
+        }
+        s.pending.removeAll(); s.rows.removeAll()
+        try? s.log?.close(); s.log = nil
+        s.manifest["state"] = "finishing"; s.manifest["reason"] = reason; s.saveManifest()
+        let group = DispatchGroup()
+        for movie in [s.raw, s.composite].compactMap({ $0 }) { group.enter(); movie.finish { group.leave() } }
+        queue.asyncAfter(deadline: .now() + 10) {
+            guard s.manifest["state"] as? String == "finishing" else { return }
+            s.manifest["state"] = "failed"; s.manifest["error"] = "编码器收尾超时，可导出逐帧诊断数据"
+            s.saveManifest()
+        }
+        group.notify(queue: queue) {
+            let complete = s.raw?.completed == true && s.composite?.completed == true && s.frames > 0 && s.manifest["error"] == nil
+            s.manifest["state"] = complete ? "ready" : "failed"
+            s.manifest["finalizationMs"] = Int(Date().timeIntervalSince(finishStart) * 1000)
+            s.manifest["frames"] = s.frames; s.manifest["droppedFrames"] = s.dropped
+            s.manifest["durationSeconds"] = max(0, Double(s.lastComposite - s.base) / 1000)
+            if !complete { s.manifest["error"] = s.manifest["error"] ?? s.raw?.error ?? s.composite?.error ?? "没有可编码的视频帧" }
+            s.saveManifest()
+        }
+    }
+
+    private final class Session {
+        let id: String; let directory: URL
+        var manifest: [String: Any]; var log: FileHandle?
+        var raw: DiagnosticMovie?; var composite: DiagnosticMovie?
+        var base: Int64 = 0; var lastComposite: Int64 = -1; var frames = 0; var dropped = 0; var finishing = false
+        var pending: [Int64: DiagnosticImages] = [:]; var rows: [Int64: [String: Any]] = [:]
+        var lastLeft: DiagnosticCrop?; var lastRight: DiagnosticCrop?
+        init(_ row: [String: Any]) throws {
+            id = row["sessionId"] as? String ?? UUID().uuidString
+            directory = StrabismusDiagnosticVideo.root.appendingPathComponent(id, isDirectory: true)
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            manifest = row; manifest["state"] = "recording"; manifest["maxRecordingFps"] = 12
+            let url = directory.appendingPathComponent("frames.jsonl")
+            FileManager.default.createFile(atPath: url.path, contents: nil)
+            log = try FileHandle(forWritingTo: url); saveManifest()
+        }
+        func saveManifest() {
+            guard let data = try? JSONSerialization.data(withJSONObject: manifest, options: [.sortedKeys]) else { return }
+            try? data.write(to: directory.appendingPathComponent("manifest.json"), options: .atomic)
+        }
+    }
+}
+
+private final class DiagnosticMovie {
+    let writer: AVAssetWriter; let input: AVAssetWriterInput; let adaptor: AVAssetWriterInputPixelBufferAdaptor
+    var completed: Bool { writer.status == .completed }
+    var error: String? { writer.error?.localizedDescription }
+    init(url: URL, width: Int, height: Int, bitrate: Int) throws {
+        writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
+        input = AVAssetWriterInput(mediaType: .video, outputSettings: [AVVideoCodecKey: AVVideoCodecType.h264,
+            AVVideoWidthKey: width, AVVideoHeightKey: height, AVVideoCompressionPropertiesKey: [AVVideoAverageBitRateKey: bitrate, AVVideoMaxKeyFrameIntervalKey: 24]])
+        input.expectsMediaDataInRealTime = true
+        adaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: input, sourcePixelBufferAttributes: [
+            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA, kCVPixelBufferWidthKey as String: width,
+            kCVPixelBufferHeightKey as String: height, kCVPixelBufferIOSurfacePropertiesKey as String: [:]])
+        guard writer.canAdd(input) else { throw NSError(domain: "诊断视频", code: 1, userInfo: [NSLocalizedDescriptionKey: "本机编码器不支持当前分辨率"]) }
+        writer.add(input)
+        guard writer.startWriting() else { throw writer.error ?? NSError(domain: "诊断视频", code: 2) }
+        writer.startSession(atSourceTime: .zero)
+    }
+    func append(_ buffer: CVPixelBuffer, at time: CMTime) -> Bool {
+        guard writer.status == .writing, input.isReadyForMoreMediaData else { return false }
+        return adaptor.append(buffer, withPresentationTime: time)
+    }
+    func pixelBuffer() -> CVPixelBuffer? {
+        guard let pool = adaptor.pixelBufferPool else { return nil }
+        var buffer: CVPixelBuffer?; CVPixelBufferPoolCreatePixelBuffer(nil, pool, &buffer); return buffer
+    }
+    func finish(_ done: @escaping () -> Void) {
+        guard writer.status == .writing else { done(); return }
+        input.markAsFinished(); writer.finishWriting(completionHandler: done)
+    }
+}
+
+struct DiagnosticCrop { let rect: CGRect; let image: CGImage; let inherited: Bool }
+struct DiagnosticImages { let time: Int64; let full: CGImage; let left: DiagnosticCrop?; let right: DiagnosticCrop? }
+
+/// 四联画使用同一源帧；左上角为相机原画，中间为左右眼原像素和标注，右侧为全屏注视坐标。
+enum DiagnosticPanelRenderer {
+    static func render(_ images: DiagnosticImages, row: [String: Any], elapsed: Double) -> UIImage {
+        let format = UIGraphicsImageRendererFormat(); format.scale = 1; format.opaque = true
+        return UIGraphicsImageRenderer(size: CGSize(width: 1280, height: 720), format: format).image { renderer in
+            let ctx = renderer.cgContext
+            UIColor(EyeStyle.background).setFill(); ctx.fill(CGRect(x: 0, y: 0, width: 1280, height: 720))
+            func text(_ value: String, _ rect: CGRect, _ color: UIColor = .white, size: CGFloat = 17) {
+                (value as NSString).draw(in: rect, withAttributes: [.font: UIFont.systemFont(ofSize: size), .foregroundColor: color])
+            }
+            func fit(_ size: CGSize, _ rect: CGRect) -> CGRect {
+                let k = min(rect.width / max(1, size.width), rect.height / max(1, size.height))
+                return CGRect(x: rect.midX - size.width*k/2, y: rect.midY-size.height*k/2, width: size.width*k, height: size.height*k)
+            }
+            text("原视频 · 不镜像", CGRect(x: 16, y: 12, width: 300, height: 28))
+            let full = fit(CGSize(width: images.full.width, height: images.full.height), CGRect(x: 16, y: 48, width: 300, height: 570))
+            UIImage(cgImage: images.full).draw(in: full)
+            text("原始眼区放大", CGRect(x: 334, y: 12, width: 590, height: 28))
+            text("同帧检测叠加：眼睑 / 虹膜 / 参照点 / 映光", CGRect(x: 334, y: 326, width: 600, height: 28))
+            for (index, key) in ["left", "right"].enumerated() {
+                let crop = index == 0 ? images.left : images.right
+                let eye = row[key] as? [String: Any] ?? [:]
+                let color = index == 0 ? EyeStyle.diagnosticLeft : EyeStyle.diagnosticRight
+                let x = CGFloat(334 + index*300)
+                text(index == 0 ? "受测者左眼" : "受测者右眼", CGRect(x: x, y: 46, width: 280, height: 25), color)
+                guard let crop else { text("眼区不可定位", CGRect(x: x, y: 140, width: 280, height: 50)); continue }
+                let area = CGRect(x: x, y: 78, width: 286, height: 225)
+                let raw = fit(CGSize(width: crop.image.width, height: crop.image.height), area)
+                UIImage(cgImage: crop.image).draw(in: raw)
+                let overlay = raw.offsetBy(dx: 0, dy: 280)
+                UIImage(cgImage: crop.image).draw(in: overlay)
+                func point(_ a: Any?) -> CGPoint? {
+                    guard let a = a as? [NSNumber], a.count >= 2 else { return nil }
+                    return CGPoint(x: overlay.minX + (CGFloat(a[0].doubleValue)-crop.rect.minX)*overlay.width/crop.rect.width,
+                                   y: overlay.minY + (CGFloat(a[1].doubleValue)-crop.rect.minY)*overlay.height/crop.rect.height)
+                }
+                ctx.saveGState(); ctx.clip(to: overlay); ctx.setLineWidth(1.5); ctx.setStrokeColor(color.cgColor)
+                for field in ["lid", "iris"] {
+                    let values = eye[field] as? [[NSNumber]] ?? []
+                    let boundary = field == "iris" && values.count == 5 ? Array(values.dropFirst()) : values
+                    let points = boundary.compactMap { point($0) }
+                    if let first = points.first { ctx.beginPath(); ctx.move(to: first); points.dropFirst().forEach { ctx.addLine(to: $0) }; ctx.closePath(); ctx.strokePath() }
+                }
+                for (field, ink) in [("pupil", EyeStyle.diagnosticReference), ("glint", EyeStyle.diagnosticGlint)] {
+                    if let p = point(eye[field]) { ctx.setStrokeColor(ink.cgColor); ctx.strokeEllipse(in: CGRect(x: p.x-5, y: p.y-5, width: 10, height: 10)) }
+                }
+                ctx.restoreGState()
+                text(crop.inherited ? "沿用眼区框，当前无关键点" : eye["rejection"] as? String ?? "无同帧检测", CGRect(x: x, y: 588, width: 286, height: 50), color, size: 14)
+            }
+            let displayW = (row["displayWidth"] as? NSNumber)?.doubleValue ?? 390
+            let displayH = (row["displayHeight"] as? NSNumber)?.doubleValue ?? 844
+            let phone = fit(CGSize(width: displayW, height: displayH), CGRect(x: 972, y: 60, width: 280, height: 540))
+            UIColor.black.setFill(); UIBezierPath(roundedRect: phone, cornerRadius: 20).fill()
+            UIColor(EyeStyle.secondary).setStroke(); UIBezierPath(roundedRect: phone, cornerRadius: 20).stroke()
+            text("手机屏幕 · 全屏坐标", CGRect(x: 968, y: 12, width: 300, height: 28))
+            for (key, color, radius) in [("target", UIColor(EyeStyle.primary), CGFloat(7)), ("leftGaze", EyeStyle.diagnosticLeft, CGFloat(6)), ("rightGaze", EyeStyle.diagnosticRight, CGFloat(6))] {
+                if key == "target" && row["targetVisible"] as? Bool == false { continue }
+                let color = key == "target" && row["targetColor"] as? String == "white" ? EyeStyle.diagnosticGlint : color
+                guard let a = row[key] as? [NSNumber], a.count >= 2 else { continue }
+                let px = a[0].doubleValue, py = a[1].doubleValue
+                guard px.isFinite, py.isFinite else { continue }
+                let p = CGPoint(x: phone.minX + CGFloat(min(1,max(0,px)))*phone.width, y: phone.minY+CGFloat(min(1,max(0,py)))*phone.height)
+                color.setStroke(); color.setFill()
+                if key == "target" { UIBezierPath(ovalIn: CGRect(x: p.x-radius, y: p.y-radius, width: radius*2, height: radius*2)).fill() }
+                else {
+                    let cross = UIBezierPath(); cross.move(to: CGPoint(x:p.x-radius,y:p.y)); cross.addLine(to: CGPoint(x:p.x+radius,y:p.y))
+                    cross.move(to: CGPoint(x:p.x,y:p.y-radius)); cross.addLine(to: CGPoint(x:p.x,y:p.y+radius)); cross.lineWidth = 2; cross.stroke()
+                    if px < 0 || px > 1 || py < 0 || py > 1 { text("屏外估计", CGRect(x: phone.minX, y: phone.maxY+2, width: 200, height: 20), color, size: 13) }
+                }
+            }
+            text("实心：实际目标   青/粉：左/右注视估计", CGRect(x: 334, y: 623, width: 890, height: 24), UIColor(EyeStyle.primary), size: 15)
+            let phaseKey = row["phase"] as? String ?? "未知阶段"
+            let phase = ["GAZE_CALIBRATION": "注视标定", "FIXATION": "定点映光", "FAR_FIXATION": "看远", "COVER": "交替遮盖", "PURSUIT": "移动点注视"][phaseKey] ?? phaseKey
+            let calibrated = row["calibrated"] as? Bool == true ? "已标定" : "未获得可靠标定，不绘制估计"
+            text(String(format: "%.2f s  %@  %@  距离 %.1f cm", elapsed, phase, calibrated, (row["distanceCm"] as? NSNumber)?.doubleValue ?? 0), CGRect(x: 16, y: 657, width: 1230, height: 24))
+            let reasons = (row["reasons"] as? [String] ?? []).joined(separator: "；")
+            text(reasons.isEmpty ? "质量门控通过；标注只是诊断观测" : reasons, CGRect(x: 16, y: 684, width: 1240, height: 30), UIColor(EyeStyle.secondary), size: 14)
+        }
+    }
+}

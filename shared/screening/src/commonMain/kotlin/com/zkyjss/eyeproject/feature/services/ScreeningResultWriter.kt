@@ -38,6 +38,8 @@ internal class ScreeningResultWriter(private val host: ScreeningEngine) {
                 category = assessment.category, findings = assessment.findings, limitations = assessment.limitations,
                 features = assessment.features, evidence = assessment.evidence) }
             val resultState = _state.value
+            val capturedDiagnosticSessionId = diagnostics.sessionId
+            diagnostics.finish(assessment.displayLines().joinToString("；"))
             stopCamera()
             recordScope.launch(recordDispatcher) {
                 runCatching {
@@ -64,6 +66,7 @@ internal class ScreeningResultWriter(private val host: ScreeningEngine) {
                             }) } })
                         }
                         put("kind", s.kind.name)
+                        if (s.kind == ScreeningKind.STRABISMUS) put("diagnosticSessionId", capturedDiagnosticSessionId)
                         put("assessment", RecordObject().apply {
                             put("modelVersion", assessment.version)
                             put("quality", assessment.quality)

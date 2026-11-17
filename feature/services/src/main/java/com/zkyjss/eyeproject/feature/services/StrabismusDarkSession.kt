@@ -77,6 +77,6 @@ internal fun StrabismusDarkSession(s: ScreeningState, vm: ScreeningTestViewModel
                 EyeButton("设置", EyeButtonRole.SECONDARY, onSettings)
             }
         }
-        if (asking) TestExitDialog(onStay = { asking = false }, onExit = { asking = false; onBack() })
+        if (asking) TestExitDialog(diagnosticSaved = true, onStay = { asking = false }, onExit = { asking = false; onBack() })
     }
 }

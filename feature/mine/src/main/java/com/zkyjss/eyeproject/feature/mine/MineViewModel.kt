@@ -156,7 +156,12 @@ class CloudSyncViewModel @Inject constructor(
 class RecordsViewModel @Inject constructor(
     private val records: ScreeningRecordRepository,
     private val explanations: ExplanationRepository,
+    private val diagnosticVideos: com.zkyjss.eyeproject.core.data.record.DiagnosticVideoRepository,
 ) : ViewModel() {
+    val diagnosticSessions = diagnosticVideos.sessions.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    fun exportDiagnostic(id: String, name: String, target: Uri, done: (Boolean) -> Unit) {
+        viewModelScope.launch { done(diagnosticVideos.export(id,name,target)) }
+    }
     /** 本机测试记录（最新在前）。 */
     val localRecords: StateFlow<List<LocalRecordEntry>> =
         records.localRecords.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())

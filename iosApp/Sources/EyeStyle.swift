@@ -3,6 +3,11 @@ import UIKit
 
 /// DESIGN.md 的双端主题令牌：同色浮雕表面、中性文字与蓝青渐变数据。
 enum EyeStyle {
+    // 诊断视频的语义颜色，与品牌橙色目标区分。
+    static let diagnosticLeft = UIColor.systemCyan
+    static let diagnosticRight = UIColor.systemPink
+    static let diagnosticReference = UIColor.systemGreen
+    static let diagnosticGlint = UIColor.white
     static let feelingComfort = Color(rgb: 0xC9D6A5)
     static let feelingDry = Color(rgb: 0xEFCDA0)
     static let feelingSore = Color(rgb: 0xEBB4AC)

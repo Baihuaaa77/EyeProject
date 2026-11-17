@@ -18,6 +18,7 @@ class ScreeningEngine(platform: ScreeningPlatform, internal val scope: Coroutine
     internal val recordScope: CoroutineScope = ScreeningPersistence.scope,
     internal val recordDispatcher: CoroutineDispatcher = Dispatchers.IO) {
     internal val helpSession = TestHelpSession(platform)
+    internal val diagnostics = StrabismusDiagnostics(platform)
     internal val platform: ScreeningPlatform = helpSession
     fun setHelpPresented(presented: Boolean) = helpSession.setPresented(presented)
 
@@ -356,6 +357,7 @@ class ScreeningEngine(platform: ScreeningPlatform, internal val scope: Coroutine
 
     /** 平台绘制亮点后回报实际明暗，解码不把计划时刻当作显示证据。 */
     fun reportReflectionLight(on: Boolean) {
+        diagnostics.reflectionLightOn = on
         if (_state.value.step == ScreeningStep.FIXATION && !_state.value.guidePending)
             reflectionCode.present(platform.nowMs(), on, platform.nowMs()-stepStartMs)
     }
@@ -398,6 +400,7 @@ class ScreeningEngine(platform: ScreeningPlatform, internal val scope: Coroutine
     }
 
     fun interruptTest() {
+        diagnostics.finish("测试中断")
         val current = _state.value
         if (current.step == ScreeningStep.PROFILE || current.step == ScreeningStep.RESULT) return
         timer?.cancel(); coverHoldJob?.cancel(); coverMonitorJob?.cancel(); coverDetector.clear()
@@ -414,6 +417,7 @@ class ScreeningEngine(platform: ScreeningPlatform, internal val scope: Coroutine
     }
 
     fun restart() {
+        diagnostics.finish("重新开始测试")
         timer?.cancel(); coverHoldJob?.cancel(); coverMonitorJob?.cancel(); stopCamera(); samples.clear(); distanceTracker.clear(); coverDetector.clear()
         gaze = null; gazeCalibration.clear(); renderedTargets.clear(); resetGazeWindow()
         stability.clear(); stabilityStep = null; stabilityCounts = null
@@ -449,6 +453,7 @@ class ScreeningEngine(platform: ScreeningPlatform, internal val scope: Coroutine
 
 
     fun close() {
+        diagnostics.finish("离开测试")
         timer?.cancel(); coverHoldJob?.cancel(); coverMonitorJob?.cancel(); stopCamera(); frames.close()
     }
 }

@@ -6,6 +6,13 @@ import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.os.SystemClock
+import android.graphics.Bitmap
+import androidx.compose.ui.graphics.toArgb
+import com.zkyjss.eyeproject.core.camera.StrabismusDiagnosticRecorder
+import com.zkyjss.eyeproject.core.camera.DiagnosticVideoPalette
+import com.zkyjss.eyeproject.core.designsystem.theme.DarkEyeColors
+import com.zkyjss.eyeproject.core.designsystem.theme.EyeDiagnosticColors
+import java.io.File
 import androidx.lifecycle.LifecycleOwner
 import com.zkyjss.eyeproject.core.camera.CameraController
 import com.zkyjss.eyeproject.core.camera.CameraIntrinsicsProvider
@@ -25,6 +32,14 @@ internal class AndroidScreeningPlatform(
     override fun feedback(cue: ScreeningFeedbackCue) = feedbackSession.offer(cue)
     var owner: LifecycleOwner? = null
     var opticalPrecision = false
+    private val diagnosticRecorder by lazy {
+        val c=DarkEyeColors
+        StrabismusDiagnosticRecorder(File(context.filesDir,"strabismus-diagnostics"), DiagnosticVideoPalette(
+            c.appBackground.toArgb(),c.textPrimary.toArgb(),c.textSecondary.toArgb(),c.primary.toArgb(),
+            EyeDiagnosticColors.left.toArgb(),EyeDiagnosticColors.right.toArgb(),EyeDiagnosticColors.reference.toArgb(),c.white.toArgb()))
+    }
+    private val diagnosticImages: (Bitmap,Long) -> Unit = { bitmap,time -> diagnosticRecorder.capture(bitmap,time) }
+    override fun diagnosticEvent(json: String) { diagnosticRecorder.event(json) }
     private val sensors = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
     private var generation: Int? = null
     private var frameObserver: ((FaceLandmarkFrame) -> Unit)? = null
@@ -41,12 +56,14 @@ internal class AndroidScreeningPlatform(
         val lifecycleOwner = owner ?: run { onError(IllegalStateException("测试页尚未进入前台")); return }
         frameObserver = onFrame; errorObserver = onError
         camera.addFrameObserver(onFrame); camera.addErrorObserver(onError)
+        if (opticalPrecision) camera.addImageObserver(diagnosticImages)
         if (!camera.isRequested || opticalPrecision) generation = camera.start(lifecycleOwner, previewView = null, onFrame = {}, onError = {}, opticalPrecision = opticalPrecision)
     }
     override fun stopCamera() {
         frameObserver?.let(camera::removeFrameObserver)
         errorObserver?.let(camera::removeErrorObserver)
         generation?.let(camera::stopIfGeneration)
+        camera.removeImageObserver(diagnosticImages)
         frameObserver = null; errorObserver = null; generation = null
         sensors.unregisterListener(this); lightObserver = null
     }

@@ -26,7 +26,7 @@ import com.zkyjss.eyeproject.core.ui.component.rememberEyeHaptics
  * 四项测试共用；苹果端 TestExitConfirm 同一文案。
  */
 @Composable
-internal fun TestExitDialog(onStay: () -> Unit, onExit: () -> Unit) {
+internal fun TestExitDialog(onStay: () -> Unit, onExit: () -> Unit, diagnosticSaved: Boolean = false) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
     val haptics = rememberEyeHaptics()
@@ -35,7 +35,7 @@ internal fun TestExitDialog(onStay: () -> Unit, onExit: () -> Unit) {
             Column(Modifier.fillMaxWidth().clip(EyeShapes.panel).background(colors.panelBackground).padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 EyeText(EXIT_TITLE, style = typography.title, color = colors.textPrimary)
-                EyeText(EXIT_BODY, style = typography.body, color = colors.textSecondary, textAlign = TextAlign.Center)
+                EyeText(if (diagnosticSaved) "本次测试需重新开始；已录制的诊断可在测试记录回看。" else EXIT_BODY, style = typography.body, color = colors.textSecondary, textAlign = TextAlign.Center)
                 EyeButton("继续测试", EyeButtonRole.PRIMARY, { haptics.tap(); onStay() }, Modifier.fillMaxWidth())
                 EyeButton("确认退出", EyeButtonRole.SECONDARY, { haptics.tap(); onExit() }, Modifier.fillMaxWidth())
             }

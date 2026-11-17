@@ -20,6 +20,8 @@ class MobileScreeningController(
     private val recordSaved: (String, String) -> Unit,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private var diagnosticObserver: ((String) -> Unit)? = null
+    fun setDiagnosticObserver(observer: ((String) -> Unit)?) { diagnosticObserver = observer }
     private var display = DisplayGeometry(0,0,0f,0f)
     private var focalPx = 0f
     private var cameraVersion = 0L
@@ -46,6 +48,7 @@ class MobileScreeningController(
         override fun feedback(cue: ScreeningFeedbackCue) = feedbackSession.offer(cue)
         override fun startLight(onLux: (Float) -> Unit) = false
         override suspend fun saveRecord(name: String,json: String) { recordSaved(name,json) }
+        override fun diagnosticEvent(json: String) { diagnosticObserver?.invoke(json) }
         override suspend fun compareHistory(state: ScreeningState,assessment: ScreeningAssessment) = emptyList<String>()
     }
     private var screening = ScreeningEngine(platform,scope)

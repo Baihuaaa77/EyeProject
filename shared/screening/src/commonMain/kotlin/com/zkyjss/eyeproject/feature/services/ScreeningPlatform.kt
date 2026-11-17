@@ -21,6 +21,8 @@ interface ScreeningPlatform {
     fun startLight(onLux: (Float) -> Unit): Boolean
     suspend fun saveRecord(name: String, json: String)
     suspend fun compareHistory(state: ScreeningState, assessment: ScreeningAssessment): List<String>
+    /** 本机诊断事件；平台异步保存视频，不阻塞测试，也不上传原视频。 */
+    fun diagnosticEvent(json: String) {}
 }
 
 object OptotypeGeometry {

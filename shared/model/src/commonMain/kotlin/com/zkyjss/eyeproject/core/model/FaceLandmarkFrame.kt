@@ -12,6 +12,8 @@ data class FaceLandmarkFrame(
     val imageBrightness: Float? = null,
     /** 图像进入分析器的单调时钟时间，早于异步模型回调；尚非相机曝光时间。 */
     val analysisElapsedRealtimeMs: Long? = null,
+    /** 未扣除帮助页暂停的源帧时间，用于将诊断信息与同一幅相机图像配对。 */
+    val sourceElapsedRealtimeMs: Long? = analysisElapsedRealtimeMs,
 ) {
     val faceDetected: Boolean get() = faces.isNotEmpty()
 }

@@ -143,6 +143,7 @@ internal class ScreeningFrameProcessor(private val host: ScreeningEngine) {
                     ?.let { GazePoint(it.first, it.second) }
             val gazeLeft = openEye(face?.leftEye, left, VisionEye.LEFT)
             val gazeRight = openEye(face?.rightEye, right, VisionEye.RIGHT)
+            val calibrationCountBefore = gazeCalibration.size
             if (step == ScreeningStep.GAZE_CALIBRATION && !_state.value.stabilityInterrupted && !_state.value.gazeCalibrationFailed && !_state.value.gazeCalibrated &&
                 step == _state.value.step && time >= calibrationPointStartMs) {
                 // 异常（人脸丢失、头偏或移动、距离超出、双眼都闭着）：暂停采样，本点计时随之顺延
@@ -174,6 +175,10 @@ internal class ScreeningFrameProcessor(private val host: ScreeningEngine) {
             val gazeOnTarget = rendered?.let { target -> estimates?.let { (l, r) ->
                 if (l == null && r == null) null else StrabismusGaze.onTarget(l, target.point) || StrabismusGaze.onTarget(r, target.point)
             } }
+            if (_state.value.kind == ScreeningKind.STRABISMUS) diagnostics.frame(frame,
+                _state.value.copy(distanceCm = smoothedDistance), valid, opticalReady, rendered?.point,
+                gaze?.estimate(gazeLeft, gazeRight), gazeOnTarget, gaze != null, coding, time,
+                gazeLeft, gazeRight, gazeCalibration.size, gazeCalibration.size > calibrationCountBefore)
             if (!_state.value.stabilityInterrupted && !_state.value.guidePending && !_state.value.farWaiting && step == _state.value.step && time >= stepStartMs && step != ScreeningStep.PROFILE && step != ScreeningStep.ENVIRONMENT && step != ScreeningStep.RESULT && step != ScreeningStep.GAZE_CALIBRATION) {
                 totalFrames++
                 // 看远另行评估（数据不足时只是不评估看远），不拉低整体有效帧率

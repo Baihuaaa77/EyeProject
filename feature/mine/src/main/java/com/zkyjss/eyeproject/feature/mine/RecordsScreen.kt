@@ -56,6 +56,9 @@ import java.util.Locale
  */
 @Composable
 fun RecordsScreen(onBack: () -> Unit, viewModel: RecordsViewModel = hiltViewModel()) {
+    var diagnosticOpen by remember { mutableStateOf(false) }
+    var diagnosticSession by remember { mutableStateOf<String?>(null) }
+    if (diagnosticOpen) DiagnosticVideoLibrary(viewModel, diagnosticSession) { diagnosticOpen = false }
     val context = LocalContext.current
     val records by viewModel.localRecords.collectAsStateWithLifecycle()
     val haptics = rememberEyeHaptics()
@@ -77,6 +80,7 @@ fun RecordsScreen(onBack: () -> Unit, viewModel: RecordsViewModel = hiltViewMode
     RecordsContent(records, onBack,
         onExport = { exporting = it.fileName; recordExport.launch(it.fileName) },
         onExportReport = { exporting = it.fileName; reportExport.launch(it.fileName.removeSuffix(".json") + "_报告.txt") },
+        onOpenDiagnostics = { diagnosticSession = it; diagnosticOpen = true },
         aiCard = { record ->
             val card by remember(record.fileName) { viewModel.explanation(record.fileName) }.collectAsStateWithLifecycle()
             card?.let {
@@ -89,10 +93,11 @@ fun RecordsScreen(onBack: () -> Unit, viewModel: RecordsViewModel = hiltViewMode
 /** 无副作用的页面内容，供界面检查复用。 */
 @Composable
 internal fun RecordsContent(records: List<LocalRecordEntry>, onBack: () -> Unit, onExport: (LocalRecordEntry) -> Unit,
-    onExportReport: (LocalRecordEntry) -> Unit = {}, aiCard: @Composable (LocalRecordEntry) -> Unit = {}) {
+    onExportReport: (LocalRecordEntry) -> Unit = {}, aiCard: @Composable (LocalRecordEntry) -> Unit = {}, onOpenDiagnostics: ((String?) -> Unit)? = null) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
     EyeSubPage("测试记录", onBack) {
+        if (onOpenDiagnostics != null) EyeButton("斜视诊断视频", EyeButtonRole.SECONDARY, { onOpenDiagnostics(null) }, Modifier.fillMaxWidth())
         if (records.isEmpty()) {
             Column(Modifier.fillMaxWidth().eyeGlass(colors, EyeShapes.panel).padding(28.dp),
                 horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -101,7 +106,12 @@ internal fun RecordsContent(records: List<LocalRecordEntry>, onBack: () -> Unit,
                 EyeText("在「服务」里做一次自测，结果会保存在这里。", style = typography.body, color = colors.textSecondary)
             }
         }
-        records.forEach { record -> RecordRow(record, { onExport(record) }, { onExportReport(record) }) { aiCard(record) } }
+        records.forEach { record -> RecordRow(record, { onExport(record) }, { onExportReport(record) }) {
+            record.diagnosticSessionId?.let { id ->
+                if (onOpenDiagnostics != null) EyeButton("回看本次诊断视频", EyeButtonRole.SECONDARY, { onOpenDiagnostics(id) }, Modifier.fillMaxWidth())
+            }
+            aiCard(record)
+        } }
     }
 }
 

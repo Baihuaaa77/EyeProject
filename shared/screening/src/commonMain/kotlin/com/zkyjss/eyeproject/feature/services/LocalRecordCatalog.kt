@@ -26,6 +26,7 @@ data class LocalRecordEntry(
     val sections: List<ResultSection> = emptyList(),
     /** 被测者关系代码（SELF / CHILD …）；旧记录未选成员时为 null */
     val subjectRelation: String? = null,
+    val diagnosticSessionId: String? = null,
 ) {
     /** 只转写保存时的内容，不用当前评估规则重算历史结论。时间由平台按用户时区格式化。 */
     fun reportText(testedAtLabel: String): String = buildString {
@@ -121,6 +122,7 @@ object LocalRecordCatalog {
             subjectLabel = subject?.string("name") ?: subject?.string("relation")?.let(SubjectProfiles::relationLabel) ?: "未选择成员",
             advice = snapshot?.string("advice") ?: root.string("advice").orEmpty(),
             qualityNotes = notes, sections = sections, subjectRelation = subject?.string("relation"),
+            diagnosticSessionId = root.string("diagnosticSessionId"),
         )
     }
 
@@ -130,7 +132,7 @@ object LocalRecordCatalog {
             put("fileName", e.fileName); put("kind", e.kind); put("title", e.title)
             put("testedAtMs", e.testedAtMs?.toDouble() ?: RecordObject.NULL)
             put("level", e.level); put("badge", e.badge); put("lines", RecordArray(e.lines))
-            put("version", e.version); put("subjectLabel", e.subjectLabel); put("advice", e.advice)
+            put("diagnosticSessionId", e.diagnosticSessionId); put("version", e.version); put("subjectLabel", e.subjectLabel); put("advice", e.advice)
             put("qualityNotes", RecordArray(e.qualityNotes))
             put("sections", RecordArray(e.sections.map { s -> RecordObject().apply {
                 put("title", s.title); put("rows", RecordArray(s.rows.map { r -> RecordObject().apply { put("label", r.label); put("value", r.value) } }))

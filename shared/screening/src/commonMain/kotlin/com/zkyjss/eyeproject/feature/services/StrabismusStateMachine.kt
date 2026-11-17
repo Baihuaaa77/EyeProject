@@ -195,6 +195,7 @@ internal class StrabismusStateMachine(private val host: ScreeningEngine) {
     fun retryGazeCalibration() {
         with(host) {
             if (_state.value.stabilityInterrupted || (_state.value.step != ScreeningStep.FIXATION && _state.value.step != ScreeningStep.GAZE_CALIBRATION)) return
+            diagnostics.start()
             timer?.cancel(); gaze = null; gazeCalibration.clear(); renderedTargets.clear(); resetGazeWindow()
             faceCenterBaseline = null
             stepStartMs = platform.nowMs()
@@ -229,7 +230,7 @@ internal class StrabismusStateMachine(private val host: ScreeningEngine) {
                 _state.update { it.copy(gazeCalibrationPaused = false, gazeWarning = null) }
                 if (gaze == null) {
                     _state.update { it.copy(gazeCalibrationFailed = true,
-                        warning = "未获得可靠注视校准，将继续测试并把注视监督降级为提示。" + StrabismusGaze.failureReason(gazeCalibration)) }
+                        warning = "未获得可靠注视校准；继续后可保存诊断，但可能因缺少有效注视样本而无法形成眼位结论。" + StrabismusGaze.failureReason(gazeCalibration)) }
                 } else run {
                     stepStartMs = platform.nowMs(); resetGazeWindow(); faceCenterBaseline = null
                     reflectionCode.clear()
@@ -241,7 +242,7 @@ internal class StrabismusStateMachine(private val host: ScreeningEngine) {
         }
     }
 
-    /** 校准失败时仍允许完成流程；眼位采集不再依赖注视模型硬门控。 */
+    /** 校准失败时允许录完整流程供排查；最终结论仍如实保留注视证据不足。 */
     fun continueWithoutCalibration() = with(host) {
         val s = _state.value
         if (s.step != ScreeningStep.GAZE_CALIBRATION || !s.gazeCalibrationFailed) return@with
@@ -255,7 +256,7 @@ internal class StrabismusStateMachine(private val host: ScreeningEngine) {
     fun reportGazeTarget(xPx: Float, yPx: Float) {
         with(host) {
             val s = _state.value
-            if (s.guidePending || s.stabilityInterrupted || s.step !in setOf(ScreeningStep.GAZE_CALIBRATION, ScreeningStep.FIXATION, ScreeningStep.COVER, ScreeningStep.PURSUIT)) return
+            if (s.guidePending || s.stabilityInterrupted || s.step !in setOf(ScreeningStep.GAZE_CALIBRATION, ScreeningStep.FIXATION, ScreeningStep.FAR_FIXATION, ScreeningStep.COVER, ScreeningStep.PURSUIT)) return
             val display = platform.display
             val now = platform.nowMs()
             val point = GazePoint(xPx / display.widthPixels, yPx / display.heightPixels)

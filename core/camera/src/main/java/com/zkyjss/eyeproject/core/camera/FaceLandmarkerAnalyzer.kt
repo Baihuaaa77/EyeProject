@@ -33,6 +33,7 @@ class FaceLandmarkerAnalyzer(
     private val onResult: (FaceLandmarkFrame) -> Unit,
     private val onError: (Throwable) -> Unit,
     private val opticalPrecision: Boolean = false,
+    private val onSourceImage: ((Bitmap, Long) -> Unit)? = null,
 ) : ImageAnalysis.Analyzer {
 
     private val faceLandmarker: FaceLandmarker
@@ -152,6 +153,8 @@ class FaceLandmarkerAnalyzer(
         try {
             val latencyMillis = (System.nanoTime() - frame.startNanos) / 1_000_000L
             val timestampMillis = System.currentTimeMillis()
+            // 只借用同一幅未镜像原图；诊断录制方必须在返回前完成有界拷贝。
+            onSourceImage?.invoke(frame.bitmap, frame.analysisElapsedRealtimeMs)
             val landmarks = result.faceLandmarks().firstOrNull()
             val face = landmarks?.let { lms ->
                 val matrix = result.facialTransformationMatrixes().orElse(emptyList()).firstOrNull()
