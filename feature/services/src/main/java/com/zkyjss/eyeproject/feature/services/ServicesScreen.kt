@@ -118,10 +118,6 @@ fun ServicesScreen(
         verticalArrangement = Arrangement.spacedBy(EyeSpacing.cardGap)
     ) {
         EyePageHeader("服务", onOpenSettings, onOpenAccount = onOpenAccount)
-        val context = androidx.compose.ui.platform.LocalContext.current
-        EyeWeekUsageCard(week, listOf("周一","周二","周三","周四","周五","周六","周日"), todayIndex) {
-            context.startActivity(android.content.Intent(android.provider.Settings.ACTION_USAGE_ACCESS_SETTINGS))
-        }
         EyeText("选择一项自测", Modifier.padding(top = EyeSpacing.sectionGap - EyeSpacing.cardGap, start = 4.dp),
             style = typography.title, color = colors.textPrimary)
         BoxWithConstraints(Modifier.fillMaxWidth()) {
@@ -145,11 +141,10 @@ fun ServicesScreen(
             }
         }
         EyeText("日常护眼", Modifier.padding(top = 8.dp), style = typography.subtitle, color = colors.textPrimary)
-        EyeWarmCard(Modifier.fillMaxWidth(.49f).clickable(role = Role.Button, onClick = onOpenExercise), fill = com.zkyjss.eyeproject.core.designsystem.theme.EyeBrown.tile(0)) {
+        EyeWarmCard(Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onOpenExercise), fill = com.zkyjss.eyeproject.core.designsystem.theme.EyeBrown.tile(0)) {
             EyeGlyphIcon(EyeGlyph.EYE, Modifier.align(Alignment.CenterHorizontally).padding(top = 12.dp).size(32.dp), colors.primary)
             EyeText("护眼操", Modifier.align(Alignment.CenterHorizontally).padding(vertical = 12.dp), style = typography.navigationTitle, color = colors.textPrimary)
         }
-        EyeDisclosure("自测方法示范") { DemoHero() }
         EyeText(
             "自测结果仅供参考，不能替代医院检查。",
             style = typography.bodySecondary,
@@ -178,7 +173,7 @@ private fun ServiceTile(title: String, kind: ServiceKind, modifier: Modifier, on
             ServiceKind.ALIGNMENT -> colors.tileIndigo
             ServiceKind.PRESBYOPIA -> colors.tileOrange
             ServiceKind.COLOR -> colors.tileRed
-        }, 32.dp)
+        }, 24.dp)
         EyeText(title, style = typography.navigationTitle, color = colors.textPrimary)
     }
 }
@@ -188,7 +183,7 @@ private class DemoClip(val motion: GuideMotion, val name: String, val line: Stri
 
 private val DEMO_CLIPS = listOf(
     DemoClip(GuideMotion.BLINK, "干眼自测", "像平时一样自然眨眼"),
-    DemoClip(GuideMotion.COVER, "眼位自测", "本人遮眼，再移开 · 协助者在手机旁打光"),
+    DemoClip(GuideMotion.COVER, "眼位自测", "本人遮眼，再移开 · 屏幕白点提供映光"),
     DemoClip(GuideMotion.NEAR, "老视自测", "看清 E 的开口朝哪边"),
 )
 

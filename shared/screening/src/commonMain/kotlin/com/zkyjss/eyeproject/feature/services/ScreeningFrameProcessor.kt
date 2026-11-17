@@ -97,13 +97,40 @@ internal class ScreeningFrameProcessor(private val host: ScreeningEngine) {
             val headStable = center != null && baseline != null &&
                 abs(center.first - baseline.first) <= frame.sourceWidth * 0.08f &&
                 abs(center.second - baseline.second) <= frame.sourceHeight * 0.08f
+            var stabilityFrameGood = true
+            val before = _state.value
+            if (before.kind == ScreeningKind.STRABISMUS && before.step == step && !before.guidePending && !before.farWaiting &&
+                step in setOf(ScreeningStep.GAZE_CALIBRATION,ScreeningStep.FIXATION,ScreeningStep.FAR_FIXATION,ScreeningStep.COVER,ScreeningStep.PURSUIT)) {
+                if (stabilityStep != step) {
+                    stabilityStep = step; stability.clear()
+                    stabilityCounts = ScreeningEngine.StabilityCounts(totalFrames,validFrames,qualityEligibleFrames,qualityEligibleValidFrames,opticalValidFrames)
+                }
+                val knownCovered = if (step == ScreeningStep.COVER) before.coverMarks.lastOrNull()?.covered else null
+                val positions = listOf(Triple(face?.leftEye,face?.leftOptical,VisionEye.LEFT),Triple(face?.rightEye,face?.rightOptical,VisionEye.RIGHT))
+                    .mapNotNull { (eye,optical,which) ->
+                        val visibleEye = eye ?: return@mapNotNull null
+                        val p = visibleEye.irisPoints.firstOrNull()
+                        if (p == null || (which == knownCovered && optical?.irisVisibilityContrast == null) || (BlinkDetector.ear(visibleEye.earPoints) ?: 0f)<0.16f ||
+                            optical?.irisVisibilityContrast?.let { it<8f } == true) null
+                        else IrisFramePosition(which.name,p.x/frame.sourceWidth,p.y/frame.sourceHeight,
+                            visibleEye.irisDiameterPx/frame.sourceWidth,frame.sourceHeight.toFloat()/frame.sourceWidth)
+                    }
+                val stabilityReading = stability.observe(time,step,positions,smoothedDistance,poseStable && headStable,before.stabilityInterrupted)
+                stabilityFrameGood = stabilityReading.ready
+                if (before.stabilityInterrupted) _state.update {
+                    val message = if (stabilityReading.ready) "距离与位置已稳定，请重新开始本段" else stabilityReading.reason ?: "正在确认稳定，请保持手机和注视稳定"
+                    it.copy(stabilityReady = stabilityReading.ready,stabilityReason = message,instruction = message,gazeWarning = message)
+                }
+                else stabilityReading.reason?.let { interruptStability(it,time,smoothedDistance) }
+            }
             val valid = smoothedDistance in 10f..100f &&
+                !_state.value.stabilityInterrupted && stabilityFrameGood &&
                 (_state.value.kind != ScreeningKind.PRESBYOPIA || (left != null || right != null)) &&
                 (_state.value.kind != ScreeningKind.STRABISMUS ||
                     ((if (step == ScreeningStep.COVER) left != null || right != null else left != null && right != null) &&
                         abs(smoothedDistance - StrabismusProtocol.DISTANCE_CM) <= StrabismusProtocol.DISTANCE_GATE_CM && headStable && poseStable)) &&
-                (_state.value.lux == null || _state.value.lux!! >= 50f)
-            if (step == _state.value.step && !_state.value.guidePending) observeCover(time, face, valid && poseStable, step)
+                (_state.value.kind == ScreeningKind.STRABISMUS || _state.value.lux == null || _state.value.lux!! >= 50f)
+            if (step == _state.value.step && !_state.value.guidePending && !_state.value.stabilityInterrupted) observeCover(time, face, valid && poseStable, step)
             val rendered = renderedTargets.lastOrNull { it.timeMs <= time && it.step == step }
             val covered = if (step == ScreeningStep.COVER) {
                 if (coverDetector.hasObservation) coverDetector.coveredEye else _state.value.coverMarks.lastOrNull()?.covered
@@ -113,7 +140,7 @@ internal class ScreeningFrameProcessor(private val host: ScreeningEngine) {
                     ?.let { GazePoint(it.first, it.second) }
             val gazeLeft = openEye(face?.leftEye, left, VisionEye.LEFT)
             val gazeRight = openEye(face?.rightEye, right, VisionEye.RIGHT)
-            if (step == ScreeningStep.GAZE_CALIBRATION && !_state.value.gazeCalibrationFailed && !_state.value.gazeCalibrated &&
+            if (step == ScreeningStep.GAZE_CALIBRATION && !_state.value.stabilityInterrupted && !_state.value.gazeCalibrationFailed && !_state.value.gazeCalibrated &&
                 step == _state.value.step && time >= calibrationPointStartMs) {
                 // 异常（人脸丢失、头偏或移动、距离超出、双眼都闭着）：暂停采样，本点计时随之顺延
                 if (!valid || (gazeLeft == null && gazeRight == null)) {
@@ -144,7 +171,7 @@ internal class ScreeningFrameProcessor(private val host: ScreeningEngine) {
             val gazeOnTarget = rendered?.let { target -> estimates?.let { (l, r) ->
                 if (l == null && r == null) null else StrabismusGaze.onTarget(l, target.point) || StrabismusGaze.onTarget(r, target.point)
             } }
-            if (!_state.value.guidePending && !_state.value.farWaiting && step == _state.value.step && time >= stepStartMs && step != ScreeningStep.PROFILE && step != ScreeningStep.ENVIRONMENT && step != ScreeningStep.RESULT && step != ScreeningStep.GAZE_CALIBRATION) {
+            if (!_state.value.stabilityInterrupted && !_state.value.guidePending && !_state.value.farWaiting && step == _state.value.step && time >= stepStartMs && step != ScreeningStep.PROFILE && step != ScreeningStep.ENVIRONMENT && step != ScreeningStep.RESULT && step != ScreeningStep.GAZE_CALIBRATION) {
                 totalFrames++
                 // 看远另行评估（数据不足时只是不评估看远），不拉低整体有效帧率
                 val eligible = step != ScreeningStep.FAR_FIXATION && (step != ScreeningStep.COVER ||
@@ -212,6 +239,7 @@ internal class ScreeningFrameProcessor(private val host: ScreeningEngine) {
                 lastUiFrameMs = time
                 _state.update { it.copy(faceDetected = left != null && right != null, distanceCm = smoothedDistance,
                     frameCount = totalFrames, acceptedFrames = validFrames, cameraFrames = cameraFrameCount,
+                    cameraSourceWidth = frame.sourceWidth,cameraSourceHeight = frame.sourceHeight,analysisFps = frame.fps,
                     cameraBrightness = frame.imageBrightness, trackingStatus = trackingStatus,
                     opticalStatus = opticalStatus, opticalValidFrames = opticalValidFrames,
                     opticalRejectionCounts = opticalRejectionCounts.toMap(),

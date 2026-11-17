@@ -274,7 +274,7 @@ internal class OfflineFirstSubjectRepository(
         /** 上传被拒、等待监护人同意时记录的原因。 */
         const val GUARDIAN_PENDING = "待监护人同意"
 
-        fun defaultName(relation: String) = if (relation == SELF) "我" else SubjectProfiles.relationLabel(relation)
+        fun defaultName(relation: String) = if (relation == SELF) "小林" else SubjectProfiles.relationLabel(relation)
 
         /** 资料里的性别 → 服务端取值。 */
         fun sexCode(value: String?) = when (value) { "男" -> "MALE"; "女" -> "FEMALE"; "不愿透露" -> "OTHER"; else -> null }

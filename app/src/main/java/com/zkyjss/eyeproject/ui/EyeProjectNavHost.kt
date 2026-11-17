@@ -139,7 +139,7 @@ fun EyeProjectNavHost(
             ))
             mineSubScreens(onBack = back, onOpenAccount = openAccount, onOpenCloudSync = { navController.navigateToCloudSync() },
                 onEditSubject = { navController.navigateToSubjectEdit(it) })
-            systemSettingsScreen(onBack = back)
+            systemSettingsScreen(onBack = back,onOpenAccount = openAccount,onOpenPermissions = { navController.navigateToPermissions() },onOpenCloud = { navController.navigateToCloudSync() })
             subjectEditScreen(onBack = { navController.navigateUp() })
             developerToolsScreens(navController)
             // 测试开始页缺资料时去「我的」的资料编辑页，保存后返回测试

@@ -77,7 +77,7 @@ internal fun SubjectEditContent(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             EyeSectionCard(title = "成员") {
-                EyeTextField(draft.nickname, onNickname, label = "称呼", placeholder = if (self) "我" else "如：小明、妈妈")
+                EyeTextField(draft.nickname, onNickname, label = "称呼", placeholder = if (self) "小林" else "如：小明、妈妈")
                 if (!self) {
                     Spacer(Modifier.height(12.dp))
                     EyeText("与你的关系", style = typography.subtitle, color = colors.textPrimary)
@@ -87,13 +87,23 @@ internal fun SubjectEditContent(
                         onChange = { label -> relations.firstOrNull { it.second == label }?.let { onRelation(it.first) } })
                 }
             }
-            SubjectProfiles.sections.forEach { section ->
+            SubjectProfiles.sections.take(1).forEach { section ->
                 val visible = section.questions.filter { it.visibleWhen(draft.fields) }
                 EyeSectionCard(title = section.title) {
                     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         visible.forEach { q -> ProfileQuestion(q, draft.fields[q.key].orEmpty()) { onField(q.key, it) } }
                     }
                 }
+            }
+            com.zkyjss.eyeproject.core.ui.component.EyeDisclosure("更多健康资料（可选）") {
+            SubjectProfiles.sections.drop(1).forEach { section ->
+                val visible = section.questions.filter { it.visibleWhen(draft.fields) }
+                EyeSectionCard(title = section.title) {
+                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        visible.forEach { q -> ProfileQuestion(q, draft.fields[q.key].orEmpty()) { onField(q.key, it) } }
+                    }
+                }
+            }
             }
             Spacer(Modifier.height(8.dp))
         }

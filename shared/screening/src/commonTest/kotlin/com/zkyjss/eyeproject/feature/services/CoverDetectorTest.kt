@@ -273,7 +273,7 @@ class CoverDetectorTest {
         for (helper in listOf("家长", "医生或护士", "其他")) {
             val fields = mapOf("协助测试者" to helper)
             assertTrue(usesSelfCover(fields))
-            assertTrue(coverGuideCue(fields).contains("手机旁打光"))
+            assertTrue(coverGuideCue(fields).contains("屏幕白点提供映光"))
             assertFalse(coverGuideCue(fields).contains("协助者按提示真实遮盖"))
             assertFalse(coverGuideCue(fields).contains("同时点按"))
         }

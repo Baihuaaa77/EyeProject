@@ -12,7 +12,7 @@ struct CareReport {
     struct Consult: Identifiable { let id: Int; let title: String; let detail: String; let department: String; let urgent: Bool }
     struct Stage: Identifiable { let id: String; let label: String; let done: Bool; let summary: String }
     struct Day: Identifiable {
-        let id: String; let label: String; let blinksPerMinute: Double?; let score: Int?; var screenMinutes: Int? = nil
+        let id: String; let label: String; let blinksPerMinute: Double?; let score: Int?; var screenMinutes: Int? = nil; var longestSessionMinutes: Int? = nil
     }
 
     var level = "UNKNOWN"
@@ -27,11 +27,14 @@ struct CareReport {
     var tips: [Tip] = []
     var consults: [Consult] = []
     var days: [Day] = []
+    var historyDays: [Day] = []
     var summary: [String] = []
     var checkInDays = 0
     var symptomDays = 0
     var checkedInToday = false
     var todaySymptoms: [String] = []
+    var todayNote = ""
+    var completedCare: [String] = []
     var suggestedReminderMinutes = 20
     var loaded = false
 
@@ -63,11 +66,14 @@ struct CareReport {
         let trend = o["trend"] as? [String: Any] ?? [:]
         days = list("days", trend).map { d in Day(id: d["day"] as? String ?? UUID().uuidString, label: d["label"] as? String ?? "",
             blinksPerMinute: (d["blinksPerMinute"] as? NSNumber)?.doubleValue, score: d["score"] as? Int, screenMinutes: d["screenMinutes"] as? Int) }
+        historyDays = list("historyDays",trend).map { d in Day(id: d["day"] as? String ?? "",label: d["label"] as? String ?? "",blinksPerMinute: (d["blinksPerMinute"] as? NSNumber)?.doubleValue,score: d["score"] as? Int,screenMinutes: d["screenMinutes"] as? Int,longestSessionMinutes: d["longestSessionMinutes"] as? Int) }
         summary = trend["summary"] as? [String] ?? []
         checkInDays = trend["checkInDays"] as? Int ?? 0
         symptomDays = trend["symptomDays"] as? Int ?? 0
         checkedInToday = o["checkedInToday"] as? Bool ?? false
         todaySymptoms = o["todaySymptoms"] as? [String] ?? []
+        todayNote = o["todayNote"] as? String ?? ""
+        completedCare = o["completedCare"] as? [String] ?? []
         suggestedReminderMinutes = o["suggestedReminderMinutes"] as? Int ?? 20
     }
 
@@ -114,9 +120,14 @@ final class EyeCareStore: ObservableObject {
     }
 
     /// 今日感受打卡（闭环「反馈」）；空数组表示没有不适。
-    func checkIn(_ symptoms: [String]) {
+    func checkIn(_ symptoms: [String], note: String = "") {
         let day = today, now = nowMs
-        mutate { EyeCareBridge.shared.checkIn(ledgerJson: $0, day: day, symptoms: symptoms, atMs: now) }
+        mutate { EyeCareBridge.shared.checkInWithNote(ledgerJson: $0, day: day, symptoms: symptoms, atMs: now,note: note) }
+    }
+
+    func careCheckIn(_ key: String) {
+        let day = today, now = nowMs
+        mutate { EyeCareBridge.shared.careCheckIn(ledgerJson: $0,day: day,key: key,atMs: now) }
     }
 
     /// 回到前台开始计时；退到后台时把这段使用时长记入当天。

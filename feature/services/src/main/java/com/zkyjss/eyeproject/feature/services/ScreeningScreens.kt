@@ -130,14 +130,14 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, onEditSubje
     val voicePrompt = when (s.step) {
         // 选人页不播报：页面标题已写明，开口就问「这次测谁」显得突兀
         ScreeningStep.PROFILE -> ""
-        ScreeningStep.ENVIRONMENT -> if (kind == ScreeningKind.PRESBYOPIA) "请正对屏幕，保持约四十厘米，检查光照和距离。" else "请正对屏幕，保持三十三厘米，本人按提示遮眼，请协助者在手机旁打光。"
+        ScreeningStep.ENVIRONMENT -> if (kind == ScreeningKind.PRESBYOPIA) "请正对屏幕，保持约四十厘米，检查光照和距离。" else "请正对屏幕，保持三十三厘米，屏幕白点提供映光，请固定手机并注视白点。"
         ScreeningStep.NEAR_VISION -> if (s.nearAwaitingEyeReady) s.instruction else "${s.visionEye.label}测试。保持四十厘米，停稳后显示视标。"
         ScreeningStep.PUSH_UP -> if (s.pushStage == PushStage.READY) "${pushEyeCue(s.visionEye)}，第${s.nearPoints.count { it.eye == s.visionEye } + 1}次移近。先移到四十五厘米以外。"
             else "看着E，慢慢移近。模糊后停一下，仍看不清就点按。"
         // 换距离的「请移动到 xx 厘米处」由距离提示播报，到位后不再重复
         ScreeningStep.DISTANCE_CURVE -> "停稳后视标会自动出现，请选择开口方向。"
         ScreeningStep.FLIPPER -> if (s.flipperCheck) "先确认两个距离都能看清。停稳后视标会自动出现，请选择开口方向。" else "停稳后视标会自动出现，请选择开口方向。"
-        ScreeningStep.FIXATION -> "请保持三十三厘米，看着上方闪烁的圆点，头和手机都不要动。"
+        ScreeningStep.FIXATION -> "请保持三十三厘米，看着上方的白色亮点，头和手机都不要动。"
         ScreeningStep.FAR_FIXATION -> if (s.farWaiting) FAR_WAIT_PROMPT else "请看六米以外的目标，眼睛不要看手机，头和手机都不要动。"
         ScreeningStep.GAZE_CALIBRATION -> "请只用眼睛依次看着圆点，头和手机都不要动。"
         ScreeningStep.COVER -> coverSpokenPrompt(s)
@@ -147,7 +147,7 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, onEditSubje
     val guidance = screeningGuidance(s)
     val distanceTarget = if (s.guidePending) null else screeningDistanceTarget(s)
     // 单眼近视力时另一只眼被遮，双眼关键点可能不全：有测距即视为可见
-    val faceVisible = s.faceDetected || (s.step == ScreeningStep.NEAR_VISION && s.distanceCm > 0f)
+    val faceVisible = s.faceDetected || (s.step in setOf(ScreeningStep.NEAR_VISION, ScreeningStep.COVER) && s.distanceCm > 0f)
     val distance = distanceTarget?.let { (target, tolerance) ->
         distanceStatus(s.distanceCm, faceVisible, target, tolerance, moving = s.distanceMoveToCm != null) }
     val voiceActive = !s.guidePending && s.step in setOf(
@@ -167,10 +167,10 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, onEditSubje
         }
     }
     // 引导与告警优先于距离提醒，距离提醒优先于其余提示。
-    val urgent = if (s.guidePending) screeningGuideText(s) else s.gazeWarning ?: s.warning
+    val urgent = if (s.stabilityInterrupted) s.stabilityReason else if (s.guidePending) screeningGuideText(s) else s.gazeWarning ?: s.warning
     val basePrompt = urgent ?: guidance?.takeUnless { it == "保持稳定" || it.startsWith("太近") || it.startsWith("太远") || it.startsWith("请移动到") || it == "请正对屏幕" }
         ?: voicePrompt
-    SpeakTestPrompts(voice, voiceEnabled && !settingsOpen && !helpOpen, basePrompt, distance?.takeIf { urgent == null && it.clearlyOff() })
+    SpeakTestPrompts(voice, voiceEnabled && !settingsOpen && !helpOpen, basePrompt, distance?.takeIf { (kind == ScreeningKind.STRABISMUS || urgent == null) && it.clearlyOff() })
     DisposableEffect(viewModel, voice) { onDispose { viewModel.stopCamera(); voice.close() } }
     DisposableEffect(kind, context) {
         val window = (context as? Activity)?.window
@@ -207,7 +207,9 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, onEditSubje
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
     Box(modifier.fillMaxSize()) {
-        TestSessionLayout(
+        if (gazeTask) StrabismusDarkSession(s, viewModel, { viewModel.stopCamera(); onBack() }, { settingsOpen = true }, openHelp) {
+            distance?.let { DistanceBanner(it, compact = true, singleLine = true) }
+        } else TestSessionLayout(
             title = if (kind == ScreeningKind.PRESBYOPIA) "老视自测" else "眼位自测",
             onBack = { viewModel.stopCamera(); onBack() }, onSettings = { settingsOpen = true },
             centered = activeTest, onHelp = openHelp.takeUnless { s.step == ScreeningStep.PROFILE || s.step == ScreeningStep.RESULT }, scroll = pageScroll, progress = screeningProgress(s),
@@ -248,6 +250,7 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, onEditSubje
     if (settingsOpen) TestSettingsPage(settings, voiceAnswer, { settingsOpen = false }, speechAvailable = voice.available) {
         EyeDisclosure("测量详情") {
             EyeText(s.trackingStatus, typography.bodySecondary, colors.textSecondary)
+            EyeText("图像 ${s.cameraSourceWidth}×${s.cameraSourceHeight} · 分析 %.1f 帧/秒".format(s.analysisFps),typography.bodySecondary,colors.textSecondary)
             EyeText("距离 ${if (s.distanceCm > 0f) "%.1f cm".format(s.distanceCm) else "—"} · 光照 ${lightingLabel(s)}", typography.bodySecondary, colors.textSecondary)
             s.headPose?.let { EyeText("头姿 偏航 %.0f° · 俯仰 %.0f° · 翻滚 %.0f°".format(it.yawDeg, it.pitchDeg, it.rollDeg), typography.bodySecondary, colors.textSecondary) }
             if (kind == ScreeningKind.STRABISMUS) EyeText(s.opticalStatus, typography.bodySecondary, colors.textSecondary)
@@ -269,15 +272,16 @@ private fun lightingLabel(s: ScreeningState): String = when {
 @Composable
 internal fun ProfileContent(kind: ScreeningKind, s: ScreeningState, vm: ScreeningTestViewModel, onEditSubject: (String?) -> Unit) {
     val subjects by vm.subjects.collectAsStateWithLifecycle()
-    SubjectPicker(kind.name, subjects, s.subject?.id, vm::useSubject, onEditSubject, vm::skipProfile)
+    SubjectPicker(kind.name, subjects, s.subject?.id, vm::useSubject, onEditSubject, vm::skipProfile, questions = {
     if (PreTestCheck.needed(kind.name)) s.subject?.let { subject ->
         PreTestQuestions(kind.name, subject.id, PreTestCheck.clean(kind.name, s.fields)) { vm.confirmCheck(it) }
     }
+    })
 }
 
 @Composable
 private fun EnvironmentContent(kind: ScreeningKind, s: ScreeningState, vm: ScreeningTestViewModel, onRetryCamera: () -> Unit) {
-    TestGuide(if (kind == ScreeningKind.STRABISMUS) GuideMotion.LIGHTING else GuideMotion.POSTURE, "调整姿势", if (kind == ScreeningKind.PRESBYOPIA) "正对屏幕，约 40 厘米" else "正对屏幕，约 33 厘米；本人按提示遮眼，请协助者在手机旁打光")
+    TestGuide(if (kind == ScreeningKind.STRABISMUS) GuideMotion.FIXATE else GuideMotion.POSTURE, "调整姿势", if (kind == ScreeningKind.PRESBYOPIA) "正对屏幕，约 40 厘米" else "正对屏幕，约 33 厘米；屏幕白点提供映光，请固定手机并注视白点")
     if (s.cameraFrames == 0 || !s.faceDetected || s.distanceCm <= 0f) {
         EyeButton("重试相机", EyeButtonRole.SECONDARY, onRetryCamera, Modifier.fillMaxWidth())
     }
@@ -386,7 +390,7 @@ internal fun FarFixationContent(s: ScreeningState, onStart: () -> Unit) {
                 } else {
                     BaseEyeText("${s.secondsLeft}", style = typography.headline, color = colors.white)
                     BaseEyeText("眼睛越过手机，看着远处的目标", style = typography.subtitle, color = colors.white, textAlign = center)
-                    BaseEyeText("协助者保持打光稳定；本人看远处，头和手机不动", style = typography.bodySecondary, color = colors.white.copy(alpha = 0.72f),
+                    BaseEyeText("屏幕白点提供映光；本人看远处，头和手机不动", style = typography.bodySecondary, color = colors.white.copy(alpha = 0.72f),
                         textAlign = center)
                 }
             }

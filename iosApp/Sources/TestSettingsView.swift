@@ -7,6 +7,10 @@ struct SystemSettingsPage: View {
     @ObservedObject var voice: EyeVoice
     @ObservedObject var feedback: EyeFeedback
     var inTest = false
+    var openAccount: () -> Void = {}
+    var openPermissions: () -> Void = {}
+    var openCloud: () -> Void = {}
+    @State private var editor: String?
     @Environment(\.dismiss) private var dismiss
     private let voices = EyeVoice.chineseVoices
     private let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
@@ -18,41 +22,21 @@ struct SystemSettingsPage: View {
     var body: some View {
         SubPage(title: "系统设置") {
             ListGroup(title: "反馈") {
-                SwitchRow(title: "音效反馈", isOn: $feedback.soundEnabled, glyph: .bell, help: Self.feedbackHelp)
-                if feedback.soundEnabled { LevelSlider(title: "音效音量", value: $feedback.soundVolume, range: 0...1) }
-                SwitchRow(title: "震动反馈", isOn: $feedback.hapticsEnabled, glyph: .sync, tone: .accent)
-                if feedback.hapticsEnabled { LevelSlider(title: "震动强度", value: $feedback.hapticStrength, range: 0.1...1) }
-                ListRow(title: "试一下反馈", titleColor: EyeStyle.primary, divider: false,
-                        enabled: feedback.soundEnabled || feedback.hapticsEnabled, indent: 50) {
-                    feedback.play(name: "START", sound: "eye_start", microphonePauseMs: 310, voice: voice)
-                }
+                SwitchRow(title: "音效反馈",isOn: $feedback.soundEnabled)
+                if feedback.soundEnabled { ListRow(title: "音效音量",value: "\(Int(feedback.soundVolume*100))%") { editor = "音效音量" } }
+                SwitchRow(title: "震动反馈",isOn: $feedback.hapticsEnabled)
+                if feedback.hapticsEnabled { ListRow(title: "震动强度",value: "\(Int(feedback.hapticStrength*100))%") { editor = "震动强度" } }
             }
             ListGroup(title: "语音") {
-                SwitchRow(title: "语音播报", isOn: $voice.enabled, glyph: .chat, help: Self.voiceHelp)
-                if voice.enabled {
-                    HStack {
-                        Text("发声人").font(EyeStyle.body).foregroundStyle(EyeStyle.text)
-                        Spacer()
-                        Picker("发声人", selection: $voice.voiceIdentifier) {
-                            Text("自动选择").tag("")
-                            ForEach(voices, id: \.identifier) { item in Text(item.name + quality(item)).tag(item.identifier) }
-                        }.pickerStyle(.menu).tint(EyeStyle.secondary)
-                    }.padding(.leading, 66).padding(.trailing, 8).frame(minHeight: 52)
-                    LevelSlider(title: "播报音量", value: $voice.volume, range: 0.1...1)
-                    LevelSlider(title: "播报语速", value: $voice.rate, range: 0.7...1.4)
-                    ListRow(title: "试听", titleColor: EyeStyle.primary, indent: 50) { voice.speak("请保持四十厘米，看视标选方向。") }
-                }
-                SwitchRow(title: "语音作答", isOn: $voice.answersEnabled, glyph: .mic, tone: .success, help: Self.answerHelp,
-                          divider: voice.answersEnabled)
-                if voice.answersEnabled {
-                    if voice.status.isEmpty {
-                        ListRow(title: "检查麦克风与语音权限", titleColor: EyeStyle.primary, divider: false, indent: 50) { voice.requestPermission() }
-                    } else {
-                        ListRow(title: "识别状态", value: voice.status, divider: false, indent: 50)
-                    }
-                }
+                SwitchRow(title: "语音辅助",isOn: Binding(get: { voice.enabled || voice.answersEnabled },set: { voice.enabled = $0; voice.answersEnabled = $0 }),subtitle: "播报与作答")
+                if voice.enabled || voice.answersEnabled { ListRow(title: "声音与语速",divider: false) { editor = "声音与语速" } }
             }
             if !inTest {
+                ListGroup(title: "通用") {
+                    ListRow(title: "账户管理",action: openAccount)
+                    ListRow(title: "权限与通知",action: openPermissions)
+                    ListRow(title: "云端同步",divider: false,action: openCloud)
+                }
                 ListGroup(title: "关于") {
                     HStack(spacing: 14) {
                         AppIconView().frame(width: 56, height: 56)
@@ -63,6 +47,7 @@ struct SystemSettingsPage: View {
                         Spacer()
                     }.padding(16)
                     ListRow(title: "版本", value: version.isEmpty ? "—" : version)
+                    ListRow(title: "切换登录",action: openAccount)
                     Text("手机初筛结果仅供参考，不能代替医院检查。").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 16).padding(.vertical, 14)
                 }
@@ -72,6 +57,28 @@ struct SystemSettingsPage: View {
             ToolbarItem(placement: .confirmationAction) {
                 if inTest { Button("完成") { EyeHaptics.tap(); dismiss() } }
             }
+        }
+        .sheet(isPresented: Binding(get: { editor != nil },set: { if !$0 { editor = nil } })) {
+            NavigationStack {
+                SubPage(title: editor ?? "设置") {
+                    if editor == "音效音量" { LevelSlider(title: "音效音量",value: $feedback.soundVolume,range: 0...1) }
+                    else if editor == "震动强度" { LevelSlider(title: "震动强度",value: $feedback.hapticStrength,range: 0.1...1) }
+                    else {
+                        Picker("发声人",selection: $voice.voiceIdentifier) {
+                            Text("自动选择").tag("")
+                            ForEach(voices,id: \.identifier) { Text($0.name+quality($0)).tag($0.identifier) }
+                        }.pickerStyle(.menu)
+                        LevelSlider(title: "播报音量",value: $voice.volume,range: 0.1...1)
+                        LevelSlider(title: "播报语速",value: $voice.rate,range: 0.7...1.4)
+                        Button("检查麦克风与语音权限") { voice.requestPermission() }.font(EyeStyle.body)
+                        if !voice.status.isEmpty { Text(voice.status).font(EyeStyle.bodySecondary) }
+                    }
+                    Button("试听 / 试一下") {
+                        if editor == "声音与语速" { voice.speak("请保持合适距离，看视标选方向。") }
+                        else { feedback.play(name: "START",sound: "eye_start",microphonePauseMs: 310,voice: voice) }
+                    }.buttonStyle(EyeButtonStyle(role: .secondary))
+                }.toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { editor = nil } } }
+            }.presentationDetents([.medium,.large])
         }
     }
 

@@ -14,10 +14,14 @@ import kotlin.math.roundToInt
 object EyeOpticalAlgorithm {
     fun measure(bitmap: GrayImage, eye: EyeLandmarks?): OpticalEyeMeasurement? = measure(bitmap, eye, 0.75f)
 
-    /** 光码实验搜索完整虹膜；主 App 继续使用原有内区参数，疾病规则不变。 */
+    /** 旧版光码实验的全虹膜基线；保留供历史回放比较，主 App 使用 measureScreenPoint。 */
     fun measureFullIris(bitmap: GrayImage, eye: EyeLandmarks?): OpticalEyeMeasurement? = measure(bitmap, eye, 1f)
 
-    private fun measure(bitmap: GrayImage, eye: EyeLandmarks?, searchRadiusFraction: Float): OpticalEyeMeasurement? {
+    /** 主 App：虹膜60%面积圆与眼睑可见区域的交集；仍保留高对比度拒判。 */
+    fun measureScreenPoint(bitmap: GrayImage, eye: EyeLandmarks?): OpticalEyeMeasurement? =
+        measure(bitmap,eye,kotlin.math.sqrt(0.6f),screenPoint = true)
+
+    private fun measure(bitmap: GrayImage, eye: EyeLandmarks?, searchRadiusFraction: Float, screenPoint: Boolean = false): OpticalEyeMeasurement? {
         eye ?: return null
         val iris = eye.irisPoints.firstOrNull() ?: return null
         val diameter = eye.irisDiameterPx
@@ -64,12 +68,26 @@ object EyeOpticalAlgorithm {
         var bestScore = Float.NEGATIVE_INFINITY
         var glint: Point2f? = null
         var glintContrast = 0f
+        fun search(x: Int,y: Int): Boolean {
+            val px = (x+x0).toFloat(); val py = (y+y0).toFloat()
+            if (hypot(px-iris.x,py-iris.y)>radius*searchRadiusFraction) return false
+            if (!screenPoint) return true
+            val lid = eye.earPoints
+            if (lid.size != 6) return false
+            var inside = false; var j = lid.lastIndex
+            for (i in lid.indices) {
+                val a = lid[i]; val b = lid[j]
+                if ((a.y>py)!=(b.y>py) && px<(b.x-a.x)*(py-a.y)/(b.y-a.y)+a.x) inside = !inside
+                j = i
+            }
+            return inside
+        }
         val queue = IntArray(gray.size)
         val maxArea = maxOf(2, (kotlin.math.PI * radius * radius * 0.10).toInt())
         for (start in gray.indices) {
             if (visited[start] || gray[start] < threshold) continue
             val sx = start % width; val sy = start / width
-            if (hypot(sx + x0 - iris.x, sy + y0 - iris.y) > radius * searchRadiusFraction) continue
+            if (!search(sx,sy)) continue
             var head = 0; var tail = 0
             queue[tail++] = start; visited[start] = true
             var sumX = 0f; var sumY = 0f; var sumBrightness = 0f
@@ -81,7 +99,7 @@ object EyeOpticalAlgorithm {
                     val nx = x + dx; val ny = y + dy
                     if (nx !in 0 until width || ny !in 0 until height) continue
                     val next = ny * width + nx
-                    if (!visited[next] && gray[next] >= threshold && hypot(nx + x0 - iris.x, ny + y0 - iris.y) <= radius * searchRadiusFraction) {
+                    if (!visited[next] && gray[next] >= threshold && search(nx,ny)) {
                         visited[next] = true; queue[tail++] = next
                     }
                 }

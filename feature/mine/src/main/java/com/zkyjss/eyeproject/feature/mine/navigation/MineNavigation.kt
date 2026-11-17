@@ -68,7 +68,7 @@ fun NavGraphBuilder.mineSubScreens(
     onOpenCloudSync: () -> Unit,
     onEditSubject: (String?) -> Unit,
 ) {
-    composable<AccountRoute> { AccountScreen(onBack = onBack, onOpenCloudSync = onOpenCloudSync) }
+    composable<AccountRoute> { AccountScreen(onBack = onBack, onOpenCloudSync = onOpenCloudSync,onEditSubject = onEditSubject) }
     composable<RecordsRoute> { RecordsScreen(onBack = onBack) }
     composable<SubjectsRoute> { SubjectsScreen(onBack = onBack, onEdit = onEditSubject) }
     composable<CloudSyncRoute> { CloudSyncScreen(onBack = onBack, onOpenAccount = onOpenAccount) }

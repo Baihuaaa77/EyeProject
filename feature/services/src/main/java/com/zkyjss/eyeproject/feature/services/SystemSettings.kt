@@ -48,7 +48,7 @@ internal const val FEEDBACK_HELP = "作答、换阶段和测试完成时的提�
  * 页面底部是「关于」（应用图标、版本与免责声明）。苹果端 SystemSettingsPage 同一排版与文案。
  */
 @Composable
-fun SystemSettingsScreen(onBack: () -> Unit) {
+fun SystemSettingsScreen(onBack: () -> Unit, onOpenAccount: () -> Unit = {}, onOpenPermissions: () -> Unit = {}, onOpenCloud: () -> Unit = {}) {
     val settings = rememberTestSettings()
     val voiceAnswer = rememberVoiceAnswer(active = false, voice = null, enabled = settings.answersEnabled) {}
     val context = LocalContext.current
@@ -57,7 +57,13 @@ fun SystemSettingsScreen(onBack: () -> Unit) {
     }
     EyeSubPage("系统设置", onBack) {
         TestSettingsContent(settings, voiceAnswer)
+        EyeListGroup(title = "通用") {
+            EyeListRow("账户管理",onOpenAccount)
+            EyeListRow("权限与通知",onOpenPermissions)
+            EyeListRow("云端同步",onOpenCloud,divider = false)
+        }
         AboutSection(version)
+        EyeListRow("切换登录",onOpenAccount,divider = false)
     }
 }
 
@@ -94,43 +100,41 @@ internal fun TestSettingsContent(settings: TestSettings, voice: VoiceAnswerState
     val speaker = remember(context) { ScreeningVoice(context) }
     DisposableEffect(speaker) { onDispose { speaker.close() } }
 
+    var editor by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
     EyeListGroup(title = "反馈") {
-        EyeSwitchRow("音效反馈", settings.soundEnabled, settings::setSound, glyph = EyeGlyph.BELL, help = "音效与震动" to FEEDBACK_HELP)
-        if (settings.soundEnabled) LevelSlider("音效音量", settings.soundVolume, 0f..1f, settings::saveSoundVolume)
-        EyeSwitchRow("震动反馈", settings.hapticsEnabled, settings::setHaptics, glyph = EyeGlyph.SYNC, tone = EyeTileTone.ACCENT)
-        if (settings.hapticsEnabled) LevelSlider("震动强度", settings.hapticStrength, 0.1f..1f, settings::saveHapticStrength)
-        EyeListRow("试一下反馈", onClick = {
-            preview.play(ScreeningFeedbackCue.START, settings.soundEnabled, settings.hapticsEnabled, settings.soundVolume, settings.hapticStrength) {}
-        }, titleColor = colors.primary, divider = false, enabled = settings.soundEnabled || settings.hapticsEnabled,
-            modifier = Modifier.padding(start = 50.dp))
+        EyeSwitchRow("音效反馈", settings.soundEnabled, settings::setSound)
+        if (settings.soundEnabled) EyeListRow("音效音量",{ editor = "音效音量" },value = "${(settings.soundVolume*100).roundToInt()}%")
+        EyeSwitchRow("震动反馈", settings.hapticsEnabled, settings::setHaptics)
+        if (settings.hapticsEnabled) EyeListRow("震动强度",{ editor = "震动强度" },value = "${(settings.hapticStrength*100).roundToInt()}%")
     }
     EyeListGroup(title = "语音") {
-        EyeSwitchRow("语音播报", settings.speechEnabled, settings::setSpeech, glyph = EyeGlyph.CHAT, help = "语音播报" to VOICE_HELP,
-            subtitle = if (settings.speechEnabled && speechAvailable == false) "本机暂不能播报" else null)
-        if (settings.speechEnabled) {
-            VoicePicker()
-            LevelSlider("播报音量", settings.speechVolume, 0.1f..1f, settings::saveSpeechVolume)
-            LevelSlider("播报语速", settings.speechRate, 0.7f..1.4f, settings::saveSpeechRate)
-            EyeListRow("试听", onClick = {
-                speaker.configure(settings.speechVolume, settings.speechRate)
-                speaker.speak("请保持四十厘米，看视标选方向。")
-            }, titleColor = colors.primary, modifier = Modifier.padding(start = 50.dp))
-        }
-        EyeSwitchRow("语音作答", settings.answersEnabled, settings::setAnswers, glyph = EyeGlyph.MIC, tone = EyeTileTone.SUCCESS,
-            help = "语音作答" to ANSWER_HELP, divider = settings.answersEnabled)
-        if (settings.answersEnabled) {
-            val status = when {
-                !voice.permissionGranted -> null
-                voice.preparing -> "正在准备离线语音"
-                voice.unavailableReason != null -> voice.unavailableReason
-                voice.available == false -> "本机不支持语音识别"
-                voice.heard.isNotBlank() -> "听到：${voice.heard}"
-                else -> "已就绪"
+        EyeSwitchRow("语音辅助",settings.speechEnabled || settings.answersEnabled,{ settings.setSpeech(it); settings.setAnswers(it) },subtitle = "播报与作答")
+        if (settings.speechEnabled || settings.answersEnabled) EyeListRow("声音与语速",{ editor = "声音与语速" },divider = false)
+    }
+    editor?.let { title ->
+        androidx.compose.ui.window.Dialog(onDismissRequest = { editor = null }) {
+            com.zkyjss.eyeproject.core.ui.component.EyeCard {
+                EyeText(title,style = typography.title,color = colors.textPrimary)
+                when (title) {
+                    "音效音量" -> LevelSlider("音效音量",settings.soundVolume,0f..1f,settings::saveSoundVolume)
+                    "震动强度" -> LevelSlider("震动强度",settings.hapticStrength,0.1f..1f,settings::saveHapticStrength)
+                    else -> {
+                        VoicePicker()
+                        LevelSlider("播报音量",settings.speechVolume,0.1f..1f,settings::saveSpeechVolume)
+                        LevelSlider("播报语速",settings.speechRate,0.7f..1.4f,settings::saveSpeechRate)
+                        if (speechAvailable == false) EyeText("本机暂不能播报",style = typography.body,color = colors.warning)
+                        EyeListRow("检查麦克风权限",{ voice.requestPermission() })
+                        if (voice.heard.isNotBlank()) EyeText("听到：${voice.heard}",style = typography.bodySecondary,color = colors.textSecondary)
+                        voice.unavailableReason?.let { EyeText(it,style = typography.bodySecondary,color = colors.warning) }
+                    }
+                }
+                EyeListRow("试听 / 试一下",{
+                    if (title == "声音与语速") {
+                        speaker.configure(settings.speechVolume,settings.speechRate); speaker.speak("请保持合适距离，看视标选方向。")
+                    } else preview.play(ScreeningFeedbackCue.START,settings.soundEnabled,settings.hapticsEnabled,settings.soundVolume,settings.hapticStrength) {}
+                })
+                com.zkyjss.eyeproject.core.ui.component.EyeButton("完成",com.zkyjss.eyeproject.core.ui.component.EyeButtonRole.PRIMARY,{ editor = null },Modifier.fillMaxWidth())
             }
-            if (status == null) EyeListRow("允许麦克风", onClick = { haptics.tap(); voice.requestPermission() }, titleColor = colors.primary, divider = false,
-                modifier = Modifier.padding(start = 50.dp))
-            else EyeListRow("识别状态", onClick = null, value = status, divider = false, modifier = Modifier.padding(start = 50.dp),
-                valueColor = if (voice.unavailableReason != null || voice.available == false) colors.warning else colors.textSecondary)
         }
     }
 }

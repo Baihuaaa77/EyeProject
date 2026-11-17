@@ -49,62 +49,8 @@ fun EyeTrendScreen(onBack: () -> Unit, viewModel: HomeViewModel = hiltViewModel(
 
 @Composable
 internal fun EyeTrendContent(report: EyeCareReport?, onBack: () -> Unit) {
-    val colors = LocalEyeColors.current
-    val typography = LocalEyeTypography.current
-    val trend = report?.trend
-    val days = trend?.days.orEmpty()
-    EyeSubPage("用眼趋势", onBack) {
-        // 本周要点（第一条「日均用屏…」在用屏卡里大字显示）
-        val points = trend?.summary.orEmpty().drop(if (trend?.averageScreenMinutes != null) 1 else 0)
-        if (points.isNotEmpty()) EyeCard(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            EyeText("本周要点", style = typography.chip, color = colors.textSecondary)
-            points.forEach { Bullet(it, colors.screen) }
-        }
-        // 用屏时长：日均大字 + 与前一周比较 + 每日柱图
-        val avg = trend?.averageScreenMinutes
-        val previous = trend?.previousAverageScreenMinutes
-        val change = if (avg != null && previous != null && previous > 0) ((avg - previous) * 100f / previous).roundToInt() else null
-        ChartCard("用屏时长", EyeGlyph.HOURGLASS, colors.screen, "近 7 天日均用屏", avg?.let(EyeCareEngine::duration) ?: "—",
-            trailing = change?.let {
-                when {
-                    it > 0 -> "较上周 ↑$it%" to colors.warning
-                    it < 0 -> "较上周 ↓${-it}%" to colors.success
-                    else -> "与上周持平" to colors.textSecondary
-                }
-            }) {
-            EyeBarChart(days.map { d ->
-                EyeBar(d.label, d.screenMinutes?.div(60f), d.screenMinutes?.let { "%.1f 小时".format(it / 60f) }, d.label == "今天",
-                    (d.screenMinutes ?: 0) > 360)
-            }, reference = 6f, tint = colors.screen, description = "近 7 天每日用屏时长")
-        }
-        // 眼健康指数：今天的分数 + 等级 + 每日柱图
-        val todayIndex = report?.score?.let(::healthIndex)
-        ChartCard("眼健康指数", EyeGlyph.EYE, colors.primary, "今天", todayIndex?.let { "$it 分" } ?: "—",
-            trailing = report?.label?.let { it to colors.levelTone(report.level).first }) {
-            EyeBarChart(days.map { d ->
-                val index = d.score?.let(::healthIndex)
-                EyeBar(d.label, index?.toFloat(), index?.let { "$it 分" }, d.label == "今天", (index ?: 100) <= 40)
-            }, maxValue = 100f, tint = colors.primary, description = "近 7 天每日眼健康指数")
-        }
-        // 眨眼频率：平均 + 参考值 + 每日柱图
-        ChartCard("眨眼频率", EyeGlyph.EYE, colors.iceInk, "平均",
-            trend?.averageBlinksPerMinute?.let { "${"%.1f".format(it)} 次/分" } ?: "—",
-            trailing = "参考 15 次/分" to colors.textSecondary,
-            help = "平时每分钟约眨眼 15 次，专注看屏幕时会明显变少。每次实时检测都会记下眨眼频率。") {
-            EyeBarChart(days.map { d -> EyeBar(d.label, d.blinksPerMinute, d.blinksPerMinute?.roundToInt()?.let { "$it 次/分" }, d.label == "今天",
-                (d.blinksPerMinute ?: 99f) < 12f) }, reference = 15f, maxValue = 20f, tint = colors.ice, description = "近 7 天每日眨眼频率")
-        }
-        if (!report?.factors.isNullOrEmpty()) EyeListGroup(title = "今天的主要原因（拉低眼健康指数）") {
-            report!!.factors.forEachIndexed { i, f ->
-                EyeListRow(f.title, onClick = null, subtitle = f.detail, value = "−${f.points}", valueColor = colors.warning,
-                    divider = i < report.factors.lastIndex)
-            }
-        }
-        if (trend != null && trend.checkInDays > 0) EyeListGroup(title = "身体感受") {
-            EyeListRow("打卡天数", onClick = null, glyph = EyeGlyph.EYE, value = "${trend.checkInDays} 天")
-            EyeListRow("有不适的天数", onClick = null, glyph = EyeGlyph.INFO, tone = EyeTileTone.ACCENT, value = "${trend.symptomDays} 天", divider = false)
-        }
-    }
+    EyeSubPage("用眼趋势",onBack) { V16WeeklyTrend(report) }
+
 }
 
 /** 眼健康指数 = 100 − 用眼负荷分（规则仍按负荷算，界面只展示指数，越高越好）。 */

@@ -34,7 +34,7 @@ import com.zkyjss.eyeproject.core.ui.component.EyeText
 
 /**
  * 测试开始页「这次测谁？」：长期资料在「我的 → 家庭成员」维护，测试时自动带入；
- * 缺少本测试必需项的成员点开即去补充。会随时间变化的几个问题选人后在下方现问（[PreTestQuestions]）。与苹果端一致。
+ * 选人和编辑分开操作，缺项通过独立按钮补充。会随时间变化的几个问题选人后在下方现问（[PreTestQuestions]）。与苹果端一致。
  */
 @Composable
 internal fun SubjectPicker(
@@ -45,31 +45,44 @@ internal fun SubjectPicker(
     onEdit: (String?) -> Unit,
     onSkip: () -> Unit,
     nowMs: Long = System.currentTimeMillis(),
+    onContinue: () -> Unit = {},
+    questions: @Composable () -> Unit = {},
 ) {
+    var skipped by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
+    var selectedVersion by remember(selectedId) { mutableStateOf(subjects.firstOrNull { it.id == selectedId }?.updatedAt) }
+    LaunchedEffect(subjects,selectedId) {
+        subjects.firstOrNull { it.id == selectedId }?.let { profile ->
+            // 仅资料编辑/同步后刷新，不能清掉「换一种戴镜方式再测」保留的本次问卷。
+            if (selectedVersion != null && selectedVersion != profile.updatedAt) onPick(profile)
+            selectedVersion = profile.updatedAt
+        }
+    }
     Column(
         Modifier.fillMaxWidth().eyeGlass(colors, EyeShapes.panel).padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        EyeText(if (kind == "STRABISMUS") "这次给谁测？" else "这次测谁？", style = typography.title, color = colors.textPrimary)
-        EyeText("资料在「我的 → 家庭成员」中填写，测试时自动带入。", style = typography.bodySecondary, color = colors.textSecondary)
+        EyeText("这次测谁？", style = typography.title, color = colors.textPrimary)
         subjects.forEach { s ->
             val missing = SubjectProfiles.missing(kind, s, nowMs)
             val name = s.nickname.ifBlank { SubjectProfiles.relationLabel(s.relation) }
             val detail = listOfNotNull(SubjectProfiles.relationLabel(s.relation), SubjectProfiles.age(s.fields, nowMs)?.let { "$it 岁" })
-                .joinToString(" · ") + if (missing.isEmpty()) "" else "\n需补充：${missing.joinToString("、")}（点此去填写）"
-            EyeOptionRow(name, detail, selected = s.id == selectedId, multiple = false) {
-                if (missing.isEmpty()) onPick(s) else onEdit(s.id)
+                .joinToString(" · ") + if (missing.isEmpty()) "" else "\n需补充：${missing.joinToString("、")}"
+            EyeOptionRow(name, detail, selected = !skipped && s.id == selectedId, multiple = false) {
+                skipped = false; onPick(s)
             }
+            EyeButton(if ("出生年份" in missing) "补充出生年份" else "编辑资料", EyeButtonRole.SECONDARY, { onEdit(s.id) })
         }
         EyeButton("添加家庭成员", EyeButtonRole.SECONDARY, { onEdit(null) }, Modifier.fillMaxWidth())
-        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-            Box(Modifier.heightIn(min = 44.dp).clickable(role = Role.Button, onClick = onSkip).padding(horizontal = 12.dp),
-                contentAlignment = Alignment.Center) {
-                EyeText("暂不选择，直接测试", style = typography.body, color = colors.primary)
+        EyeOptionRow("暂不选择成员", hint = null, selected = skipped, multiple = false) { skipped = true }
+        if (skipped) EyeButton("继续", EyeButtonRole.PRIMARY, onSkip, Modifier.fillMaxWidth())
+        else if (selectedId != null) {
+            val profile = subjects.firstOrNull { it.id == selectedId }
+            if (profile != null && SubjectProfiles.missing(kind,profile,nowMs).isEmpty()) {
+                if (kind == "COLOR_VISION") EyeButton("继续", EyeButtonRole.PRIMARY, onContinue, Modifier.fillMaxWidth())
+                else questions()
             }
-            EyeText("不选成员时，依赖年龄和症状的判断会注明无法评估。", style = typography.bodySecondary, color = colors.textSecondary)
         }
     }
 }
@@ -86,7 +99,6 @@ internal fun PreTestQuestions(kind: String, subjectId: String, initial: Map<Stri
     val typography = LocalEyeTypography.current
     var answers by remember(subjectId) { mutableStateOf(initial) }
     val requester = remember { BringIntoViewRequester() }
-    LaunchedEffect(subjectId) { requester.bringIntoView() }
     Column(
         Modifier.fillMaxWidth().bringIntoViewRequester(requester).eyeGlass(colors, EyeShapes.panel).padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),

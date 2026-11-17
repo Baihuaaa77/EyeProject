@@ -91,7 +91,7 @@ class ChatViewModel @Inject constructor(private val chat: ChatRepository) : View
 }
 
 /** 对话页标题（两端一致）；首页入口是爱科卡（见 HomeScreen 的 EyechoCard）。 */
-internal const val CHAT_TITLE = "AI 主动问诊"
+internal const val CHAT_TITLE = "AI问诊"
 
 /**
  * 「AI 主动问诊」对话页：由爱尔眼科数字人「爱科 Eyecho」主持。顶部是爱科的自我介绍，接着是今天的综合建议卡片，
@@ -105,6 +105,7 @@ fun EyeChatScreen(
     home: HomeViewModel = hiltViewModel(),
     viewModel: ChatViewModel = hiltViewModel(),
 ) {
+    var referenceOpen by rememberSaveable { mutableStateOf(false) }
     val homeState by home.uiState.collectAsStateWithLifecycle()
     val card by home.aiAdvice.collectAsStateWithLifecycle()
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -116,8 +117,13 @@ fun EyeChatScreen(
         onConfirmOptionsChange = viewModel::setConfirmOptionAnswers,
         onClear = viewModel::clear,
     ) {
-        card?.let { AiExplanationCard(it, onGenerate = { home.generateAdvice() }, onAgree = { home.generateAdvice(agreeFirst = true) },
-            text = AiCardText.ADVICE) }
+        EyeButton("今日护眼参考",EyeButtonRole.SECONDARY,{ referenceOpen = true },Modifier.fillMaxWidth())
+    }
+    if (referenceOpen) com.zkyjss.eyeproject.core.ui.component.EyeFullScreenPage({ referenceOpen = false }) {
+        EyeSubPage("今日护眼参考",{ referenceOpen = false }) {
+            card?.let { AiExplanationCard(it,onGenerate = { home.generateAdvice() },onAgree = { home.generateAdvice(agreeFirst = true) },text = AiCardText.ADVICE) }
+            EyeText("结合已授权的用眼记录、感受与自测结果生成。医学参考仅用于健康教育；风险等级由自测规则决定，不能替代眼科检查。",style = LocalEyeTypography.current.bodySecondary,color = LocalEyeColors.current.textSecondary)
+        }
     }
 }
 

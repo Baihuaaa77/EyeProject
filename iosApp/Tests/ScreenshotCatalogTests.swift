@@ -123,6 +123,10 @@ final class ScreenshotCatalogTests: XCTestCase {
             for (tag, cm) in [("太近了", 20.0), ("太远了", 52.0)] {
                 try await testShot("75-眼位-注视-" + tag, "STRABISMUS", "FIXATION", dark, values: ["distanceCm": cm])
             }
+            try await testShot("75a-眼位-距离超限中断", "STRABISMUS", "FIXATION", dark,
+                values: ["distanceCm": 45,"distanceZone": 1,"stabilityInterrupted": true,"stabilityReason": "距离太远，请将手机移到约33厘米","stabilityReady": false])
+            try await testShot("75b-眼位-恢复后重做本段", "STRABISMUS", "FIXATION", dark,
+                values: ["distanceCm": 33,"distanceZone": 0,"stabilityInterrupted": true,"stabilityReason": "距离与位置已稳定，请重新开始本段","stabilityReady": true])
             try await testShot("76-眼位-看远准备", "STRABISMUS", "FAR_FIXATION", dark, values: ["farWaiting": true])
             try await testShot("77-眼位-看远计时", "STRABISMUS", "FAR_FIXATION", dark, values: ["farWaiting": false, "secondsLeft": 7])
             for selfCover in [false, true] {
@@ -135,7 +139,7 @@ final class ScreenshotCatalogTests: XCTestCase {
                     values: ["coverDone": index + 1, "coverHolding": true, "coverCurrent": label, "coverNext": coverSteps[min(index + 1, 8)],
                              "coverPrompt": label, "coverHoldMs": index < 4 ? 2000 : 1000, "coverRemainingMs": 650])
             }
-            try await testShot("80-眼位-等待相机确认遮盖", "STRABISMUS", "COVER", dark, values: ["coverHolding": false, "coverNext": "遮右眼", "coverPrompt": "请协助者遮住右眼"])
+            try await testShot("80-眼位-等待相机确认遮盖", "STRABISMUS", "COVER", dark, values: ["coverHolding": false, "coverNext": "遮右眼", "coverPrompt": "请自己遮住右眼"])
             try await testShot("81-眼位-追踪演示", "STRABISMUS", "PURSUIT", dark,
                 values: ["guidePending": true, "stepTitle": "追踪移动目标", "guideText": "只用眼睛跟随移动的圆点，头和手机保持不动。"])
             try await testShot("82-眼位-追踪移动目标", "STRABISMUS", "PURSUIT", dark)

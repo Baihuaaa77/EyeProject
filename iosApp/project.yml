@@ -7,8 +7,8 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "0.1.0"
-    CURRENT_PROJECT_VERSION: "1"
+    MARKETING_VERSION: "0.2.0"
+    CURRENT_PROJECT_VERSION: "2"
     FRAMEWORK_SEARCH_PATHS: "$(inherited) $(SRCROOT)/../shared/screening/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)"
     OTHER_LDFLAGS: "$(inherited) -framework EyeScreening -lc++"
 targets:
@@ -18,6 +18,12 @@ targets:
     sources:
       - Sources
       - path: ../core/camera/src/main/assets/face_landmarker.task
+        buildPhase: resources
+      - path: ../core/designsystem/src/main/res/font/eye_noto_regular.ttf
+        buildPhase: resources
+      - path: ../core/designsystem/src/main/res/font/eye_noto_semibold.ttf
+        buildPhase: resources
+      - path: ../core/designsystem/src/main/assets/fonts/OFL-NotoSansSC.txt
         buildPhase: resources
       - path: ../core/designsystem/src/main/res/font/nunito_black.ttf
         buildPhase: resources
@@ -48,7 +54,7 @@ targets:
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
           NSAllowsArbitraryLoads: true
-        UIAppFonts: [nunito_black.ttf]
+        UIAppFonts: [nunito_black.ttf, eye_noto_regular.ttf, eye_noto_semibold.ttf]
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
         ITSAppUsesNonExemptEncryption: false

@@ -41,7 +41,17 @@ internal class ScreeningResultWriter(private val host: ScreeningEngine) {
             recordScope.launch(recordDispatcher) {
                 runCatching {
                     val data = RecordObject().apply {
-                        put("protocolVersion", if (s.kind == ScreeningKind.STRABISMUS) 7 else 4)
+                        put("protocolVersion", if (s.kind == ScreeningKind.STRABISMUS) 8 else 4)
+                        if (s.kind == ScreeningKind.STRABISMUS) {
+                            put("stimulusSource", "screen-white-dot-v1")
+                            put("acquisitionVersion", "iris-stability-distance-1")
+                            put("opticsAlgorithm", "screen-point-baseline-60-area-lid-v1")
+                            put("sourceIdentityVerified", false)
+                            put("stabilityInterruptions", s.stabilityInterruptions)
+                            put("stabilityEvents", RecordArray(s.stabilityEvents.map { event -> RecordObject().apply {
+                                put("step",event.step.name); put("timeMs",event.timeMs); put("reason",event.reason); put("distanceCm",event.distanceCm)
+                            } }))
+                        }
                         if (s.kind == ScreeningKind.STRABISMUS) put("coverDetectionVersion", "camera-cover-2")
                         if (s.kind == ScreeningKind.STRABISMUS) {
                             put("gazeCalibrated", s.gazeCalibrated)
@@ -76,6 +86,8 @@ internal class ScreeningResultWriter(private val host: ScreeningEngine) {
                         put("lightSensorAvailable", s.lightSensorAvailable ?: RecordObject.NULL)
                         put("cameraBrightness", s.cameraBrightness?.toDouble() ?: RecordObject.NULL)
                         put("cameraFrames", s.cameraFrames)
+                        put("cameraImageWidth",s.cameraSourceWidth); put("cameraImageHeight",s.cameraSourceHeight)
+                        put("analysisFpsAtFinish",s.analysisFps)
                         put("opticalValidFrames", s.opticalValidFrames)
                         put("opticalIrisReferenceFrames", capturedIrisReferenceFrames)
                         put("opticalRejectionCounts", RecordObject(s.opticalRejectionCounts))

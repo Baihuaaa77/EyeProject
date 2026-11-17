@@ -78,7 +78,9 @@ internal const val SERVER_HELP = "默认是课题组的服务器，一般不用�
  * 分项同意、立即同步与导出在「我的 → 云端同步」。与苹果端 AccountPage 同一排版与文案。
  */
 @Composable
-fun AccountScreen(onBack: () -> Unit, onOpenCloudSync: () -> Unit, viewModel: AccountViewModel = hiltViewModel()) {
+fun AccountScreen(onBack: () -> Unit, onOpenCloudSync: () -> Unit, onEditSubject: (String?) -> Unit = {}, viewModel: AccountViewModel = hiltViewModel()) {
+    val people by viewModel.people.collectAsStateWithLifecycle()
+    val self = people.firstOrNull { it.relation == "SELF" }
     val account by viewModel.account.collectAsStateWithLifecycle()
     val busy by viewModel.busyState.collectAsStateWithLifecycle()
     val message by viewModel.messageState.collectAsStateWithLifecycle()
@@ -86,7 +88,7 @@ fun AccountScreen(onBack: () -> Unit, onOpenCloudSync: () -> Unit, viewModel: Ac
     val haptics = rememberEyeHaptics()
     LaunchedEffect(outcome?.id) { outcome?.let { if (it.success) haptics.success() else haptics.failure() } }
     AccountContent(account, busy, message, AccountActions(viewModel::signIn, viewModel::register, viewModel::signOut,
-        viewModel::deleteCloudAccount, viewModel::setServer), onBack, onOpenCloudSync)
+        viewModel::deleteCloudAccount, viewModel::setServer), onBack, onOpenCloudSync, self?.nickname ?: "小林", { onEditSubject(self?.id) })
 }
 
 @Composable
@@ -97,8 +99,12 @@ internal fun AccountContent(
     actions: AccountActions,
     onBack: () -> Unit,
     onOpenCloudSync: () -> Unit = {},
+    nickname: String = "小林",
+    onEditProfile: () -> Unit = {},
 ) {
-    EyeSubPage("账户", onBack) {
+    EyeSubPage("我的账户", onBack) {
+        com.zkyjss.eyeproject.core.ui.component.EyeListRow(nickname,onEditProfile,subtitle = "我的资料",divider = false)
+        com.zkyjss.eyeproject.core.ui.component.EyeDisclosure("登录与账号管理") {
         AccountHeader(account)
         when {
             account == null -> Unit
@@ -110,6 +116,7 @@ internal fun AccountContent(
             else -> SignedInGroups(account, busy, message, actions, onOpenCloudSync)
         }
         if (account != null && !account.cloudConfigured && message != null) Note(message)
+        }
     }
 }
 

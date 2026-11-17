@@ -7,7 +7,7 @@ internal data class GuideScene(val motion: GuideMotion, val cycleMs: Int, val be
 internal enum class GuidePose { OPEN, BLINK, LEFT, RIGHT, LIGHTING_OPEN, LIGHTING_LEFT, LIGHTING_RIGHT, SIDE_FAR, SIDE_NEAR }
 
 internal fun guideScene(motion: GuideMotion): GuideScene = when (motion) {
-    GuideMotion.LIGHTING -> GuideScene(motion, 5000, listOf(GuideBeat(0f, "① 手机固定在支架上，正对双眼"), GuideBeat(0.35f, "② 协助者在手机旁打光"), GuideBeat(0.7f, "③ 本人按提示遮眼，不压眼球")), 0.5f)
+    GuideMotion.LIGHTING -> GuideScene(motion, 5000, listOf(GuideBeat(0f, "① 手机固定在支架上，正对双眼"), GuideBeat(0.35f, "② 屏幕白点提供映光"), GuideBeat(0.7f, "③ 本人按提示遮眼，不压眼球")), 0.5f)
     GuideMotion.REST -> GuideScene(motion, 4000, listOf(GuideBeat(0f, "① 轻轻闭眼，放松休息"), GuideBeat(0.5f, "② 倒计时结束后再睁眼")), 0.5f)
     GuideMotion.POSTURE -> GuideScene(motion, 5200, listOf(GuideBeat(0.0f, "① 正对屏幕，露出双眼"), GuideBeat(0.25f, "② 前后微调到提示的距离"), GuideBeat(0.6f, "③ 光线均匀，避免逆光")), 0.7f)
     GuideMotion.BLINK -> GuideScene(motion, 4200, listOf(GuideBeat(0.0f, "① 正对屏幕，保持放松"), GuideBeat(0.15f, "② 像平时一样自然眨眼"), GuideBeat(0.55f, "③ 应用自动记录眨眼")), 0.6f)
@@ -15,7 +15,7 @@ internal fun guideScene(motion: GuideMotion): GuideScene = when (motion) {
     GuideMotion.NEAR -> GuideScene(motion, 5600, listOf(GuideBeat(0.0f, "① 用手掌遮住左眼（不压眼球）"), GuideBeat(0.2f, "② 用右眼看 E 的开口方向"), GuideBeat(0.28f, "③ 点选对应方向；之后换眼再做")), 0.35f)
     GuideMotion.MOVE -> GuideScene(motion, 7600, listOf(GuideBeat(0.0f, "① 从 45 cm 外开始，看着 E"), GuideBeat(0.15f, "② 慢慢移近（每秒不超过 5 cm）"), GuideBeat(0.6f, "③ E 一开始持续模糊就点按，记录近点")), 0.66f)
     GuideMotion.SWITCH -> GuideScene(motion, 6400, listOf(GuideBeat(0.0f, "① 远处停稳，点选 E 的开口"), GuideBeat(0.15f, "② 移近停稳，再点选一次"), GuideBeat(0.55f, "③ 移远，远近交替进行")), 0.45f)
-    GuideMotion.FIXATE -> GuideScene(motion, 4000, listOf(GuideBeat(0.0f, "① 看着屏幕上方闪烁的圆点"), GuideBeat(0.45f, "② 头和手机都保持不动")), 0.5f)
+    GuideMotion.FIXATE -> GuideScene(motion, 4000, listOf(GuideBeat(0.0f, "① 看着屏幕上方的白色亮点"), GuideBeat(0.45f, "② 头和手机都保持不动")), 0.5f)
     GuideMotion.FAR -> GuideScene(motion, 5200, listOf(GuideBeat(0.0f, "① 手机留在眼前约 33 cm，略低于视线"), GuideBeat(0.3f, "② 眼睛越过手机，看 6 米外的目标"), GuideBeat(0.65f, "③ 看约 10 秒，头和手机都不动")), 0.5f)
     GuideMotion.COVER_SELF -> GuideScene(motion, 12000, listOf(GuideBeat(0.0f, "① 遮右眼 2 秒 → 移开，双眼注视 2 秒"), GuideBeat(0.3333333333333333f, "② 遮左眼 2 秒 → 移开，双眼注视 2 秒"), GuideBeat(0.6666666666666666f, "③ 右眼、左眼各遮 1 秒，快速交替两轮")), 0.12f)
     GuideMotion.COVER -> GuideScene(motion, 12000, listOf(GuideBeat(0.0f, "① 遮右眼 2 秒 → 移开，双眼注视 2 秒"), GuideBeat(0.3333333333333333f, "② 遮左眼 2 秒 → 移开，双眼注视 2 秒"), GuideBeat(0.6666666666666666f, "③ 右眼、左眼各遮 1 秒，快速交替两轮")), 0.12f)
@@ -29,13 +29,13 @@ internal fun guideScene(motion: GuideMotion): GuideScene = when (motion) {
 internal fun guidePoseAt(motion: GuideMotion, phase: Float): GuidePose {
     val p = phase.coerceIn(0f, 0.999999f)
     if (motion == GuideMotion.REST) return GuidePose.BLINK
-    if (motion == GuideMotion.LIGHTING) return GuidePose.LIGHTING_OPEN
+    if (motion == GuideMotion.LIGHTING) return GuidePose.OPEN
     if (motion == GuideMotion.COVER || motion == GuideMotion.COVER_SELF) {
         val second = (p * 12).toInt()
         val pose = when (second) {
-            0, 1, 8, 10 -> GuidePose.LIGHTING_RIGHT
-            4, 5, 9, 11 -> GuidePose.LIGHTING_LEFT
-            else -> GuidePose.LIGHTING_OPEN
+            0, 1, 8, 10 -> GuidePose.RIGHT
+            4, 5, 9, 11 -> GuidePose.LEFT
+            else -> GuidePose.OPEN
         }
         return pose
     }
@@ -58,9 +58,9 @@ internal fun guidePoseAt(motion: GuideMotion, phase: Float): GuidePose {
 internal fun guidePoseLabel(pose: GuidePose) = when (pose) {
     GuidePose.LEFT -> "遮左眼"
     GuidePose.RIGHT -> "遮右眼"
-    GuidePose.LIGHTING_LEFT -> "本人遮左眼 · 协助者打光"
-    GuidePose.LIGHTING_RIGHT -> "本人遮右眼 · 协助者打光"
-    GuidePose.LIGHTING_OPEN -> "双眼注视 · 协助者打光"
+    GuidePose.LIGHTING_LEFT -> "本人遮左眼 · 屏幕映光"
+    GuidePose.LIGHTING_RIGHT -> "本人遮右眼 · 屏幕映光"
+    GuidePose.LIGHTING_OPEN -> "双眼注视 · 屏幕映光"
     GuidePose.SIDE_FAR -> "自己遮左眼 · 从远处开始"
     GuidePose.SIDE_NEAR -> "保持遮眼 · 慢慢移近手机"
     GuidePose.BLINK -> "自然眨眼"

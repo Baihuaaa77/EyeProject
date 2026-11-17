@@ -93,8 +93,8 @@ internal fun summary(s: SubjectProfile, nowMs: Long = System.currentTimeMillis()
     listOfNotNull(SubjectProfiles.relationLabel(s.relation), SubjectProfiles.age(s.fields, nowMs)?.let { "$it 岁" },
         "资料待完善".takeIf { s.fields.values.none { it.isNotBlank() } }).joinToString(" · ")
 
-/** 本人资料的完善程度（年龄、职业、视力、眼病史、性别）：已填项数 / 5。 */
+/** 本人资料的完善程度（称呼、出生年份、性别、戴镜）：已填项数 / 4。 */
 internal fun profileCompleteness(s: SubjectProfile?): Int {
     val f = s?.fields ?: return 0
-    return listOf(f["出生年份"], f["职业"], f["基础视力"] ?: f["日常矫正方式"], f["既往眼病"], f["性别"]).count { !it.isNullOrBlank() }
+    return listOf(s.nickname, f["出生年份"], f["日常矫正方式"], f["性别"]).count { !it.isNullOrBlank() }
 }

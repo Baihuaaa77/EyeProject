@@ -47,7 +47,7 @@ final class GuideAssetsTests: XCTestCase {
 
     func testHelpAndCompletionViewsRender() async throws {
         for dark in [false, true] {
-            let help = TestHelpView(motion: .coverSelf, title: "交替遮盖", cue: "本人按提示遮眼，协助者在手机旁打光。", onClose: {})
+            let help = TestHelpView(motion: .coverSelf, title: "交替遮盖", cue: "本人按提示遮眼，屏幕白点提供映光。", onClose: {})
             let helpImage = try await windowImage(help, dark: dark)
             XCTAssertGreaterThan(try skinPixels(helpImage, minX: 0, maxX: helpImage.cgImage!.width), 500)
             attach(helpImage, name: "当前环节问号-\(dark ? "深色" : "浅色")")

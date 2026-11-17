@@ -3,11 +3,20 @@ package com.zkyjss.eyeproject.feature.services
 /** 仅提供行动提示；开始、呈现和作答仍由原测量门控判断。 */
 fun screeningGuidance(s: ScreeningState): String? {
     if (s.step == ScreeningStep.PROFILE || s.step == ScreeningStep.RESULT || s.guidePending) return null
-    // 遮盖阶段单眼不可见是预期情况，不提示用户移开遮盖。
-    if (s.step == ScreeningStep.COVER) return null
+    if (s.stabilityInterrupted) return s.stabilityReason
+    // 遮盖阶段仍使用未遮眼测距；单眼不可见本身不要求用户移开手掌。
+    if (s.step == ScreeningStep.COVER) {
+        if (s.distanceCm<=0f) return "请露出未遮眼并保持手机稳定"
+        val target = screeningDistanceTarget(s) ?: return null
+        return when {
+            s.distanceCm<target.first-target.second -> "太近了，请把手机往远处移"
+            s.distanceCm>target.first+target.second -> "太远了，请把手机靠近一点"
+            else -> null
+        }
+    }
     val monocular = s.step == ScreeningStep.NEAR_VISION && s.visionEye != VisionEye.BOTH
     if ((!s.faceDetected && !monocular) || !s.distanceCm.isFinite() || s.distanceCm <= 0f) return "请正对屏幕"
-    if (s.lux != null && s.lux < 50f) return "请增加光照"
+    if (s.kind != ScreeningKind.STRABISMUS && s.lux != null && s.lux < 50f) return "请增加光照"
     // 看远时手机放在视线下方，相机看到的俯仰本来就大一些
     val pitchLimit = if (s.step == ScreeningStep.FAR_FIXATION) StrabismusProtocol.FAR_PITCH_LIMIT_DEG + 5f else 15f
     s.headPose?.let { pose -> if (kotlin.math.abs(pose.yawDeg) > 15f || kotlin.math.abs(pose.pitchDeg) > pitchLimit) return "请把头摆正" }
@@ -30,7 +39,8 @@ fun screeningGuidance(s: ScreeningState): String? {
 
 /** 当前步骤要求的（目标距离, 容差）；移近法、遮盖、问卷与结果页不做距离约束时返回 null。 */
 fun screeningDistanceTarget(s: ScreeningState): Pair<Float, Float>? = when (s.step) {
-    ScreeningStep.PROFILE, ScreeningStep.RESULT, ScreeningStep.PUSH_UP, ScreeningStep.COVER -> null
+    ScreeningStep.PROFILE, ScreeningStep.RESULT, ScreeningStep.PUSH_UP -> null
+    ScreeningStep.COVER -> if (s.kind == ScreeningKind.STRABISMUS) StrabismusProtocol.DISTANCE_CM to StrabismusProtocol.DISTANCE_TOLERANCE_CM else null
     ScreeningStep.FLIPPER -> (if (s.trialIndex % 2 == 0) PresbyopiaProtocol.FLIPPER_FAR_CM else PresbyopiaProtocol.FLIPPER_NEAR_CM) to
         PresbyopiaProtocol.DISTANCE_TOLERANCE_CM
     ScreeningStep.DISTANCE_CURVE -> PresbyopiaProtocol.CURVE_DISTANCES.getOrElse(s.curveIndex) { 40f } to PresbyopiaProtocol.DISTANCE_TOLERANCE_CM

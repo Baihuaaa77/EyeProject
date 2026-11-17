@@ -28,9 +28,9 @@ fun guideCue(step: ScreeningStep) = when (step) {
     ScreeningStep.PUSH_UP -> "遮住一只眼，从 45 cm 外看着 E，每秒移近一两厘米；E 模糊后停一下，仍看不清就点按。每只眼做 3 次"
     ScreeningStep.DISTANCE_CURVE -> "依次在 67、50、33 cm 停稳，看 E 选方向，记录不同距离下的视力"
     ScreeningStep.FLIPPER -> "可选，约 1 分钟：先在 50 cm 和 25 cm 各看清一次 E，再来回移动手机，停稳后点选开口方向"
-    ScreeningStep.FIXATION -> "先依次看着九个圆点完成约 18 秒注视校准，再看屏幕上方闪烁的圆点 12 秒，头和手机保持不动"
+    ScreeningStep.FIXATION -> "先依次看着九个圆点完成约 18 秒注视校准，再看屏幕上方的白色亮点 12 秒，头和手机保持不动"
     ScreeningStep.FAR_FIXATION -> "在 6 米外找一个目标（门、窗或墙上的画）。手机留在眼前约 33 cm、略低于视线，" +
-        "眼睛越过手机看着目标约 10 秒，头和手机不动；协助者在手机旁保持光源稳定"
+        "眼睛越过手机看着目标约 10 秒，头和手机不动；屏幕白点提供映光，保持手机约33厘米"
     ScreeningStep.COVER -> "按提示遮右眼、移开、遮左眼、移开，再左右交替；不压眼球、不挡摄像头，相机自动识别动作，无需点屏幕"
     ScreeningStep.PURSUIT -> "只用眼睛跟随移动的圆点：水平、垂直、斜向各一段，头保持不动"
     else -> "正对屏幕，保持光线均匀"
@@ -42,4 +42,4 @@ fun usesSelfCover(fields: Map<String, String>): Boolean = true
 @Suppress("UNUSED_PARAMETER")
 fun coverGuideCue(fields: Map<String, String>): String =
     "请自己按提示遮盖单眼：遮右、移开、遮左、移开，再左右交替；不压眼球、不挡摄像头，相机自动识别，无需点屏幕。" +
-        "协助者负责在手机旁打光，让双眼光照均匀。"
+        "屏幕白点提供映光，保持约33厘米；距离或位置变化时须重做本段。"

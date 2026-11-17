@@ -6,6 +6,10 @@ import androidx.compose.ui.graphics.Color
 
 /** 用户棕色参考稿的材质令牌，业务页面只消费这些画刷。 */
 object EyeBrown {
+    val feelingComfort = Color(0xFFC9D6A5)
+    val feelingDry = Color(0xFFEFCDA0)
+    val feelingSore = Color(0xFFEBB4AC)
+    val feelingTired = Color(0xFFC8B9DD)
     val warm = Color(0xFFEFB285)
     val peach = Color(0xFFF6A267)
     val sage = Color(0xFFB6C6B3)

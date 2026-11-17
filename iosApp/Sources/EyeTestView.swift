@@ -12,6 +12,7 @@ struct EyeTestView: View {
     @State private var helpOpen = false
     @State private var suspended = false
     @State private var confirmingExit = false
+    @State private var darkControlsHeight: CGFloat = 230
     init(kind: String) { _runtime = StateObject(wrappedValue: EyeRuntime(kind: kind)) }
 #if SCREENSHOT_CAPTURE
     private var captureOnly = false
@@ -28,6 +29,8 @@ struct EyeTestView: View {
 #endif
 
     var body: some View {
+        Group {
+        if isGazeTask { darkGazeSession } else {
         VStack(spacing: 0) {
             TestTopBar(title: runtime.string("title").isEmpty ? "眼健康自测" : runtime.string("title"),
                 onBack: { if needsExitConfirm { confirmingExit = true } else { runtime.close(); dismiss() } },
@@ -69,6 +72,8 @@ struct EyeTestView: View {
                 TestDistanceBanner(runtime: runtime).padding(.horizontal, 16).padding(.bottom, 8)
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
+        }
+        }
         }.foregroundStyle(EyeStyle.text).tint(EyeStyle.primary)
             .overlay {
                 if confirmingExit {
@@ -110,6 +115,7 @@ struct EyeTestView: View {
                 runtime.close(); UIApplication.shared.isIdleTimerDisabled = previousIdleDisabled
                 if let value = brightness { UIScreen.main.brightness = value }
             }
+            .onChange(of: phase) { _ in UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),to: nil,from: nil,for: nil) }
             .onChange(of: scenePhase) { phase in
 #if SCREENSHOT_CAPTURE
                 guard !captureOnly else { return }
@@ -123,6 +129,44 @@ struct EyeTestView: View {
                     if suspended { suspended = false; runtime.resume() }
                 }
             }
+    }
+    private var darkStageCaption: String {
+        runtime.bool("stabilityInterrupted") ? "本段已中断" : phase == "GAZE_CALIBRATION"
+                     ? "注视白点 · \(Int(runtime.number("gazeCalibrationIndex")) + 1)/9"
+                     : phase == "COVER" ? runtime.string("coverPrompt")
+                     : phase == "FAR_FIXATION" ? "越过手机看6米外 · \(Int(runtime.number("secondsLeft")))秒"
+                     : "\(Int(runtime.number("secondsLeft")))秒"
+    }
+    private var darkGazeSession: some View {
+        ZStack(alignment: .bottom) {
+            EyeStyle.reflectionBackground.ignoresSafeArea()
+            GazeTargetView(runtime: runtime, pixelsPerMm: pixelsPerMm)
+                .padding(.bottom, darkControlsHeight)
+            VStack(alignment: .leading, spacing: 8) {
+                Text(darkStageCaption)
+                    .font(EyeStyle.subtitle).foregroundStyle(EyeStyle.reflectionTarget)
+                if runtime.bool("stabilityInterrupted") {
+                    Text(runtime.string("stabilityReason")).font(EyeStyle.body).foregroundStyle(EyeStyle.testTooClose)
+                    Button(runtime.bool("stabilityReady") ? "已稳定，重新开始本段" : "请回到原位并保持稳定") { runtime.act("restartStableStage") }
+                        .buttonStyle(EyeButtonStyle()).disabled(!runtime.bool("stabilityReady"))
+                    Button("重新开始整个测试") { runtime.act("restart") }.buttonStyle(EyeButtonStyle(role: .secondary))
+                } else if runtime.bool("farWaiting") {
+                    Button("已在看远处，开始") { runtime.act("farStart") }.buttonStyle(EyeButtonStyle())
+                } else if runtime.bool("gazeCalibrationFailed") {
+                    Button("重试注视校准") { runtime.act("calibrate") }.buttonStyle(EyeButtonStyle())
+                } else if runtime.bool("coverRetryAvailable") {
+                    Button("重新识别本段") { runtime.act("retryCover") }.buttonStyle(EyeButtonStyle(role: .secondary))
+                }
+                TestDistanceBanner(runtime: runtime)
+                HStack {
+                    Button("退出") { confirmingExit = true }
+                    Spacer()
+                    Button("说明") { runtime.setHelpPresented(true); helpOpen = true }
+                    Spacer()
+                    Button("设置") { settingsOpen = true }
+                }.font(EyeStyle.body).padding(.vertical, 8)
+            }.padding(16).background(GeometryReader { geometry in Color.clear.preference(key: DarkControlsHeight.self,value: geometry.size.height) })
+        }.onPreferenceChange(DarkControlsHeight.self) { darkControlsHeight = $0 }
     }
     private var pageContent: some View {
         VStack(spacing: EyeStyle.spacing) {
@@ -180,9 +224,9 @@ struct EyeTestView: View {
                 Text("建议佩戴最佳矫正视力眼镜进行测试").font(EyeStyle.body).frame(maxWidth: .infinity, alignment: .leading)
                     .padding(14).background(EyeStyle.accentSoft, in: RoundedRectangle(cornerRadius: EyeStyle.radiusMedium))
             }
-            TestGuideView(motion: runtime.kind == "STRABISMUS" ? .lighting : .posture, title: runtime.kind == "DRY_EYE" ? "调整姿势 · 约 40 cm" : "调整姿势",
+            TestGuideView(motion: runtime.kind == "STRABISMUS" ? .fixate : .posture, title: runtime.kind == "DRY_EYE" ? "调整姿势 · 约 40 cm" : "调整姿势",
                 cue: runtime.kind == "DRY_EYE" ? "正对屏幕，手机距离眼睛约 40 厘米，光线均匀"
-                    : runtime.kind == "STRABISMUS" ? "正对屏幕，约 33 厘米；本人按提示遮眼，请协助者在手机旁打光" : "正对屏幕，约 40 厘米")
+                    : runtime.kind == "STRABISMUS" ? "正对屏幕，约 33 厘米；本人按提示遮眼，请屏幕白点提供映光" : "正对屏幕，约 40 厘米")
             Button("开始测试") { runtime.act("begin") }.buttonStyle(EyeButtonStyle())
             Button("重试相机") { runtime.act("retryCamera") }.buttonStyle(EyeButtonStyle(role: .secondary))
             DisclosureGroup("测距校准") {
@@ -450,7 +494,7 @@ private struct FarFixationPanel: View {
             } else {
                 Text("\(seconds)").font(EyeStyle.headline).monospacedDigit().foregroundStyle(.white)
                 Text("眼睛越过手机，看着远处的目标").font(EyeStyle.subtitle).foregroundStyle(.white).multilineTextAlignment(.center)
-                Text("协助者保持打光稳定；本人看远处，头和手机不动").font(EyeStyle.bodySecondary).foregroundStyle(.white.opacity(0.72))
+                Text("保持屏幕白点常亮；本人看远处，头和手机不动").font(EyeStyle.bodySecondary).foregroundStyle(.white.opacity(0.72))
                     .multilineTextAlignment(.center)
             }
         }
@@ -499,38 +543,28 @@ private struct GazeTargetView: View {
         GeometryReader { geometry in
             let size = geometry.size
             let phase = runtime.string("phase")
-            TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: phase != "PURSUIT")) { _ in
+            TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: phase != "PURSUIT" || runtime.bool("stabilityInterrupted"))) { _ in
                 let trajectory = runtime.controller.pursuitTargetNow()
                 let point = target(in: size, trajectory: CGPoint(x: CGFloat(trajectory.x), y: CGFloat(trajectory.y)))
                 ZStack(alignment: .topLeading) {
-                    // 测试画布恒为白底（与安卓一致，深色模式下也保持高对比）
-                    Color.white
-                    if phase == "GAZE_CALIBRATION" {
-                        // 补测轮重看同一点时编号变化，外圈动效重播。
-                        CalibrationDot(index: Int(runtime.number("gazeCalibrationIndex") + runtime.number("gazeCalibrationRound") * 100))
-                            // 暂停时圆点变淡：位置不变，提示受试者校准在等待
-                            .opacity(runtime.bool("calibrationPaused") ? 0.35 : 1).position(point)
-                    } else {
-                        let width = phase == "PURSUIT" ? CGFloat(10 * pixelsPerMm) / UIScreen.main.scale : CGFloat(runtime.number("targetDiameterMm") * Double(pixelsPerMm)) / UIScreen.main.scale
-                        // 与安卓一致：准星外环即目标包络（跟随为原 1 cm），中心即上报的目标位置；固定深蓝保证白底对比。
-                        Canvas { ctx, size in
-                            Cartoon.fixationTarget(ctx, center: CGPoint(x: size.width / 2, y: size.height / 2), size: min(size.width, size.height), color: EyeStyle.fixedPrimary)
-                        }.frame(width: width, height: width)
-                            .opacity(phase == "FIXATION" && runtime.number("targetX") <= 0 ? 0.3 : 1).position(point)
-                    }
-                }.clipShape(RoundedRectangle(cornerRadius: EyeStyle.radius))
+                    EyeStyle.reflectionBackground
+                    let diameter = phase == "PURSUIT" ? CGFloat(10 * pixelsPerMm) / UIScreen.main.scale : CGFloat(runtime.number("targetDiameterMm") * Double(pixelsPerMm)) / UIScreen.main.scale
+                    Circle().fill(EyeStyle.reflectionTarget).frame(width: diameter, height: diameter).position(point)
+                }
                     .onAppear { report(geometry, point) }
                     .onChange(of: point) { value in report(geometry, value) }
                     .onChange(of: runtime.stateKeyForTarget) { _ in report(geometry, point) }
                     .onChange(of: geometry.frame(in: .global).origin) { _ in report(geometry, point) }
                     .onChange(of: geometry.size) { _ in report(geometry, point) }
             }
-        }.stageHeight(["PURSUIT", "GAZE_CALIBRATION"].contains(runtime.string("phase")) ? EyeStyle.gazeCanvasBaseHeight(UIScreen.main.bounds.height) : 240)
+        }
     }
     private func target(in size: CGSize, trajectory: CGPoint) -> CGPoint {
         if runtime.string("phase") == "GAZE_CALIBRATION" {
             // 点位由共用核心给出，两端一致。
-            return CGPoint(x: size.width * runtime.number("calibrationX"), y: size.height * runtime.number("calibrationY"))
+            let radius = CGFloat(runtime.number("targetDiameterMm") * Double(pixelsPerMm)) / UIScreen.main.scale / 2
+            return CGPoint(x: min(max(radius,size.width * runtime.number("calibrationX")),max(radius,size.width-radius)),
+                           y: min(max(radius,size.height * runtime.number("calibrationY")),max(radius,size.height-radius)))
         }
         if runtime.string("phase") == "PURSUIT" {
             let ppm = Double(pixelsPerMm) / Double(UIScreen.main.scale)
@@ -544,7 +578,7 @@ private struct GazeTargetView: View {
         }
         // 注视、遮盖：目标放在画布顶部、尽量靠近顶部的映光点（专家建议），头顶嫩芽也留在画布内
         let width = CGFloat(runtime.number("targetDiameterMm") * Double(pixelsPerMm)) / UIScreen.main.scale
-        return CGPoint(x: size.width / 2, y: width * 0.6 + 12)
+        return CGPoint(x: size.width / 2, y: width / 2 + 4)
     }
     private func report(_ geometry: GeometryProxy,_ point: CGPoint) {
         let frame = geometry.frame(in: .global), scale = UIScreen.main.scale
@@ -706,4 +740,9 @@ struct ColorPlateCanvas: View {
         .eyeGlass()
         .accessibilityLabel("色觉检测图")
     }
+}
+
+private struct DarkControlsHeight: PreferenceKey {
+    static let defaultValue: CGFloat = 230
+    static func reduce(value: inout CGFloat,nextValue: () -> CGFloat) { value = nextValue() }
 }

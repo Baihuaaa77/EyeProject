@@ -53,10 +53,16 @@ if not guide_loader.exists() or 'UIImage(contentsOfFile:' not in guide_loader.re
     errors.append('iOS must decode shared guide PNG files explicitly')
 if not score_font.exists() or score_font.read_bytes()[:4] != b'\x00\x01\x00\x00':
     errors.append('Missing or invalid bundled score font')
-if '../core/designsystem/src/main/res/font/nunito_black.ttf' not in ios_project or 'UIAppFonts: [nunito_black.ttf]' not in ios_project:
+if '../core/designsystem/src/main/res/font/nunito_black.ttf' not in ios_project or not re.search(r'UIAppFonts: \[[^\]]*nunito_black\.ttf',ios_project):
     errors.append('iOS must bundle and register the shared score font')
 if not (root / 'core/designsystem/src/main/assets/fonts/OFL-Nunito.txt').exists() or '../core/designsystem/src/main/assets/fonts/OFL-Nunito.txt' not in ios_project:
     errors.append('Both platforms must bundle the score font license')
+for name in ('eye_noto_regular.ttf','eye_noto_semibold.ttf'):
+    font = root / 'core/designsystem/src/main/res/font' / name
+    if not font.exists() or font.read_bytes()[:4] != b'\x00\x01\x00\x00' or name not in ios_project:
+        errors.append('V16 shared text font missing: '+name)
+if '../core/designsystem/src/main/assets/fonts/OFL-NotoSansSC.txt' not in ios_project:
+    errors.append('V16 text font license missing from iOS resources')
 expected = '64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff'
 if hashlib.sha256(model.read_bytes()).hexdigest() != expected:
     errors.append('MediaPipe model changed: review both platform fixtures and update model manifest')

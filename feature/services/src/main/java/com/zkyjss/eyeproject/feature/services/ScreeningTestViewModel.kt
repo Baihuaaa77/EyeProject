@@ -34,7 +34,7 @@ class ScreeningTestViewModel @Inject constructor(
     val state get() = engine.state
     fun setHelpPresented(presented: Boolean) = engine.setHelpPresented(presented)
     fun feedbackCues(enabled: Boolean) = platform.feedbackSession.poll(screeningFeedbackFrame(state.value, engine.coverRemainingMs()), platform.nowMs(), enabled)
-    fun configure(kind: ScreeningKind) = engine.configure(kind)
+    fun configure(kind: ScreeningKind) { platform.opticalPrecision = kind == ScreeningKind.STRABISMUS; engine.configure(kind) }
     /** 本人与家庭成员：测试开始时选「这次测谁」，资料在「我的」维护。 */
     val subjects: StateFlow<List<SubjectProfile>> =
         subjectRepository.subjects.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -52,6 +52,7 @@ class ScreeningTestViewModel @Inject constructor(
     fun markPushBlur() = engine.markPushBlur()
     fun markCover() = engine.markCover()
     fun retryCoverDetection() = engine.retryCoverDetection()
+    fun restartStableStage() = engine.restartStableStage()
     fun startFarCountdown() = engine.startFarCountdown()
     fun confirmGuide() = engine.confirmGuide()
     fun confirmGlasses() = engine.confirmGlasses()

@@ -85,6 +85,7 @@ data class NearPoint(
 data class CurvePoint(val distanceCm: Float, val thresholdDecimal: Float?, val resolutionLimited: Boolean = false)
 data class CoverMark(val label: String, val timeMs: Long, val uncovered: VisionEye? = null, val covered: VisionEye? = null,
     val source: String = "MANUAL", val confirmedAtMs: Long = timeMs)
+data class AcquisitionInterruption(val step: ScreeningStep, val timeMs: Long, val reason: String, val distanceCm: Float)
 
 data class ScreeningState(
     val kind: ScreeningKind = ScreeningKind.PRESBYOPIA,
@@ -108,6 +109,9 @@ data class ScreeningState(
     val lightSensorAvailable: Boolean? = null,
     val cameraBrightness: Float? = null,
     val cameraFrames: Int = 0,
+    val cameraSourceWidth: Int = 0,
+    val cameraSourceHeight: Int = 0,
+    val analysisFps: Float = 0f,
     val trackingStatus: String = "等待相机启动",
     val opticalStatus: String = "等待双眼光学测量",
     val opticalValidFrames: Int = 0,
@@ -123,6 +127,12 @@ data class ScreeningState(
     val acceptedFrames: Int = 0,
     val secondsLeft: Int = 0,
     val instruction: String = "",
+    /** 中断期间不计时、不接收本段测量；恢复原位置与合适距离后手动重做本段。 */
+    val stabilityInterrupted: Boolean = false,
+    val stabilityReason: String? = null,
+    val stabilityReady: Boolean = false,
+    val stabilityInterruptions: Int = 0,
+    val stabilityEvents: List<AcquisitionInterruption> = emptyList(),
     val direction: Int = 0,
     val visionLevel: Float = 0.5f,
     val trialIndex: Int = 0,

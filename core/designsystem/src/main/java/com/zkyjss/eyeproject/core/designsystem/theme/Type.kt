@@ -13,7 +13,8 @@ import androidx.compose.ui.unit.sp
  * 数字字体：大号读数、分数、图表数值用等宽数字（tnum），数字跳动时宽度不变。
  * 目前用系统无衬线体；内置 Inter 字体文件后只改这一处。
  */
-val EyeNumberFamily: FontFamily = FontFamily.SansSerif
+val EyeTextFamily = FontFamily(Font(R.font.eye_noto_regular,FontWeight.Normal), Font(R.font.eye_noto_semibold,FontWeight.SemiBold))
+val EyeNumberFamily: FontFamily = EyeTextFamily
 val EyeScoreFamily = FontFamily(Font(R.font.nunito_black, FontWeight.Black))
 
 /** 等宽数字特性（tabular figures）。 */
@@ -48,15 +49,15 @@ data class EyeTypography(
 )
 
 val EyeTypographyDefaults = EyeTypography(
-    label = TextStyle(fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.SemiBold,
+    label = TextStyle(fontFamily = EyeTextFamily, fontWeight = FontWeight.SemiBold,
         fontSize = 13.sp, lineHeight = 20.sp),
-    navigationTitle = TextStyle(fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.SemiBold,
-        fontSize = 15.sp, lineHeight = 22.sp),
+    navigationTitle = TextStyle(fontFamily = EyeTextFamily, fontWeight = FontWeight.SemiBold,
+        fontSize = 18.sp, lineHeight = 26.sp),
     healthScore = TextStyle(fontFamily = EyeScoreFamily, fontWeight = FontWeight.Black, fontSize = 42.sp,
         lineHeight = 68.sp, letterSpacing = (-1.2).sp, fontFeatureSettings = EYE_TABULAR_NUMBERS),
     healthScoreCompact = TextStyle(fontFamily = EyeScoreFamily, fontWeight = FontWeight.Black, fontSize = 36.sp,
         lineHeight = 56.sp, letterSpacing = (-0.96).sp, fontFeatureSettings = EYE_TABULAR_NUMBERS),
-    chatBody = TextStyle(fontFamily = FontFamily.SansSerif, fontSize = 18.sp, lineHeight = 28.sp),
+    chatBody = TextStyle(fontFamily = EyeTextFamily, fontSize = 15.sp, lineHeight = 24.sp),
     display = TextStyle(
         fontFamily = EyeNumberFamily,
         fontWeight = FontWeight.SemiBold,
@@ -74,32 +75,32 @@ val EyeTypographyDefaults = EyeTypography(
         fontFeatureSettings = EYE_TABULAR_NUMBERS
     ),
     headline = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = EyeTextFamily,
         fontWeight = FontWeight.SemiBold,
-        fontSize = 34.sp,
-        lineHeight = 42.sp,
+        fontSize = 32.sp,
+        lineHeight = 40.sp,
         letterSpacing = 0.sp
     ),
     title = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = EyeTextFamily,
         fontWeight = FontWeight.SemiBold,
-        fontSize = 20.sp,
-        lineHeight = 28.sp
+        fontSize = 21.sp,
+        lineHeight = 30.sp
     ),
     subtitle = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = EyeTextFamily,
         fontWeight = FontWeight.SemiBold,
-        fontSize = 17.sp,
-        lineHeight = 24.sp
+        fontSize = 18.sp,
+        lineHeight = 26.sp
     ),
     body = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = EyeTextFamily,
         fontWeight = FontWeight.Normal,
         fontSize = 15.sp,
         lineHeight = 22.sp
     ),
     bodySecondary = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = EyeTextFamily,
         fontWeight = FontWeight.Normal,
         fontSize = 13.sp,
         lineHeight = 20.sp
@@ -113,31 +114,31 @@ val EyeTypographyDefaults = EyeTypography(
         fontFeatureSettings = EYE_TABULAR_NUMBERS
     ),
     unit = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = EyeTextFamily,
         fontWeight = FontWeight.Medium,
-        fontSize = 12.sp,
-        lineHeight = 18.sp
+        fontSize = 13.sp,
+        lineHeight = 20.sp
     ),
     chip = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = EyeTextFamily,
         fontWeight = FontWeight.SemiBold,
         fontSize = 12.sp,
         lineHeight = 18.sp
     ),
     button = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = EyeTextFamily,
         fontWeight = FontWeight.SemiBold,
         fontSize = 15.sp,
         lineHeight = 22.sp
     ),
     caption = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = EyeTextFamily,
         fontWeight = FontWeight.SemiBold,
-        fontSize = 11.sp,
-        lineHeight = 16.sp
+        fontSize = 12.sp,
+        lineHeight = 18.sp
     ),
     tab = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = EyeTextFamily,
         fontWeight = FontWeight.Medium,
         fontSize = 11.sp,
         lineHeight = 14.sp

@@ -154,6 +154,8 @@ enum CloudTexts {
 /// 账户（右上角人像按钮进入的完整页面）：账号概况、登录 / 注册、退出登录、注销账号与服务器地址。
 /// 分项同意、立即同步与导出在「我的 → 云端同步」。与安卓 AccountScreen 同一排版与文案。
 struct AccountPage: View {
+    @ObservedObject private var subjects = SubjectStore.shared
+    var editProfile: (String?) -> Void = { _ in }
     @ObservedObject private var cloud = CloudModel.shared
     let openCloudSync: () -> Void
     @State private var confirmDelete = false
@@ -161,7 +163,10 @@ struct AccountPage: View {
     private var message: String { cloud.string("message") }
 
     var body: some View {
-        SubPage(title: "账户") {
+        SubPage(title: "我的账户") {
+            let selfProfile = subjects.subjects.first { $0.relation == "SELF" }
+            ListRow(title: selfProfile?.displayName ?? "小林",subtitle: "我的资料",divider: false) { editProfile(selfProfile?.id) }
+            DisclosureGroup("登录与账号管理") {
             header
             if !cloud.bool("configured") {
                 ServerCard(cloud: cloud, emphasize: true)
@@ -172,6 +177,7 @@ struct AccountPage: View {
             } else {
                 signedIn
             }
+            }.font(EyeStyle.body)
         }
         .onChange(of: cloud.int("outcomeId")) { _ in if cloud.bool("outcomeOk") { EyeHaptics.success() } else { EyeHaptics.failure() } }
         .onChange(of: confirmDelete) { if $0 { EyeHaptics.failure() } }

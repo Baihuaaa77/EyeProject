@@ -141,8 +141,11 @@ class SharedParityTest {
         advanceTimeBy(StrabismusGaze.calibrationTargets.size * StrabismusGaze.CALIBRATION_POINT_MS); runCurrent()
         assertFalse(engine.state.value.gazeCalibrationFailed)
         advanceTimeBy(StrabismusGaze.calibrationTargets.size * StrabismusGaze.CALIBRATION_POINT_MAX_MS); runCurrent()
-        assertTrue(engine.state.value.gazeCalibrationFailed)
-        engine.retryGazeCalibration(); runCurrent(); engine.interruptTest()
+        assertTrue(engine.state.value.stabilityInterrupted,"断流必须中断，不能靠墙钟完成校准")
+        assertFalse(engine.state.value.gazeCalibrationFailed)
+        engine.retryGazeCalibration(); runCurrent()
+        assertTrue(engine.state.value.stabilityInterrupted,"不能绕过稳定恢复门控")
+        engine.interruptTest()
         advanceTimeBy(30_000); runCurrent()
         assertEquals(ScreeningStep.ENVIRONMENT,engine.state.value.step)
         assertFalse(engine.state.value.gazeCalibrated)
@@ -163,11 +166,15 @@ class SharedParityTest {
         engine.begin(); engine.confirmGuide(); runCurrent()
         assertEquals(ScreeningStep.GAZE_CALIBRATION,engine.state.value.step)
         repeat(40) { frame(false); advanceTimeBy(100); runCurrent() } // 4 秒：旧逻辑 3 秒就换点
-        assertTrue(engine.state.value.gazeCalibrationPaused, "看不到双眼时校准应暂停")
-        assertTrue(engine.state.value.gazeWarning!!.contains("暂停"))
-        assertEquals(0,engine.state.value.gazeCalibrationIndex, "暂停期间不换点")
-        repeat(3) { frame(true); advanceTimeBy(100); runCurrent() }
+        assertTrue(engine.state.value.stabilityInterrupted,"持续丢眼必须中断本段")
+        assertEquals(0,engine.state.value.gazeCalibrationIndex,"中断期间不换点")
+        repeat(12) { frame(true); advanceTimeBy(100); runCurrent() }
+        assertTrue(engine.state.value.stabilityReady)
+        assertTrue(engine.state.value.stabilityInterrupted,"稳定后仍需明确重新开始本段")
+        engine.restartStableStage(); runCurrent()
+        assertFalse(engine.state.value.stabilityInterrupted)
         assertFalse(engine.state.value.gazeCalibrationPaused)
+        assertEquals(0,engine.state.value.gazeCalibrationIndex)
         engine.close()
     }
     @Test fun presbyopiaRoutesFromIntakeAndConfirmsGlassesFirst() = runTest {

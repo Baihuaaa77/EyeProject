@@ -101,9 +101,9 @@ class HomeVisualTest {
         compose.onNodeWithText("今日用眼负荷").assertIsDisplayed()
         compose.onNodeWithText("全部数据  ›").assertIsDisplayed()
         capture("01-首页-首屏")
-        compose.onNodeWithText("按日查看  ›").performScrollTo().performClick()
+        compose.onNodeWithText("查看本周趋势  ›").performScrollTo().performClick()
         assertTrue(trend)
-        compose.onNodeWithText("AI 主动问诊").performScrollTo().performClick()
+        compose.onNodeWithText("AI问诊").performScrollTo().performClick()
         assertTrue(chat)
         compose.onNodeWithText("休息一下").performScrollTo().performClick()
         assertTrue(reminder)
@@ -200,17 +200,25 @@ class HomeVisualTest {
         capture("01b-首页-负荷偏高", advance = false)
     }
 
-    @Test fun checkInRecordsSymptoms() {
+    @Test fun feelingFormRecordsSymptomsAndNote() {
         var saved: List<String>? = null
-        compose.setContent { EyeProjectTheme { HomeContent(demoState(checkIn = false), HomeNavigation(), HomeActions(checkIn = { saved = it })) } }
-        compose.onNodeWithText("今日感受").performScrollTo().performClick()
+        var savedNote = ""
+        var opened by mutableStateOf(true)
+        compose.setContent {
+            // 截图测试关闭光标闪烁，产品中保留系统输入行为。
+            androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalCursorBlinkEnabled provides false) {
+                EyeProjectTheme { if (opened) FeelingPicker(emptyList(),{},onSaveNote = { picked,note -> saved = picked; savedNote = note; opened = false }) }
+            }
+        }
         compose.onNodeWithText("保存").assertIsNotEnabled()
-        compose.onAllNodesWithText("没有不适").onLast().performClick()
-        compose.onAllNodesWithText("眼睛酸胀").onLast().performClick()
-        compose.onNodeWithText("头痛").performClick()
+        compose.onAllNodesWithText("舒适").onLast().performClick()
+        compose.onAllNodesWithText("酸胀").onLast().performClick()
+        compose.onNodeWithText("疲劳").performClick()
+        compose.onNode(hasSetTextAction()).performTextInput("连续用屏后的感受")
         capture("04-首页-今日感受")
         compose.onNodeWithText("保存").performClick()
-        assertEquals(listOf("眼睛酸胀", "头痛"), saved)
+        assertEquals(listOf("眼睛酸胀","眼睛疲劳"),saved)
+        assertEquals("连续用屏后的感受",savedNote)
         compose.onNodeWithText("保存").assertDoesNotExist()
     }
 
@@ -258,14 +266,14 @@ class HomeVisualTest {
     @Test @Config(qualifiers = "zh-rCN-w390dp-h1500dp-mdpi")
     fun trendReport() {
         compose.setContent { EyeProjectTheme { EyeTrendContent(demoState().report, {}) } }
-        compose.onNodeWithText("近 7 天日均用屏").assertExists()
+        compose.onNodeWithText("平均每日用屏").assertExists()
         capture("06-用眼趋势报告")
     }
 
     @Test @Config(qualifiers = "zh-rCN-w390dp-h1500dp-mdpi")
     fun trendReportDark() {
         compose.setContent { EyeProjectTheme(darkTheme = true) { EyeTrendContent(demoState().report, {}) } }
-        compose.onNodeWithText("近 7 天日均用屏").assertExists()
+        compose.onNodeWithText("平均每日用屏").assertExists()
         capture("06b-用眼趋势报告-深色")
     }
 

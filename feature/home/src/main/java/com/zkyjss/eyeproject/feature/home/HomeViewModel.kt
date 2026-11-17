@@ -160,6 +160,8 @@ class HomeViewModel @Inject constructor(
     }
 
     /** 今日感受打卡（闭环「反馈」）。 */
+    fun checkInWithNote(symptoms: List<String>,note: String) { viewModelScope.launch { eyeCare.checkIn(symptoms,note) } }
+    fun careCheckIn(key: String) { viewModelScope.launch { eyeCare.careCheckIn(key) } }
     fun checkIn(symptoms: List<String>) { viewModelScope.launch { eyeCare.checkIn(symptoms) } }
 
     /** AI 综合建议卡片（概况变化时跟着换；同样的概况命中本机缓存）。 */

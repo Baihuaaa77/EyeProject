@@ -18,6 +18,8 @@ struct BrownHomePage: View {
     @ObservedObject private var store = EyeCareStore.shared
     @StateObject private var reminder = EyeReminder()
     @State private var feeling = false
+    @State private var booking = false
+    @State private var careTimer: String?
     @State private var allData = false
     @State private var exercise = false
     @State private var liveRequests = 0
@@ -67,19 +69,21 @@ struct BrownHomePage: View {
                         metric("今日用屏", signal("screen"))
                     }.padding(.top, 4)
                 }
+                HStack(spacing: 10) {
+                    quick("AI问诊",.chat,BrownStyle.consult) { navigate(.chat) }
+                    quick("智能挂号",.document,BrownStyle.feeling) { booking = true }
+                }
                 WarmCard(fill: BrownStyle.trend, spacing: 2) {
                     HStack {
                         Text("本周用眼趋势").font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text)
                         Spacer()
-                        Button { navigate(.trend) } label: { Text("按日查看  ›").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.primary).frame(minHeight: 44) }.buttonStyle(.plain)
+                        Button { feeling = true } label: { Text("记录感受  ›").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.primary).frame(minHeight: 44) }.buttonStyle(.plain)
                     }
-                    TrendRibbon(values: weekScores)
+                    Button { navigate(.trend) } label: { TrendRibbon(values: weekScores) }.buttonStyle(.plain)
+                    Button("查看本周趋势") { navigate(.trend) }.font(EyeStyle.bodySecondary)
                     HStack { ForEach(["周初", "周中", "周末"], id: \.self) { text in Text(text).font(EyeStyle.caption).foregroundStyle(EyeStyle.secondary).frame(maxWidth: .infinity) } }
                 }
-                HStack(spacing: 10) {
-                    quick("AI 主动问诊", .chat, BrownStyle.consult) { navigate(.chat) }
-                    quick("今日感受", .heart, BrownStyle.feeling) { feeling = true }
-                }
+                companionCheckIns
                 WarmCard(padding: 14) {
                     LiveEyeSection(startRequests: liveRequests)
                     Rectangle().fill(EyeStyle.borderSubtle).frame(height: 1)
@@ -107,12 +111,41 @@ struct BrownHomePage: View {
                     .toolbar { ToolbarItem(placement: .navigationBarLeading) { Button("关闭") { allData = false } } }
             }
         }
+        .fullScreenCover(isPresented: Binding(get: { careTimer != nil },set: { if !$0 { careTimer = nil } })) {
+            companionTimerPage
+        }
+        .sheet(isPresented: $booking) {
+            VStack(alignment: .leading,spacing: 20) {
+                HStack { Text("智能挂号").font(EyeStyle.title); Spacer(); Button("关闭") { booking = false } }
+                Text("预约服务尚未接入，当前仅供预览挂号入口。").font(EyeStyle.body)
+                Button("返回首页") { booking = false }.buttonStyle(EyeButtonStyle())
+            }.padding(24).presentationDetents([.height(220)]).presentationDragIndicator(.visible)
+        }
         .overlay {
             if feeling {
                 FeelingSheet(initial: report.checkedInToday ? (report.todaySymptoms.isEmpty ? ["没有不适"] : report.todaySymptoms) : [],
-                    save: { picked in feeling = false; store.checkIn(picked.filter { $0 != "没有不适" }) }, dismiss: { feeling = false })
+                    save: { picked in feeling = false; store.checkIn(picked.filter { $0 != "没有不适" }) }, dismiss: { feeling = false }, initialNote: report.todayNote, saveNote: { picked,note in feeling = false; store.checkIn(picked.filter { $0 != "没有不适" },note: note) })
             }
         }
+    }
+    @ViewBuilder private var companionTimerPage: some View {
+            if let key = careTimer {
+                RestBreakView(title: key,seconds: key == "闭眼休息" ? 30 : key == "热敷眼睛" ? 180 : 20,
+                    hint: key == "热敷眼睛" ? "准备温度舒适的热敷用品，遵循用品说明；不适时停止。" : key == "闭眼休息" ? "轻轻闭眼，让视线离开屏幕。" : "望向6米外，计时结束后再回来。",
+                    onComplete: { store.careCheckIn(key) })
+            }
+    }
+    private var companionCheckIns: some View {
+                WarmCard {
+                    HStack {
+                        Text("陪伴小打卡").font(EyeStyle.subtitle)
+                        Spacer()
+                        Text("今日 \(report.completedCare.count) 项").font(EyeStyle.caption).foregroundStyle(EyeStyle.secondary)
+                    }
+                    ForEach(["闭眼休息","远眺20秒","热敷眼睛"],id: \.self) { key in
+                        ListRow(title: key,value: report.completedCare.contains(key) ? "已完成" : "开始") { careTimer = key }
+                    }
+                }
     }
     private func reading(_ rescan: @escaping () -> Void) -> some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -126,7 +159,7 @@ struct BrownHomePage: View {
     private func quick(_ title: String, _ glyph: EyeGlyph, _ fill: LinearGradient, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
             WarmCard(fill: fill, padding: 14) {
-                HStack { EyeGlyphView(glyph: glyph, color: EyeStyle.primary).frame(width: 24, height: 24); Spacer(); Text(title == "今日感受" ? (report.checkedInToday ? "已记录" : "记录") : "↗").font(EyeStyle.caption).foregroundStyle(EyeStyle.secondary) }
+                HStack { Spacer(); Text(title == "今日感受" ? (report.checkedInToday ? "已记录" : "记录") : "↗").font(EyeStyle.caption).foregroundStyle(EyeStyle.secondary) }
                 Text(title).font(EyeStyle.navigationTitle).foregroundStyle(EyeStyle.text).padding(.top, 6)
             }
         }.buttonStyle(PressScale(scale: 0.98))

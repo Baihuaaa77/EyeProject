@@ -78,7 +78,8 @@ class CameraController @Inject constructor(
         lifecycleOwner: LifecycleOwner,
         previewView: PreviewView? = null,
         onFrame: (FaceLandmarkFrame) -> Unit,
-        onError: (Throwable) -> Unit
+        onError: (Throwable) -> Unit,
+        opticalPrecision: Boolean = false,
     ): Int {
         val myGeneration = ++generation
         releaseCamera()
@@ -95,6 +96,7 @@ class CameraController @Inject constructor(
                     val executor = Executors.newSingleThreadExecutor().also { openingExecutor = it }
                     val eyeAnalyzer = FaceLandmarkerAnalyzer(
                         context = context,
+                        opticalPrecision = opticalPrecision,
                         onResult = { frame ->
                             runCatching { onFrame(frame) }
                             frameObservers.forEach { observer -> runCatching { observer(frame) } }
@@ -105,14 +107,14 @@ class CameraController @Inject constructor(
                         }
                     ).also { openingAnalyzer = it }
                     val emulator = Build.HARDWARE == "ranchu" || Build.HARDWARE == "goldfish"
-                    val analysisResolution = if (emulator) Size(640, 480) else Size(1280, 720)
+                    val analysisResolution = if (emulator) Size(640, 480) else if (opticalPrecision) Size(3840, 2160) else Size(1280, 720)
                     val analysis = ImageAnalysis.Builder()
                         .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
                         .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST) // 只保留最新帧，旧的没处理完直接丢弃
                         .setResolutionSelector(ResolutionSelector.Builder()
-                            .setAspectRatioStrategy(ASPECT_RATIO)
+                            .setAspectRatioStrategy(if (opticalPrecision) AspectRatioStrategy.RATIO_16_9_FALLBACK_AUTO_STRATEGY else ASPECT_RATIO)
                             .setResolutionStrategy(ResolutionStrategy(analysisResolution,
-                                ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER))
+                                if (opticalPrecision) ResolutionStrategy.FALLBACK_RULE_CLOSEST_LOWER_THEN_HIGHER else ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER))
                             .build())
                         .build()
                         .also { it.setAnalyzer(executor, eyeAnalyzer) }

@@ -116,7 +116,8 @@ private fun GuideDiagram(motion: GuideMotion, phase: () -> Float, modifier: Modi
                 }
                 val dot = if (motion == GuideMotion.FOLLOW) Offset(tl.x + screen.width * (0.5f + relative.x),
                     tl.y + screen.height * (0.5f + relative.y)) else target
-                drawFixationTarget(colors, dot, 17f * unit)
+                drawRect(colors.black,topLeft = tl,size = screen)
+                drawCircle(colors.white,3.5f*unit,dot)
             }
             else -> {
                 val step = (p * 5).toInt().coerceIn(0, 4)

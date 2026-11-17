@@ -24,6 +24,7 @@ internal class AndroidScreeningPlatform(
     val feedbackSession = ScreeningFeedbackSession()
     override fun feedback(cue: ScreeningFeedbackCue) = feedbackSession.offer(cue)
     var owner: LifecycleOwner? = null
+    var opticalPrecision = false
     private val sensors = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
     private var generation: Int? = null
     private var frameObserver: ((FaceLandmarkFrame) -> Unit)? = null
@@ -40,7 +41,7 @@ internal class AndroidScreeningPlatform(
         val lifecycleOwner = owner ?: run { onError(IllegalStateException("测试页尚未进入前台")); return }
         frameObserver = onFrame; errorObserver = onError
         camera.addFrameObserver(onFrame); camera.addErrorObserver(onError)
-        if (!camera.isRequested) generation = camera.start(lifecycleOwner, previewView = null, onFrame = {}, onError = {})
+        if (!camera.isRequested || opticalPrecision) generation = camera.start(lifecycleOwner, previewView = null, onFrame = {}, onError = {}, opticalPrecision = opticalPrecision)
     }
     override fun stopCamera() {
         frameObserver?.let(camera::removeFrameObserver)

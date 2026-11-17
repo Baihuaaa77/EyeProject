@@ -174,20 +174,23 @@ struct FeelingSheet: View {
     let save: ([String]) -> Void
     let dismiss: () -> Void
     @State private var selected: [String]
-    init(initial: [String], save: @escaping ([String]) -> Void, dismiss: @escaping () -> Void) {
+    @State private var note: String
+    let saveNote: (([String],String) -> Void)?
+    init(initial: [String], save: @escaping ([String]) -> Void, dismiss: @escaping () -> Void, initialNote: String = "", saveNote: (([String],String) -> Void)? = nil) {
         self.save = save; self.dismiss = dismiss
         _selected = State(initialValue: initial)
+        _note = State(initialValue: initialNote); self.saveNote = saveNote
     }
     var body: some View {
         ZStack {
             EyeStyle.ink.opacity(0.55).ignoresSafeArea().contentShape(Rectangle()).onTapGesture { dismiss() }
             VStack(alignment: .leading, spacing: 10) {
                 Text("今天眼睛感觉怎么样？").font(EyeStyle.title).foregroundStyle(EyeStyle.text).padding(.bottom, 6)
-                option(noDiscomfort)
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
-                    ForEach(EyeCareBridge.shared.symptoms, id: \.self) { option($0) }
+                    ForEach([noDiscomfort,"眼睛干涩","眼睛酸胀","眼睛疲劳"], id: \.self) { option($0) }
                 }
-                Button("保存") { EyeHaptics.success(); save(selected) }.buttonStyle(EyeButtonStyle())
+                TextField("补充说明（可选）",text: $note,axis: .vertical).font(EyeStyle.body).lineLimit(2...4).textFieldStyle(.roundedBorder)
+                Button("保存") { EyeHaptics.success(); if let saveNote { saveNote(selected,String(note.prefix(500))) } else { save(selected) } }.buttonStyle(EyeButtonStyle())
                     .disabled(selected.isEmpty).padding(.top, 4)
             }
             .padding(24).frame(maxWidth: .infinity, alignment: .leading)
@@ -199,11 +202,14 @@ struct FeelingSheet: View {
     private func option(_ label: String) -> some View {
         let on = selected.contains(label)
         return Button { EyeHaptics.toggle(); toggle(label) } label: {
-            Text(label).font(on ? EyeStyle.body.weight(.semibold) : EyeStyle.body)
-                .foregroundStyle(on ? EyeStyle.primary : EyeStyle.text).multilineTextAlignment(.center)
+            VStack(spacing: 4) {
+                EyeGlyphView(glyph: .eye,color: EyeStyle.ink).frame(width: 24,height: 24)
+                Text(label == noDiscomfort ? "舒适" : label == "眼睛干涩" ? "干涩" : label == "眼睛酸胀" ? "酸胀" : "疲劳")
+                    .font(on ? EyeStyle.body.weight(.semibold) : EyeStyle.body)
+            }.foregroundStyle(EyeStyle.ink).multilineTextAlignment(.center)
                 .lineLimit(1).minimumScaleFactor(0.8)
                 .padding(.horizontal, 6).frame(maxWidth: .infinity, minHeight: 52)
-                .background(on ? EyeStyle.primarySoft : EyeStyle.background, in: RoundedRectangle(cornerRadius: EyeStyle.radiusMedium))
+                .background(label == noDiscomfort ? EyeStyle.feelingComfort : label == "眼睛干涩" ? EyeStyle.feelingDry : label == "眼睛酸胀" ? EyeStyle.feelingSore : EyeStyle.feelingTired, in: RoundedRectangle(cornerRadius: EyeStyle.radiusMedium))
                 .overlay { RoundedRectangle(cornerRadius: EyeStyle.radiusMedium).stroke(on ? EyeStyle.primary : EyeStyle.background, lineWidth: 1.5) }
                 .contentShape(RoundedRectangle(cornerRadius: EyeStyle.radiusMedium))
         }
@@ -395,48 +401,7 @@ func healthIndex(_ loadScore: Int) -> Int { min(max(100 - loadScore, 0), 100) }
 struct TrendPage: View {
     @ObservedObject private var store = EyeCareStore.shared
     var body: some View {
-        let report = store.report
-        let blinks = report.days.compactMap { $0.blinksPerMinute }
-        SubPage(title: "用眼趋势") {
-            if !report.summary.isEmpty {
-                Panel {
-                    Text("本周要点").font(EyeStyle.chip).foregroundStyle(EyeStyle.secondary)
-                    ForEach(Array(report.summary.enumerated()), id: \.offset) { _, line in Bullet(text: line, dot: EyeStyle.screen) }
-                }
-            }
-            chart("眼健康指数", glyph: .eye, tint: EyeStyle.primary, caption: "今天",
-                  value: report.score.map { "\(healthIndex($0)) 分" } ?? "—",
-                  trailing: report.score == nil ? nil : (report.label, levelColor(report.level)), help: nil) {
-                BarChartView(bars: report.days.enumerated().map { i, d -> BarItem in
-                    let index = d.score.map(healthIndex)
-                    return BarItem(id: i, label: d.label, value: index.map { Double($0) }, text: index.map { "\($0) 分" }, highlight: d.label == "今天",
-                            warning: (index ?? 100) <= 40)
-                }, maxValue: 100, tint: EyeStyle.primary)
-            }
-            chart("眨眼频率", glyph: .eye, tint: EyeStyle.iceInk, caption: "平均",
-                  value: blinks.isEmpty ? "—" : String(format: "%.1f 次/分", blinks.reduce(0, +) / Double(blinks.count)),
-                  trailing: ("参考 15 次/分", EyeStyle.secondary),
-                  help: "平时每分钟约眨眼 15 次，专注看屏幕时会明显变少。每次实时检测都会记下眨眼频率。") {
-                BarChartView(bars: report.days.enumerated().map { i, d in
-                    BarItem(id: i, label: d.label, value: d.blinksPerMinute, text: d.blinksPerMinute.map { "\(Int($0.rounded())) 次/分" },
-                            highlight: d.label == "今天", warning: (d.blinksPerMinute ?? 99) < 12)
-                }, reference: 15, maxValue: 20, tint: EyeStyle.ice)
-            }
-            if !report.factors.isEmpty {
-                ListGroup(title: "今天的主要原因（拉低眼健康指数）") {
-                    ForEach(Array(report.factors.enumerated()), id: \.element.id) { i, f in
-                        ListRow(title: f.title, subtitle: f.detail, value: "−\(f.points)", valueColor: EyeStyle.warning, divider: i < report.factors.count - 1)
-                    }
-                }
-            }
-            if report.checkInDays > 0 {
-                ListGroup(title: "身体感受") {
-                    ListRow(title: "打卡天数", glyph: .eye, value: "\(report.checkInDays) 天")
-                    ListRow(title: "有不适的天数", glyph: .info, tone: .accent, value: "\(report.symptomDays) 天", divider: false)
-                }
-            }
-        }
-        .onAppear { store.refresh() }
+        SubPage(title: "用眼趋势") { V16WeeklyTrendView(report: store.report) }.onAppear { store.refresh() }
     }
 
     /// 图表卡：类别标签（类别色）+ 右侧一项对比 / 等级，下面小字说明 + 大号读数（数字大、单位灰），再下面是图。
@@ -553,13 +518,18 @@ struct BrightnessPage: View {
 /// 「现在休息 20 秒」：看远处，圆环倒计时（中间大号秒数），结束时有提示音与轻触觉。与安卓 RestBreakPage 同一流程。
 struct RestBreakView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var running = false
     @State private var started = Date()
     @State private var done = false
-    private let seconds = 20.0
+    var title = "休息一下"
+    var seconds = 20.0
+    var hint = "看向6米外的远处，慢慢眨眼，放松肩膀。"
+    var onComplete: () -> Void = {}
     var body: some View {
         NavigationStack {
             TimelineView(.periodic(from: started, by: 0.1)) { timeline in
-                let elapsed = min(seconds, timeline.date.timeIntervalSince(started))
+                let elapsed = running ? min(seconds, timeline.date.timeIntervalSince(started)) : 0
                 VStack(spacing: 0) {
                     Spacer()
                     ZStack {
@@ -567,21 +537,22 @@ struct RestBreakView: View {
                         Text(done ? "完成" : "\(Int(ceil(seconds - elapsed)))").font(EyeStyle.display).foregroundStyle(EyeStyle.text).monospacedDigit()
                     }.frame(width: 240, height: 240)
                     Text(done ? "做得好！" : "秒").font(EyeStyle.title).foregroundStyle(EyeStyle.text).padding(.top, 24)
-                    Text(done ? "眼睛放松一下就舒服多了，继续保持。" : "看向 6 米外的远处，慢慢眨几下眼，放松肩膀。")
+                    Text(done ? "本次已记录。" : hint)
                         .font(EyeStyle.body).foregroundStyle(EyeStyle.secondary).multilineTextAlignment(.center).padding(.horizontal, 32).padding(.top, 8)
                     Spacer()
                     Button(done ? "完成" : "提前结束") { EyeHaptics.tap(); dismiss() }
                         .buttonStyle(EyeButtonStyle(role: done ? .primary : .secondary)).padding(16)
                 }
                 .onChange(of: elapsed >= seconds) { finished in
-                    if finished && !done { done = true; EyeCueSound.shared.play(.complete); EyeHaptics.success() }
+                    if finished && !done { done = true; onComplete(); EyeCueSound.shared.play(.complete); EyeHaptics.success() }
                 }
             }
             .background(EyeBackdrop())
-            .navigationTitle("休息一下").navigationBarTitleDisplayMode(.inline)
+            .navigationTitle(title).navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("关闭") { dismiss() } } }
         }
         .onAppear { started = Date() }
+        .onChange(of: scenePhase) { phase in if phase == .background && !done { dismiss() } }
     }
 }
 

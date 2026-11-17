@@ -109,7 +109,8 @@ class MineViewModel @Inject constructor(
 
 /** 账户页：服务器地址、登录 / 注册、退出与注销。 */
 @HiltViewModel
-class AccountViewModel @Inject constructor(private val accounts: AccountRepository) : AccountActionViewModel() {
+class AccountViewModel @Inject constructor(private val accounts: AccountRepository, subjects: SubjectRepository) : AccountActionViewModel() {
+    val people = subjects.subjects.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val account: StateFlow<AccountState?> = accounts.accountState
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
     val busyState: StateFlow<Boolean> = busy.asStateFlow()

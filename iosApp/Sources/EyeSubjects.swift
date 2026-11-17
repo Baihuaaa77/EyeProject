@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import EyeScreening
 
 /// 被测者（本人与家庭成员）：原先每项测试开头的问卷合并为一份资料，在「我的」维护，测试时只选「这次测谁」。
@@ -27,7 +28,7 @@ final class SubjectStore: ObservableObject {
         subjects = data.compactMap(Self.item)
         // 首次使用：建立空白的「本人」并立即保存，编号固定下来（记录与云端同步都按编号归属）
         if !subjects.contains(where: { $0.relation == "SELF" }) {
-            subjects.insert(SubjectProfileItem(id: UUID().uuidString.lowercased(), relation: "SELF", nickname: "我", fields: [:], updatedAt: 0), at: 0)
+            subjects.insert(SubjectProfileItem(id: UUID().uuidString.lowercased(), relation: "SELF", nickname: "小林", fields: [:], updatedAt: 0), at: 0)
             persist()
         }
     }
@@ -60,7 +61,7 @@ final class SubjectStore: ObservableObject {
         var next = item
         next.updatedAt = Date().timeIntervalSince1970 * 1000
         if next.nickname.trimmingCharacters(in: .whitespaces).isEmpty {
-            next.nickname = next.relation == "SELF" ? "我" : SubjectProfiles.shared.relationLabel(code: next.relation)
+            next.nickname = next.relation == "SELF" ? "小林" : SubjectProfiles.shared.relationLabel(code: next.relation)
         }
         if let index = subjects.firstIndex(where: { $0.id == item.id }) { subjects[index] = next } else { subjects.append(next) }
         persist()
@@ -160,7 +161,7 @@ struct SubjectEditView: View {
         ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     card("成员") {
-                        TextField(draft.relation == "SELF" ? "我" : "称呼，如：小明、妈妈", text: $draft.nickname).textFieldStyle(.roundedBorder)
+                        TextField(draft.relation == "SELF" ? "小林" : "称呼，如：小明、妈妈", text: $draft.nickname).textFieldStyle(.roundedBorder)
                         if draft.relation != "SELF" {
                             Text("与你的关系").font(EyeStyle.subtitle)
                             // 关系代码与共用 SubjectProfiles.RELATIONS 一致（「本人」不可选）
@@ -169,11 +170,18 @@ struct SubjectEditView: View {
                             }
                         }
                     }
-                    ForEach(Array(sections.enumerated()), id: \.offset) { _, section in
+                    ForEach(Array(sections.prefix(1).enumerated()), id: \.offset) { _, section in
                         card(section["title"] as? String ?? "") {
                             ForEach(Array((section["questions"] as? [[String: Any]] ?? []).enumerated()), id: \.offset) { _, q in question(q) }
                         }
                     }
+                    DisclosureGroup("更多健康资料（可选）") {
+                    ForEach(Array(sections.dropFirst().enumerated()), id: \.offset) { _, section in
+                        card(section["title"] as? String ?? "") {
+                            ForEach(Array((section["questions"] as? [[String: Any]] ?? []).enumerated()), id: \.offset) { _, q in question(q) }
+                        }
+                    }
+                    }.font(EyeStyle.body)
                     if let error { Text(error).foregroundStyle(EyeStyle.readableText(EyeStyle.danger)) }
                     if confirmDelete { Text("将删除该成员的资料，测试记录保留。").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary) }
                     HStack(spacing: 8) {
@@ -186,10 +194,12 @@ struct SubjectEditView: View {
                         Button("保存") { EyeHaptics.tap(); save() }.buttonStyle(EyeButtonStyle())
                     }
                 }.padding(20)
-            }.background(EyeStyle.background.ignoresSafeArea())
+            }.scrollDismissesKeyboard(.interactively).background(EyeStyle.background.ignoresSafeArea())
                 .navigationTitle(isNew ? "添加家庭成员" : "\(draft.displayName)的资料").navigationBarTitleDisplayMode(.inline)
                 .toolbarBackground(EyeStyle.background, for: .navigationBar)
+                .onDisappear { UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),to: nil,from: nil,for: nil) }
                 .toolbar {
+                    ToolbarItemGroup(placement: .keyboard) { Spacer(); Button("完成") { UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),to: nil,from: nil,for: nil) } }
                     ToolbarItem(placement: .cancellationAction) {
                         if modal { Button("取消") { dismiss() } }
                     }
@@ -282,36 +292,44 @@ struct SubjectPickerView: View {
     @ObservedObject var store = SubjectStore.shared
     @State private var editing: SubjectProfileItem?
     @State private var chosenId: String?
+    @State private var skipped = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: EyeStyle.spacing) {
-            Text(runtime.kind == "STRABISMUS" ? "这次给谁测？" : "这次测谁？").font(EyeStyle.title)
-            Text("资料在「我的 → 家庭成员」中填写，测试时自动带入。").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
+            Text("这次测谁？").font(EyeStyle.title)
             ForEach(store.subjects) { s in
                 let missing = runtime.missing(s)
                 Button {
-                    if missing.isEmpty { chosenId = s.id; runtime.useSubject(s) } else { editing = s }
+                    skipped = false; chosenId = s.id; runtime.useSubject(s)
                 } label: {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(s.displayName).font(EyeStyle.body)
                         Text(subjectSummary(s)).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
                         if !missing.isEmpty {
-                            Text("需补充：\(missing.joined(separator: "、"))（点此去填写）").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.readableText(EyeStyle.warning))
+                            Text("需补充：\(missing.joined(separator: "、"))").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.readableText(EyeStyle.warning))
                         }
                     }
-                }.buttonStyle(EyeCardButtonStyle(selected: chosenId == s.id))
+                }.buttonStyle(EyeCardButtonStyle(selected: !skipped && chosenId == s.id))
+                Button(missing.contains("出生年份") ? "补充出生年份" : "编辑资料") { editing = s }
+                    .buttonStyle(EyeButtonStyle(role: .secondary))
             }
             Button("添加家庭成员") { editing = SubjectStore.newMember() }.buttonStyle(EyeButtonStyle(role: .secondary))
-            if let chosenId, runtime.checkNeeded {
-                PreTestCheckView(runtime: runtime, initial: runtime.checkInitial).id(chosenId)
+            Button { skipped = true } label: { Text("暂不选择成员") }
+                .buttonStyle(EyeCardButtonStyle(selected: skipped))
+            if skipped {
+                Button("继续") { runtime.act("skipProfile") }.buttonStyle(EyeButtonStyle())
+            } else if let chosenId, let chosen = store.subjects.first(where: { $0.id == chosenId }), runtime.missing(chosen).isEmpty {
+                if runtime.checkNeeded {
+                    PreTestCheckView(runtime: runtime, initial: runtime.checkInitial).id(chosenId)
+                } else {
+                    Button("继续") { runtime.act("continueProfile") }.buttonStyle(EyeButtonStyle())
+                }
             }
-            VStack(spacing: 2) {
-                Button("暂不选择，直接测试") { runtime.act("skipProfile") }
-                    .font(EyeStyle.body).foregroundStyle(EyeStyle.primary).frame(minHeight: 44)
-                Text("不选成员时，依赖年龄和症状的判断会注明无法评估。").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
-            }.frame(maxWidth: .infinity)
         }.fullScreenCover(item: $editing) { item in
             NavigationStack { SubjectEditView(item: item, modal: true) }.tint(EyeStyle.primary)
+        }
+        .onChange(of: store.subjects.map(\.updatedAt)) { _ in
+            if let chosenId, let chosen = store.subjects.first(where: { $0.id == chosenId }) { runtime.useSubject(chosen) }
         }
         // 老视「换一种戴镜方式再测」回到本页时被测者已选好
         .onAppear { if chosenId == nil, !runtime.string("subjectId").isEmpty { chosenId = runtime.string("subjectId") } }

@@ -39,6 +39,8 @@ internal fun BrownHomeOverview(
     val report = state.report
     var exercise by rememberSaveable { mutableStateOf(false) }
     var feeling by rememberSaveable { mutableStateOf(false) }
+    var booking by rememberSaveable { mutableStateOf(false) }
+    var careTimer by rememberSaveable { mutableStateOf<String?>(null) }
     var allData by rememberSaveable { mutableStateOf(false) }
     var liveRequests by rememberSaveable { mutableIntStateOf(0) }
     val live = remember { BringIntoViewRequester() }
@@ -163,39 +165,33 @@ internal fun BrownHomeOverview(
                 }
             }
         }
+        Row(Modifier.height(IntrinsicSize.Min),horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            WarmQuick("AI问诊",EyeGlyph.CHAT,EyeBrown.consult,Modifier.weight(1f).fillMaxHeight(),navigation.onOpenChat)
+            WarmQuick("智能挂号",EyeGlyph.DOCUMENT,EyeBrown.feeling,Modifier.weight(1f).fillMaxHeight(),{ booking = true })
+        }
         EyeWarmCard(fill = EyeBrown.trend, spacing = 2.dp) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 EyeText("本周用眼趋势", Modifier.weight(1f), style = t.subtitle, color = c.textPrimary)
-                WarmLink("按日查看", navigation.onOpenTrend)
+                WarmLink("记录感受") { feeling = true }
             }
             val monday = LocalDate.now().with(java.time.DayOfWeek.MONDAY)
             val days = report?.trend?.days.orEmpty().associateBy { it.day }
-            EyeTrendRibbon((0..6).map { days[monday.plusDays(it.toLong()).toString()]?.score })
+            Box(Modifier.clickable(role = Role.Button,onClick = navigation.onOpenTrend)) { EyeTrendRibbon((0..6).map { days[monday.plusDays(it.toLong()).toString()]?.score }) }
+            WarmLink("查看本周趋势",navigation.onOpenTrend)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
                 listOf("周初", "周中", "周末").forEach {
                     EyeText(it, style = t.caption, color = c.textSecondary)
                 }
             }
         }
-        Row(
-            Modifier.height(IntrinsicSize.Min),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            WarmQuick(
-                "AI 主动问诊",
-                EyeGlyph.CHAT,
-                EyeBrown.consult,
-                Modifier.weight(1f).fillMaxHeight(),
-                navigation.onOpenChat,
-            )
-            WarmQuick(
-                "今日感受",
-                EyeGlyph.HEART,
-                EyeBrown.feeling,
-                Modifier.weight(1f).fillMaxHeight(),
-                { feeling = true },
-                if (report?.checkedInToday == true) "已记录" else "记录",
-            )
+        EyeWarmCard {
+            Row(Modifier.fillMaxWidth(),verticalAlignment = Alignment.CenterVertically) {
+                EyeText("陪伴小打卡",Modifier.weight(1f),style = t.subtitle,color = c.textPrimary)
+                EyeText("今日 ${report?.completedCare?.size ?: 0} 项",style = t.caption,color = c.textSecondary)
+            }
+            listOf("闭眼休息","远眺20秒","热敷眼睛").forEach { name ->
+                EyeListRow(name,{ careTimer = name },value = if (name in report?.completedCare.orEmpty()) "已完成" else "开始")
+            }
         }
         EyeWarmCard(Modifier.bringIntoViewRequester(live), padding = 14.dp) {
             liveEye(liveRequests)
@@ -246,7 +242,24 @@ internal fun BrownHomeOverview(
                 actions.checkIn(picked.filter { it != "没有不适" })
             },
             { feeling = false },
+            initialNote = report?.todayNote.orEmpty(),
+            onSaveNote = { picked,note -> feeling = false; actions.checkInWithNote(picked.filter { it != "没有不适" },note) },
         )
+    careTimer?.let { key ->
+        RestBreakPage(onClose = { careTimer = null },title = key,seconds = when (key) { "闭眼休息" -> 30; "热敷眼睛" -> 180; else -> 20 },
+            hint = when (key) { "闭眼休息" -> "轻轻闭眼，让视线离开屏幕。"; "热敷眼睛" -> "准备温度舒适的热敷用品，遵循用品说明；不适时停止。"; else -> "望向6米外，放松视线，计时结束后再回来。" },
+            onComplete = { actions.careCheckIn(key) })
+    }
+    if (booking) androidx.compose.ui.window.Dialog(onDismissRequest = { booking = false }) {
+        EyeWarmCard {
+            Row(Modifier.fillMaxWidth()) {
+                EyeText("智能挂号",Modifier.weight(1f),style = t.title,color = c.textPrimary)
+                EyeButton("关闭",EyeButtonRole.SECONDARY,{ booking = false })
+            }
+            EyeText("预约服务尚未接入，当前仅供预览挂号入口。",style = t.body,color = c.textSecondary)
+            EyeButton("返回首页",EyeButtonRole.PRIMARY,{ booking = false },Modifier.fillMaxWidth())
+        }
+    }
     if (allData)
         EyeFullScreenPage({ allData = false }) {
             EyeSubPage("全部数据", { allData = false }) {
@@ -266,7 +279,7 @@ internal fun BrownHomeOverview(
 private fun WarmLink(text: String, action: () -> Unit) {
     EyeText(
         "$text  ›",
-        Modifier.heightIn(min = 28.dp)
+        Modifier.heightIn(min = 48.dp)
             .wrapContentHeight()
             .clickable(role = Role.Button, onClick = action),
         style = LocalEyeTypography.current.bodySecondary,
@@ -287,7 +300,6 @@ private fun WarmQuick(
     val t = LocalEyeTypography.current
     EyeWarmCard(modifier.clickable(role = Role.Button, onClick = action), fill, padding = 14.dp) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            EyeGlyphIcon(glyph, Modifier.size(24.dp), c.primary)
             Spacer(Modifier.weight(1f))
             EyeText(badge ?: "↗", style = t.caption, color = c.textSecondary)
         }

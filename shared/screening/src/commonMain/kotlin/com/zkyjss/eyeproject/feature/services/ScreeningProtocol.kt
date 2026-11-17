@@ -96,11 +96,8 @@ object StrabismusProtocol {
     const val DISTANCE_CM = 33f
     /** 原文：33 cm，超出 ±5 cm 时提醒。 */
     const val DISTANCE_TOLERANCE_CM = 5f
-    /**
-     * 采样容差：提醒仍在 ±5 cm，采样放宽到 ±7 cm。人一进入「距离合适」就停下，常停在 ±5 cm 边缘，
-     * 测距抖动会让大段画面作废、校准采不到点；未经实物校准的前置测距本身也有约 6% 误差。
-     */
-    const val DISTANCE_GATE_CM = DISTANCE_TOLERANCE_CM + 2f
+    /** 距离平滑后，采样与提示统一遵守33±5厘米；持续超限中断本段。 */
+    const val DISTANCE_GATE_CM = DISTANCE_TOLERANCE_CM
     const val FIXATION_SECONDS = 12
     const val PURSUIT_SECONDS = 22
 

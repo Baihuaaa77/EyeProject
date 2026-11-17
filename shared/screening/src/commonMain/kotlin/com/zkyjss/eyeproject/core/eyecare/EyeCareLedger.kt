@@ -43,7 +43,10 @@ data class LiveSessionRecord(
 
 /** 当天的身体感受打卡；[symptoms] 为空表示「没有不适」。 */
 @Serializable
-data class CheckIn(val day: String, val symptoms: List<String>, val atMs: Long)
+data class CheckIn(val day: String, val symptoms: List<String>, val atMs: Long, val note: String = "")
+
+@Serializable
+data class CareCheckIn(val day: String,val key: String,val atMs: Long,val durationSeconds: Int = 0)
 
 @Serializable
 data class LedgerData(
@@ -51,6 +54,7 @@ data class LedgerData(
     val sessions: List<LiveSessionRecord> = emptyList(),
     val appSeconds: Map<String, Long> = emptyMap(),
     val checkIns: List<CheckIn> = emptyList(),
+    val careCheckIns: List<CareCheckIn> = emptyList(),
 ) {
     fun withSession(day: String, endedAtMs: Long, session: LiveEyeMonitor.Session): LedgerData = copy(
         sessions = (sessions + LiveSessionRecord(
@@ -66,9 +70,14 @@ data class LedgerData(
         if (seconds <= 0) this else copy(appSeconds = appSeconds + (day to ((appSeconds[day] ?: 0L) + seconds).coerceAtMost(86_400L)))
 
     /** 同一天再次打卡覆盖上一次。 */
-    fun withCheckIn(day: String, symptoms: List<String>, atMs: Long): LedgerData = copy(
-        checkIns = checkIns.filter { it.day != day } + CheckIn(day, symptoms.filter { it in EyeCareEngine.SYMPTOMS }.distinct(), atMs),
+    fun withCheckIn(day: String, symptoms: List<String>, atMs: Long, note: String = ""): LedgerData = copy(
+        checkIns = checkIns.filter { it.day != day } + CheckIn(day, symptoms.filter { it in EyeCareEngine.SYMPTOMS }.distinct(), atMs, note.trim().take(500)),
     )
+
+    /** 陪伴打卡只记录行为，不伪造休息时长或医学评分。 */
+    fun withCareCheckIn(day: String,key: String,atMs: Long): LedgerData =
+        if (key !in setOf("闭眼休息","远眺20秒","热敷眼睛")) this
+        else copy(careCheckIns = (careCheckIns + CareCheckIn(day,key,atMs,when (key) { "闭眼休息" -> 30; "热敷眼睛" -> 180; else -> 20 })).takeLast(MAX_SESSIONS))
 
     /** 只保留最近 [KEEP_DAYS] 天。 */
     fun pruned(today: String): LedgerData {
@@ -77,6 +86,7 @@ data class LedgerData(
             sessions = sessions.filter { it.day >= oldest },
             appSeconds = appSeconds.filterKeys { it >= oldest },
             checkIns = checkIns.filter { it.day >= oldest },
+            careCheckIns = careCheckIns.filter { it.day >= oldest },
         )
     }
 

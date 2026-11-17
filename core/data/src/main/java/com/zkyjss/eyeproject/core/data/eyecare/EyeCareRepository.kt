@@ -46,7 +46,8 @@ interface EyeCareRepository {
     /** 重新读取系统用屏统计（回到前台、从系统设置授权回来时调用）。 */
     suspend fun refreshUsage()
     suspend fun addLiveSession(session: LiveEyeMonitor.Session)
-    suspend fun checkIn(symptoms: List<String>)
+    suspend fun checkIn(symptoms: List<String>, note: String = "")
+    suspend fun careCheckIn(key: String)
     suspend fun addAppSeconds(seconds: Long)
 }
 
@@ -95,7 +96,8 @@ internal class OfflineFirstEyeCareRepository(
     }
 
     override suspend fun addLiveSession(session: LiveEyeMonitor.Session) = update { it.withSession(today(), clock(), session) }
-    override suspend fun checkIn(symptoms: List<String>) = update { it.withCheckIn(today(), symptoms, clock()) }
+    override suspend fun checkIn(symptoms: List<String>, note: String) = update { it.withCheckIn(today(), symptoms, clock(),note) }
+    override suspend fun careCheckIn(key: String) = update { it.withCareCheckIn(today(),key,clock()) }
     override suspend fun addAppSeconds(seconds: Long) = update { it.withAppSeconds(today(), seconds) }
 
     private suspend fun update(transform: (LedgerData) -> LedgerData) = lock.withLock {

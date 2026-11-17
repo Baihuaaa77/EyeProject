@@ -60,7 +60,8 @@ final class EyeRuntime: ObservableObject {
     init(kind: String) {
         self.kind = kind
         // 干眼只用关键点与眨眼，不做瞳孔 / 角膜反光测量
-        camera.measureOptics = kind != "DRY_EYE"
+        camera.measureOptics = kind == "STRABISMUS"
+        camera.opticalPrecision = kind == "STRABISMUS"
         frames = FrameMailbox<CameraSample>(limit: 8) { [weak self] batch in
             guard let self = self, !self.closed else { return }
             for f in batch {
@@ -116,6 +117,8 @@ final class EyeRuntime: ObservableObject {
         if phase == "Profile" || phase == "PROFILE" { base = "" }
         else if phase == "Setup" || phase == "ENVIRONMENT" {
             base = kind == "STRABISMUS" ? "请正对屏幕，保持三十三厘米。" : "请正对屏幕，保持四十厘米。"
+        } else if bool("stabilityInterrupted") {
+            base = string("instruction")
         } else if bool("calibrationPaused") {
             // 与安卓一致：校准暂停时播报暂停原因
             base = string("warning")

@@ -3,12 +3,18 @@ import UIKit
 
 /// DESIGN.md 的双端主题令牌：同色浮雕表面、中性文字与蓝青渐变数据。
 enum EyeStyle {
+    static let feelingComfort = Color(rgb: 0xC9D6A5)
+    static let feelingDry = Color(rgb: 0xEFCDA0)
+    static let feelingSore = Color(rgb: 0xEBB4AC)
+    static let feelingTired = Color(rgb: 0xC8B9DD)
     static let background = dyn(0x10110F, 0x10110F)
     static let optotypeSurround = dyn(0xFFFFFF, 0x1E2023, darkAlpha: 0)
     static let guideStageHeight: CGFloat = 200
     static let gazeCanvasHeight: CGFloat = 480
     static let gazeCanvasMinHeight: CGFloat = 160
     static let optotypeField = Color.white
+    static let reflectionBackground = Color.black
+    static let reflectionTarget = Color.white
     static func gazeCanvasBaseHeight(_ screenHeight: CGFloat) -> CGFloat {
         min(gazeCanvasHeight, max(gazeCanvasMinHeight, screenHeight * (screenHeight < gazeCanvasHeight ? 0.38 : 0.58)))
     }
@@ -177,24 +183,27 @@ enum EyeStyle {
     static let moodGold = Color(rgb: 0xFFCE65)
     static let moodWarm = Color(rgb: 0xE8BE7C)
     static let moodSilver = Color(rgb: 0xCAD0DA)
-    static let chatBody = Font.system(size: 18)
+    private static func type(_ size: CGFloat, semibold: Bool = false, relativeTo style: Font.TextStyle = .body) -> Font {
+        .custom(semibold ? "EyeNotoSC-SemiBold" : "EyeNotoSC-Regular", size: size, relativeTo: style)
+    }
+    static let chatBody = type(15)
     static let chatUserBackground = primaryDark
     static let chatUserText = onPrimary
-    static let display = Font.system(size: 42, weight: .semibold)
-    static let displayCompact = Font.system(size: 34, weight: .semibold)
-    static let headline = Font.system(size: 34, weight: .semibold)
-    static let chip = Font.system(size: 12, weight: .semibold)
-    static let caption = Font.system(size: 11, weight: .semibold)
-    static let tab = Font.system(size: 13, weight: .medium)
-    static let title = Font.system(size: 20, weight: .semibold)
-    static let subtitle = Font.system(size: 17, weight: .semibold)
-    static let label = Font.system(size: 13, weight: .semibold)
-    static let navigationTitle = Font.system(size: 15, weight: .semibold)
-    static let button = Font.system(size: 15, weight: .semibold)
-    static let body = Font.system(size: 15)
-    static let bodySecondary = Font.system(size: 13)
-    static let metricValue = Font.system(size: 28, weight: .semibold)
-    static let unit = Font.system(size: 12, weight: .medium)
+    static let display = type(42,semibold: true,relativeTo: .largeTitle)
+    static let displayCompact = type(34,semibold: true,relativeTo: .largeTitle)
+    static let headline = type(32,semibold: true,relativeTo: .largeTitle)
+    static let chip = type(12,semibold: true,relativeTo: .caption)
+    static let caption = type(12,relativeTo: .caption)
+    static let tab = type(13,relativeTo: .caption)
+    static let title = type(21,semibold: true,relativeTo: .title2)
+    static let subtitle = type(18,semibold: true,relativeTo: .headline)
+    static let label = type(13,relativeTo: .subheadline)
+    static let navigationTitle = type(18,semibold: true,relativeTo: .headline)
+    static let button = type(15,semibold: true)
+    static let body = type(15)
+    static let bodySecondary = type(13,relativeTo: .subheadline)
+    static let metricValue = type(28,semibold: true,relativeTo: .title)
+    static let unit = type(13,relativeTo: .subheadline)
     /// EyeMotion.pressSpring：阻尼 0.6、中等刚度。
     static let pressSpring = Animation.spring(response: 0.3, dampingFraction: 0.6)
 

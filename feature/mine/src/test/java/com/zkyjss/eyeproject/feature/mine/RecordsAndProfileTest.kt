@@ -56,6 +56,7 @@ class RecordsAndProfileTest {
         compose.setContent { EyeProjectTheme {
             SubjectEditContent(draft, false, null, {}, {}, {}, { key, value -> draft = draft.copy(fields = draft.fields + (key to value)) }, {}, {})
         } }
+        compose.onNodeWithText("更多健康资料（可选）").performScrollTo().performClick()
         compose.onNodeWithText("右眼球镜 SPH（D，保留正负号）").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("-2.50").performScrollTo().assertIsDisplayed()
         capture("member-refraction")

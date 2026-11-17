@@ -123,8 +123,9 @@ class ScreeningGazeFlowTest {
         assertEquals(false, samples.last().gazeOnTarget)
         assertNull(samples.last().leftGazeX)
         feed(0f, 0f)
-        assertNull(vm.state.value.gazeWarning)
-        assertEquals(true, samples.last().gazeOnTarget)
+        assertEquals("虹膜单帧大幅跳回时不立即接收该帧",false,samples.last().gazeOnTarget)
+        repeat(3) { feed(0f,0f) }
+        assertTrue("大幅位置变化持续后中断当前遮盖段",vm.state.value.stabilityInterrupted)
         vm.interruptTest()
     }
 }

@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// 对话页标题（与安卓 CHAT_TITLE 一致）；首页入口是爱科卡（EyechoCard）。
-let chatTitle = "AI 主动问诊"
+let chatTitle = "AI问诊"
 
 /// 「AI 主动问诊」对话页：由爱尔眼科数字人「爱科 Eyecho」主持。顶部是爱科的自我介绍，接着是今天的综合建议卡片，
 /// 下面和爱科自由对话；记录只存在本机，可清空。
@@ -11,6 +11,7 @@ struct AiChatPage: View {
     let openAccount: () -> Void
     @ObservedObject private var cloud = CloudModel.shared
     @ObservedObject private var store = EyeCareStore.shared
+    @State private var referenceOpen = false
     @State private var draft = ""
     @State private var confirmClear = false
     /// 本次进入对话页是否已弹过同意说明；还没同意时每次发送都要弹
@@ -30,7 +31,7 @@ struct AiChatPage: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
                         EyechoIntro()
-                        AiAdviceView()
+                        Button("今日护眼参考") { referenceOpen = true }.buttonStyle(EyeButtonStyle(role: .secondary))
                         if messages.isEmpty { suggestions(info) }
                         ForEach(Array(messages.enumerated()), id: \.offset) { index, m in
                             ChatBubble(message: m, urgentNotice: info["urgentNotice"] as? String ?? "",
@@ -56,6 +57,15 @@ struct AiChatPage: View {
                 .onChange(of: sending) { _ in withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo("bottom", anchor: .bottom) } }
             }
             inputArea(info, sending: sending)
+        }
+        .fullScreenCover(isPresented: $referenceOpen) {
+            NavigationStack {
+                SubPage(title: "今日护眼参考") {
+                    AiAdviceView()
+                    Text("结合已授权的用眼记录、感受与自测结果生成。医学参考仅用于健康教育；风险等级由自测规则决定，不能替代眼科检查。")
+                        .font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
+                }.toolbar { ToolbarItem(placement: .confirmationAction) { Button("关闭") { referenceOpen = false } } }
+            }
         }
         .overlay {
             if let choice = pendingOption {

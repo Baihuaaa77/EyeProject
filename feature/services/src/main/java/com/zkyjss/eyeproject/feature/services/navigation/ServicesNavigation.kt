@@ -61,8 +61,8 @@ fun NavController.navigateToSystemSettings() {
     navigate(SystemSettingsRoute) { launchSingleTop = true }
 }
 
-fun NavGraphBuilder.systemSettingsScreen(onBack: () -> Unit) {
-    composable<SystemSettingsRoute> { SystemSettingsScreen(onBack = onBack) }
+fun NavGraphBuilder.systemSettingsScreen(onBack: () -> Unit, onOpenAccount: () -> Unit = {}, onOpenPermissions: () -> Unit = {}, onOpenCloud: () -> Unit = {}) {
+    composable<SystemSettingsRoute> { SystemSettingsScreen(onBack = onBack,onOpenAccount = onOpenAccount,onOpenPermissions = onOpenPermissions,onOpenCloud = onOpenCloud) }
 }
 
 fun NavGraphBuilder.servicesScreen(

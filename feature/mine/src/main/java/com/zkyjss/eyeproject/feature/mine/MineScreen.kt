@@ -90,19 +90,16 @@ internal fun MineContent(state: MineUiState, navigation: MineNavigation, modifie
         EyePageHeader("我的", navigation.onOpenSettings, onOpenAccount = navigation.onOpenAccount)
         ProfileCard(ready, navigation)
         EyeListGroup(title = "健康档案") {
-            EyeListRow("测试记录", navigation.onOpenRecords, glowBorder = false, glyph = EyeGlyph.DOCUMENT,
-                value = ready?.recordCount?.let { if (it == 0) "暂无" else "$it 条" })
-            EyeListRow("家庭成员与资料", navigation.onOpenSubjects, glowBorder = false, glyph = EyeGlyph.FAMILY, tone = EyeTileTone.VIOLET,
-                value = ready?.memberCount?.let { "$it 人" })
-            EyeListRow("用眼趋势报告", navigation.onOpenTrend, glowBorder = false, glyph = EyeGlyph.CHART, tone = EyeTileTone.VIOLET, divider = false)
+            EyeListRow("测试记录", navigation.onOpenRecords, glowBorder = false, value = ready?.recordCount?.let { if (it == 0) "暂无" else "$it 条" })
+            EyeListRow("家庭成员与资料", navigation.onOpenSubjects, glowBorder = false, value = ready?.memberCount?.let { "$it 人" })
+            EyeListRow("用眼趋势报告", navigation.onOpenTrend, glowBorder = false, divider = false)
         }
         EyeListGroup(title = "数据与隐私") {
-            EyeListRow("云端同步", navigation.onOpenCloudSync, glowBorder = false, glyph = EyeGlyph.CLOUD, tone = EyeTileTone.BLUE,
-                value = ready?.let { cloudSummary(it.cloudConfigured, it.email, it.healthDataSync) })
-            EyeListRow("权限与通知", navigation.onOpenPermissions, glowBorder = false, glyph = EyeGlyph.SHIELD, tone = EyeTileTone.SUCCESS, divider = false)
+            EyeListRow("云端同步", navigation.onOpenCloudSync, glowBorder = false, value = ready?.let { cloudSummary(it.cloudConfigured, it.email, it.healthDataSync) })
+            EyeListRow("权限与通知", navigation.onOpenPermissions, glowBorder = false, divider = false)
         }
         EyeListGroup(title = "通用") {
-            EyeListRow("系统设置", navigation.onOpenSettings, glyph = EyeGlyph.GEAR, divider = false)
+            EyeListRow("系统设置", navigation.onOpenSettings, divider = false)
         }
         Spacer(Modifier.height(20.dp))
     }
@@ -129,10 +126,10 @@ private fun ProfileCard(state: MineUiState.Ready?, navigation: MineNavigation) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 EyeText(self?.nickname?.ifBlank { null } ?: "我", style = typography.title, color = colors.textPrimary)
                 val age = self?.let { SubjectProfiles.age(it.fields, System.currentTimeMillis()) }
-                EyeText(listOfNotNull(age?.let { "$it 岁" }, if (complete >= 5) "档案已完善" else "档案完善 $complete/5").joinToString(" · "),
+                EyeText(listOfNotNull(age?.let { "$it 岁" }, if (complete >= 4) "档案已完善" else "档案完善 $complete/4").joinToString(" · "),
                     style = typography.bodySecondary, color = colors.textSecondary)
                 Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                    repeat(5) { index -> Box(Modifier.width(16.dp).height(3.dp).clip(EyeShapes.chip).background(if(index < complete) colors.primary else EyeBrown.rail)) }
+                    repeat(4) { index -> Box(Modifier.width(16.dp).height(3.dp).clip(EyeShapes.chip).background(if(index < complete) colors.primary else EyeBrown.rail)) }
                 }
             }
             EyeIcon(painterResource(com.zkyjss.eyeproject.core.designsystem.R.drawable.ic_arrow_right), null, Modifier.size(14.dp), tint = colors.primary)

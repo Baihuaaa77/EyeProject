@@ -7,9 +7,9 @@ import org.junit.Test
 /** 防止遮眼图片与教学时序错配，尤其不能通过镜像把协助遮眼变成自行遮眼。 */
 class GuideDemoTest {
     @Test fun selfCoverKeepsTwoSecondUncoverAndOneSecondAlternation() {
-        val expected = listOf(GuidePose.LIGHTING_RIGHT, GuidePose.LIGHTING_RIGHT, GuidePose.LIGHTING_OPEN, GuidePose.LIGHTING_OPEN,
-            GuidePose.LIGHTING_LEFT, GuidePose.LIGHTING_LEFT, GuidePose.LIGHTING_OPEN, GuidePose.LIGHTING_OPEN,
-            GuidePose.LIGHTING_RIGHT, GuidePose.LIGHTING_LEFT, GuidePose.LIGHTING_RIGHT, GuidePose.LIGHTING_LEFT)
+        val expected = listOf(GuidePose.RIGHT, GuidePose.RIGHT, GuidePose.OPEN, GuidePose.OPEN,
+            GuidePose.LEFT, GuidePose.LEFT, GuidePose.OPEN, GuidePose.OPEN,
+            GuidePose.RIGHT, GuidePose.LEFT, GuidePose.RIGHT, GuidePose.LEFT)
         assertEquals(12000, guideCycleMs(GuideMotion.COVER_SELF))
         expected.forEachIndexed { second, pose ->
             assertEquals("第 ${second + 1} 秒", pose, guidePoseAt(GuideMotion.COVER_SELF, (second + 0.5f) / 12))

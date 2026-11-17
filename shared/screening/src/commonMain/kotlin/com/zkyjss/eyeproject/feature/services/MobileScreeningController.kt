@@ -28,6 +28,8 @@ class MobileScreeningController(
     private var kind = "DRY_EYE"
     private var closed = false
     private var captureStartedMs = 0L
+    private var lastCameraFaceMs = 0L
+    private var observedFps = 0f
     private val feedbackSession = ScreeningFeedbackSession()
     private val platform = object : ScreeningPlatform {
         override val display get() = this@MobileScreeningController.display
@@ -37,7 +39,7 @@ class MobileScreeningController(
         override fun epochMs() = SharedClock.epochMs()
         override fun cameraGeometry(width: Int,height: Int) = CameraGeometry(width,height,focalPx,cameraVersion)
         override fun startCamera(onFrame: (FaceLandmarkFrame) -> Unit,onError: (Throwable) -> Unit) {
-            captureStartedMs = nowMs()
+            captureStartedMs = nowMs(); lastCameraFaceMs = 0L; observedFps = 0f
             cameraFrame = onFrame; cameraError = onError; systemEvent("camera:start")
         }
         override fun stopCamera() { cameraFrame = null; cameraError = null; systemEvent("camera:stop") }
@@ -70,10 +72,10 @@ class MobileScreeningController(
         val profile = SubjectProfiles.fromJson("[$profileJson]").firstOrNull() ?: return false
         when (kind) {
             "DRY_EYE" -> dry.useSubject(profile)
-            "COLOR_VISION" -> { color.useSubject(profile); return true }
+            "COLOR_VISION" -> color.useSubject(profile)
             else -> screening.useSubject(profile)
         }
-        return !PreTestCheck.needed(kind) && proceedFromProfile()
+        return false // 选定成员不自动离开选择页
     }
 
     /** 当前测试的测前快问（应显示的题目，JSON）；为空数组表示没有这一步。[answersJson] 为已选答案。 */
@@ -102,7 +104,7 @@ class MobileScreeningController(
 
     /** 离开选人页进入准备页并启动相机；老视没答完戴镜问卷或资料不全时返回 false。 */
     fun proceedFromProfile(): Boolean {
-        if (kind == "COLOR_VISION") return color.uiState.value.phase == ColorVisionPhase.Setup
+        if (kind == "COLOR_VISION") { color.continueProfile(); return color.uiState.value.phase == ColorVisionPhase.Setup }
         if (display.xdpi <= 0) return false
         if (kind == "DRY_EYE") {
             if (dry.uiState.value.phase != DryEyePhase.Setup) return false
@@ -115,6 +117,7 @@ class MobileScreeningController(
     }
     fun action(name: String) {
         when(name) {
+            "continueProfile" -> proceedFromProfile()
             "begin" -> if (kind == "DRY_EYE") dry.startTest() else screening.begin()
             "practice" -> dry.confirmPracticeGuide()
             "formal" -> dry.confirmFormalGuide()
@@ -127,6 +130,7 @@ class MobileScreeningController(
             "blur" -> screening.markPushBlur()
             "cover" -> screening.markCover()
             "retryCover" -> screening.retryCoverDetection()
+            "restartStableStage" -> screening.restartStableStage()
             "farStart" -> screening.startFarCountdown()
             "calibrate" -> screening.retryGazeCalibration()
             "extended" -> dry.startExtended()
@@ -238,7 +242,13 @@ class MobileScreeningController(
     fun cameraFace(face: FaceMetrics?,imageWidth: Int,imageHeight: Int,focalLengthPx: Float,timeMs: Long,brightness: Float) {
         if (closed || cameraFrame == null || timeMs < captureStartedMs) return
         if (focalChanged(focalPx, focalLengthPx)) { focalPx = focalLengthPx; cameraVersion++ }
-        cameraFrame?.invoke(FaceLandmarkFrame(listOfNotNull(face),imageWidth,imageHeight,timeMs,0,30f,brightness,timeMs))
+        val delta = timeMs-lastCameraFaceMs
+        if (lastCameraFaceMs>0 && delta in 1L..1_000L) {
+            val current = 1_000f/delta
+            observedFps = if (observedFps<=0f) current else observedFps*0.85f+current*0.15f
+        } else observedFps = 0f
+        lastCameraFaceMs = timeMs
+        cameraFrame?.invoke(FaceLandmarkFrame(listOfNotNull(face),imageWidth,imageHeight,timeMs,0,observedFps,brightness,timeMs))
     }
     fun snapshotJson(): String {
         val result = RecordObject().apply { put("kind",kind) }
@@ -291,13 +301,15 @@ class MobileScreeningController(
                 PresbyopiaIntake.glassesCheck(s.fields).let { put("glassesTitle",it.title); put("glassesButton",it.button) }
                 put("flipperCheck",s.flipperCheck); put("pushEye",s.visionEye.label); put("pushDone",s.nearPoints.count { it.eye == s.visionEye })
                 put("calibrationPaused",s.gazeCalibrationPaused)
+                put("stabilityInterrupted",s.stabilityInterrupted); put("stabilityReason",s.stabilityReason); put("stabilityReady",s.stabilityReady)
+                put("cameraSourceWidth",s.cameraSourceWidth); put("cameraSourceHeight",s.cameraSourceHeight); put("analysisFps",s.analysisFps)
                 put("distanceCm",s.distanceCm); put("faceDetected",s.faceDetected); put("warning",s.gazeWarning ?: s.warning ?: screeningGuidance(s)?.takeUnless { it == "保持稳定" || it.startsWith("请移动到") })
                 put("secondsLeft",s.secondsLeft); put("trialVisible",s.trialVisible); put("trialId",s.trialId)
                 put("targetDistanceCm",screeningDistanceTarget(s)?.first)
                 put("distanceMoveToCm",s.distanceMoveToCm)
                 // 移动到新目标距离途中由主提示播报「请移动到 xx 厘米处」，不播报太近 / 太远
-                put("distanceZone",if (s.guidePending || s.gazeWarning != null || s.warning != null || s.distanceMoveToCm != null) null else spokenDistanceZone(s.distanceCm,
-                    s.faceDetected || (s.step == ScreeningStep.NEAR_VISION && s.distanceCm > 0f),screeningDistanceTarget(s)))
+                put("distanceZone",if (s.guidePending || (s.kind != ScreeningKind.STRABISMUS && (s.gazeWarning != null || s.warning != null)) || s.distanceMoveToCm != null) null else spokenDistanceZone(s.distanceCm,
+                    s.faceDetected || (s.step in setOf(ScreeningStep.NEAR_VISION, ScreeningStep.COVER) && s.distanceCm > 0f),screeningDistanceTarget(s)))
                 put("distanceToleranceCm",screeningDistanceTarget(s)?.second)
                 put("direction",s.direction); put("optotypePx",s.trialOptotypePx); put("eye",s.visionEye.name)
                 put("nearAwaitingEyeReady",s.nearAwaitingEyeReady); put("pushStage",s.pushStage.name)

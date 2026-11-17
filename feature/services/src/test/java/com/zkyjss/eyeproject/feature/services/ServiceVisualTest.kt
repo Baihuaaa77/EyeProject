@@ -213,6 +213,8 @@ class ServiceVisualTest {
             }
         }
         compose.onNodeWithText("小明").performClick()
+        assertEquals("none",edited)
+        compose.onAllNodesWithText("编辑资料").onLast().performClick()
         assertEquals("kid", edited)
         compose.onNodeWithText("添加家庭成员").performScrollTo().performClick()
         assertEquals(null, edited)
@@ -327,25 +329,25 @@ class ServiceVisualTest {
         compose.onNodeWithText("语音播报").assertDoesNotExist()
         compose.onNodeWithText("语音作答").assertDoesNotExist()
         compose.onNodeWithContentDescription("系统设置").performClick()
+        compose.onNodeWithText("语音辅助").assertExists()
+        compose.onNodeWithText("声音与语速").performClick()
         compose.onNodeWithText("听到：左").assertExists()
+        compose.onAllNodesWithText("完成").onLast().performClick()
         val vibration = org.robolectric.Shadows.shadowOf(context.getSystemService(android.os.Vibrator::class.java))
         vibration.setHasVibrator(true)
-        compose.onNodeWithText("试一下反馈").performClick()
-        assertEquals(android.os.VibrationEffect.EFFECT_CLICK, vibration.effectId)
-        // 调用开关行的语义操作，避免字号变化后行中心落到独立的帮助按钮。
-        compose.onNodeWithText("音效反馈").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) { it() }
-        compose.onNodeWithText("震动反馈").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) { it() }
-        assertEquals(false, TestSettings(preferences).soundEnabled)
-        assertEquals(false, TestSettings(preferences).hapticsEnabled)
-        compose.onNodeWithText("试一下反馈").assertIsNotEnabled()
-        compose.onNodeWithText("语音播报").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) { it() }
-        compose.onNodeWithText("语音作答").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) { it() }
-        assertEquals(false, TestSettings(preferences).speechEnabled)
-        assertEquals(false, TestSettings(preferences).answersEnabled)
+        compose.onNodeWithText("音效音量").performClick()
+        compose.onNodeWithText("试听 / 试一下").performClick()
+        assertEquals(android.os.VibrationEffect.EFFECT_CLICK,vibration.effectId)
+        compose.onAllNodesWithText("完成").onLast().performClick()
+        listOf("音效反馈","震动反馈","语音辅助").forEach { name ->
+            compose.onNodeWithText(name).performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) { it() }
+        }
+        val restored = TestSettings(preferences)
+        assertEquals(false,restored.soundEnabled); assertEquals(false,restored.hapticsEnabled)
+        assertEquals(false,restored.speechEnabled); assertEquals(false,restored.answersEnabled)
         capture("test-settings")
         compose.onNodeWithText("完成").performClick()
-        compose.onNodeWithText("语音播报").assertDoesNotExist()
-        compose.onNodeWithText("语音作答").assertDoesNotExist()
+        compose.onNodeWithText("语音辅助").assertDoesNotExist()
     }
 
     @Test @org.robolectric.annotation.Config(qualifiers = "zh-rCN-w390dp-h1900dp-mdpi")
@@ -429,7 +431,8 @@ class ServiceVisualTest {
                     ), 1, {}, Modifier.align(androidx.compose.ui.Alignment.BottomCenter).padding(16.dp))
                 } } }
         compose.mainClock.advanceTimeBy(1_500)
-        compose.onNodeWithText("手机使用时长").assertExists()
+        compose.onNodeWithText("手机使用时长").assertDoesNotExist()
+        compose.onNodeWithText("自测方法示范").assertDoesNotExist()
         compose.onNodeWithText("选择一项自测").assertExists()
         compose.onNodeWithText("推荐").assertDoesNotExist()
         capture("brown-services")

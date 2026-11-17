@@ -22,6 +22,12 @@ object EyeCareBridge {
     fun checkIn(ledgerJson: String, day: String, symptoms: List<String>, atMs: Long): String =
         LedgerData.fromJson(ledgerJson).withCheckIn(day, symptoms, atMs).toJson()
 
+    fun checkInWithNote(ledgerJson: String,day: String,symptoms: List<String>,atMs: Long,note: String): String =
+        LedgerData.fromJson(ledgerJson).withCheckIn(day,symptoms,atMs,note).toJson()
+
+    fun careCheckIn(ledgerJson: String,day: String,key: String,atMs: Long): String =
+        LedgerData.fromJson(ledgerJson).withCareCheckIn(day,key,atMs).pruned(day).toJson()
+
     /** [contextJson] 为 [EyeCareContext] 的 JSON。 */
     fun reportJson(ledgerJson: String, contextJson: String): String {
         val context = runCatching { LedgerData.JSON.decodeFromString(EyeCareContext.serializer(), contextJson) }.getOrNull()

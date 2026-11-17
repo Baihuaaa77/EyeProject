@@ -20,7 +20,7 @@ internal class StrabismusStateMachine(private val host: ScreeningEngine) {
             gaze = null; gazeCalibration.clear(); renderedTargets.clear()
             stepStartMs = platform.nowMs()
             _state.update { it.copy(step = ScreeningStep.FIXATION, guidePending = true, gazeCalibrated = false,
-                gazeWarning = null, secondsLeft = StrabismusProtocol.FIXATION_SECONDS, instruction = "看着屏幕上方闪烁的圆点，头和手机保持不动。", warning = null) }
+                gazeWarning = null, secondsLeft = StrabismusProtocol.FIXATION_SECONDS, instruction = "看着屏幕上方的白色亮点，头和手机保持不动。", warning = null) }
 
         }
     }
@@ -37,7 +37,7 @@ internal class StrabismusStateMachine(private val host: ScreeningEngine) {
     fun startFarCountdown() {
         with(host) {
             val s = _state.value
-            if (s.step != ScreeningStep.FAR_FIXATION || s.guidePending || !s.farWaiting) return
+            if (s.step != ScreeningStep.FAR_FIXATION || s.guidePending || s.stabilityInterrupted || !s.farWaiting) return
             stepStartMs = platform.nowMs()
             faceCenterBaseline = null
             _state.update { it.copy(farWaiting = false, instruction = "眼睛越过手机，看着 6 米外的目标，头和手机保持不动。", warning = null) }
@@ -82,6 +82,7 @@ internal class StrabismusStateMachine(private val host: ScreeningEngine) {
     }
 
     fun retryCoverDetection() = with(host) {
+        if (_state.value.stabilityInterrupted) return@with
         val s = _state.value
         if (s.step != ScreeningStep.COVER || s.guidePending || !s.coverRetryAvailable) return
         coverDetector.clear()
@@ -183,7 +184,7 @@ internal class StrabismusStateMachine(private val host: ScreeningEngine) {
 
     fun retryGazeCalibration() {
         with(host) {
-            if (_state.value.step != ScreeningStep.FIXATION && _state.value.step != ScreeningStep.GAZE_CALIBRATION) return
+            if (_state.value.stabilityInterrupted || (_state.value.step != ScreeningStep.FIXATION && _state.value.step != ScreeningStep.GAZE_CALIBRATION)) return
             timer?.cancel(); gaze = null; gazeCalibration.clear(); renderedTargets.clear(); resetGazeWindow()
             faceCenterBaseline = null
             stepStartMs = platform.nowMs()
@@ -222,7 +223,7 @@ internal class StrabismusStateMachine(private val host: ScreeningEngine) {
                 } else {
                     stepStartMs = platform.nowMs(); resetGazeWindow(); faceCenterBaseline = null
                     _state.update { it.copy(step = ScreeningStep.FIXATION, gazeCalibrated = true,
-                        instruction = "看着屏幕上方闪烁的圆点，头和手机保持不动。", targetX = 1f, targetY = 0f) }
+                        instruction = "看着屏幕上方的白色亮点，头和手机保持不动。", targetX = 1f, targetY = 0f) }
                     runTimedStep(StrabismusProtocol.FIXATION_SECONDS) { startFarFixation() }
                 }
             }
@@ -232,7 +233,7 @@ internal class StrabismusStateMachine(private val host: ScreeningEngine) {
     fun reportGazeTarget(xPx: Float, yPx: Float) {
         with(host) {
             val s = _state.value
-            if (s.guidePending || s.step !in setOf(ScreeningStep.GAZE_CALIBRATION, ScreeningStep.FIXATION, ScreeningStep.COVER, ScreeningStep.PURSUIT)) return
+            if (s.guidePending || s.stabilityInterrupted || s.step !in setOf(ScreeningStep.GAZE_CALIBRATION, ScreeningStep.FIXATION, ScreeningStep.COVER, ScreeningStep.PURSUIT)) return
             val display = platform.display
             val now = platform.nowMs()
             val point = GazePoint(xPx / display.widthPixels, yPx / display.heightPixels)
@@ -260,7 +261,7 @@ internal class StrabismusStateMachine(private val host: ScreeningEngine) {
                 while (isActive) {
                     val elapsed = ((platform.nowMs() - stepStartMs).coerceAtLeast(0L) / 1_000f).coerceAtMost(seconds.toFloat())
                     val target = if (_state.value.step == ScreeningStep.PURSUIT) StrabismusProtocol.pursuitTarget(elapsed).let { it.first to it.second }
-                        else (if ((elapsed * StrabismusProtocol.FLASH_HZ * 2f).toInt() % 2 == 0) 1f else -1f) to 0f
+                        else 1f to 0f
                     _state.update { it.copy(secondsLeft = kotlin.math.ceil(seconds - elapsed).toInt().coerceAtLeast(0), targetX = target.first, targetY = target.second) }
                     if (elapsed >= seconds) break
                     helpSession.delay(50)

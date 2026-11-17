@@ -194,8 +194,9 @@ fun DryEyeScreen(
             when (state.phase) {
                 DryEyePhase.Profile -> {
                     val subjects by viewModel.subjects.collectAsStateWithLifecycle()
-                    SubjectPicker("DRY_EYE", subjects, state.subject?.id, viewModel::useSubject, onEditSubject, viewModel::skipProfile)
+                    SubjectPicker("DRY_EYE", subjects, state.subject?.id, viewModel::useSubject, onEditSubject, viewModel::skipProfile, questions = {
                     state.subject?.let { subject -> PreTestQuestions("DRY_EYE", subject.id) { viewModel.confirmCheck(it) } }
+                    })
                 }
                 DryEyePhase.Setup -> {
                     SetupGate(state, viewModel::startTest)

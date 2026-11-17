@@ -1,6 +1,7 @@
 import AVFoundation
 import CoreMedia
 import CoreVideo
+import CoreImage
 import UIKit
 import EyeScreening
 import MediaPipeTasksVision
@@ -93,6 +94,8 @@ final class EyeCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
     var captureSession: AVCaptureSession { session }
     /// 是否测量瞳孔 / 角膜反光（斜视用；干眼与眨眼对比用不到，关掉省下每帧的眼区像素计算）。在 start 前设置。
     var measureOptics = true
+    var opticalPrecision = false
+    private let resizeContext = CIContext(options: [.cacheIntermediates: false])
     /// 最近一秒的诊断读数；相机队列写、界面读。
     var stats: CameraStats { statsLock.lock(); defer { statsLock.unlock() }; return currentStats }
     private let statsLock = NSLock()
@@ -203,7 +206,7 @@ final class EyeCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
                     let level = device.systemPressureState.level
                     self?.queue.async { self?.applyPressure(level) }
                 }
-                session.beginConfiguration(); session.sessionPreset = .hd1280x720
+                session.beginConfiguration()
                 let input = try AVCaptureDeviceInput(device: front)
                 guard session.canAddInput(input) else { session.commitConfiguration(); return }
                 session.addInput(input)
@@ -212,6 +215,9 @@ final class EyeCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
                 output.alwaysDiscardsLateVideoFrames = true; output.setSampleBufferDelegate(self, queue: queue)
                 guard session.canAddOutput(output) else { session.commitConfiguration(); return }
                 session.addOutput(output)
+                let requested: AVCaptureSession.Preset = opticalPrecision ? .hd4K3840x2160 : .hd1280x720
+                session.sessionPreset = session.canSetSessionPreset(requested) ? requested
+                    : session.canSetSessionPreset(.hd1920x1080) ? .hd1920x1080 : .hd1280x720
                 if let connection = output.connection(with: .video) {
                     if connection.isVideoOrientationSupported { connection.videoOrientation = .portrait }
                     if connection.isVideoMirroringSupported { connection.automaticallyAdjustsVideoMirroring = false; connection.isVideoMirrored = false }
@@ -278,6 +284,20 @@ final class EyeCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
         autoreleasepool { process(sampleBuffer) }
     }
 
+    private func inferenceImage(_ buffer: CVPixelBuffer) throws -> CVPixelBuffer {
+        let width = CVPixelBufferGetWidth(buffer), height = CVPixelBufferGetHeight(buffer)
+        let factor = min(1,1280.0 / Double(max(width,height)))
+        guard factor < 1 else { return buffer }
+        var scaled: CVPixelBuffer?
+        let status = CVPixelBufferCreate(kCFAllocatorDefault, Int(Double(width)*factor), Int(Double(height)*factor),
+            kCVPixelFormatType_32BGRA,[kCVPixelBufferIOSurfacePropertiesKey as String: [:]] as CFDictionary,&scaled)
+        guard status == kCVReturnSuccess, let scaled else {
+            throw NSError(domain: "EyeCamera",code: Int(status),userInfo: [NSLocalizedDescriptionKey: "相机推理图分配失败"])
+        }
+        resizeContext.render(CIImage(cvPixelBuffer: buffer).transformed(by: CGAffineTransform(scaleX: CGFloat(factor),y: CGFloat(factor))),to: scaled)
+        return scaled
+    }
+
     private func process(_ sampleBuffer: CMSampleBuffer) {
         let time = Int64(ProcessInfo.processInfo.systemUptime * 1000)
         guard active else { return }
@@ -288,7 +308,9 @@ final class EyeCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
         lastTime = time
         let started = DispatchTime.now().uptimeNanoseconds
         do {
-            let image = try MPImage(pixelBuffer: buffer, orientation: .up)
+            // 归一化关键点不依赖推理图大小；保留相机原像素给光学检测。
+            let inferenceBuffer = try inferenceImage(buffer)
+            let image = try MPImage(pixelBuffer: inferenceBuffer, orientation: .up)
             let result: FaceLandmarkerResult
             do { result = try detector.detect(videoFrame: image, timestampInMilliseconds: Int(time)) }
             catch {
@@ -328,7 +350,9 @@ final class EyeCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
             }
             focal *= distanceScale
             // 关键点几何与光学测量在相机队列完成，主线程只接收结果。
-            let face = points.isEmpty ? nil : LandmarkGeometry.shared.face(points: array, matrix: transform, image: frame, optics: measureOptics)
+            let face = points.isEmpty ? nil : opticalPrecision
+                ? ScreenPointOptics.shared.face(points: array, matrix: transform, image: frame)
+                : LandmarkGeometry.shared.face(points: array, matrix: transform, image: frame, optics: measureOptics)
             onAnalyzedFrame?(buffer, face, time)
             onFrame?(face, frame.width, frame.height, focal, time, frame.brightness())
             let finished = DispatchTime.now().uptimeNanoseconds

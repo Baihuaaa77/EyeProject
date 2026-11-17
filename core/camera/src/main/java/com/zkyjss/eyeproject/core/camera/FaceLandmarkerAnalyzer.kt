@@ -31,7 +31,8 @@ import java.util.concurrent.CopyOnWriteArrayList
 class FaceLandmarkerAnalyzer(
     context: Context,
     private val onResult: (FaceLandmarkFrame) -> Unit,
-    private val onError: (Throwable) -> Unit
+    private val onError: (Throwable) -> Unit,
+    private val opticalPrecision: Boolean = false,
 ) : ImageAnalysis.Analyzer {
 
     private val faceLandmarker: FaceLandmarker
@@ -59,6 +60,7 @@ class FaceLandmarkerAnalyzer(
         val fps: Float,
         val imageBrightness: Float,
         val bitmap: Bitmap,
+        val inferenceBitmap: Bitmap,
     )
 
     init {
@@ -72,7 +74,7 @@ class FaceLandmarkerAnalyzer(
         // 帧率限制，相机不断传来图片，每DETECTION_FRAME_INTERVAL张分析一次
         // 否则关闭imageProxy，然后返回
         frameIndex += 1
-        if (frameIndex % DETECTION_FRAME_INTERVAL != 0) {
+        if (!opticalPrecision && frameIndex % DETECTION_FRAME_INTERVAL != 0) {
             imageProxy.close()
             return
         }
@@ -117,7 +119,10 @@ class FaceLandmarkerAnalyzer(
             } ?: rotateBitmap(toArgbBitmap(imageProxy), rotationDegrees)
             val sourceWidth = upright.width
             val sourceHeight = upright.height
-            val mpImage = BitmapImageBuilder(upright).build()
+            // 只缩小关键点推理图；光学提取始终保留本帧原始分辨率。
+            val factor = minOf(1f,1280f/maxOf(sourceWidth,sourceHeight))
+            val inference = if (factor<1f) Bitmap.createScaledBitmap(upright,(sourceWidth*factor).toInt(),(sourceHeight*factor).toInt(),true) else upright
+            val mpImage = BitmapImageBuilder(inference).build()
 
             val timestampMs = imageProxy.imageInfo.timestamp / 1_000_000
             synchronized(pendingFrames) {
@@ -129,6 +134,7 @@ class FaceLandmarkerAnalyzer(
                 fps = fps,
                 imageBrightness = estimateBrightness(upright),
                 bitmap = upright,
+                inferenceBitmap = inference,
                 )
             }
             // CameraX 时间戳为纳秒，MediaPipe detectAsync 期望毫秒
@@ -164,6 +170,7 @@ class FaceLandmarkerAnalyzer(
                 )
             )
         } finally {
+            if (frame.inferenceBitmap !== frame.bitmap) frame.inferenceBitmap.recycle()
             frame.bitmap.recycle()
         }
     }
@@ -182,7 +189,8 @@ class FaceLandmarkerAnalyzer(
             points[index * 3 + 2] = landmark.z()
         }
         // 同一 478 点索引、头姿矩阵和光学算法也用于 iOS，拒判条件一起维护。
-        return LandmarkGeometry.face(points, matrix ?: FloatArray(0), BitmapGrayImage(bitmap))
+        return (if (opticalPrecision) ScreenPointOptics.face(points, matrix ?: FloatArray(0), BitmapGrayImage(bitmap))
+            else LandmarkGeometry.face(points, matrix ?: FloatArray(0), BitmapGrayImage(bitmap)))
             ?: FaceMetrics(lms.boundingBox(sourceWidth, sourceHeight), null, null)
     }
 

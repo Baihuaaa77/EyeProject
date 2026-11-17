@@ -23,16 +23,16 @@ struct MinePage: View {
             PageHeader(title: "我的", openAccount: { navigate(.account) }, openSettings: { navigate(.settings) })
             profileCard
             ListGroup(title: "健康档案") {
-                ListRow(title: "测试记录", glyph: .document, value: recordCount == 0 ? "暂无" : "\(recordCount) 条", glowBorder: false) { navigate(.records) }
-                ListRow(title: "家庭成员与资料", glyph: .family, tone: .violet, value: "\(store.subjects.count) 人", glowBorder: false) { navigate(.subjects) }
-                ListRow(title: "用眼趋势报告", glyph: .chart, tone: .violet, divider: false, glowBorder: false) { navigate(.trend) }
+                ListRow(title: "测试记录", value: recordCount == 0 ? "暂无" : "\(recordCount) 条", glowBorder: false) { navigate(.records) }
+                ListRow(title: "家庭成员与资料", value: "\(store.subjects.count) 人", glowBorder: false) { navigate(.subjects) }
+                ListRow(title: "用眼趋势报告", divider: false, glowBorder: false) { navigate(.trend) }
             }
             ListGroup(title: "数据与隐私") {
-                ListRow(title: "云端同步", glyph: .cloud, tone: .blue, value: cloudSummary, glowBorder: false) { navigate(.cloud) }
-                ListRow(title: "权限与通知", glyph: .shield, tone: .success, divider: false, glowBorder: false) { navigate(.permissions) }
+                ListRow(title: "云端同步", value: cloudSummary, glowBorder: false) { navigate(.cloud) }
+                ListRow(title: "权限与通知", divider: false, glowBorder: false) { navigate(.permissions) }
             }
 
-            ListGroup(title: "通用") { ListRow(title: "系统设置", glyph: .gear, divider: false) { navigate(.settings) } }
+            ListGroup(title: "通用") { ListRow(title: "系统设置", divider: false) { navigate(.settings) } }
         }.onAppear(perform: recount)
     }
 
@@ -46,9 +46,9 @@ struct MinePage: View {
                         .frame(width: 56, height: 56).eyeGlass(cornerRadius: 17, fill: AnyShapeStyle(BrownStyle.avatar))
                     VStack(alignment: .leading, spacing: 4) {
                         Text(me?.displayName ?? "我").font(EyeStyle.title).foregroundStyle(EyeStyle.text)
-                        Text(([age.map { "\($0) 岁" }, complete >= 5 ? "档案已完善" : "档案完善 \(complete)/5"] as [String?]).compactMap { $0 }.joined(separator: " · "))
+                        Text(([age.map { "\($0) 岁" }, complete >= 4 ? "档案已完善" : "档案完善 \(complete)/4"] as [String?]).compactMap { $0 }.joined(separator: " · "))
                             .font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
-                        HStack(spacing: 3) { ForEach(0..<5) { i in Capsule().fill(i < complete ? EyeStyle.primary : BrownStyle.rail).frame(width: 16, height: 3) } }
+                        HStack(spacing: 3) { ForEach(0..<4) { i in Capsule().fill(i < complete ? EyeStyle.primary : BrownStyle.rail).frame(width: 16, height: 3) } }
                     }.frame(maxWidth: .infinity, alignment: .leading)
                     Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(EyeStyle.tertiary)
                 }.padding(.leading, 18).padding(.trailing, 16).padding(.top, 18).padding(.bottom, 14).contentShape(Rectangle())
@@ -76,11 +76,10 @@ struct MinePage: View {
         }.buttonStyle(PressScale(scale: 0.97))
     }
 
-    /// 本人资料的完善程度（年龄、职业、视力、眼病史、性别）：已填项数 / 5（与安卓 profileCompleteness 一致）。
+    /// 本人资料的完善程度（称呼、出生年份、性别、戴镜）：已填项数 / 4（与安卓 profileCompleteness 一致）。
     private func completeness(_ s: SubjectProfileItem?) -> Int {
         guard let f = s?.fields else { return 0 }
-        let vision = f["基础视力"].flatMap { $0.isEmpty ? nil : $0 } ?? f["日常矫正方式"]
-        return [f["出生年份"], f["职业"], vision, f["既往眼病"], f["性别"]].filter { !($0 ?? "").isEmpty }.count
+        return [s?.nickname, f["出生年份"], f["日常矫正方式"], f["性别"]].filter { !($0 ?? "").isEmpty }.count
     }
 
     private func recount() {

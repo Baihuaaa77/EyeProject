@@ -47,11 +47,11 @@ object SubjectProfiles {
             Question(BIRTH_YEAR, "出生年份", numeric = true, optional = true,
                 validate = { it.toIntOrNull()?.let { y -> y in 1900..2100 } == true }),
             Question("性别", "性别", listOf("男", "女", "不愿透露"), optional = true),
+            Question("日常矫正方式", "平时戴镜",
+                listOf("不戴眼镜", "近视或远视眼镜", "老花镜"),
+                multiple = true, optional = true, exclusive = setOf("不戴眼镜")),
         )),
-        ProfileSection("视力与戴镜", listOf(
-            Question("日常矫正方式", "平时戴什么眼镜？",
-                listOf("不戴眼镜", "近视或远视眼镜", "老花镜", "渐进多焦点眼镜", "隐形眼镜", "需要配镜但没戴"),
-                multiple = true, optional = true, hints = mapOf("渐进多焦点眼镜" to "一副镜片看远看近都清楚")),
+        ProfileSection("视力与戴镜补充", listOf(
             Question("屈光情况", "知道自己有以下情况吗？", listOf("近视", "远视", "散光", "老花", "都没有或不清楚"),
                 multiple = true, optional = true),
             Question("佩戴隐形眼镜史", "戴过隐形眼镜吗？", listOf("没戴过", "以前戴过", "现在在戴"), optional = true),

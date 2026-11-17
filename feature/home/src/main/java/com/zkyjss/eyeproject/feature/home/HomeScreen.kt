@@ -8,6 +8,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -32,6 +33,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.zkyjss.eyeproject.core.designsystem.theme.EyeBrown
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeColors
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeMotion
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeShapes
@@ -65,6 +67,8 @@ internal data class HomeActions(
     val enableReminder: (Int) -> Unit = {},
     val checkIn: (List<String>) -> Unit = {},
     val openUsageAccess: () -> Unit = {},
+    val checkInWithNote: (List<String>,String) -> Unit = { _, _ -> },
+    val careCheckIn: (String) -> Unit = {},
 )
 
 internal const val USAGE_HELP_ANDROID = "需要在系统设置里允许「使用情况访问」，才能统计每天用屏多久、连续用了多久和夜间使用；统计只在本机进行。"
@@ -110,6 +114,8 @@ fun HomeScreen(
             viewModel::selectReminderInterval,
             viewModel::enableReminder,
             viewModel::checkIn,
+            checkInWithNote = viewModel::checkInWithNote,
+            careCheckIn = viewModel::careCheckIn,
             openUsageAccess = {
                 runCatching { context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)) }
             },
@@ -168,17 +174,26 @@ internal fun FeelingDialog(
     initial: List<String>,
     onSave: (List<String>) -> Unit,
     onDismiss: () -> Unit,
+    initialNote: String = "",
+    onSaveNote: ((List<String>,String) -> Unit)? = null,
 ) {
-    Dialog(onDismissRequest = onDismiss) { FeelingPicker(initial, onSave) }
+    Dialog(onDismissRequest = onDismiss,properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
+        Box(Modifier.fillMaxSize().imePadding().padding(24.dp),contentAlignment = Alignment.Center) {
+            Column(Modifier.widthIn(max = 560.dp).fillMaxWidth().verticalScroll(androidx.compose.foundation.rememberScrollState())) {
+                FeelingPicker(initial,onSave,initialNote,onSaveNote)
+            }
+        }
+    }
 }
 
 /** 选择框本体（弹窗内容，界面检查可单独渲染）。 */
 @Composable
-internal fun FeelingPicker(initial: List<String>, onSave: (List<String>) -> Unit) {
+internal fun FeelingPicker(initial: List<String>, onSave: (List<String>) -> Unit, initialNote: String = "", onSaveNote: ((List<String>,String) -> Unit)? = null) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
     val haptics = rememberEyeHaptics()
     var selected by remember { mutableStateOf(initial) }
+    var note by remember { mutableStateOf(initialNote) }
     fun toggle(label: String) {
         val on = label in selected
         selected =
@@ -201,30 +216,19 @@ internal fun FeelingPicker(initial: List<String>, onSave: (List<String>) -> Unit
             style = typography.title,
             color = colors.textPrimary,
         )
-        FeelingOption(NO_DISCOMFORT, NO_DISCOMFORT in selected, Modifier.fillMaxWidth()) {
-            toggle(NO_DISCOMFORT)
-        }
-        EyeCareEngine.SYMPTOMS.chunked(2).forEach { row ->
-            // 同一行两格等高：长选项折行时另一格跟着变高
-            Row(
-                Modifier.height(IntrinsicSize.Min),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                row.forEach { label ->
-                    FeelingOption(label, label in selected, Modifier.weight(1f).fillMaxHeight()) {
-                        toggle(label)
-                    }
-                }
-                if (row.size == 1) Spacer(Modifier.weight(1f))
+        listOf(NO_DISCOMFORT,"眼睛干涩","眼睛酸胀","眼睛疲劳").chunked(2).forEach { row ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                row.forEach { label -> FeelingOption(label,label in selected,Modifier.weight(1f)) { toggle(label) } }
             }
         }
+        EyeTextField(note,{ note = it.take(500) },label = "补充说明（可选）")
         Spacer(Modifier.height(4.dp))
         EyeButton(
             "保存",
             EyeButtonRole.PRIMARY,
             {
                 haptics.success()
-                onSave(selected)
+                if (onSaveNote != null) onSaveNote(selected,note) else onSave(selected)
             },
             Modifier.fillMaxWidth(),
             enabled = selected.isNotEmpty(),
@@ -246,7 +250,7 @@ private fun FeelingOption(
         modifier
             .heightIn(min = 52.dp)
             .clip(EyeShapes.medium)
-            .background(if (selected) colors.primarySoft else colors.surfaceVariant)
+            .background(when (label) { NO_DISCOMFORT -> EyeBrown.feelingComfort; "眼睛干涩" -> EyeBrown.feelingDry; "眼睛酸胀" -> EyeBrown.feelingSore; else -> EyeBrown.feelingTired })
             .border(
                 1.5.dp,
                 if (selected) colors.primary else colors.surfaceVariant,
@@ -259,13 +263,16 @@ private fun FeelingOption(
             .padding(horizontal = 6.dp, vertical = 12.dp),
         contentAlignment = Alignment.Center,
     ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        EyeGlyphIcon(EyeGlyph.EYE,Modifier.size(24.dp),colors.ink)
         EyeText(
-            label,
+            when (label) { NO_DISCOMFORT -> "舒适"; "眼睛干涩" -> "干涩"; "眼睛酸胀" -> "酸胀"; else -> "疲劳" },
             style = LocalEyeTypography.current.body,
-            color = if (selected) colors.primary else colors.textPrimary,
+            color = colors.ink,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
             textAlign = TextAlign.Center,
         )
+        }
     }
 }
 

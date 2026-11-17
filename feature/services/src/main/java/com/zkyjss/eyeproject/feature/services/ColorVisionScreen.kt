@@ -76,6 +76,7 @@ class ColorVisionViewModel @Inject constructor(
     }
     fun useSubject(profile: SubjectProfile) = engine.useSubject(profile)
     fun skipProfile() = engine.skipProfile()
+    fun continueProfile() = engine.continueProfile()
     fun start() = engine.start()
     fun answer(option: String) = engine.answer(option)
     fun markPlateShown(timestampMs: Long) = engine.markPlateShown(timestampMs)
@@ -122,7 +123,7 @@ fun ColorVisionScreen(
             when (state.phase) {
                 ColorVisionPhase.Profile -> {
                     val subjects by viewModel.subjects.collectAsStateWithLifecycle()
-                    SubjectPicker("COLOR_VISION", subjects, state.subject?.id, viewModel::useSubject, onEditSubject, viewModel::skipProfile)
+                    SubjectPicker("COLOR_VISION", subjects, state.subject?.id, viewModel::useSubject, onEditSubject, viewModel::skipProfile, onContinue = viewModel::continueProfile)
                 }
                 ColorVisionPhase.Setup -> ColorSetup(viewModel::start)
                 ColorVisionPhase.Demo, ColorVisionPhase.Plates -> state.plate?.let { plate ->

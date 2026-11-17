@@ -114,7 +114,7 @@ struct GuideScene {
     let keyframe: Double
     static func scene(_ motion: GuideMotion) -> GuideScene {
         switch motion {
-        case .lighting: GuideScene(motion: motion, cycle: 5.0, beats: [.init(start: 0, label: "① 手机固定在支架上，正对双眼"), .init(start: 0.35, label: "② 协助者在手机旁打光"), .init(start: 0.7, label: "③ 本人按提示遮眼，不压眼球")], keyframe: 0.5)
+        case .lighting: GuideScene(motion: motion, cycle: 5.0, beats: [.init(start: 0, label: "① 手机固定在支架上，正对双眼"), .init(start: 0.35, label: "② 屏幕白点提供映光"), .init(start: 0.7, label: "③ 本人按提示遮眼，不压眼球")], keyframe: 0.5)
         case .rest: GuideScene(motion: motion, cycle: 4.0, beats: [.init(start: 0, label: "① 轻轻闭眼，放松休息"), .init(start: 0.5, label: "② 倒计时结束后再睁眼")], keyframe: 0.5)
         case .posture: GuideScene(motion: motion, cycle: 5.2, beats: [.init(start: 0.0, label: "① 正对屏幕，露出双眼"), .init(start: 0.25, label: "② 前后微调到提示的距离"), .init(start: 0.6, label: "③ 光线均匀，避免逆光")], keyframe: 0.7)
         case .blink: GuideScene(motion: motion, cycle: 4.2, beats: [.init(start: 0.0, label: "① 正对屏幕，保持放松"), .init(start: 0.15, label: "② 像平时一样自然眨眼"), .init(start: 0.55, label: "③ 应用自动记录眨眼")], keyframe: 0.6)
@@ -122,7 +122,7 @@ struct GuideScene {
         case .near: GuideScene(motion: motion, cycle: 5.6, beats: [.init(start: 0.0, label: "① 用手掌遮住左眼（不压眼球）"), .init(start: 0.2, label: "② 用右眼看 E 的开口方向"), .init(start: 0.28, label: "③ 点选对应方向；之后换眼再做")], keyframe: 0.35)
         case .move: GuideScene(motion: motion, cycle: 7.6, beats: [.init(start: 0.0, label: "① 从 45 cm 外开始，看着 E"), .init(start: 0.15, label: "② 慢慢移近（每秒不超过 5 cm）"), .init(start: 0.6, label: "③ E 一开始持续模糊就点按，记录近点")], keyframe: 0.66)
         case .flip: GuideScene(motion: motion, cycle: 6.4, beats: [.init(start: 0.0, label: "① 远处停稳，点选 E 的开口"), .init(start: 0.15, label: "② 移近停稳，再点选一次"), .init(start: 0.55, label: "③ 移远，远近交替进行")], keyframe: 0.45)
-        case .fixate: GuideScene(motion: motion, cycle: 4.0, beats: [.init(start: 0.0, label: "① 看着屏幕上方闪烁的圆点"), .init(start: 0.45, label: "② 头和手机都保持不动")], keyframe: 0.5)
+        case .fixate: GuideScene(motion: motion, cycle: 4.0, beats: [.init(start: 0.0, label: "① 看着屏幕上方的白色亮点"), .init(start: 0.45, label: "② 头和手机都保持不动")], keyframe: 0.5)
         case .far: GuideScene(motion: motion, cycle: 5.2, beats: [.init(start: 0.0, label: "① 手机留在眼前约 33 cm，略低于视线"), .init(start: 0.3, label: "② 眼睛越过手机，看 6 米外的目标"), .init(start: 0.65, label: "③ 看约 10 秒，头和手机都不动")], keyframe: 0.5)
         case .coverSelf: GuideScene(motion: motion, cycle: 12.0, beats: [.init(start: 0.0, label: "① 遮右眼 2 秒 → 移开，双眼注视 2 秒"), .init(start: 0.3333333333333333, label: "② 遮左眼 2 秒 → 移开，双眼注视 2 秒"), .init(start: 0.6666666666666666, label: "③ 右眼、左眼各遮 1 秒，快速交替两轮")], keyframe: 0.12)
         case .cover: GuideScene(motion: motion, cycle: 12.0, beats: [.init(start: 0.0, label: "① 遮右眼 2 秒 → 移开，双眼注视 2 秒"), .init(start: 0.3333333333333333, label: "② 遮左眼 2 秒 → 移开，双眼注视 2 秒"), .init(start: 0.6666666666666666, label: "③ 右眼、左眼各遮 1 秒，快速交替两轮")], keyframe: 0.12)
@@ -145,9 +145,9 @@ private enum GuidePose: String {
         case .blink: "自然眨眼"
         case .left: "遮左眼"
         case .right: "遮右眼"
-        case .lightingOpen: "双眼注视 · 协助者打光"
-        case .lightingLeft: "本人遮左眼 · 协助者打光"
-        case .lightingRight: "本人遮右眼 · 协助者打光"
+        case .lightingOpen: "双眼注视 · 屏幕映光"
+        case .lightingLeft: "本人遮左眼 · 屏幕映光"
+        case .lightingRight: "本人遮右眼 · 屏幕映光"
         case .sideFar: "自己遮左眼 · 从远处开始"
         case .sideNear: "保持遮眼 · 慢慢移近手机"
         }
@@ -156,13 +156,13 @@ private enum GuidePose: String {
     static func at(_ motion: GuideMotion, _ phase: Double) -> GuidePose {
         let p = min(0.999999, max(0, phase))
         if motion == .rest { return .blink }
-        if motion == .lighting { return .lightingOpen }
+        if motion == .lighting { return .open }
         if motion == .cover || motion == .coverSelf {
             let pose: GuidePose
             switch Int(p * 12) {
-            case 0, 1, 8, 10: pose = .lightingRight
-            case 4, 5, 9, 11: pose = .lightingLeft
-            default: pose = .lightingOpen
+            case 0, 1, 8, 10: pose = .right
+            case 4, 5, 9, 11: pose = .left
+            default: pose = .open
             }
             return pose
         }
@@ -285,7 +285,8 @@ private struct GuideDiagram: View {
                 }
                 let dot = motion == .follow ? CGPoint(x: tl.x + screen.width * (0.5 + relative.x),
                     y: tl.y + screen.height * (0.5 + relative.y)) : target
-                Cartoon.fixationTarget(context, center: dot, size: 17 * unit)
+                context.fill(Path(CGRect(origin: tl,size: screen)),with: .color(EyeStyle.reflectionBackground))
+                context.fill(Path(ellipseIn: CGRect(x: dot.x-3.5*unit,y: dot.y-3.5*unit,width: 7*unit,height: 7*unit)),with: .color(EyeStyle.reflectionTarget))
             default:
                 let step = min(4, max(0, Int(p * 5)))
                 let direction = [0, 3, 2, 1, 0][step]

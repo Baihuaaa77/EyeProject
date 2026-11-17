@@ -91,6 +91,7 @@ data class EyeTrend(
     val averageBlinksPerMinute: Float? = null,
     val checkInDays: Int = 0,
     val symptomDays: Int = 0,
+    val historyDays: List<TrendDay> = emptyList(),
 )
 
 @Serializable
@@ -113,6 +114,8 @@ data class EyeCareReport(
     val checkedInToday: Boolean,
     val todaySymptoms: List<String>,
     val suggestedReminderMinutes: Int,
+    val todayNote: String = "",
+    val completedCare: List<String> = emptyList(),
 ) {
     fun toJson(): String = LedgerData.JSON.encodeToString(serializer(), this)
 }
@@ -126,6 +129,7 @@ object EyeCareEngine {
     private val SYMPTOM_POINTS = linkedMapOf(
         "眼睛干涩" to 10,
         "眼睛酸胀" to 10,
+        "眼睛疲劳" to 10,
         "看东西模糊" to 20,
         "头痛" to 10,
         "眼睛疼痛" to 25,
@@ -197,6 +201,7 @@ object EyeCareEngine {
             ),
             signals = signals, factors = factors, actions = actions, tips = tips(actions, factors, level, redFlag), consults = consults, trend = trend,
             checkedInToday = checkIn != null, todaySymptoms = symptoms, suggestedReminderMinutes = suggested,
+            todayNote = checkIn?.note.orEmpty(), completedCare = ledger.careCheckIns.filter { it.day == today }.map { it.key }.distinct(),
         )
     }
 
@@ -421,7 +426,7 @@ object EyeCareEngine {
 
     private fun trend(ledger: LedgerData, c: EyeCareContext, usage: Map<String, UsageDay>, child: Boolean, todayScore: Int?): EyeTrend {
         val days = (6 downTo 0).map { EyeCareDays.plusDays(c.today, -it) }
-        val rows = days.map { day ->
+        val history = (13 downTo 0).map { EyeCareDays.plusDays(c.today,-it) }.map { day ->
             val u = usage[day]
             val sessions = ledger.sessions.filter { it.day == day }
             val symptoms = ledger.checkIns.lastOrNull { it.day == day }
@@ -431,6 +436,7 @@ object EyeCareEngine {
             TrendDay(day, EyeCareDays.label(day, c.today), u?.screenMinutes, u?.longestSessionMinutes, u?.nightMinutes,
                 weightedBlink(sessions)?.let { (it * 10).roundToInt() / 10f }, score, u?.source)
         }
+        val rows = history.takeLast(7)
         val screen = rows.mapNotNull { it.screenMinutes }
         val average = screen.takeIf { it.isNotEmpty() }?.average()?.roundToInt()
         val previous = (13 downTo 7).mapNotNull { usage[EyeCareDays.plusDays(c.today, -it)]?.screenMinutes }
@@ -462,7 +468,7 @@ object EyeCareEngine {
             else add("近 7 天没有做实时检测")
             if (checkIns.isNotEmpty()) add("打卡 ${checkIns.size} 天" + if (symptomDays > 0) "，其中 $symptomDays 天有不适" else "，都没有不适")
         }
-        return EyeTrend(rows, summary, average, previous, blink?.let { (it * 10).roundToInt() / 10f }, checkIns.size, symptomDays)
+        return EyeTrend(rows, summary, average, previous, blink?.let { (it * 10).roundToInt() / 10f }, checkIns.size, symptomDays,history)
     }
 
     // endregion

@@ -51,37 +51,41 @@ private const val BREAK_SECONDS = 20
  * 盖在首页上的完整页面，返回键或「提前结束」可退出。苹果端 RestBreakView 同一流程。
  */
 @Composable
-internal fun RestBreakPage(onClose: () -> Unit) {
+internal fun RestBreakPage(onClose: () -> Unit, title: String = "休息一下", seconds: Int = BREAK_SECONDS, hint: String = "看向6米外，慢慢眨眼，放松肩膀。", onComplete: () -> Unit = {}) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
     val haptics = rememberEyeHaptics()
     val sounds = rememberEyeCueSounds()
     val progress = remember { Animatable(0f) }
     var done by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
-        progress.animateTo(1f, tween(BREAK_SECONDS * 1_000, easing = LinearEasing))
+    var started by remember { mutableStateOf(false) }
+    androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_STOP) { onClose() }
+    LaunchedEffect(started) {
+        if (!started) return@LaunchedEffect
+        progress.animateTo(1f, tween(seconds * 1_000, easing = LinearEasing))
         done = true
+        onComplete()
         sounds.play(EyeCue.COMPLETE)
         haptics.success()
     }
     EyeFullScreenPage(onClose) {
         Column(Modifier.fillMaxSize().eyeBackdrop(colors)) {
-            TopBackBar(title = "休息一下", noText = true, containerColor = androidx.compose.ui.graphics.Color.Transparent, onBackClick = onClose)
+            TopBackBar(title = title, noText = true, containerColor = androidx.compose.ui.graphics.Color.Transparent, onBackClick = onClose)
             Column(Modifier.weight(1f).fillMaxWidth().screenHorizontalPaddingLarge(), horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center) {
                 Box(Modifier.size(240.dp), contentAlignment = Alignment.Center) {
                     Canvas(Modifier.fillMaxSize()) { drawProgressRing(colors, progress.value, 10.dp.toPx()) }
-                    val left = ceil(BREAK_SECONDS * (1f - progress.value)).toInt()
+                    val left = ceil(seconds * (1f - progress.value)).toInt()
                     EyeText(if (done) "完成" else "$left", style = typography.display, color = colors.textPrimary)
                 }
                 Spacer(Modifier.height(24.dp))
                 EyeText(if (done) "做得好！" else "秒", style = typography.title, color = colors.textPrimary)
                 Spacer(Modifier.height(8.dp))
-                EyeText(if (done) "眼睛放松一下就舒服多了，继续保持。" else "看向 6 米外的远处，慢慢眨几下眼，放松肩膀。",
+                EyeText(if (done) "本次已记录。" else hint,
                     style = typography.body, color = colors.textSecondary, textAlign = TextAlign.Center)
             }
             Column(Modifier.fillMaxWidth().screenHorizontalPaddingLarge().padding(vertical = 16.dp).navigationBarsPadding()) {
-                EyeButton(if (done) "完成" else "提前结束", if (done) EyeButtonRole.PRIMARY else EyeButtonRole.SECONDARY, onClose, Modifier.fillMaxWidth())
+                EyeButton(if (!started) "开始" else if (done) "完成" else "提前结束", if (!started || done) EyeButtonRole.PRIMARY else EyeButtonRole.SECONDARY, { if (!started) started = true else onClose() }, Modifier.fillMaxWidth())
             }
         }
     }

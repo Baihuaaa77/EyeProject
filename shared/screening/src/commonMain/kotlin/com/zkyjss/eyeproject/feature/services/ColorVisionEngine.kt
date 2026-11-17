@@ -59,8 +59,13 @@ class ColorVisionEngine(
         private set
 
     fun useSubject(profile: SubjectProfile) = _uiState.update {
-        it.copy(phase = ColorVisionPhase.Setup, fields = SubjectProfiles.testFields(profile, platform.epochMs()),
+        it.copy(phase = ColorVisionPhase.Profile, fields = SubjectProfiles.testFields(profile, platform.epochMs()),
             subject = TestSubject(profile.id, profile.nickname, profile.relation), profileSkipped = false, error = null)
+    }
+
+    /** 选择成员后留在原页，只有显式继续才进入准备。 */
+    fun continueProfile() = _uiState.update {
+        if (it.phase == ColorVisionPhase.Profile && it.subject != null) it.copy(phase = ColorVisionPhase.Setup) else it
     }
 
     fun skipProfile() = _uiState.update {

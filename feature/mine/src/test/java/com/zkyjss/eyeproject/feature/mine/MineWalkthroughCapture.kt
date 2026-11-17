@@ -93,6 +93,7 @@ Box(Modifier.fillMaxSize().background(LocalEyeColors.current.appBackground)) {
             }
         }
         capture("13-账户-未登录")
+        compose.onNodeWithText("登录与账号管理").performClick()
         account = account.copy(email = "demo@example.com", healthDataSync = true)
         compose.waitForIdle()
         capture("14-账户-已登录")
@@ -153,6 +154,7 @@ Box(Modifier.fillMaxSize().background(LocalEyeColors.current.appBackground)) {
             SubjectEditContent(draft, false, null, {}, {}, {}, { key, value -> draft = draft.copy(fields = draft.fields + (key to value)) }, {}, {})
         } }
         capture("19-成员资料")
+        compose.onNodeWithText("更多健康资料（可选）").performScrollTo().performClick()
         focus("视力与验光记录")
         capture("20-成员资料-视力与验光")
     }

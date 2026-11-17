@@ -74,8 +74,8 @@ struct EyeRootView: View {
     @ViewBuilder private func destination(_ route: AppRoute) -> some View {
         switch route {
         case .exercise: EyeExerciseView()
-        case .account: AccountPage(openCloudSync: { navigate(.cloud) })
-        case .settings: SystemSettingsPage(voice: voice, feedback: feedback)
+        case .account: AccountPage(editProfile: { navigate(.subjectEdit($0)) },openCloudSync: { navigate(.cloud) })
+        case .settings: SystemSettingsPage(voice: voice, feedback: feedback,openAccount: { navigate(.account) },openPermissions: { navigate(.permissions) },openCloud: { navigate(.cloud) })
         case .records: RecordsPage()
         case .subjects: SubjectsPage(edit: { navigate(.subjectEdit($0)) })
         case .cloud: CloudSyncPage(openAccount: { navigate(.account) })
@@ -182,7 +182,6 @@ private struct ServicesPage: View {
     var body: some View {
         PageScroll {
             PageHeader(title: "服务", openAccount: { navigate(.account) }, openSettings: { navigate(.settings) })
-            WeekUsageCard(values: serviceWeek, labels: ["周一","周二","周三","周四","周五","周六","周日"], todayIndex: (Calendar.current.component(.weekday, from: Date()) + 5) % 7)
             Text("选择一项自测").font(EyeStyle.title).foregroundStyle(EyeStyle.text)
                 .padding(.top, EyeSpacing.sectionGap - EyeSpacing.cardGap).padding(.leading, 4)
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 16), GridItem(.flexible(), spacing: 16)], spacing: 16) {
@@ -197,8 +196,7 @@ private struct ServicesPage: View {
                     EyeGlyphView(glyph: .eye, color: EyeStyle.primary).frame(width: 32, height: 32).frame(maxWidth: .infinity).padding(.top, 12)
                     Text("护眼操").font(EyeStyle.navigationTitle).foregroundStyle(EyeStyle.text).frame(maxWidth: .infinity).padding(.vertical, 12)
                 }
-            }.buttonStyle(.plain).frame(maxWidth: 170)
-            WarmDisclosure(title: "自测方法示范") { DemoHeroCard() }
+            }.buttonStyle(.plain).frame(maxWidth: .infinity)
             Text("自测结果仅供参考，不能替代医院检查。").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.tertiary)
                 .frame(maxWidth: .infinity).multilineTextAlignment(.center).padding(.top, 4)
         }
@@ -222,7 +220,7 @@ private struct DemoHeroCard: View {
     private struct Clip { let motion: GuideMotion; let name: String; let line: String }
     private static let clips = [
         Clip(motion: .blink, name: "干眼", line: "像平时一样自然眨眼"),
-        Clip(motion: .cover, name: "眼位", line: "本人遮眼，再移开 · 协助者在手机旁打光"),
+        Clip(motion: .cover, name: "眼位", line: "本人遮眼，再移开 · 屏幕白点提供映光"),
         Clip(motion: .near, name: "老视", line: "看清 E 的开口朝哪边"),
     ]
     /// 每种示范连播的遍数。

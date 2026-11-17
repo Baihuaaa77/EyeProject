@@ -77,6 +77,14 @@ class ColorVisionTest {
         assertEquals(ScreeningRiskLevel.UNKNOWN, badDemo.riskLevel)
     }
 
+    @Test fun selectingMemberStaysOnPickerUntilExplicitContinue() = runTest {
+        val engine = ColorVisionEngine(Platform(),backgroundScope)
+        engine.useSubject(SubjectProfile("me","SELF","小林",mapOf("出生年份" to "1990"),0))
+        assertEquals(ColorVisionPhase.Profile,engine.uiState.value.phase)
+        engine.continueProfile()
+        assertEquals(ColorVisionPhase.Setup,engine.uiState.value.phase)
+    }
+
     @Test fun fullFlowSavesARecordTheCatalogCanRead() = runTest {
         val platform = Platform()
         val engine = ColorVisionEngine(platform, this, StandardTestDispatcher(testScheduler), recordScope = this)

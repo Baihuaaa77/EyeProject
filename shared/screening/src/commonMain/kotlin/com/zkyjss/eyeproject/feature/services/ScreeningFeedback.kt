@@ -30,7 +30,7 @@ data class ScreeningFeedbackFrame(
 
 fun screeningFeedbackFrame(s: ScreeningState, coverRemainingMs: Long = -1): ScreeningFeedbackFrame {
     // 看远等待协助者确认期间不算开始，点「开始」时才响开始音
-    val active = !s.guidePending && !s.farWaiting && s.step !in setOf(ScreeningStep.PROFILE, ScreeningStep.ENVIRONMENT, ScreeningStep.RESULT)
+    val active = !s.stabilityInterrupted && !s.guidePending && !s.farWaiting && s.step !in setOf(ScreeningStep.PROFILE, ScreeningStep.ENVIRONMENT, ScreeningStep.RESULT)
     val suffix = when (s.step) {
         ScreeningStep.NEAR_VISION -> ":${s.visionEye}"
         ScreeningStep.DISTANCE_CURVE -> ":${s.curveIndex}"
@@ -40,14 +40,14 @@ fun screeningFeedbackFrame(s: ScreeningState, coverRemainingMs: Long = -1): Scre
     // 移动到新目标距离途中不算偏离，不发距离警示音
     val target = if (s.guidePending || s.distanceMoveToCm != null) null else screeningDistanceTarget(s)
     return ScreeningFeedbackFrame(s.step.name + suffix, active, s.step == ScreeningStep.RESULT,
-        if (s.step == ScreeningStep.GAZE_CALIBRATION && !s.gazeCalibrationFailed) s.gazeCalibrationIndex else -1,
+        if (active && s.step == ScreeningStep.GAZE_CALIBRATION && !s.gazeCalibrationFailed) s.gazeCalibrationIndex else -1,
         s.step == ScreeningStep.GAZE_CALIBRATION && s.gazeCalibrationFailed,
         // 看远的最后 3 秒响节拍音：受试者不看屏幕，听到结束音再看回手机
-        countdown = if (s.step == ScreeningStep.FAR_FIXATION && !s.guidePending && s.secondsLeft in 1..3) s.secondsLeft else 0,
-        coverReady = s.step == ScreeningStep.COVER && !s.guidePending && s.coverMarks.isNotEmpty() &&
+        countdown = if (active && s.step == ScreeningStep.FAR_FIXATION && s.secondsLeft in 1..3) s.secondsLeft else 0,
+        coverReady = active && s.step == ScreeningStep.COVER && !s.guidePending && s.coverMarks.isNotEmpty() &&
             s.coverMarks.size < StrabismusProtocol.COVER_SEQUENCE.size && coverRemainingMs == 0L,
         distanceZone = feedbackDistanceZone(s.distanceCm,
-            s.faceDetected || (s.step == ScreeningStep.NEAR_VISION && s.distanceCm > 0f), target),
+            s.faceDetected || (s.step in setOf(ScreeningStep.NEAR_VISION,ScreeningStep.COVER) && s.distanceCm > 0f), target),
         movingToTarget = !s.guidePending && s.distanceMoveToCm != null)
 }
 
