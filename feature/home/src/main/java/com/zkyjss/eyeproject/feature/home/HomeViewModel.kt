@@ -65,17 +65,13 @@ class HomeViewModel @Inject constructor(
     val permissionEvents: SharedFlow<HomePermissionEvent> = _permissionEvents.asSharedFlow()
     private var pendingExactAlarm = false
     private var pendingMinutes: Int? = null
-    private var clockDay: String? = null
-    private val clock = homeClockTicks().onEach { now ->
-        val offset = TimeZone.getDefault().getOffset(now) / 60_000
-        val day = EyeCareDays.dayOf(now, offset)
-        if (clockDay != day) { clockDay = day; eyeCare.refreshUsage() }
-    }
+    // 持续停留首页或趋势页时，系统用屏时间也随整分钟更新。
+    private val clock = homeClockTicks().onEach { eyeCare.refreshUsage() }
 
-    /** 环境光按档次去抖：传感器每秒多次读数，档次与亮度不变就不重算报告。 */
+    /** 保留实际光照变化，避免同一档位内的 lux 读数停在旧值。 */
     private val environment: Flow<EnvironmentReading?> = eyeCare.environment().map<EnvironmentReading, EnvironmentReading?> { it }
         .onStart { emit(null) }
-        .distinctUntilChanged { a, b -> a?.brightness == b?.brightness && luxBand(a?.lux) == luxBand(b?.lux) }
+        .distinctUntilChanged()
 
     val uiState: StateFlow<HomeUiState> = combine(
         combine(eyeCare.ledger, eyeCare.systemUsage, environment, subjects.subjects, records.localRecords) { ledger, usage, env, people, list ->
@@ -198,13 +194,5 @@ class HomeViewModel @Inject constructor(
             }
         }
 
-        fun luxBand(lux: Float?): Int = when {
-            lux == null -> -1
-            lux < 10f -> 0
-            lux < 50f -> 1
-            lux < 200f -> 2
-            lux < 1000f -> 3
-            else -> 4
-        }
     }
 }

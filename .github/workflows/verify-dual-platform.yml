@@ -19,7 +19,7 @@ jobs:
         with: {distribution: temurin, java-version: "17"}
       - uses: gradle/actions/setup-gradle@v4
       - run: python3 scripts/ios/check_project.py
-      - run: chmod +x gradlew && ./gradlew -p shared :model:jvmTest :domain:jvmTest :screening:jvmTest
+      - run: chmod +x gradlew && ./gradlew -p shared :model:jvmTest :domain:jvmTest :screening:jvmTest :sync:jvmTest
   android:
     name: 安卓原有功能回归
     runs-on: ubuntu-latest
@@ -31,7 +31,7 @@ jobs:
         with: {packages: "platform-tools", log-accepted-android-sdk-licenses: false}
       - run: sdkmanager "platforms;android-37.0" "build-tools;36.0.0" "ndk;27.3.13750724" "cmake;3.22.1"
       - uses: gradle/actions/setup-gradle@v4
-      - run: chmod +x gradlew && ./gradlew :app:compileDebugKotlin :feature:home:testDebugUnitTest :feature:services:testDebugUnitTest :feature:mine:testDebugUnitTest :core:domain:testDebugUnitTest :app:assembleDebug :app:assembleRelease
+      - run: chmod +x gradlew && ./gradlew :app:compileDebugKotlin :feature:home:testDebugUnitTest :feature:services:testDebugUnitTest :feature:mine:testDebugUnitTest :core:domain:testDebugUnitTest :core:data:testDebugUnitTest :core:network:testDebugUnitTest :app:assembleDebug :app:assembleRelease
       - run: python3 scripts/android/check_release_package.py
       - run: git diff --exit-code -- docs
       - uses: actions/upload-artifact@v4

@@ -10,6 +10,10 @@ import com.zkyjss.eyeproject.core.domain.LiveEyeMonitor
 import com.zkyjss.eyeproject.core.eyecare.EyeCareEngine
 import com.zkyjss.eyeproject.core.eyecare.UsageDay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -20,12 +24,38 @@ import org.robolectric.RobolectricTestRunner
 import java.io.File
 import java.time.LocalDateTime
 import java.time.ZoneId
+import java.util.concurrent.atomic.AtomicReference
 
 /** 主动护眼数据：系统亮屏事件还原每日用屏，账本落盘与授权状态。 */
 @RunWith(RobolectricTestRunner::class)
 class EyeCareRepositoryTest {
     private val zone = ZoneId.of("Asia/Shanghai")
     private fun at(day: Int, hour: Int, minute: Int = 0) = LocalDateTime.of(2026, 10, day, hour, minute).atZone(zone).toInstant().toEpochMilli()
+
+    @Test
+    fun brightnessRefreshesWithoutALightSensorOrLightEvent() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val directory = File(context.cacheDir, "environment-${System.nanoTime()}").apply { mkdirs() }
+        val value = AtomicReference(0.25f)
+        val reader = object : ScreenUsageReader {
+            override fun hasAccess() = false
+            override fun read(nowMs: Long, zone: ZoneId, days: Int) = emptyList<UsageDay>()
+        }
+        val repo = OfflineFirstEyeCareRepository(directory, reader, null, { value.get() }, { at(23, 12) }, { zone })
+        val readings = Channel<com.zkyjss.eyeproject.core.data.eyecare.EnvironmentReading>(Channel.UNLIMITED)
+        val subscription = launch { repo.environment().collect { readings.send(it) } }
+        try {
+            val initial = withTimeout(5_000) { readings.receive() }
+            assertEquals(0.25f, initial.brightness)
+            assertNull(initial.lux)
+            assertTrue(!initial.luxSupported)
+            value.set(0.8f)
+            val changed = withTimeout(5_000) { readings.receive() }
+            assertEquals("无传感器时也能读到新的系统亮度", 0.8f, changed.brightness)
+        } finally {
+            subscription.cancel()
+        }
+    }
 
     @Test
     fun screenEventsBecomeDailyUsage() {

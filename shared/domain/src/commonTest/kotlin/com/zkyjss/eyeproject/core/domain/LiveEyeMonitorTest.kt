@@ -12,6 +12,38 @@ import kotlin.test.assertTrue
 
 /** 首页实时视窗：与干眼测试同一眨眼判据、曲线窗口裁剪、帧率与断流判断。 */
 class LiveEyeMonitorTest {
+    @Test fun staleCameraDoesNotKeepPublishingOldMeasurements() {
+        val monitor = LiveEyeMonitor()
+        var t = 1_000L
+        repeat(30) { monitor.update(face(0.3f), 720, 1280, t, 600f); t += 33 }
+        repeat(3) { monitor.update(face(0.05f), 720, 1280, t, 600f); t += 33 }
+        monitor.update(face(0.3f), 720, 1280, t, 600f)
+        assertEquals(1, monitor.snapshot(t).blinkCount)
+        val stale = monitor.snapshot(t + 61_000)
+        assertTrue(stale.stale)
+        assertFalse(stale.faceFound)
+        assertFalse(stale.eyesFound)
+        assertNull(stale.ear)
+        assertNull(stale.distanceCm)
+        assertEquals(0f, stale.fps)
+        assertEquals(0, stale.blinksLastMinute)
+        assertTrue(stale.samples.isEmpty())
+        assertEquals(1, stale.blinkCount, "累计眨眼数保留，滚动指标按当前时间过期")
+    }
+
+    @Test fun missingIrisMeasurementsDoNotReuseTheOldDistance() {
+        val monitor = LiveEyeMonitor()
+        val good = face(0.3f)
+        monitor.update(good, 720, 1280, 1_000, 600f)
+        assertEquals(35.1f, monitor.snapshot(1_000).distanceCm!!, 0.1f)
+        val missing = good.copy(leftEye = good.leftEye!!.copy(irisDiameterPx = 0f),
+            rightEye = good.rightEye!!.copy(irisDiameterPx = 0f))
+        monitor.update(missing, 720, 1280, 1_033, 600f)
+        assertNull(monitor.snapshot(1_033).distanceCm)
+        monitor.update(good, 720, 1280, 1_066, 600f)
+        assertEquals(35.1f, monitor.snapshot(1_066).distanceCm!!, 0.1f)
+    }
+
     /** 眼裂宽 1、上下各偏 h 的 6 点，EAR = 2h。 */
     private fun eye(ear: Float, label: String) = EyeLandmarks(label, listOf(
         Point2f(0f, 0f), Point2f(0.3f, -ear / 2), Point2f(0.7f, -ear / 2),

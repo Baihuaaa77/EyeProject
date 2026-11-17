@@ -99,12 +99,15 @@ final class EyeCareStore: ObservableObject {
     private let work = DispatchQueue(label: "eye.care.report", qos: .userInitiated)
     private var activeSince: Date?
     private var refreshTimer: Timer?
+    private var brightnessObserver: NSObjectProtocol?
     /// 本人测试结论的缓存：记录文件不变就不重新解析
     private var testsSignature = ""
     private var testsCache: [[String: Any]] = []
 
     private init() {
         ledger = (try? String(contentsOf: file, encoding: .utf8)) ?? ""
+        brightnessObserver = NotificationCenter.default.addObserver(forName: UIScreen.brightnessDidChangeNotification,
+            object: nil, queue: .main) { [weak self] _ in self?.refresh() }
     }
 
     private var nowMs: Int64 { Int64(Date().timeIntervalSince1970 * 1000) }

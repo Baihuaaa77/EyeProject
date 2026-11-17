@@ -496,7 +496,7 @@ struct BrightnessPage: View {
                 }
                 Slider(value: Binding(get: { brightness }, set: { brightness = $0; UIScreen.main.brightness = CGFloat($0) }), in: 0.05...1)
                     .tint(EyeStyle.primary)
-                Text(factor.map { "\($0.title)：\($0.detail)" } ?? "屏幕亮度和周围环境比较协调。").font(EyeStyle.body)
+                Text(factor.map { "\($0.title)：\($0.detail)" } ?? "请根据周围环境调整屏幕亮度。").font(EyeStyle.body)
                     .foregroundStyle(factor != nil ? EyeStyle.warning : EyeStyle.text)
             }
             Panel {
@@ -511,6 +511,10 @@ struct BrightnessPage: View {
             }
         }
         .onAppear { brightness = Double(UIScreen.main.brightness) }
+        .onReceive(NotificationCenter.default.publisher(for: UIScreen.brightnessDidChangeNotification)) { _ in
+            brightness = Double(UIScreen.main.brightness)
+            store.refresh()
+        }
         .onDisappear { store.refresh() }
     }
 }

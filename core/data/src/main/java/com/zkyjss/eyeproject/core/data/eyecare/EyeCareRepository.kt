@@ -13,6 +13,9 @@ import com.zkyjss.eyeproject.core.eyecare.LedgerData
 import com.zkyjss.eyeproject.core.eyecare.UsageDay
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,10 +28,11 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.time.ZoneId
+import java.util.concurrent.atomic.AtomicReference
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** 当下的环境光与屏幕亮度；[lux] 为 null 表示本机没有光线传感器。 */
+/** 当下的环境光与屏幕亮度；[lux] 为 null 表示暂无读数，是否支持传感器由 [EnvironmentReading.luxSupported] 区分。 */
 data class EnvironmentReading(val lux: Float?, val brightness: Float?, val luxSupported: Boolean)
 
 /** 系统用屏统计的授权状态与逐日数据（未授权时为空）。 */
@@ -78,14 +82,24 @@ internal class OfflineFirstEyeCareRepository(
     override fun environment(): Flow<EnvironmentReading> = callbackFlow {
         val manager = sensors
         val light = manager?.getDefaultSensor(Sensor.TYPE_LIGHT)
-        trySend(EnvironmentReading(null, brightness(), light != null))
-        if (manager == null || light == null) { awaitClose {}; return@callbackFlow }
+        val lux = AtomicReference<Float?>(null)
         val listener = object : SensorEventListener {
-            override fun onSensorChanged(event: SensorEvent) { trySend(EnvironmentReading(event.values[0], brightness(), true)) }
+            override fun onSensorChanged(event: SensorEvent) {
+                val value = event.values.firstOrNull()?.takeIf { it.isFinite() && it >= 0f } ?: return
+                lux.set(value)
+                trySend(EnvironmentReading(value, brightness(), true))
+            }
             override fun onAccuracyChanged(sensor: Sensor, accuracy: Int) = Unit
         }
-        manager.registerListener(listener, light, SensorManager.SENSOR_DELAY_NORMAL)
-        awaitClose { manager.unregisterListener(listener) }
+        val supported = manager != null && light != null && manager.registerListener(listener, light, SensorManager.SENSOR_DELAY_NORMAL)
+        // 系统亮度可独立变化；无光线传感器或光照不变时也需要刷新。
+        val ticker = launch {
+            while (isActive) {
+                trySend(EnvironmentReading(lux.get(), brightness(), supported))
+                delay(1_000)
+            }
+        }
+        awaitClose { ticker.cancel(); manager?.unregisterListener(listener) }
     }.conflate().flowOn(Dispatchers.Default)
 
     override suspend fun refreshUsage() {

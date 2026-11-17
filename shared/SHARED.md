@@ -1,5 +1,7 @@
 # 双端共用核心
 
+> 2026-11-17 演示巡检：`SyncContract.RECORD_FILE_NAME` 统一四项自测文件名规则，Android 仓库与 iOS 云同步客户端均接受 `color_<时间>.json`。`LiveEyeMonitor` 的滚动指标按快照当前时间过期，断流后不再显示旧距离、EAR 和帧率；当前虹膜测距无效时清空当前距离，累计统计不重置。新增回归覆盖色觉记录与断流/测距恢复。
+
 这是独立的 Kotlin Multiplatform 构建，通过根目录 `includeBuild("shared")` 向安卓提供 JVM 包，通过 `EyeScreening.framework` 向 iOS 提供相同核心。
 
 ## 模块

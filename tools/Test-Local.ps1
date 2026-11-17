@@ -15,9 +15,13 @@ if (-not (Test-Path -LiteralPath $gradle)) {
 Push-Location $projectRoot
 try {
     if ($Mode -eq 'Local') {
+        $sharedArgs = @('-p', 'shared', ':model:jvmTest', ':domain:jvmTest', ':screening:jvmTest', ':sync:jvmTest')
+        if ($Fresh) { $sharedArgs += '--rerun-tasks' }
+        & $gradle @sharedArgs
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         $gradleArgs = @(
-            ':feature:services:testDebugUnitTest',
-            ':feature:fatigue:testDebugUnitTest',
+            ':app:compileDebugKotlin',
+            'testDebugUnitTest',
             ':app:assembleDebug'
         )
         if ($Fresh) { $gradleArgs += '--rerun-tasks' }
@@ -26,7 +30,7 @@ try {
 
         Write-Host '本地逻辑与 Compose 测试通过。页面截图：'
         Write-Host (Join-Path $projectRoot 'feature\services\build\reports\ui')
-        Write-Host (Join-Path $projectRoot 'feature\fatigue\build\reports\ui')
+        Write-Host (Join-Path $projectRoot 'feature\home\build\reports\ui')
         Write-Host 'Debug APK：'
         Write-Host (Join-Path $projectRoot 'app\build\outputs\apk\debug\app-debug.apk')
         exit 0

@@ -452,15 +452,14 @@ internal fun GazeCalibrationContent(s: ScreeningState, vm: ScreeningTestViewMode
     TestStageCard(expanded = true) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             // 与追踪画布同高（两屏卡片结构相同，伸展量也相同）：校准点覆盖追踪目标会到达的整个范围，避免边缘外推。
-            Canvas(Modifier.fillMaxWidth().height(gazeCanvasBaseHeight(LocalConfiguration.current.screenHeightDp.dp) + rememberStageExtra()).clip(EyeShapes.medium).background(colors.white)
+            Canvas(Modifier.fillMaxWidth().height(gazeCanvasBaseHeight(LocalConfiguration.current.screenHeightDp.dp) + rememberStageExtra()).clip(EyeShapes.medium).background(colors.black)
                 .onGloballyPositioned { origin = it.positionInWindow() }) {
                 val target = StrabismusGaze.calibrationTargets[s.gazeCalibrationIndex]
                 val point = Offset(size.width * target.x, size.height * target.y)
                 // 暂停时圆点变淡：位置不变，提示受试者校准在等待
                 val dim = if (s.gazeCalibrationPaused) 0.35f else 1f
-                drawCircle(StageAccent.copy(alpha = 0.18f * dim), radius = 16.dp.toPx() * halo.value, center = point)
-                drawCircle(StageAccent.copy(alpha = dim), radius = 8.dp.toPx(), center = point)
-                drawCircle(colors.white, radius = 2.5.dp.toPx(), center = point)
+                drawCircle(colors.primary.copy(alpha = 0.18f * dim), radius = 16.dp.toPx() * halo.value, center = point)
+                drawCircle(colors.primary.copy(alpha = dim), radius = 8.dp.toPx(), center = point)
                 vm.reportGazeTarget(origin.x + point.x, origin.y + point.y)
             }
             StageCaption("注视校准 · ${s.gazeCalibrationIndex + 1}/${StrabismusGaze.calibrationTargets.size}")
@@ -540,7 +539,7 @@ private fun PursuitContent(s: ScreeningState, vm: ScreeningTestViewModel) {
     }
     TestStageCard(expanded = true) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Canvas(Modifier.fillMaxWidth().height(gazeCanvasBaseHeight(LocalConfiguration.current.screenHeightDp.dp) + rememberStageExtra()).clip(EyeShapes.medium).background(colors.white)
+            Canvas(Modifier.fillMaxWidth().height(gazeCanvasBaseHeight(LocalConfiguration.current.screenHeightDp.dp) + rememberStageExtra()).clip(EyeShapes.medium).background(colors.black)
                 .onGloballyPositioned { origin = it.positionInWindow() }) {
                 val halfW = size.width / 2f - radiusPx
                 val halfH = size.height / 2f - radiusPx
@@ -553,8 +552,9 @@ private fun PursuitContent(s: ScreeningState, vm: ScreeningTestViewModel) {
                 val target = vm.engine.pursuitTargetAt(renderTime)
                 val x = size.width / 2f + degToPx(target.x * scale)
                 val y = size.height / 2f - degToPx(target.y * scale)
-                // 准星外环即原 1 cm 目标包络，不改变轨迹或注视位置上报。
-                drawFixationTarget(LightEyeColors, Offset(x, y), radiusPx * 2f)
+                // 与注视标定使用相同的圆点和外圈；保留原有轨迹边界及位置上报。
+                drawCircle(colors.primary.copy(alpha = 0.18f), radius = 16.dp.toPx(), center = Offset(x, y))
+                drawCircle(colors.primary, radius = 8.dp.toPx(), center = Offset(x, y))
                 vm.reportGazeTarget(origin.x + x, origin.y + y)
             }
             StageCaption("剩余 ${s.secondsLeft} 秒")

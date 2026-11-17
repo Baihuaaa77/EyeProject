@@ -136,9 +136,9 @@ class LiveEyeMonitor(private val windowMs: Long = DEFAULT_WINDOW_MS) {
 
     private fun measureDistance(left: EyeLandmarks?, right: EyeLandmarks?, focalLengthPx: Float) {
         val iris = listOfNotNull(left, right).map { it.irisDiameterPx }.filter { it > 0f }
-        if (focalLengthPx <= 0f || iris.isEmpty()) return
+        if (!focalLengthPx.isFinite() || focalLengthPx <= 0f || iris.isEmpty()) { distance = null; return }
         val cm = DepthFromIris.distanceCm(iris.average().toFloat(), focalLengthPx)
-        if (cm !in MIN_DISTANCE_CM..MAX_DISTANCE_CM) return
+        if (!cm.isFinite() || cm !in MIN_DISTANCE_CM..MAX_DISTANCE_CM) { distance = null; return }
         distance = distance?.let { it + (cm - it) * SMOOTHING } ?: cm
         distanceSum += cm; distanceFrames++
         if (cm < CLOSE_CM) closeFrames++
@@ -147,34 +147,35 @@ class LiveEyeMonitor(private val windowMs: Long = DEFAULT_WINDOW_MS) {
     private fun measureHead(face: FaceMetrics?) {
         val pose = face?.headPose ?: run { headOffset = null; return }
         val offset = sqrt(pose.pitchDeg * pose.pitchDeg + pose.yawDeg * pose.yawDeg)
-        if (offset.isNaN() || abs(offset) > 90f) return
+        if (!offset.isFinite() || abs(offset) > 90f) { headOffset = null; return }
         headOffset = headOffset?.let { it + (offset - it) * SMOOTHING } ?: offset
         headSum += offset; headFrames++
     }
 
     fun snapshot(nowMs: Long): Snapshot = lock.withLock {
         val last = samples.lastOrNull()
+        val stale = latestMs >= 0 && nowMs - latestMs > STALE_MS
         Snapshot(
-            samples = samples.toList(),
-            blinkTimesMs = blinks.filter { latestMs - it <= windowMs },
+            samples = samples.filter { nowMs - it.timeMs <= windowMs },
+            blinkTimesMs = blinks.filter { nowMs - it <= windowMs },
             blinkCount = blinkCount,
-            blinksLastMinute = blinks.size,
+            blinksLastMinute = blinks.count { nowMs - it <= MINUTE_MS },
             lastClosedMs = lastClosedMs,
-            faceFound = faceFound,
-            eyesFound = leftEye != null && rightEye != null,
-            ear = last?.ear,
+            faceFound = faceFound && !stale,
+            eyesFound = leftEye != null && rightEye != null && !stale,
+            ear = last?.ear.takeUnless { stale },
             threshold = last?.threshold ?: detector.threshold,
             ready = earSamples >= READY_SAMPLES,
-            closed = last?.closed == true,
-            fps = samples.count { it.timeMs > latestMs - 1_000 }.toFloat(),
-            leftEye = leftEye,
-            rightEye = rightEye,
+            closed = last?.closed == true && !stale,
+            fps = samples.count { it.timeMs > nowMs - 1_000 }.toFloat(),
+            leftEye = leftEye.takeUnless { stale },
+            rightEye = rightEye.takeUnless { stale },
             imageWidth = imageWidth,
             imageHeight = imageHeight,
-            stale = latestMs >= 0 && nowMs - latestMs > STALE_MS,
+            stale = stale,
             waiting = latestMs < 0,
-            distanceCm = distance.takeIf { leftEye != null || rightEye != null },
-            headOffsetDeg = headOffset,
+            distanceCm = distance.takeIf { !stale && (leftEye != null || rightEye != null) },
+            headOffsetDeg = headOffset.takeUnless { stale },
         )
     }
 

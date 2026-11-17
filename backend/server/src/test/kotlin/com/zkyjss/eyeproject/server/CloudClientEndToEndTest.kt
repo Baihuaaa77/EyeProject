@@ -190,6 +190,14 @@ class CloudClientEndToEndTest {
                     client.sync()
                     assertNull(services.db.transaction { single("SELECT id FROM subjects WHERE id = ?", kidId) { it.getString(1) } })
 
+                    // 苹果端的新色觉记录自动上传；历史色觉文件也能在同步时补登。
+                    phone.records["color_1760502000000.json"] = """{"kind":"COLOR_VISION","valid":true,"riskLevel":"LOW"}"""
+                    client.recordSaved("color_1760502000000.json"); client.awaitIdle()
+                    assertEquals(1, services.db.transaction { single("SELECT COUNT(*) FROM records WHERE kind = 'COLOR_VISION'") { it.getInt(1) } })
+                    phone.records["color_1760503000000.json"] = """{"kind":"COLOR_VISION","valid":true,"riskLevel":"MEDIUM"}"""
+                    assertTrue(client.sync())
+                    assertEquals(2, services.db.transaction { single("SELECT COUNT(*) FROM records WHERE kind = 'COLOR_VISION'") { it.getInt(1) } })
+
                     // 服务器连不上（换了网络、原服务器已关）：同步卡住时照样能退出，且立即生效、不等服务器
                     val refreshToken = SyncContract.json.parseToJsonElement(phone.secrets.values.single())
                         .jsonObject["refreshToken"]!!.jsonPrimitive.content
@@ -210,7 +218,7 @@ class CloudClientEndToEndTest {
                     // 服务器连得上：退出登录只清会话，本机资料与记录保留，并在后台吊销服务端令牌
                     client.signOut(); client.awaitIdle()
                     assertTrue(phone.secrets.isEmpty())
-                    assertEquals(3, phone.records.size)
+                    assertEquals(5, phone.records.size)
                     val reuse = http.request("/v1/auth/refresh") {
                         method = HttpMethod.Post; contentType(ContentType.Application.Json); setBody("""{"refreshToken":"$refreshToken"}""")
                     }

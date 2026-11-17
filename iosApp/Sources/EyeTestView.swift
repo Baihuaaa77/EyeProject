@@ -208,7 +208,7 @@ struct EyeTestView: View {
     private var isGazeTask: Bool {
         pixelsPerMm > 0 && !runtime.bool("guidePending") && ["GAZE_CALIBRATION","FIXATION","FAR_FIXATION","COVER","PURSUIT"].contains(phase)
     }
-    /// 只有映光采集使用黑底光源；九点标定和眼动跟随保持原来的白底目标。
+    /// 映光采集使用黑底白色光源；九点标定和眼动跟随使用黑底主题橙色圆点。
     private var isReflectionTask: Bool {
         pixelsPerMm > 0 && !runtime.bool("guidePending") && ["FIXATION","FAR_FIXATION","COVER"].contains(phase)
     }
@@ -569,7 +569,7 @@ private struct GazeTargetView: View {
                 let trajectory = runtime.controller.pursuitTargetNow()
                 let point = target(in: size, trajectory: CGPoint(x: CGFloat(trajectory.x), y: CGFloat(trajectory.y)))
                 ZStack(alignment: .topLeading) {
-                    if reflection { EyeStyle.reflectionBackground } else { EyeStyle.optotypeField }
+                    EyeStyle.reflectionBackground
                     if phase == "GAZE_CALIBRATION" {
                         CalibrationDot(index: Int(runtime.number("gazeCalibrationIndex") + runtime.number("gazeCalibrationRound") * 100))
                             .opacity(runtime.bool("calibrationPaused") ? 0.35 : 1).position(point)
@@ -578,9 +578,7 @@ private struct GazeTargetView: View {
                         if reflection {
                             Circle().fill(EyeStyle.reflectionTarget).frame(width: diameter, height: diameter).opacity(lightOn ? 1 : 0).position(point)
                         } else {
-                            Canvas { ctx, size in
-                                Cartoon.fixationTarget(ctx,center: CGPoint(x: size.width / 2,y: size.height / 2),size: min(size.width,size.height),color: EyeStyle.fixedPrimary)
-                            }.frame(width: diameter,height: diameter).position(point)
+                            CalibrationDot(index: 0, animates: false).position(point)
                         }
                     }
                 }
@@ -632,20 +630,20 @@ private extension EyeRuntime {
 /// 换点时外圈从大收拢，帮助视线找到新位置；圆点中心即上报位置，立即到位。
 private struct CalibrationDot: View {
     let index: Int
+    var animates: Bool = true
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var halo: CGFloat = 1
     var body: some View {
         ZStack {
-            // 白底测试画布：固定深蓝，深色模式下也保持高对比
-            Circle().fill(EyeStyle.fixedPrimary.opacity(0.18)).frame(width: 32, height: 32).scaleEffect(halo)
-            Circle().fill(EyeStyle.fixedPrimary).frame(width: 16, height: 16)
-            Circle().fill(Color.white).frame(width: 5, height: 5)
+            // 黑底测试画布：主题橙色圆点，保留换点提示动效。
+            Circle().fill(EyeStyle.primary.opacity(0.18)).frame(width: 32, height: 32).scaleEffect(halo)
+            Circle().fill(EyeStyle.primary).frame(width: 16, height: 16)
         }.frame(width: 80, height: 80)
             .onAppear { pop() }
             .onChange(of: index) { _ in pop() }
     }
     private func pop() {
-        guard !reduceMotion else { halo = 1; return }
+        guard animates && !reduceMotion else { halo = 1; return }
         var snap = Transaction(); snap.disablesAnimations = true
         withTransaction(snap) { halo = 2.4 }
         DispatchQueue.main.async { withAnimation(.spring(response: 0.45, dampingFraction: 0.65)) { halo = 1 } }

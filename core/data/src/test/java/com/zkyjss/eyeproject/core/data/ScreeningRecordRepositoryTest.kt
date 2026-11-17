@@ -41,6 +41,26 @@ class ScreeningRecordRepositoryTest {
     private fun repository() = OfflineFirstScreeningRecordRepository(directory, network, sessions,
         AuthorizedCaller(network, sessions), scheduler) { 1_760_500_000_000L }
 
+    @Test
+    fun colorRecordsAreSavedListedExportedAndUploaded() = runTest {
+        val repo = OfflineFirstScreeningRecordRepository(directory, network, sessions, AuthorizedCaller(network, sessions),
+            scheduler, resolver = context.contentResolver) { 1_760_500_000_000L }
+        val name = "color_1760000000000.json"
+        val json = """{"kind":"COLOR_VISION","valid":true,"riskLevel":"LOW","completed":true,"assessmentVersion":"color-test"}"""
+        repo.saveRecord(name, json)
+        assertEquals(json, File(directory, name).readText())
+        assertEquals("色觉自测", repo.localRecords.first().single().title)
+        val target = File(directory, "color-report.txt")
+        assertTrue(repo.exportRecord(name, Uri.fromFile(target), RecordExportFormat.TEXT))
+        assertTrue(target.readText().contains("色觉正常"))
+        // 已有色觉文件在升级后也必须列出、补登并上传。
+        val restored = repository()
+        assertEquals(name, restored.localRecords.first().single().fileName)
+        signIn(consent = true)
+        assertEquals(1, restored.syncNow()!!.uploaded)
+        assertTrue(network.uploads.single().second.payload.contains("COLOR_VISION"))
+    }
+
     private fun signIn(consent: Boolean, accountId: String = "acc") = sessions.save(Session(accountId, "a@example.com", "subject", "access-0",
         Long.MAX_VALUE, "refresh-0", Long.MAX_VALUE, mapOf(ConsentType.HEALTH_DATA_SYNC to consent)))
 

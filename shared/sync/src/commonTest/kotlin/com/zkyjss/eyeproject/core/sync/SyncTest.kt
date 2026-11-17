@@ -17,6 +17,14 @@ internal const val DRY_EYE_RECORD = """{"protocolVersion":1,"kind":"DRY_EYE","as
 "riskLevel":"UNKNOWN","valid":false,"validityReasons":["测试未完整完成"],"features":{"blink_rate_per_min":12.0,"vmr":null}}"""
 
 class RecordSummaryTest {
+    @Test fun recordFileNamesCoverAllFourTestsAndRejectPaths() {
+        for (kind in listOf("dryeye", "presbyopia", "strabismus", "color")) {
+            assertTrue(SyncContract.RECORD_FILE_NAME.matches("${kind}_1760000000000.json"))
+        }
+        for (name in listOf("../color_1760000000000.json", "color_x.json", "subjects.json", "eyecare.json")) {
+            assertFalse(SyncContract.RECORD_FILE_NAME.matches(name))
+        }
+    }
     @Test fun serverAddressMayCarryAPathPrefix() {
         // 局域网 IP、域名、部署在主页域名下的子路径都可以；不接受查询串、空格和非 http(s)
         listOf("http://192.168.1.5:8080", "https://eye.example.com", "https://geometrylearning.com/eyeapi", "https://example.com/a/b")

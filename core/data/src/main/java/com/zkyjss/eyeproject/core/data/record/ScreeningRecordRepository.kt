@@ -271,7 +271,6 @@ internal class OfflineFirstScreeningRecordRepository(
 
     companion object {
         const val OUTBOX_FILE = "screening_outbox.json"
-        /** shared/screening 的记录命名：`dryeye_<ms>.json`、`presbyopia_<ms>.json`、`strabismus_<ms>.json`。 */
-        val RECORD_NAME = Regex("^(dryeye|presbyopia|strabismus)_\\d+\\.json$")
+        val RECORD_NAME = SyncContract.RECORD_FILE_NAME
     }
 }

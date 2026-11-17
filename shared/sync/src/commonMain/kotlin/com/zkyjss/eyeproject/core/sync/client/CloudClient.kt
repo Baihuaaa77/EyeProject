@@ -820,7 +820,7 @@ class CloudClient(
         private const val BIRTH_YEAR = "出生年份"
         const val GUARDIAN_PENDING = "待监护人同意"
         private val SIGNED_OUT = ApiResult.Failed(401, ErrorCodes.INVALID_TOKEN, "请先登录")
-        val RECORD_NAME = Regex("^(dryeye|presbyopia|strabismus)_\\d+\\.json$")
+        val RECORD_NAME = SyncContract.RECORD_FILE_NAME
         fun sexCode(value: String?) = when (value) { "男" -> "MALE"; "女" -> "FEMALE"; "不愿透露" -> "OTHER"; else -> null }
     }
 }

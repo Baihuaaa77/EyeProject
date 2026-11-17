@@ -9,6 +9,8 @@ import kotlinx.serialization.json.Json
  */
 object SyncContract {
     const val API_PREFIX = "/v1"
+    /** 四项自测共用的本机文件名白名单；保存、导出和历史补传使用同一规则。 */
+    val RECORD_FILE_NAME = Regex("^(dryeye|presbyopia|strabismus|color)_\\d+\\.json$")
     /**
      * 服务器地址格式（双端共用）：`http(s)://主机[:端口]`，可带路径前缀（如部署在主页域名下的 `https://域名/eyeapi`），
      * 不带查询串；末尾的 `/` 由调用方去掉。接口地址 = 服务器地址 + [API_PREFIX] + 路径。

@@ -177,7 +177,7 @@ internal fun EyeBrightnessContent(state: HomeUiState, onBack: () -> Unit, onOpen
                 SignalCell(signals.firstOrNull { it.key == "brightness" }, Modifier.weight(1f))
                 SignalCell(signals.firstOrNull { it.key == "light" }, Modifier.weight(1f))
             }
-            EyeText(factor?.let { "${it.title}：${it.detail}" } ?: "屏幕亮度和周围环境比较协调。", style = typography.body,
+            EyeText(factor?.let { "${it.title}：${it.detail}" } ?: "请根据周围环境调整屏幕亮度。", style = typography.body,
                 color = if (factor != null) colors.warning else colors.textPrimary)
         }
         Column(Modifier.fillMaxWidth().eyeGlass(colors, EyeShapes.panel).padding(18.dp),
