@@ -100,7 +100,7 @@ internal class ScreeningFrameProcessor(private val host: ScreeningEngine) {
             var stabilityFrameGood = true
             val before = _state.value
             if (before.kind == ScreeningKind.STRABISMUS && before.step == step && !before.guidePending && !before.farWaiting &&
-                step in setOf(ScreeningStep.GAZE_CALIBRATION,ScreeningStep.FIXATION,ScreeningStep.FAR_FIXATION,ScreeningStep.COVER,ScreeningStep.PURSUIT)) {
+                step in setOf(ScreeningStep.FIXATION,ScreeningStep.FAR_FIXATION,ScreeningStep.COVER,ScreeningStep.PURSUIT)) {
                 if (stabilityStep != step) {
                     stabilityStep = step; stability.clear()
                     stabilityCounts = ScreeningEngine.StabilityCounts(totalFrames,validFrames,qualityEligibleFrames,qualityEligibleValidFrames,opticalValidFrames)
@@ -109,11 +109,9 @@ internal class ScreeningFrameProcessor(private val host: ScreeningEngine) {
                 val positions = listOf(Triple(face?.leftEye,face?.leftOptical,VisionEye.LEFT),Triple(face?.rightEye,face?.rightOptical,VisionEye.RIGHT))
                     .mapNotNull { (eye,optical,which) ->
                         val visibleEye = eye ?: return@mapNotNull null
-                        val p = visibleEye.irisPoints.firstOrNull()
-                        if (p == null || (which == knownCovered && optical?.irisVisibilityContrast == null) || (BlinkDetector.ear(visibleEye.earPoints) ?: 0f)<0.16f ||
+                        if ((which == knownCovered && optical?.irisVisibilityContrast == null) || (BlinkDetector.ear(visibleEye.earPoints) ?: 0f)<0.16f ||
                             optical?.irisVisibilityContrast?.let { it<8f } == true) null
-                        else IrisFramePosition(which.name,p.x/frame.sourceWidth,p.y/frame.sourceHeight,
-                            visibleEye.irisDiameterPx/frame.sourceWidth,frame.sourceHeight.toFloat()/frame.sourceWidth)
+                        else eyeFramePosition(visibleEye,frame.sourceWidth,frame.sourceHeight)
                     }
                 val stabilityReading = stability.observe(time,step,positions,smoothedDistance,poseStable && headStable,before.stabilityInterrupted)
                 stabilityFrameGood = stabilityReading.ready

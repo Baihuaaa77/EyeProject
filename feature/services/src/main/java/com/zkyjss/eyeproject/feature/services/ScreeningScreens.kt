@@ -207,7 +207,7 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, onEditSubje
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
     Box(modifier.fillMaxSize()) {
-        if (gazeTask) StrabismusDarkSession(s, viewModel, { viewModel.stopCamera(); onBack() }, { settingsOpen = true }, openHelp) {
+        if (gazeTask && s.step in setOf(ScreeningStep.FIXATION, ScreeningStep.FAR_FIXATION, ScreeningStep.COVER)) StrabismusDarkSession(s, viewModel, { viewModel.stopCamera(); onBack() }, { settingsOpen = true }, openHelp) {
             distance?.let { DistanceBanner(it, compact = true, singleLine = true) }
         } else TestSessionLayout(
             title = if (kind == ScreeningKind.PRESBYOPIA) "老视自测" else "眼位自测",
@@ -244,6 +244,11 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, onEditSubje
                 ScreeningStep.RESULT -> ScreeningResultContent(s, viewModel)
             }
             if (gazeTask) TestNoticeSlot(notice)
+            if (s.step == ScreeningStep.PURSUIT && s.stabilityInterrupted) {
+                EyeButton(if (s.stabilityReady) "已稳定，重新开始本段" else "请回到原位并保持稳定", EyeButtonRole.PRIMARY,
+                    viewModel::restartStableStage,Modifier.fillMaxWidth(),enabled = s.stabilityReady)
+                EyeButton("重新开始整个测试",EyeButtonRole.SECONDARY,viewModel::restart,Modifier.fillMaxWidth())
+            }
         }
         distance?.let { DistanceEdgeGlow(it.zone) }
     }

@@ -517,48 +517,96 @@ struct BrightnessPage: View {
 
 // MARK: - 休息一下
 
-/// 「现在休息 20 秒」：看远处，圆环倒计时（中间大号秒数），结束时有提示音与轻触觉。与安卓 RestBreakPage 同一流程。
+/// 按实际经过时间倒计时，提前关闭或进入后台后不能补记完成。
+struct CareCountdown {
+    private(set) var startedAt: Date?
+    private(set) var completed = false
+    private var cancelled = false
+    mutating func start(at now: Date) { if startedAt == nil && !cancelled { startedAt = now } }
+    func remaining(total: TimeInterval,at now: Date) -> TimeInterval {
+        guard let startedAt else { return total }
+        return max(0,min(total,total - now.timeIntervalSince(startedAt)))
+    }
+    mutating func complete(total: TimeInterval,at now: Date) -> Bool {
+        guard startedAt != nil, !cancelled, !completed, remaining(total: total,at: now) <= 0 else { return false }
+        completed = true; return true
+    }
+    mutating func cancel() { cancelled = true }
+}
+
+/// 看远、闭眼和热敷共用的圆环倒计时，结束时有提示音与轻触觉。
 struct RestBreakView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
-    @State private var running = false
-    @State private var started = Date()
-    @State private var done = false
+    @State private var countdown = CareCountdown()
+    @State private var scheduleStart = Date()
+    private var running: Bool { countdown.startedAt != nil }
+    private var done: Bool { countdown.completed }
     var title = "休息一下"
     var seconds = 20.0
-    var hint = "看向6米外的远处，慢慢眨眼，放松肩膀。"
+    var hint = "看向6米外的远处。\n慢慢眨眼，放松肩膀。"
     var onComplete: () -> Void = {}
     var body: some View {
         NavigationStack {
-            TimelineView(.periodic(from: started, by: 0.1)) { timeline in
-                let elapsed = running ? min(seconds, timeline.date.timeIntervalSince(started)) : 0
+            TimelineView(.periodic(from: countdown.startedAt ?? scheduleStart, by: 0.1)) { timeline in
+                let elapsed = seconds - countdown.remaining(total: seconds,at: timeline.date)
                 VStack(spacing: 0) {
                     Spacer()
                     ZStack {
                         ProgressRing(fraction: elapsed / seconds, lineWidth: 10)
-                        Text(done ? "完成" : "\(Int(ceil(seconds - elapsed)))").font(EyeStyle.display).foregroundStyle(EyeStyle.text).monospacedDigit()
+                        HStack(alignment: .firstTextBaseline,spacing: 4) {
+                            Text(done ? "完成" : "\(Int(ceil(seconds - elapsed)))").font(EyeStyle.display).monospacedDigit()
+                            if !done { Text("秒").font(EyeStyle.body) }
+                        }.foregroundStyle(EyeStyle.text)
                     }.frame(width: 240, height: 240)
-                    Text(done ? "做得好！" : "秒").font(EyeStyle.title).foregroundStyle(EyeStyle.text).padding(.top, 24)
+                    if done { Text("做得好！").font(EyeStyle.title).foregroundStyle(EyeStyle.text).padding(.top, 24) }
                     Text(done ? "本次已记录。" : hint)
-                        .font(EyeStyle.body).foregroundStyle(EyeStyle.secondary).multilineTextAlignment(.center).padding(.horizontal, 32).padding(.top, 8)
+                        .font(EyeStyle.body).foregroundStyle(EyeStyle.secondary).multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false,vertical: true).padding(.horizontal, 24).padding(.top, 24)
                     Spacer()
-                    Button(done ? "完成" : "提前结束") { EyeHaptics.tap(); dismiss() }
-                        .buttonStyle(EyeButtonStyle(role: done ? .primary : .secondary)).padding(16)
+                    Button(!running ? "开始" : done ? "完成" : "提前结束") {
+                        EyeHaptics.tap()
+                        if !running { countdown.start(at: Date()) } else { countdown.cancel(); dismiss() }
+                    }.buttonStyle(EyeButtonStyle(role: !running || done ? .primary : .secondary)).padding(16)
                 }
                 .onChange(of: elapsed >= seconds) { finished in
-                    if finished && !done { done = true; onComplete(); EyeCueSound.shared.play(.complete); EyeHaptics.success() }
+                    if finished && scenePhase == .active { finishIfNeeded(at: timeline.date) }
                 }
             }
             .background(EyeBackdrop())
             .navigationTitle(title).navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("关闭") { dismiss() } } }
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("关闭") { countdown.cancel(); dismiss() } } }
         }
-        .onAppear { started = Date() }
-        .onChange(of: scenePhase) { phase in if phase == .background && !done { dismiss() } }
+        .onDisappear { countdown.cancel() }
+        .onChange(of: scenePhase) { phase in
+            if phase == .background && !done { countdown.cancel(); dismiss() }
+            else if phase == .active { finishIfNeeded(at: Date()) }
+        }
+    }
+    private func finishIfNeeded(at now: Date) {
+        if countdown.complete(total: seconds,at: now) {
+            onComplete(); EyeCueSound.shared.play(.complete); EyeHaptics.success()
+        }
     }
 }
 
 // MARK: - 护眼操
+
+#if SCREENSHOT_CAPTURE
+extension RestBreakView {
+    /// 只在截图构建注入指定计时位置，不保存打卡或启动真实辅助任务。
+    init(captureTitle: String,seconds: Double,hint: String,elapsed: Double? = nil) {
+        self.init(title: captureTitle,seconds: seconds,hint: hint)
+        var clock = CareCountdown()
+        if let elapsed {
+            let now = Date()
+            clock.start(at: now.addingTimeInterval(-elapsed))
+            if elapsed >= seconds { _ = clock.complete(total: seconds,at: now) }
+        }
+        _countdown = State(initialValue: clock)
+    }
+}
+#endif
 
 /// 「护眼操」完整页面（与安卓 EyeExercisePage 同一流程与文案）：深色底，顶部进度条；上方大箭头 +「向左看」，
 /// 注视点（准星）在屏幕正中，下方倒计时。眼睛转到位时提示朝那个方向翻过去、手机振动，注视点顺着滑出画面再回来；最后闭眼休息 5 秒，每秒轻响一下。

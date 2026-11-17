@@ -351,7 +351,7 @@ class ScreeningEngine(platform: ScreeningPlatform, internal val scope: Coroutine
     internal fun interruptStability(reason: String, timeMs: Long = platform.nowMs(), distanceCm: Float = _state.value.distanceCm) {
         val current = _state.value
         if (current.kind != ScreeningKind.STRABISMUS || current.stabilityInterrupted || current.guidePending ||
-            current.step in setOf(ScreeningStep.PROFILE,ScreeningStep.ENVIRONMENT,ScreeningStep.RESULT)) return
+            current.step !in setOf(ScreeningStep.FIXATION,ScreeningStep.FAR_FIXATION,ScreeningStep.COVER,ScreeningStep.PURSUIT)) return
         timer?.cancel(); coverHoldJob?.cancel(); coverMonitorJob?.cancel()
         samples.removeAll { it.step == current.step }
         stabilityCounts?.let { count ->
@@ -372,7 +372,6 @@ class ScreeningEngine(platform: ScreeningPlatform, internal val scope: Coroutine
         stability.clear(); stabilityStep = null; faceCenterBaseline = null
         _state.update { it.copy(stabilityInterrupted = false,stabilityReason = null,stabilityReady = false,gazeWarning = null,warning = null) }
         when (current.step) {
-            ScreeningStep.GAZE_CALIBRATION -> retryGazeCalibration()
             ScreeningStep.FIXATION -> {
                 stepStartMs = platform.nowMs()
                 _state.update { it.copy(secondsLeft = StrabismusProtocol.FIXATION_SECONDS,instruction = "请注视屏幕上方的白点，保持约33厘米，头和手机保持不动。") }

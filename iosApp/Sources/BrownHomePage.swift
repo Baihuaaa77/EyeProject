@@ -131,7 +131,7 @@ struct BrownHomePage: View {
     @ViewBuilder private var companionTimerPage: some View {
             if let key = careTimer {
                 RestBreakView(title: key,seconds: key == "闭眼休息" ? 30 : key == "热敷眼睛" ? 180 : 20,
-                    hint: key == "热敷眼睛" ? "准备温度舒适的热敷用品，遵循用品说明；不适时停止。" : key == "闭眼休息" ? "轻轻闭眼，让视线离开屏幕。" : "望向6米外，计时结束后再回来。",
+                    hint: key == "热敷眼睛" ? "准备温度舒适的热敷用品。\n遵循用品说明，不适时停止。" : key == "闭眼休息" ? "轻轻闭眼。\n让眼睛休息30秒。" : "看向6米外的远处。\n放松视线，持续20秒。",
                     onComplete: { store.careCheckIn(key) })
             }
     }

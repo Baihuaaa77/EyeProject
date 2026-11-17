@@ -7,6 +7,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -51,7 +52,7 @@ private const val BREAK_SECONDS = 20
  * 盖在首页上的完整页面，返回键或「提前结束」可退出。苹果端 RestBreakView 同一流程。
  */
 @Composable
-internal fun RestBreakPage(onClose: () -> Unit, title: String = "休息一下", seconds: Int = BREAK_SECONDS, hint: String = "看向6米外，慢慢眨眼，放松肩膀。", onComplete: () -> Unit = {}) {
+internal fun RestBreakPage(onClose: () -> Unit, title: String = "休息一下", seconds: Int = BREAK_SECONDS, hint: String = "看向6米外的远处。\n慢慢眨眼，放松肩膀。", onComplete: () -> Unit = {}) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
     val haptics = rememberEyeHaptics()
@@ -76,10 +77,13 @@ internal fun RestBreakPage(onClose: () -> Unit, title: String = "休息一下", 
                 Box(Modifier.size(240.dp), contentAlignment = Alignment.Center) {
                     Canvas(Modifier.fillMaxSize()) { drawProgressRing(colors, progress.value, 10.dp.toPx()) }
                     val left = ceil(seconds * (1f - progress.value)).toInt()
-                    EyeText(if (done) "完成" else "$left", style = typography.display, color = colors.textPrimary)
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        EyeText(if (done) "完成" else "$left", Modifier.alignByBaseline(), style = typography.display, color = colors.textPrimary)
+                        if (!done) EyeText("秒", Modifier.alignByBaseline(), style = typography.body, color = colors.textPrimary)
+                    }
                 }
                 Spacer(Modifier.height(24.dp))
-                EyeText(if (done) "做得好！" else "秒", style = typography.title, color = colors.textPrimary)
+                if (done) EyeText("做得好！", style = typography.title, color = colors.textPrimary)
                 Spacer(Modifier.height(8.dp))
                 EyeText(if (done) "本次已记录。" else hint,
                     style = typography.body, color = colors.textSecondary, textAlign = TextAlign.Center)

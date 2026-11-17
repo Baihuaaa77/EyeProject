@@ -123,9 +123,9 @@ class ScreeningGazeFlowTest {
         assertEquals(false, samples.last().gazeOnTarget)
         assertNull(samples.last().leftGazeX)
         feed(0f, 0f)
-        assertEquals("虹膜单帧大幅跳回时不立即接收该帧",false,samples.last().gazeOnTarget)
-        repeat(3) { feed(0f,0f) }
-        assertTrue("大幅位置变化持续后中断当前遮盖段",vm.state.value.stabilityInterrupted)
+        assertEquals("只有眼球转动、眼角未移动时应恢复注视采样",true,samples.last().gazeOnTarget)
+        repeat(8) { feed(0f,0f) }
+        assertFalse("恢复注视不能被误判成手机或头部移动",vm.state.value.stabilityInterrupted)
         vm.interruptTest()
     }
 }

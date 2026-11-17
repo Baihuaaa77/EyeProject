@@ -247,7 +247,7 @@ internal fun BrownHomeOverview(
         )
     careTimer?.let { key ->
         RestBreakPage(onClose = { careTimer = null },title = key,seconds = when (key) { "闭眼休息" -> 30; "热敷眼睛" -> 180; else -> 20 },
-            hint = when (key) { "闭眼休息" -> "轻轻闭眼，让视线离开屏幕。"; "热敷眼睛" -> "准备温度舒适的热敷用品，遵循用品说明；不适时停止。"; else -> "望向6米外，放松视线，计时结束后再回来。" },
+            hint = when (key) { "闭眼休息" -> "轻轻闭眼。\n让眼睛休息30秒。"; "热敷眼睛" -> "准备温度舒适的热敷用品。\n遵循用品说明，不适时停止。"; else -> "看向6米外的远处。\n放松视线，持续20秒。" },
             onComplete = { actions.careCheckIn(key) })
     }
     if (booking) androidx.compose.ui.window.Dialog(onDismissRequest = { booking = false }) {

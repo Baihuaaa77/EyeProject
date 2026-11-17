@@ -44,7 +44,7 @@ internal class ScreeningResultWriter(private val host: ScreeningEngine) {
                         put("protocolVersion", if (s.kind == ScreeningKind.STRABISMUS) 8 else 4)
                         if (s.kind == ScreeningKind.STRABISMUS) {
                             put("stimulusSource", "screen-white-dot-v1")
-                            put("acquisitionVersion", "iris-stability-distance-1")
+                            put("acquisitionVersion", "eye-corner-stability-distance-2")
                             put("opticsAlgorithm", "screen-point-baseline-60-area-lid-v1")
                             put("sourceIdentityVerified", false)
                             put("stabilityInterruptions", s.stabilityInterruptions)

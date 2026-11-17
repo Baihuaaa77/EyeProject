@@ -55,6 +55,45 @@ import java.io.File
 class HomeVisualTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
+    @Test fun careTimerStartsCountsDownAndRecordsOnlyOnce() {
+        compose.mainClock.autoAdvance = false
+        var completed = 0
+        var closed = false
+        compose.setContent { EyeProjectTheme {
+            RestBreakPage({ closed = true },title = "远眺20秒",seconds = 2,
+                hint = "看向6米外的远处。\n放松视线，持续20秒。",onComplete = { completed++ })
+        } }
+        compose.onNodeWithText("开始").assertIsDisplayed()
+        compose.mainClock.advanceTimeBy(1000)
+        compose.onNodeWithText("2").assertIsDisplayed()
+        compose.onNodeWithText("开始").performClick()
+        compose.mainClock.advanceTimeBy(1050)
+        compose.onNodeWithText("1").assertIsDisplayed()
+        capture("care-timer-running",advance = false,dialog = true)
+        compose.mainClock.advanceTimeBy(1050)
+        compose.onNodeWithText("本次已记录。").assertIsDisplayed()
+        assertEquals(1,completed)
+        compose.mainClock.advanceTimeBy(1000)
+        assertEquals(1,completed)
+        compose.onAllNodesWithText("完成",useUnmergedTree = true).onLast().performClick()
+        assertTrue(closed)
+    }
+
+    @Test fun leavingCareTimerEarlyDoesNotRecordCompletion() {
+        compose.mainClock.autoAdvance = false
+        var completed = 0
+        var closed by mutableStateOf(false)
+        compose.setContent { EyeProjectTheme {
+            if (!closed) RestBreakPage({ closed = true },title = "闭眼休息",seconds = 20,onComplete = { completed++ })
+        } }
+        compose.onNodeWithText("开始").performClick()
+        compose.mainClock.advanceTimeBy(1050)
+        compose.onNodeWithText("提前结束").performClick()
+        compose.mainClock.advanceTimeBy(30000)
+        assertTrue(closed)
+        assertEquals(0,completed)
+    }
+
     @Test fun exerciseCompletionKeepsTheActionVisible() {
         var closed = false
         compose.setContent { EyeProjectTheme(darkTheme = true) {
@@ -492,10 +531,10 @@ class HomeVisualTest {
         assertEquals(0, selected)
     }
 
-    private fun capture(name: String, advance: Boolean = true) {
+    private fun capture(name: String, advance: Boolean = true, dialog: Boolean = false) {
         if (advance) compose.mainClock.advanceTimeBy(800)
         val bitmap = compose.runOnIdle {
-            val view = compose.activity.window.decorView
+            val view = if (dialog) org.robolectric.shadows.ShadowDialog.getLatestDialog().window!!.decorView else compose.activity.window.decorView
             Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888).also { view.draw(Canvas(it)) }
         }
         for (dir in listOf("build/reports/ui")) {
