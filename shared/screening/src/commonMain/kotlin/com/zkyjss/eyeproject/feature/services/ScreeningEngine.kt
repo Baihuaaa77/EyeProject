@@ -316,7 +316,10 @@ class ScreeningEngine(platform: ScreeningPlatform, internal val scope: Coroutine
             ScreeningStep.FIXATION -> retryGazeCalibration()
             ScreeningStep.PURSUIT -> runTimedStep(StrabismusProtocol.PURSUIT_SECONDS) { finish() }
             ScreeningStep.FAR_FIXATION -> _state.update { it.copy(farWaiting = true) }
-            ScreeningStep.COVER -> strabismus.monitorCover()
+            ScreeningStep.COVER -> {
+                reflectionCode.begin(s.step)
+                strabismus.monitorCover()
+            }
             else -> Unit
         }
     }
@@ -328,7 +331,10 @@ class ScreeningEngine(platform: ScreeningPlatform, internal val scope: Coroutine
     /** 记录实际画出的目标，而非未考虑画布缩放、滚动和布局位置的理论轨迹。 */
     fun reportGazeTarget(xPx: Float, yPx: Float) = strabismus.reportGazeTarget(xPx, yPx)
 
-    internal fun resetGazeWindow() = strabismus.resetGazeWindow()
+    internal fun resetGazeWindow() {
+        frameProcessor.resetGazeDrift()
+        strabismus.resetGazeWindow()
+    }
 
     /** 按实际显示时刻计算追踪轨迹；界面逐帧绘制，不依赖 50 ms 的状态快照。 */
     fun pursuitTargetAt(timeMs: Long): GazePoint {
@@ -351,15 +357,26 @@ class ScreeningEngine(platform: ScreeningPlatform, internal val scope: Coroutine
 
     fun retryCoverDetection() = strabismus.retryCoverDetection()
 
-    fun reflectionLightOn(): Boolean = _state.value.let { s ->
-        s.step != ScreeningStep.FIXATION || s.guidePending || ReflectionCodeVerifier.lightOn(platform.nowMs() - stepStartMs)
+    internal fun reflectionCoding(step: ScreeningStep, now: Long): Boolean =
+        _state.value.let { it.step == step && !it.guidePending && !it.farWaiting && !it.stabilityInterrupted } &&
+            reflectionCode.active(step) && now - stepStartMs in 0L until ReflectionCodeVerifier.DURATION_MS
+
+    fun reflectionChip(): Int {
+        val now = platform.nowMs()
+        return if (!helpSession.paused && reflectionCoding(_state.value.step, now))
+            ((now - stepStartMs) / ReflectionCodeVerifier.CHIP_MS).toInt() else -1
     }
+
+    fun reflectionLightOn(chip: Int): Boolean =
+        chip < 0 || ReflectionCodeVerifier.lightOn(chip * ReflectionCodeVerifier.CHIP_MS)
 
     /** 平台绘制亮点后回报实际明暗，解码不把计划时刻当作显示证据。 */
     fun reportReflectionLight(on: Boolean) {
-        diagnostics.reportLight(platform.nowMs(), on)
-        if (_state.value.step == ScreeningStep.FIXATION && !_state.value.guidePending)
-            reflectionCode.present(platform.nowMs(), on, platform.nowMs()-stepStartMs)
+        if (helpSession.paused) return
+        val now = platform.nowMs()
+        val step = _state.value.step
+        diagnostics.reportLight(now, on)
+        if (reflectionCoding(step, now)) reflectionCode.present(step, now, on, now-stepStartMs)
     }
 
     internal fun interruptStability(reason: String, timeMs: Long = platform.nowMs(), distanceCm: Float = _state.value.distanceCm) {
@@ -388,7 +405,8 @@ class ScreeningEngine(platform: ScreeningPlatform, internal val scope: Coroutine
         when (current.step) {
             ScreeningStep.FIXATION -> {
                 stepStartMs = platform.nowMs()
-                _state.update { it.copy(secondsLeft = StrabismusProtocol.FIXATION_SECONDS,instruction = "请注视屏幕上方的白点，保持约33厘米，头和手机保持不动。") }
+                reflectionCode.begin(ScreeningStep.FIXATION)
+                _state.update { it.copy(secondsLeft = StrabismusProtocol.FIXATION_SECONDS,instruction = "请看着白点，保持约33厘米。") }
                 runTimedStep(StrabismusProtocol.FIXATION_SECONDS) { startFarFixation() }
             }
             ScreeningStep.FAR_FIXATION -> startFarFixation()
@@ -406,7 +424,7 @@ class ScreeningEngine(platform: ScreeningPlatform, internal val scope: Coroutine
         timer?.cancel(); coverHoldJob?.cancel(); coverMonitorJob?.cancel(); coverDetector.clear()
         stopCamera()
         samples.clear()
-        gaze = null; gazeCalibration.clear(); renderedTargets.clear(); resetGazeWindow()
+        gaze = null; gazeCalibration.clear(); renderedTargets.clear(); reflectionCode.clear(); resetGazeWindow()
         distanceTracker.clear()
         stability.clear(); stabilityStep = null; stabilityCounts = null
         // 环境检查尚未开始计时，切后台只需释放相机，不提示「测试已中断」。
@@ -419,7 +437,7 @@ class ScreeningEngine(platform: ScreeningPlatform, internal val scope: Coroutine
     fun restart() {
         diagnostics.finish("重新开始测试")
         timer?.cancel(); coverHoldJob?.cancel(); coverMonitorJob?.cancel(); stopCamera(); samples.clear(); distanceTracker.clear(); coverDetector.clear()
-        gaze = null; gazeCalibration.clear(); renderedTargets.clear(); resetGazeWindow()
+        gaze = null; gazeCalibration.clear(); renderedTargets.clear(); reflectionCode.clear(); resetGazeWindow()
         stability.clear(); stabilityStep = null; stabilityCounts = null
         _state.value = ScreeningState(kind = _state.value.kind)
     }

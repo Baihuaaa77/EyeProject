@@ -12,6 +12,9 @@ data class OpticalEyeMeasurement(
     val referenceFromIris: Boolean = false,
     /** 原始眼区像素的虹膜—眼白对比度；遮盖检测使用，独立于角膜反光点是否可测。 */
     val irisVisibilityContrast: Float? = null,
+    val reflexCandidates: List<ReflexCandidate> = emptyList(),
+    val reflexConfidence: Float? = null,
+    val reflexCodeMatched: Boolean = false,
 ) {
     val usable: Boolean get() = pupilCenter != null && cornealReflex != null && rejectionReason == null
     val horizontalIrisUnits: Float?
@@ -20,5 +23,8 @@ data class OpticalEyeMeasurement(
         get() = if (usable && irisDiameterPx > 0f) (pupilCenter!!.y - cornealReflex!!.y) / irisDiameterPx else null
 }
 
-/** MediaPipe 面部变换矩阵估计的相对头姿；角度只用于采集质量检查。 */
+/** 候选点保留原图像素和局部对比度，供随设备移动的眼区光码解码。 */
+data class ReflexCandidate(val point: Point2f, val contrast: Float, val brightness: Float)
+
+ /** MediaPipe 面部变换矩阵估计的相对头姿；角度只用于采集质量检查。 */
 data class HeadPoseEstimate(val yawDeg: Float, val pitchDeg: Float, val rollDeg: Float)

@@ -46,7 +46,11 @@ data class EyeMotionSample(
     val leftGazeY: Float? = null,
     val rightGazeX: Float? = null,
     val rightGazeY: Float? = null,
+    /** 双眼融合后的单一屏幕注视点，正式质量监督优先使用它。 */
+    val gazeX: Float? = null,
+    val gazeY: Float? = null,
     val gazeOnTarget: Boolean? = null,
+    val reflectionCodeMatched: Boolean = false,
 )
 
 data class VisionAnswer(
@@ -169,6 +173,7 @@ data class ScreeningState(
     val coverMarks: List<CoverMark> = emptyList(),
     /** 刚执行的遮盖动作仍在保持期内；保持结束时给震动与音效，并只播报下一动作。 */
     val coverHolding: Boolean = false,
+    val reflectionPreparing: Boolean = false,
     /** 连续等待识别过久时可重新建立基线、重做本段；此操作不记录遮盖事件。 */
     val coverRetryAvailable: Boolean = false,
     val targetX: Float = 0f,

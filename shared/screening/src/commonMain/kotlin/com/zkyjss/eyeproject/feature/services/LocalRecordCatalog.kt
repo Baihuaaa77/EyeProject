@@ -118,6 +118,7 @@ object LocalRecordCatalog {
             )))
         }
         return entry.copy(
+            badge = snapshot?.string("badge") ?: entry.badge,
             version = snapshot?.string("version") ?: root.string("assessmentVersion") ?: assessment?.string("modelVersion") ?: "未记录（旧版本）",
             subjectLabel = subject?.string("name") ?: subject?.string("relation")?.let(SubjectProfiles::relationLabel) ?: "未选择成员",
             advice = snapshot?.string("advice") ?: root.string("advice").orEmpty(),

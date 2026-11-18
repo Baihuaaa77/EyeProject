@@ -183,7 +183,7 @@ private class DemoClip(val motion: GuideMotion, val name: String, val line: Stri
 
 private val DEMO_CLIPS = listOf(
     DemoClip(GuideMotion.BLINK, "干眼自测", "像平时一样自然眨眼"),
-    DemoClip(GuideMotion.COVER, "眼位自测", "本人遮眼，再移开 · 屏幕白点提供映光"),
+    DemoClip(GuideMotion.COVER, "眼位自测", "本人遮眼，再移开"),
     DemoClip(GuideMotion.NEAR, "老视自测", "看清 E 的开口朝哪边"),
 )
 

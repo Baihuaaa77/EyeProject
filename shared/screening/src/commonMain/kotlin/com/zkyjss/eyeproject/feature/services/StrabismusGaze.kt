@@ -14,7 +14,11 @@ data class GazeCalibrationSample(
  * 每只眼独立校准，允许只有一只眼可靠跟随，保留另一只眼的异常供原评估使用。
  * 九点覆盖整个追踪画布；每个屏幕轴用 a + b·水平 + c·垂直 的仿射映射，吸收头部轻微倾斜带来的轴间串扰。
  */
-class StrabismusGaze private constructor(private val left: Mapping?, private val right: Mapping?) {
+class StrabismusGaze private constructor(
+    private val left: Mapping?,
+    private val right: Mapping?,
+    private val binocular: Mapping?,
+) {
     private data class Axis(val a: Double, val bx: Double, val by: Double) {
         fun estimate(point: GazePoint) = (a + bx * point.x + by * point.y).toFloat()
     }
@@ -26,17 +30,29 @@ class StrabismusGaze private constructor(private val left: Mapping?, private val
     fun estimate(leftEye: GazePoint?, rightEye: GazePoint?): Pair<GazePoint?, GazePoint?> =
         leftEye?.let { left?.estimate(it) } to rightEye?.let { right?.estimate(it) }
 
+    /**
+     * 屏幕上的注视只有一个点。两眼映射后先做双眼融合，再交给任务监督，
+     * 避免把两只眼的检测抖动当成两个屏幕目标，也避免用“任一眼命中”放宽质量门控。
+     */
+    fun estimatePoint(leftEye: GazePoint?, rightEye: GazePoint?): GazePoint? {
+        val mapped = estimate(leftEye, rightEye)
+        return fuse(mapped.first, mapped.second)
+            ?: binocular?.let {
+                fuse(leftEye, rightEye)?.let(it::estimate)
+            }
+    }
+
     companion object {
         /**
-         * 画布内 3×3 网格，四周仅留 8% 边距，覆盖追踪任务的整个显示范围；
+         * 画布内 3×3 网格，四周仅留 2% 边距，覆盖追踪任务的整个显示范围；
          * 从中心开始按顺时针走相邻点，视线每次移动距离短、容易找到新点。
          * 约 18 秒，每点先等待 0.8 秒让视线落定，再采样 1.2 秒（30 帧/秒下约 36 帧，远多于每点至少 4 帧的要求）。
          */
         val calibrationTargets = listOf(
             GazePoint(0.5f, 0.5f),
-            GazePoint(0.08f, 0.08f), GazePoint(0.5f, 0.08f), GazePoint(0.92f, 0.08f),
-            GazePoint(0.92f, 0.5f), GazePoint(0.92f, 0.92f), GazePoint(0.5f, 0.92f),
-            GazePoint(0.08f, 0.92f), GazePoint(0.08f, 0.5f),
+            GazePoint(0.02f, 0.02f), GazePoint(0.5f, 0.02f), GazePoint(0.98f, 0.02f),
+            GazePoint(0.98f, 0.5f), GazePoint(0.98f, 0.98f), GazePoint(0.5f, 0.98f),
+            GazePoint(0.02f, 0.98f), GazePoint(0.02f, 0.5f),
         )
         const val CALIBRATION_POINT_MS = 2_000L
         const val SETTLE_MS = 800L
@@ -51,8 +67,8 @@ class StrabismusGaze private constructor(private val left: Mapping?, private val
         /** 异常持续超过此时长才提示「校准已暂停」，避免眨眼一下就闪提示。 */
         const val PAUSE_NOTICE_MS = 500L
         /** 注视容差（屏幕比例）：只判断「大致在看目标」，手机前置相机的眼动估计误差不小，宁宽勿严。 */
-        const val TOLERANCE_X = 0.30f
-        const val TOLERANCE_Y = 0.25f
+        const val TOLERANCE_X = 0.34f
+        const val TOLERANCE_Y = 0.30f
         /** 每点至少的有效帧数；允许最多 3 个点缺失或被剔除为离群点（剩余点仍须覆盖三行三列）。 */
         private const val MIN_SAMPLES_PER_POINT = 4
         private const val MAX_DROPPED_POINTS = 3
@@ -64,7 +80,11 @@ class StrabismusGaze private constructor(private val left: Mapping?, private val
 
         fun calibrate(samples: List<GazeCalibrationSample>): StrabismusGaze? {
             val left = fit(samples, true).mapping; val right = fit(samples, false).mapping
-            return if (left == null && right == null) null else StrabismusGaze(left, right)
+            val binocular = fit(samples.mapNotNull { sample ->
+                val eye = fuse(sample.left, sample.right) ?: return@mapNotNull null
+                GazeCalibrationSample(sample.index, sample.target, eye, null)
+            }, true).mapping
+            return if (left == null && right == null && binocular == null) null else StrabismusGaze(left, right, binocular)
         }
 
         /**
@@ -154,8 +174,7 @@ class StrabismusGaze private constructor(private val left: Mapping?, private val
 
         /**
          * 每个轴的拟合值须与目标明显相关（≥ 0.6），且均方根误差不超过该轴注视容差的 60%
-         * （水平 0.15、垂直 0.12 屏幕）。校准只用于宽容的注视监督（容差 0.25 / 0.20），不进入眼位度数；
-         * 手机屏幕窄，iPhone 实测水平眼动信号弱，均方根误差常在 0.14 左右，原先 0.10 的门槛几乎无法通过。
+         * 校准只用于注视监督，眼位估计使用独立的映光与遮盖观测。
          */
         private fun quality(model: Mapping, anchors: List<Anchor>): Boolean {
             for (horizontal in listOf(true, false)) {
@@ -181,6 +200,16 @@ class StrabismusGaze private constructor(private val left: Mapping?, private val
             point.x in -0.15f..1.15f && point.y in -0.15f..1.15f &&
             abs(point.x - target.x) <= TOLERANCE_X && abs(point.y - target.y) <= TOLERANCE_Y
 
+        /** 双眼都可用时取中点，只有一只眼可用时保留该眼，兼容遮盖和短暂丢点。 */
+        private fun fuse(left: GazePoint?, right: GazePoint?): GazePoint? = when {
+            left != null && right != null && left.x.isFinite() && left.y.isFinite() &&
+                right.x.isFinite() && right.y.isFinite() ->
+                GazePoint((left.x + right.x) * 0.5f, (left.y + right.y) * 0.5f)
+            left != null && left.x.isFinite() && left.y.isFinite() -> left
+            right != null && right.x.isFinite() && right.y.isFinite() -> right
+            else -> null
+        }
+
         private fun correlation(a: List<Double>, b: List<Double>) = StrabismusMeasures.correlation(a, b)
     }
 }
@@ -197,9 +226,17 @@ object PursuitGazeCheck {
                     val eye = if (useLeft) {
                         if (horizontal) sample.leftGazeX else sample.leftGazeY
                     } else if (horizontal) sample.rightGazeX else sample.rightGazeY
+                    val paired = if (horizontal) {
+                        sample.leftGazeX to sample.rightGazeX
+                    } else sample.leftGazeY to sample.rightGazeY
+                    val fused = (if (horizontal) sample.gazeX else sample.gazeY)?.takeIf { it.isFinite() }
+                        ?: paired.first?.let { l -> paired.second?.let { r ->
+                        if (abs(l - r) <= 0.22f) (l + r) * 0.5f else null
+                    } }
                     val target = points.lastOrNull { it.timeMs <= sample.timeMs - lag } ?: return@mapNotNull null
-                    if (sample.timeMs - lag - target.timeMs > 150L || eye == null || !eye.isFinite()) return@mapNotNull null
-                    eye.toDouble() to (if (horizontal) target.targetScreenX!! else target.targetScreenY!!).toDouble()
+                    val selected = fused ?: eye
+                    if (sample.timeMs - lag - target.timeMs > 150L || selected == null || !selected.isFinite()) return@mapNotNull null
+                    selected.toDouble() to (if (horizontal) target.targetScreenX!! else target.targetScreenY!!).toDouble()
                 }
                 if (pairs.size < 10) continue
                 val eye = pairs.map { it.first }; val target = pairs.map { it.second }
@@ -219,24 +256,127 @@ object PursuitGazeCheck {
         }
         return eye(true) || eye(false)
     }
+}
 
-    /**
-     * 只用「能判断」的帧计算注视比例：遮盖眼、刚动过遮盖、只有被遮眼完成校准等无法判断的帧（gazeOnTarget 为空）
-     * 不算作未注视。遮盖阶段可判断的帧太少时不据此判失败（眼位由映光与再注视指标评估）。
-     */
-    fun qualityReasons(samples: List<EyeMotionSample>, calibrated: Boolean): List<String> = buildList {
-        if (!calibrated) { add("注视校准未完成，请重新测试"); return@buildList }
-        for (step in listOf(ScreeningStep.FIXATION, ScreeningStep.COVER, ScreeningStep.PURSUIT)) {
-            val judged = samples.filter { it.step == step && it.gazeOnTarget != null }
-            if (step == ScreeningStep.COVER && judged.size < MIN_JUDGED_FRAMES) continue
-            val accepted = judged.count { it.gazeOnTarget == true }
-            if (judged.size < MIN_JUDGED_FRAMES || accepted.toDouble() / judged.size < MIN_ON_TARGET_RATIO)
-                add("${stepTitle(step)}未获得足够的有效注视，请看着屏幕目标重新测试")
+/** 三帧中值去除跳点，再按真实时间低通；短眨眼在显示层沿用上次稳定值。 */
+internal class GazeSmoother {
+    /** 五帧中值去掉单帧跳点，再用较慢的时间常数保留真正的扫视。 */
+    private val window = ArrayDeque<GazePoint>(5)
+    private var last: GazePoint? = null
+    private var lastTime = 0L
+    private var holdingBlink = false
+
+    fun clear() { window.clear(); last = null; lastTime = 0L; holdingBlink = false }
+
+    fun heldDuringBlink(time: Long): GazePoint? =
+        last?.takeIf { time - lastTime in 0L..350L }?.also { holdingBlink = true }
+
+    fun update(time: Long, point: GazePoint?): GazePoint? {
+        point ?: return null
+        if (!point.x.isFinite() || !point.y.isFinite()) return null
+        val gap = time - lastTime
+        val resumingBlink = holdingBlink && gap in 0L..350L
+        if (!resumingBlink && gap !in 0L..240L) clear()
+        holdingBlink = false
+        if (window.size == 5) window.removeFirst()
+        window.addLast(point)
+        val center = when {
+            window.size < 3 -> point
+            else -> {
+                val middle = window.size / 2
+                GazePoint(window.map { it.x }.sorted()[middle], window.map { it.y }.sorted()[middle])
+            }
         }
-        for (segment in 0..2) if (follows(samples, segment) != true)
-            add("${listOf("水平", "垂直", "斜向")[segment]}跟随未获得有效轨迹，请跟随圆点重新测试")
+        val interval = if (resumingBlink) gap.coerceAtMost(40L) else gap.coerceAtLeast(0L)
+        val weight = (1.0 - kotlin.math.exp(-interval / 180.0)).toFloat()
+        val smoothed = last?.let { GazePoint(it.x + weight * (center.x - it.x), it.y + weight * (center.y - it.y)) } ?: center
+        last = smoothed
+        lastTime = time
+        return smoothed
+    }
+}
+
+
+/** 闭眼后至少连续可见约两帧才恢复采样，避免眼睑边缘干扰刚睁眼时的虹膜中心。 */
+internal class GazeBlinkGate {
+    private var blinking = false
+    private var reopenedAt: Long? = null
+    private var openBaseline: Float? = null
+    private var openSamples = 0
+
+    fun clear() {
+        reopen()
+        openBaseline = null
+        openSamples = 0
     }
 
-    private const val MIN_JUDGED_FRAMES = 10
-    private const val MIN_ON_TARGET_RATIO = 0.5
+    private fun reopen() { blinking = false; reopenedAt = null }
+
+    fun isBlinking(time: Long, ear: Float?): Boolean {
+        if (ear == null) { reopen(); return false }
+        val threshold = if (openSamples >= 12) (openBaseline!! * 0.62f).coerceIn(0.14f,0.21f) else 0.16f
+        if (ear < threshold) {
+            blinking = true
+            reopenedAt = null
+        } else if (blinking && ear >= threshold + 0.01f) {
+            val start = reopenedAt ?: time.also { reopenedAt = it }
+            if (time - start >= 50L) reopen()
+        } else reopenedAt = null
+        if (!blinking) {
+            openBaseline = openBaseline?.let { it + (ear - it) * 0.045f } ?: ear
+            openSamples = (openSamples + 1).coerceAtMost(12)
+        }
+        return blinking
+    }
+}
+
+/**
+ * 任务内动态纠偏。九点标定只提供眼动范围和初始映射，进入每个屏幕目标阶段后，
+ * 用受试者开始阶段持续注视的实际目标重新估计整体偏移，适应手机与人脸相对位置变化。
+ */
+internal class GazeDriftCorrector {
+    private var stage: ScreeningStep? = null
+    private var startedAt = 0L
+    private var offset = GazePoint(0f, 0f)
+    private val raw = ArrayDeque<GazePoint>(30)
+    private val targets = ArrayDeque<GazePoint>(30)
+    private var anchored = false
+
+    fun clear() {
+        stage = null; startedAt = 0L; offset = GazePoint(0f, 0f)
+        raw.clear(); targets.clear(); anchored = false
+    }
+
+    fun begin(step: ScreeningStep, time: Long) {
+        if (stage == step) return
+        stage = step; startedAt = time; offset = GazePoint(0f, 0f)
+        raw.clear(); targets.clear(); anchored = false
+    }
+
+    fun update(time: Long, estimate: GazePoint?, target: GazePoint?): GazePoint? {
+        estimate ?: return null
+        if (target == null || stage == ScreeningStep.FAR_FIXATION) return estimate.shift(offset)
+        if (!anchored) {
+            raw.addLast(estimate); targets.addLast(target)
+            while (raw.size > 30) raw.removeFirst()
+            while (targets.size > 30) targets.removeFirst()
+            if (time - startedAt >= 700L && raw.size >= 8) {
+                val source = GazePoint(median(raw.map { it.x }), median(raw.map { it.y }))
+                val destination = GazePoint(median(targets.map { it.x }), median(targets.map { it.y }))
+                offset = GazePoint(destination.x - source.x, destination.y - source.y)
+                anchored = true
+            }
+        } else {
+            // 只在当前点已接近目标时缓慢跟随漂移，走神时不把偏移吸收到模型里。
+            val corrected = estimate.shift(offset)
+            if (StrabismusGaze.onTarget(corrected, target)) {
+                val alpha = 0.012f
+                offset = GazePoint(offset.x + alpha * (target.x - corrected.x), offset.y + alpha * (target.y - corrected.y))
+            }
+        }
+        return estimate.shift(offset)
+    }
+
+    private fun GazePoint.shift(delta: GazePoint) = GazePoint(x + delta.x, y + delta.y)
+    private fun median(values: List<Float>): Float = values.sorted()[values.size / 2]
 }

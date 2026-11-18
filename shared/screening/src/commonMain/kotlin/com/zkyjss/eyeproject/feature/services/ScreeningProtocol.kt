@@ -140,7 +140,9 @@ object StrabismusProtocol {
 
     /** 原文：注视点闪烁 1–2 Hz；视标直径 3–5 岁约 2.0 cm（≈3.5°），6–12 岁约 1.5 cm（≈2.6°）。 */
     const val FLASH_HZ = 1.5f
-    fun targetDiameterMm(age: Int?) = if ((age ?: 6) <= 5) 20f else 15f
+    // 屏幕同时承担照明，增大有效发光面积。看远时另找 6 米外视标。
+    /** 映光目标需要在前摄原图中形成稳定、连续的高亮区域。 */
+    fun targetDiameterMm(age: Int?) = if ((age ?: 6) <= 5) 46f else 42f
 
     /** 追踪：幅度 ±10°，水平/垂直正弦周期 4 秒各 2 次，45° 斜向直线往复周期 3 秒 2 次。 */
     const val PURSUIT_AMPLITUDE_DEG = 10f

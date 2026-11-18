@@ -112,6 +112,9 @@ class CoverDetectorTest {
         }
         feedFor(session, face(), 600L)
         engine.startCover(); engine.confirmGuide()
+        assertTrue(engine.state.value.reflectionPreparing)
+        feedFor(session, face(), ReflectionCodeVerifier.DURATION_MS)
+        assertFalse(engine.state.value.reflectionPreparing)
         return session
     }
 
@@ -166,7 +169,7 @@ class CoverDetectorTest {
         assertTrue(session.engine.state.value.coverMarks.isEmpty())
         assertEquals(ScreeningStep.COVER, session.engine.state.value.step)
         assertEquals(framesBeforeCover, session.engine.totalFrames, "重新识别不能残留本段旧质量计数")
-        feedFor(session, face(), 600L)
+        feedFor(session, face(), ReflectionCodeVerifier.DURATION_MS)
         feedFor(session, face(right = 0f, rightClosed = true), 1_000L)
         assertEquals(1, session.engine.state.value.coverMarks.size)
         session.engine.close()
@@ -247,6 +250,7 @@ class CoverDetectorTest {
         repeat(6) { feed(face()); advanceTimeBy(100); runCurrent() }
         engine.startCover(); engine.confirmGuide(); engine.markCover()
         assertTrue(engine.state.value.coverMarks.isEmpty(), "点屏幕不再冒充遮盖")
+        repeat((ReflectionCodeVerifier.DURATION_MS / 100).toInt()) { feed(face()); advanceTimeBy(100); runCurrent() }
         for ((index, action) in StrabismusProtocol.COVER_SEQUENCE.withIndex()) {
             val sample = when (action.covered) { VisionEye.LEFT -> face(left = 0f); VisionEye.RIGHT -> face(right = 0f); else -> face() }
             repeat(5) { feed(sample); advanceTimeBy(100); runCurrent() }
@@ -273,7 +277,7 @@ class CoverDetectorTest {
         for (helper in listOf("家长", "医生或护士", "其他")) {
             val fields = mapOf("协助测试者" to helper)
             assertTrue(usesSelfCover(fields))
-            assertTrue(coverGuideCue(fields).contains("屏幕白点提供映光"))
+            assertTrue(coverGuideCue(fields).contains("等提示后再遮眼"))
             assertFalse(coverGuideCue(fields).contains("协助者按提示真实遮盖"))
             assertFalse(coverGuideCue(fields).contains("同时点按"))
         }

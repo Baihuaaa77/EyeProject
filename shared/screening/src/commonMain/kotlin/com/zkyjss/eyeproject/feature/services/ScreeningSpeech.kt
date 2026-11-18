@@ -75,6 +75,7 @@ fun spokenDistanceZone(distanceCm: Float, faceVisible: Boolean, target: Pair<Flo
  * 保持结束时变为下一动作，由震动与音效配合提示，不再反复说「保持两秒」。
  */
 fun coverSpokenPrompt(s: ScreeningState): String {
+    if (s.reflectionPreparing) return "请睁开双眼看亮点，暂时不要遮眼"
     val index = if (s.coverHolding) s.coverMarks.size - 1 else s.coverMarks.size
     return StrabismusProtocol.COVER_SEQUENCE.getOrNull(index)?.label ?: "遮盖完成"
 }

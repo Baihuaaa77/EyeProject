@@ -38,11 +38,11 @@ class SharedParityTest {
     }
     @Test fun missingMeasurementsNeverBecomeNormal() {
         assertEquals(ScreeningRiskLevel.UNKNOWN,ScreeningAssessmentModel.presbyopia(ScreeningState()).riskLevel)
-        assertEquals(ScreeningRiskLevel.UNKNOWN,ScreeningAssessmentModel.strabismus(ScreeningState(),emptyList(),0,0).riskLevel)
+        assertEquals(ScreeningRiskLevel.UNCERTAIN,ScreeningAssessmentModel.strabismus(ScreeningState(),emptyList(),0,0).riskLevel)
     }
     @Test fun strabismusGoldenSessionProducesHighRisk() {
         val fixation = List(40) { i -> EyeMotionSample(i * 100L,ScreeningStep.FIXATION,0f,0f,0f,0f,33f,
-            leftNasal = 0.18f,rightNasal = 0.1f,leftVertical = 0f,rightVertical = 0f,gazeOnTarget = true) }
+            leftNasal = 0.18f,rightNasal = 0.1f,leftVertical = 0f,rightVertical = 0f,gazeOnTarget = true,reflectionCodeMatched = true) }
         val marks = listOf(CoverMark("移开遮盖，双眼注视",5_000,uncovered = VisionEye.RIGHT),
             CoverMark("移开遮盖，双眼注视",6_000,uncovered = VisionEye.LEFT))
         val cover = marks.flatMap { mark -> listOf(100L,400L).map { offset ->

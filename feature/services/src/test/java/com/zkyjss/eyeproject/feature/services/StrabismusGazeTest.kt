@@ -111,11 +111,10 @@ class StrabismusGazeTest {
         assertNull(PursuitGazeCheck.follows(pursuit().map { it.copy(targetScreenX = null) }, 0))
     }
 
-    @Test fun invalidGazeMakesFinalAssessmentUnknownInsteadOfLowOrHighRisk() {
+    @Test fun invalidGazeWithoutOpticalEvidenceReportsUndeterminedRisk() {
         val samples = pursuit(behavior = "still")
         val result = ScreeningAssessmentModel.strabismus(ScreeningState(gazeCalibrated = true), samples, 100, 100)
-        assertEquals(ScreeningRiskLevel.UNKNOWN, result.riskLevel)
-        assertTrue(result.findings.any { it.contains("跟随未获得有效轨迹") })
-        assertTrue(PursuitGazeCheck.qualityReasons(pursuit(), calibrated = false).any { it.contains("校准未完成") })
+        assertEquals(ScreeningRiskLevel.UNCERTAIN, result.riskLevel)
+        assertEquals(EvidenceStatus.UNAVAILABLE, result.evidence.first { it.key == "coordination" }.status)
     }
 }

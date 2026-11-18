@@ -114,7 +114,7 @@ struct GuideScene {
     let keyframe: Double
     static func scene(_ motion: GuideMotion) -> GuideScene {
         switch motion {
-        case .lighting: GuideScene(motion: motion, cycle: 5.0, beats: [.init(start: 0, label: "① 手机固定在支架上，正对双眼"), .init(start: 0.35, label: "② 屏幕白点提供映光"), .init(start: 0.7, label: "③ 本人按提示遮眼，不压眼球")], keyframe: 0.5)
+        case .lighting: GuideScene(motion: motion, cycle: 5.0, beats: [.init(start: 0, label: "① 手机固定在支架上，正对双眼"), .init(start: 0.35, label: "② 按提示遮眼"), .init(start: 0.7, label: "③ 不要压眼球")], keyframe: 0.5)
         case .rest: GuideScene(motion: motion, cycle: 4.0, beats: [.init(start: 0, label: "① 轻轻闭眼，放松休息"), .init(start: 0.5, label: "② 倒计时结束后再睁眼")], keyframe: 0.5)
         case .posture: GuideScene(motion: motion, cycle: 5.2, beats: [.init(start: 0.0, label: "① 正对屏幕，露出双眼"), .init(start: 0.25, label: "② 前后微调到提示的距离"), .init(start: 0.6, label: "③ 光线均匀，避免逆光")], keyframe: 0.7)
         case .blink: GuideScene(motion: motion, cycle: 4.2, beats: [.init(start: 0.0, label: "① 正对屏幕，保持放松"), .init(start: 0.15, label: "② 像平时一样自然眨眼"), .init(start: 0.55, label: "③ 应用自动记录眨眼")], keyframe: 0.6)

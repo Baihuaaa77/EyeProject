@@ -3,5 +3,6 @@
     <color name="eye_dark_background">#FF10110F</color>
     <color name="eye_warm_primary">#FFF6A267</color>
     <color name="eye_warm_brand_start">#FFFFD2AE</color>
-    <color name="eye_icon_background">#FF30261E</color>
+    <color name="eye_icon_terracotta_top">#FFC88D6E</color>
+    <color name="eye_icon_terracotta_bottom">#FF6A4131</color>
 </resources>

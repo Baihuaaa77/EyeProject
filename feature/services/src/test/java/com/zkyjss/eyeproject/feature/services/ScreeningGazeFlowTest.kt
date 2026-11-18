@@ -122,8 +122,8 @@ class ScreeningGazeFlowTest {
         val samples = field("samples").get(vm.engine) as List<EyeMotionSample>
         assertEquals(false, samples.last().gazeOnTarget)
         assertNull(samples.last().leftGazeX)
-        feed(0f, 0f)
-        assertEquals("只有眼球转动、眼角未移动时应恢复注视采样",true,samples.last().gazeOnTarget)
+        repeat(4) { feed(0f, 0f) }
+        assertEquals("抗噪短窗口结束后应恢复注视估计",true,samples.last().gazeOnTarget)
         repeat(8) { feed(0f,0f) }
         assertFalse("恢复注视不能被误判成手机或头部移动",vm.state.value.stabilityInterrupted)
         vm.interruptTest()

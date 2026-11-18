@@ -329,7 +329,7 @@ enum DiagnosticPanelRenderer {
             let full = fit(CGSize(width: images.full.width, height: images.full.height), CGRect(x: 16, y: 48, width: 300, height: 570))
             UIImage(cgImage: images.full).draw(in: full)
             text("原始眼区放大", CGRect(x: 334, y: 12, width: 590, height: 28))
-            text("同帧检测叠加：眼睑 / 虹膜 / 参照点 / 映光", CGRect(x: 334, y: 326, width: 600, height: 28))
+            text("同帧映光检测", CGRect(x: 334, y: 326, width: 600, height: 28))
             for (index, key) in ["left", "right"].enumerated() {
                 let crop = index == 0 ? images.left : images.right
                 let eye = row[key] as? [String: Any] ?? [:]
@@ -347,18 +347,21 @@ enum DiagnosticPanelRenderer {
                     return CGPoint(x: overlay.minX + (CGFloat(a[0].doubleValue)-crop.rect.minX)*overlay.width/crop.rect.width,
                                    y: overlay.minY + (CGFloat(a[1].doubleValue)-crop.rect.minY)*overlay.height/crop.rect.height)
                 }
-                ctx.saveGState(); ctx.clip(to: overlay); ctx.setLineWidth(1.5); ctx.setStrokeColor(color.cgColor)
-                for field in ["lid", "iris"] {
-                    let values = eye[field] as? [[NSNumber]] ?? []
-                    let boundary = field == "iris" && values.count == 5 ? Array(values.dropFirst()) : values
-                    let points = boundary.compactMap { point($0) }
-                    if let first = points.first { ctx.beginPath(); ctx.move(to: first); points.dropFirst().forEach { ctx.addLine(to: $0) }; ctx.closePath(); ctx.strokePath() }
+                let marker = point(eye["glint"])
+                if let marker {
+                    ctx.saveGState(); ctx.clip(to: overlay); ctx.setLineWidth(2)
+                    ctx.setStrokeColor(EyeStyle.diagnosticGlint.cgColor)
+                    ctx.strokeEllipse(in: CGRect(x: marker.x-6, y: marker.y-6, width: 12, height: 12))
+                    ctx.restoreGState()
                 }
-                for (field, ink) in [("pupil", EyeStyle.diagnosticReference), ("glint", EyeStyle.diagnosticGlint)] {
-                    if let p = point(eye[field]) { ctx.setStrokeColor(ink.cgColor); ctx.strokeEllipse(in: CGRect(x: p.x-5, y: p.y-5, width: 10, height: 10)) }
-                }
-                ctx.restoreGState()
-                text(crop.inherited ? "沿用眼区框，当前无关键点" : eye["rejection"] as? String ?? "无同帧检测", CGRect(x: x, y: 588, width: 286, height: 50), color, size: 14)
+                let summary: String
+                if crop.inherited { summary = "眼区定位暂缺" }
+                else if marker == nil { summary = eye["rejection"] as? String ?? "未检测到映光点" }
+                else if let confidence = eye["glintConfidence"] as? NSNumber, confidence.doubleValue.isFinite {
+                    let source = eye["glintCodeMatched"] as? Bool == true ? "光码确认" : "候选亮斑"
+                    summary = "置信度 \(Int(confidence.doubleValue * 100))% · \(source)"
+                } else { summary = "已检出 · 置信度未记录" }
+                text(summary, CGRect(x: x, y: 588, width: 286, height: 50), color, size: 14)
             }
             let displayW = (row["displayWidth"] as? NSNumber)?.doubleValue ?? 390
             let displayH = (row["displayHeight"] as? NSNumber)?.doubleValue ?? 844
@@ -366,7 +369,7 @@ enum DiagnosticPanelRenderer {
             UIColor.black.setFill(); UIBezierPath(roundedRect: phone, cornerRadius: 20).fill()
             UIColor(EyeStyle.secondary).setStroke(); UIBezierPath(roundedRect: phone, cornerRadius: 20).stroke()
             text("手机屏幕 · 全屏坐标", CGRect(x: 968, y: 12, width: 300, height: 28))
-            for (key, color, radius) in [("target", UIColor(EyeStyle.primary), CGFloat(7)), ("leftGaze", EyeStyle.diagnosticLeft, CGFloat(6)), ("rightGaze", EyeStyle.diagnosticRight, CGFloat(6))] {
+            for (key, color, radius) in [("target", UIColor(EyeStyle.primary), CGFloat(7)), ("gaze", UIColor(EyeStyle.diagnosticReference), CGFloat(7))] {
                 if key == "target" && row["targetVisible"] as? Bool == false { continue }
                 let color = key == "target" && row["targetColor"] as? String == "white" ? EyeStyle.diagnosticGlint : color
                 guard let a = row[key] as? [NSNumber], a.count >= 2 else { continue }
@@ -381,7 +384,7 @@ enum DiagnosticPanelRenderer {
                     if px < 0 || px > 1 || py < 0 || py > 1 { text("屏外估计", CGRect(x: phone.minX, y: phone.maxY+2, width: 200, height: 20), color, size: 13) }
                 }
             }
-            text("实心：实际目标   青/粉：左/右注视估计", CGRect(x: 334, y: 623, width: 890, height: 24), UIColor(EyeStyle.primary), size: 15)
+            text("实心：实际目标   绿色：双眼融合注视点", CGRect(x: 334, y: 623, width: 890, height: 24), UIColor(EyeStyle.primary), size: 15)
             let phaseKey = row["phase"] as? String ?? "未知阶段"
             let phase = ["GAZE_CALIBRATION": "注视标定", "FIXATION": "定点映光", "FAR_FIXATION": "看远", "COVER": "交替遮盖", "PURSUIT": "移动点注视"][phaseKey] ?? phaseKey
             let calibrated = phaseKey == "GAZE_CALIBRATION" && row["calibrationFailed"] as? Bool != true

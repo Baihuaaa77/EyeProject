@@ -130,18 +130,18 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, onEditSubje
     val voicePrompt = when (s.step) {
         // 选人页不播报：页面标题已写明，开口就问「这次测谁」显得突兀
         ScreeningStep.PROFILE -> ""
-        ScreeningStep.ENVIRONMENT -> if (kind == ScreeningKind.PRESBYOPIA) "请正对屏幕，保持约四十厘米，检查光照和距离。" else "请正对屏幕，保持三十三厘米，屏幕白点提供映光，请固定手机并注视白点。"
+        ScreeningStep.ENVIRONMENT -> if (kind == ScreeningKind.PRESBYOPIA) "请正对屏幕，保持约四十厘米。" else "请正对屏幕，保持约三十三厘米。"
         ScreeningStep.NEAR_VISION -> if (s.nearAwaitingEyeReady) s.instruction else "${s.visionEye.label}测试。保持四十厘米，停稳后显示视标。"
         ScreeningStep.PUSH_UP -> if (s.pushStage == PushStage.READY) "${pushEyeCue(s.visionEye)}，第${s.nearPoints.count { it.eye == s.visionEye } + 1}次移近。先移到四十五厘米以外。"
             else "看着E，慢慢移近。模糊后停一下，仍看不清就点按。"
         // 换距离的「请移动到 xx 厘米处」由距离提示播报，到位后不再重复
         ScreeningStep.DISTANCE_CURVE -> "停稳后视标会自动出现，请选择开口方向。"
         ScreeningStep.FLIPPER -> if (s.flipperCheck) "先确认两个距离都能看清。停稳后视标会自动出现，请选择开口方向。" else "停稳后视标会自动出现，请选择开口方向。"
-        ScreeningStep.FIXATION -> "请保持三十三厘米，看着上方的白色亮点，头和手机都不要动。"
-        ScreeningStep.FAR_FIXATION -> if (s.farWaiting) FAR_WAIT_PROMPT else "请看六米以外的目标，眼睛不要看手机，头和手机都不要动。"
-        ScreeningStep.GAZE_CALIBRATION -> "请只用眼睛依次看着圆点，头和手机都不要动。"
+        ScreeningStep.FIXATION -> "请看着白点，保持三十三厘米。"
+        ScreeningStep.FAR_FIXATION -> if (s.farWaiting) FAR_WAIT_PROMPT else "请看六米外的目标，头和手机不动。"
+        ScreeningStep.GAZE_CALIBRATION -> "请只转动眼睛依次看圆点。"
         ScreeningStep.COVER -> coverSpokenPrompt(s)
-        ScreeningStep.PURSUIT -> "请只用双眼跟随移动的圆点，保持头部稳定。"
+        ScreeningStep.PURSUIT -> "请只用眼睛跟随圆点，头不要动。"
         ScreeningStep.RESULT -> "测试完成，请查看结果。"
     }
     val guidance = screeningGuidance(s)
@@ -207,7 +207,8 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, onEditSubje
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
     Box(modifier.fillMaxSize()) {
-        if (gazeTask && s.step in setOf(ScreeningStep.FIXATION, ScreeningStep.FAR_FIXATION, ScreeningStep.COVER)) StrabismusDarkSession(s, viewModel, { viewModel.stopCamera(); onBack() }, { settingsOpen = true }, openHelp) {
+        if (gazeTask && s.step == ScreeningStep.GAZE_CALIBRATION) StrabismusCalibrationSession(s, viewModel, { viewModel.stopCamera(); onBack() }, { settingsOpen = true })
+        else if (gazeTask && s.step in setOf(ScreeningStep.FIXATION, ScreeningStep.FAR_FIXATION, ScreeningStep.COVER)) StrabismusDarkSession(s, viewModel, { viewModel.stopCamera(); onBack() }, { settingsOpen = true }, openHelp) {
             distance?.let { DistanceBanner(it, compact = true, singleLine = true) }
         } else TestSessionLayout(
             title = if (kind == ScreeningKind.PRESBYOPIA) "老视自测" else "眼位自测",
@@ -290,7 +291,7 @@ internal fun ProfileContent(kind: ScreeningKind, s: ScreeningState, vm: Screenin
 
 @Composable
 private fun EnvironmentContent(kind: ScreeningKind, s: ScreeningState, vm: ScreeningTestViewModel, onRetryCamera: () -> Unit) {
-    TestGuide(if (kind == ScreeningKind.STRABISMUS) GuideMotion.FIXATE else GuideMotion.POSTURE, "调整姿势", if (kind == ScreeningKind.PRESBYOPIA) "正对屏幕，约 40 厘米" else "正对屏幕，约 33 厘米；屏幕白点提供映光，请固定手机并注视白点")
+    TestGuide(if (kind == ScreeningKind.STRABISMUS) GuideMotion.FIXATE else GuideMotion.POSTURE, "调整姿势", if (kind == ScreeningKind.PRESBYOPIA) "正对屏幕，约 40 厘米" else "正对屏幕，约 33 厘米")
     if (s.cameraFrames == 0 || !s.faceDetected || s.distanceCm <= 0f) {
         EyeButton("重试相机", EyeButtonRole.SECONDARY, onRetryCamera, Modifier.fillMaxWidth())
     }
@@ -399,7 +400,7 @@ internal fun FarFixationContent(s: ScreeningState, onStart: () -> Unit) {
                 } else {
                     BaseEyeText("${s.secondsLeft}", style = typography.headline, color = colors.white)
                     BaseEyeText("眼睛越过手机，看着远处的目标", style = typography.subtitle, color = colors.white, textAlign = center)
-                    BaseEyeText("屏幕白点提供映光；本人看远处，头和手机不动", style = typography.bodySecondary, color = colors.white.copy(alpha = 0.72f),
+                    BaseEyeText("本人看远处，头和手机不动", style = typography.bodySecondary, color = colors.white.copy(alpha = 0.72f),
                         textAlign = center)
                 }
             }
@@ -455,11 +456,15 @@ internal fun GazeCalibrationContent(s: ScreeningState, vm: ScreeningTestViewMode
     }
     TestStageCard(expanded = true) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            // 与追踪画布同高（两屏卡片结构相同，伸展量也相同）：校准点覆盖追踪目标会到达的整个范围，避免边缘外推。
-            Canvas(Modifier.fillMaxWidth().height(gazeCanvasBaseHeight(LocalConfiguration.current.screenHeightDp.dp) + rememberStageExtra()).clip(EyeShapes.medium).background(colors.black)
+            val configuration = LocalConfiguration.current
+            val expansion = if (configuration.screenHeightDp > configuration.screenWidthDp) 1.10f else 1f
+            val height = gazeCanvasBaseHeight(configuration.screenHeightDp.dp) * expansion + rememberStageExtra()
+            Canvas(Modifier.fillMaxWidth().height(height).clip(EyeShapes.medium).background(colors.black)
                 .onGloballyPositioned { origin = it.positionInWindow() }) {
                 val target = StrabismusGaze.calibrationTargets[s.gazeCalibrationIndex]
-                val point = Offset(size.width * target.x, size.height * target.y)
+                val inset = minOf(16.dp.toPx(), size.width / 2f, size.height / 2f)
+                val point = Offset((size.width * target.x).coerceIn(inset, size.width - inset),
+                    (size.height * target.y).coerceIn(inset, size.height - inset))
                 // 暂停时圆点变淡：位置不变，提示受试者校准在等待
                 val dim = if (s.gazeCalibrationPaused) 0.35f else 1f
                 drawCircle(colors.primary.copy(alpha = 0.18f * dim), radius = 16.dp.toPx() * halo.value, center = point)
@@ -586,7 +591,7 @@ internal fun ScreeningResultContent(s: ScreeningState, vm: ScreeningTestViewMode
 
 /** 追踪与注视校准共用的画布高度。 */
 internal fun gazeCanvasBaseHeight(screenHeight: Dp): Dp =
-    minOf(EyeControlSizes.gazeCanvasHeight, screenHeight * if (screenHeight < EyeControlSizes.gazeCanvasHeight) 0.38f else 0.58f).coerceAtLeast(EyeControlSizes.gazeCanvasMinHeight)
+    minOf(EyeControlSizes.gazeCanvasHeight, screenHeight * if (screenHeight < EyeControlSizes.gazeCanvasHeight) 0.52f else 0.72f).coerceAtLeast(EyeControlSizes.gazeCanvasMinHeight)
 
 @Composable
 private fun EyeText(text: String, style: TextStyle, color: Color) {

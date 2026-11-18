@@ -20,7 +20,7 @@ internal class StrabismusStateMachine(private val host: ScreeningEngine) {
             gaze = null; gazeCalibration.clear(); renderedTargets.clear()
             stepStartMs = platform.nowMs()
             _state.update { it.copy(step = ScreeningStep.FIXATION, guidePending = true, gazeCalibrated = false,
-                gazeWarning = null, secondsLeft = StrabismusProtocol.FIXATION_SECONDS, instruction = "看着屏幕上方的白色亮点，头和手机保持不动。", warning = null) }
+                gazeWarning = null, secondsLeft = StrabismusProtocol.FIXATION_SECONDS, instruction = "看着白点，头和手机保持不动。", warning = null) }
 
         }
     }
@@ -40,7 +40,8 @@ internal class StrabismusStateMachine(private val host: ScreeningEngine) {
             if (s.step != ScreeningStep.FAR_FIXATION || s.guidePending || s.stabilityInterrupted || !s.farWaiting) return
             stepStartMs = platform.nowMs()
             faceCenterBaseline = null
-            _state.update { it.copy(farWaiting = false, instruction = "眼睛越过手机，看着 6 米外的目标，头和手机保持不动。", warning = null) }
+            reflectionCode.begin(ScreeningStep.FAR_FIXATION)
+            _state.update { it.copy(farWaiting = false, instruction = "看着 6 米外的目标，头和手机保持不动。", warning = null) }
             runTimedStep(StrabismusProtocol.FAR_FIXATION_SECONDS) { startCover() }
         }
     }
@@ -56,7 +57,7 @@ internal class StrabismusStateMachine(private val host: ScreeningEngine) {
             coverStageStartMs = platform.nowMs()
             stepStartMs = platform.nowMs()
             _state.update { it.copy(step = ScreeningStep.COVER, guidePending = true, coverMarks = emptyList(), coverHolding = false,
-                coverRetryAvailable = false, instruction = coverGuideCue(it.fields), warning = null) }
+                coverRetryAvailable = false, reflectionPreparing = false, instruction = coverGuideCue(it.fields), warning = null) }
         }
     }
 
@@ -70,8 +71,13 @@ internal class StrabismusStateMachine(private val host: ScreeningEngine) {
     /** 超时只提供恢复入口，不把等待时间或点击当成真实遮盖动作。 */
     fun monitorCover() = with(host) {
         coverMonitorJob?.cancel()
-        actionWaitStartMs = platform.nowMs()
+        _state.update { it.copy(reflectionPreparing = true, instruction = "请睁开双眼看亮点，暂时不要遮眼") }
         coverMonitorJob = scope.launch {
+            helpSession.delay(ReflectionCodeVerifier.DURATION_MS)
+            coverStageStartMs = platform.nowMs()
+            actionWaitStartMs = coverStageStartMs
+            if (_state.value.step != ScreeningStep.COVER) return@launch
+            _state.update { it.copy(reflectionPreparing = false, instruction = "下一步：${coverSequence[coverIndex].label}") }
             while (isActive && _state.value.step == ScreeningStep.COVER) {
                 helpSession.delay(250L)
                 val s = _state.value
@@ -125,7 +131,7 @@ internal class StrabismusStateMachine(private val host: ScreeningEngine) {
             var current = _state.value
             val learn = step != ScreeningStep.COVER || coverIndex == 0 || coverSequence.getOrNull(coverIndex)?.covered == null
             val observation = coverDetector.observe(time, face, quality, learn) ?: return
-            if (step != ScreeningStep.COVER || current.step != step || current.guidePending) return
+            if (step != ScreeningStep.COVER || current.step != step || current.guidePending || current.reflectionPreparing) return
             if (current.coverHolding) {
                 val held = current.coverMarks.lastOrNull() ?: return
                 val deadline = coverStageStartMs + coverSequence[coverIndex - 1].holdMs
@@ -200,8 +206,9 @@ internal class StrabismusStateMachine(private val host: ScreeningEngine) {
             faceCenterBaseline = null
             stepStartMs = platform.nowMs()
             _state.update { it.copy(step = ScreeningStep.GAZE_CALIBRATION, guidePending = false,
-                gazeCalibrationIndex = 0, gazeCalibrationRound = 0, gazeCalibrationFailed = false, gazeCalibrated = false, gazeCalibrationPaused = false,
-                instruction = "只用眼睛依次看着圆点，头和手机保持不动。", warning = null) }
+                // 先用 -1 清空上一阶段的目标，再由标定协程设置首个中心点，确保首点实际绘制时间晚于采样起点。
+                gazeCalibrationIndex = -1, gazeCalibrationRound = 0, gazeCalibrationFailed = false, gazeCalibrated = false, gazeCalibrationPaused = false,
+                instruction = "只用眼睛依次看圆点，头不要动。", warning = null) }
             timer = scope.launch {
                 // 每点需累计 [StrabismusGaze.SAMPLE_MS] 的有效采样才换下一点：异常期间暂停计时、自动延长，
                 // 最长 [StrabismusGaze.CALIBRATION_POINT_MAX_MS]；仍不够的点交给补测或整体重试。
@@ -220,8 +227,8 @@ internal class StrabismusStateMachine(private val host: ScreeningEngine) {
                 show(StrabismusGaze.calibrationTargets.indices.toList())
                 gaze = StrabismusGaze.calibrate(gazeCalibration)
                 // 少数点没看稳（眨眼、看晚了）时只重看这几个点，而不是整轮约 18 秒重来。
-                val retake = emptyList<Int>()
-                if (retake.isNotEmpty()) {
+                val retake = if (gaze == null) StrabismusGaze.pointsToRetake(gazeCalibration) else emptyList()
+                if (retake.isNotEmpty() && retake.size <= StrabismusGaze.MAX_RETAKE_POINTS) {
                     gazeCalibration.removeAll { it.index in retake }
                     _state.update { it.copy(gazeCalibrationRound = 1, instruction = "再看一次刚才没看稳的 ${retake.size} 个圆点。") }
                     show(retake)
@@ -230,12 +237,12 @@ internal class StrabismusStateMachine(private val host: ScreeningEngine) {
                 _state.update { it.copy(gazeCalibrationPaused = false, gazeWarning = null) }
                 if (gaze == null) {
                     _state.update { it.copy(gazeCalibrationFailed = true,
-                        warning = "未获得可靠注视校准；继续后可保存诊断，但可能因缺少有效注视样本而无法形成眼位结论。" + StrabismusGaze.failureReason(gazeCalibration)) }
+                        warning = "未获得可靠注视校准；可继续采集眼位，报告会注明注视监督的局限。" + StrabismusGaze.failureReason(gazeCalibration)) }
                 } else run {
                     stepStartMs = platform.nowMs(); resetGazeWindow(); faceCenterBaseline = null
-                    reflectionCode.clear()
+                    reflectionCode.begin(ScreeningStep.FIXATION)
                     _state.update { it.copy(step = ScreeningStep.FIXATION, gazeCalibrated = gaze != null,
-                        instruction = "看着屏幕上方的白色亮点，头和手机保持不动。", targetX = 1f, targetY = 0f) }
+                        instruction = "看着白点，头和手机保持不动。", targetX = 1f, targetY = 0f) }
                     runTimedStep(StrabismusProtocol.FIXATION_SECONDS) { startFarFixation() }
                 }
             }
@@ -247,19 +254,21 @@ internal class StrabismusStateMachine(private val host: ScreeningEngine) {
         val s = _state.value
         if (s.step != ScreeningStep.GAZE_CALIBRATION || !s.gazeCalibrationFailed) return@with
         timer?.cancel(); stepStartMs = platform.nowMs(); resetGazeWindow(); faceCenterBaseline = null
-        reflectionCode.clear()
+        reflectionCode.begin(ScreeningStep.FIXATION)
         _state.update { it.copy(step = ScreeningStep.FIXATION, gazeCalibrated = false, gazeCalibrationFailed = false,
-            instruction = "看着屏幕上方的白色亮点即可，头和手机保持大致稳定。", warning = null) }
+            instruction = "看着白点，头和手机保持稳定。", warning = null) }
         runTimedStep(StrabismusProtocol.FIXATION_SECONDS) { startFarFixation() }
     }
 
     fun reportGazeTarget(xPx: Float, yPx: Float) {
         with(host) {
             val s = _state.value
-            diagnostics.reportTarget(s.step, xPx, yPx, platform.nowMs())
-            if (s.guidePending || s.stabilityInterrupted || s.step !in setOf(ScreeningStep.GAZE_CALIBRATION, ScreeningStep.FIXATION, ScreeningStep.FAR_FIXATION, ScreeningStep.COVER, ScreeningStep.PURSUIT)) return
             val display = platform.display
+            if (!xPx.isFinite() || !yPx.isFinite() || xPx <= 0f || yPx <= 0f ||
+                xPx >= display.widthPixels || yPx >= display.heightPixels) return
             val now = platform.nowMs()
+            diagnostics.reportTarget(s.step, xPx, yPx, now)
+            if (s.guidePending || s.stabilityInterrupted || s.step !in setOf(ScreeningStep.GAZE_CALIBRATION, ScreeningStep.FIXATION, ScreeningStep.FAR_FIXATION, ScreeningStep.COVER, ScreeningStep.PURSUIT)) return
             val point = GazePoint(xPx / display.widthPixels, yPx / display.heightPixels)
             // 同一校准点在屏幕上被挪动（布局变化）：此前看的位置已不是现在记录的位置，需重新稳定后再采样
             renderedTargets.lastOrNull()?.takeIf { it.step == s.step && it.index == s.gazeCalibrationIndex }?.let { last ->

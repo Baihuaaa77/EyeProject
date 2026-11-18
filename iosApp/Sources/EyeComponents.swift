@@ -559,7 +559,7 @@ struct BarChartView: View {
 
 // MARK: - 应用图标与启动动画
 
-/// 应用图标的展示（关于页）：与桌面图标同一张图（爱科头像与纯棕底）。
+/// 应用图标的展示（关于页）：与桌面图标同一张图（爱科头像与暖陶棕渐变）。
 struct AppIconView: View {
     var body: some View {
         GeometryReader { geometry in

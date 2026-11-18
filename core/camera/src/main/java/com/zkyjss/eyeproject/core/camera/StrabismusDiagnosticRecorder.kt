@@ -167,7 +167,7 @@ internal class DiagnosticPanelRenderer(private val p: DiagnosticVideoPalette) : 
         text(if (originalScaled) "原画 · 编码降采样 · 不镜像" else "原视频 · 不镜像",16f,30f)
         val full=fit(source.width.toFloat(),source.height.toFloat(),RectF(16f,48f,316f,618f))
         canvas.drawBitmap(source,null,full,paint)
-        text("原始眼区放大",334f,30f); text("同帧检测：眼睑 / 虹膜 / 参照点 / 映光",334f,345f)
+        text("原始眼区放大",334f,30f); text("同帧映光检测",334f,345f)
         for((index,key) in listOf("left","right").withIndex()) {
             val eye=row.optJSONObject(key) ?: JSONObject(); val x=334f+300*index; val ink=if(index==0) p.left else p.right
             text(if(index==0) "受测者左眼" else "受测者右眼",x,65f,ink)
@@ -188,17 +188,21 @@ internal class DiagnosticPanelRenderer(private val p: DiagnosticVideoPalette) : 
             fun point(a: JSONArray): PointF = PointF(overlay.left+(a.optDouble(0).toFloat()-crop.left)*overlay.width()/crop.width(),
                 overlay.top+(a.optDouble(1).toFloat()-crop.top)*overlay.height()/crop.height())
             canvas.save(); canvas.clipRect(overlay); paint.style=Paint.Style.STROKE; paint.strokeWidth=1.5f; paint.color=ink
-            for(field in listOf("lid","iris")) {
-                val a=eye.optJSONArray(field) ?: continue; val path=Path()
-                val first = if (field == "iris" && a.length() == 5) 1 else 0
-                for(i in first until a.length()) a.optJSONArray(i)?.let { val pt=point(it); if(i==first) path.moveTo(pt.x,pt.y) else path.lineTo(pt.x,pt.y) }
-                path.close(); canvas.drawPath(path,paint)
+            val glint = eye.optJSONArray("glint")
+            glint?.let {
+                val marker = point(it)
+                paint.color = p.glint; paint.strokeWidth = 2f
+                canvas.drawCircle(marker.x,marker.y,6f,paint)
             }
-            for((field,color) in listOf("pupil" to p.reference,"glint" to p.glint)) eye.optJSONArray(field)?.let {
-                val pt=point(it); paint.color=color; canvas.drawCircle(pt.x,pt.y,5f,paint)
+            canvas.restore()
+            val confidence = eye.optDouble("glintConfidence")
+            val summary = when {
+                inherited -> "眼区定位暂缺"
+                glint == null -> eye.optString("rejection", "未检测到映光点")
+                !confidence.isFinite() -> "已检出 · 置信度未记录"
+                else -> "置信度 ${(confidence * 100).toInt()}% · ${if (eye.optBoolean("glintCodeMatched")) "光码确认" else "候选亮斑"}"
             }
-            canvas.restore(); paint.style=Paint.Style.FILL
-            text(if(inherited) "沿用眼区框，当前无关键点" else eye.optString("rejection","无同帧检测"),x,607f,ink,14f)
+            text(summary,x,607f,ink,14f)
         }
         text("手机屏幕 · 全屏坐标",968f,30f)
         val phone=fit(row.optDouble("displayWidth",390.0).toFloat(),row.optDouble("displayHeight",844.0).toFloat(),RectF(972f,60f,1252f,600f))

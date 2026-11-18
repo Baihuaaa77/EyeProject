@@ -37,7 +37,11 @@ internal class StrabismusDiagnostics(private val platform: ScreeningPlatform) {
     fun frame(frame: FaceLandmarkFrame, state: ScreeningState, valid: Boolean, opticalReady: Boolean,
               target: GazePoint?, estimates: Pair<GazePoint?, GazePoint?>?, onTarget: Boolean?,
               calibrated: Boolean, coding: Boolean, sessionTime: Long,
-              inputLeft: GazePoint? = null, inputRight: GazePoint? = null, calibrationSamples: Int = 0, sampleAccepted: Boolean = false, targetRenderTimeMs: Long? = null) {
+              inputLeft: GazePoint? = null, inputRight: GazePoint? = null, calibrationSamples: Int = 0, sampleAccepted: Boolean = false, targetRenderTimeMs: Long? = null,
+              leftMeasurement: OpticalEyeMeasurement? = frame.faces.singleOrNull()?.leftOptical,
+              rightMeasurement: OpticalEyeMeasurement? = frame.faces.singleOrNull()?.rightOptical,
+              leftBlinking: Boolean = false, rightBlinking: Boolean = false,
+              fusedEstimate: GazePoint? = null) {
         if (!active || state.kind != ScreeningKind.STRABISMUS) return
         val presented = targets.lastOrNull { it.step == state.step && it.time <= sessionTime }
         val actualTarget = if (targets.isEmpty()) target else presented?.point
@@ -77,14 +81,16 @@ internal class StrabismusDiagnostics(private val platform: ScreeningPlatform) {
                 (state.step !in setOf(ScreeningStep.FIXATION, ScreeningStep.COVER, ScreeningStep.FAR_FIXATION) || light?.second == true))
             put("targetColor", if (state.step in setOf(ScreeningStep.FIXATION, ScreeningStep.COVER, ScreeningStep.FAR_FIXATION)) "white" else "orange")
             put("target", point(actualTarget)); put("leftGaze", point(estimates?.first)); put("rightGaze", point(estimates?.second))
+            put("gaze", point(fusedEstimate ?: fuse(estimates?.first, estimates?.second)))
             put("calibrated", calibrated); put("gazeOnTarget", onTarget)
+            put("leftBlinking", leftBlinking); put("rightBlinking", rightBlinking)
             put("valid", valid); put("opticalReady", opticalReady); put("coding", coding)
             put("guidePending", state.guidePending); put("calibrationIndex", state.gazeCalibrationIndex)
             put("calibrationRound", state.gazeCalibrationRound); put("calibrationPaused", state.gazeCalibrationPaused)
             put("distanceCm", state.distanceCm); put("fps", frame.fps)
             put("warning", state.gazeWarning ?: state.warning ?: state.stabilityReason)
-            put("reasons", RecordArray(rejected)); put("left", eye(face?.leftEye, face?.leftOptical))
-            put("right", eye(face?.rightEye, face?.rightOptical))
+            put("reasons", RecordArray(rejected)); put("left", eye(face?.leftEye, leftMeasurement))
+            put("right", eye(face?.rightEye, rightMeasurement))
             put("coverCount", state.coverMarks.size); put("coverHolding", state.coverHolding)
             put("headYaw", pose?.yawDeg); put("headPitch", pose?.pitchDeg); put("headRoll", pose?.rollDeg)
         })
@@ -105,11 +111,16 @@ internal class StrabismusDiagnostics(private val platform: ScreeningPlatform) {
         runCatching { platform.diagnosticEvent(data.toString()) }
     }
     private fun point(p: GazePoint?) = p?.let { RecordArray(listOf(it.x, it.y)) }
+    private fun fuse(left: GazePoint?, right: GazePoint?): GazePoint? = when {
+        left != null && right != null -> GazePoint((left.x + right.x) * 0.5f, (left.y + right.y) * 0.5f)
+        else -> left ?: right
+    }
     private fun eye(eye: EyeLandmarks?, optical: OpticalEyeMeasurement?) = RecordObject().apply {
         put("lid", RecordArray(eye?.earPoints.orEmpty().map { RecordArray(listOf(it.x, it.y)) }))
         put("iris", RecordArray(eye?.irisPoints.orEmpty().map { RecordArray(listOf(it.x, it.y)) }))
         put("irisDiameter", eye?.irisDiameterPx); put("pupil", optical?.pupilCenter?.let { RecordArray(listOf(it.x, it.y)) })
         put("glint", optical?.cornealReflex?.let { RecordArray(listOf(it.x, it.y)) })
+        put("glintConfidence", optical?.reflexConfidence); put("glintCodeMatched", optical?.reflexCodeMatched)
         put("usable", optical?.usable == true); put("rejection", optical?.rejectionReason ?: if (optical?.usable == true) "检测通过" else "无光学观测")
         put("pupilContrast", optical?.pupilContrast); put("glintContrast", optical?.reflexContrast)
         put("visibility", optical?.irisVisibilityContrast); put("referenceFromIris", optical?.referenceFromIris)

@@ -15,13 +15,13 @@ enum EyeStyle {
     static let background = dyn(0x10110F, 0x10110F)
     static let optotypeSurround = dyn(0xFFFFFF, 0x1E2023, darkAlpha: 0)
     static let guideStageHeight: CGFloat = 200
-    static let gazeCanvasHeight: CGFloat = 480
+    static let gazeCanvasHeight: CGFloat = 600
     static let gazeCanvasMinHeight: CGFloat = 160
     static let optotypeField = Color.white
     static let reflectionBackground = Color.black
     static let reflectionTarget = Color.white
     static func gazeCanvasBaseHeight(_ screenHeight: CGFloat) -> CGFloat {
-        min(gazeCanvasHeight, max(gazeCanvasMinHeight, screenHeight * (screenHeight < gazeCanvasHeight ? 0.38 : 0.58)))
+        min(gazeCanvasHeight, max(gazeCanvasMinHeight, screenHeight * (screenHeight < gazeCanvasHeight ? 0.52 : 0.72)))
     }
     static let panel = dyn(0x22231E, 0x22231E)
     /// 浅填充：次要按钮、分段控件底、输入框、圆环底环。

@@ -65,18 +65,18 @@ class ScreeningAssessmentTest {
 
     // region 斜视
 
-    @Test fun strabismusWithoutReliableReflexFramesIsRejected() {
+    @Test fun strabismusWithoutReliableReflexFramesReportsUndeterminedRisk() {
         val result = ScreeningAssessmentModel.strabismus(ScreeningState(), emptyList(), 100, 10)
-        assertEquals("不足", result.quality)
-        assertEquals(ScreeningRiskLevel.UNKNOWN, result.riskLevel)
-        assertEquals("测试质量不佳，请重新测试", result.category)
+        assertTrue(result.quality.contains("证据不足"))
+        assertEquals(ScreeningRiskLevel.UNCERTAIN, result.riskLevel)
+        assertEquals(0.0, result.features["risk_evidence_confidence"]!!, 0.001)
     }
 
     /** 构造三项任务的样本：注视鼻侧偏心差 [fixNasal]、遮盖解除后偏心变化 [refix]、追踪是否协调。 */
     private fun strabismusSamples(fixNasal: Float, refix: Float, coordinated: Boolean): Pair<List<EyeMotionSample>, List<CoverMark>> {
         val fixed = (0..39).map {
             EyeMotionSample(it * 100L, ScreeningStep.FIXATION, 0f, 0f, 0f, 0f, 33f,
-                leftNasal = fixNasal + 0.1f, rightNasal = 0.1f, leftVertical = 0f, rightVertical = 0f, gazeOnTarget = true)
+                leftNasal = fixNasal + 0.1f, rightNasal = 0.1f, leftVertical = 0f, rightVertical = 0f, gazeOnTarget = true, reflectionCodeMatched = true)
         }
         val marks = listOf(
             CoverMark("移开遮盖，双眼注视", 5_000L, uncovered = VisionEye.RIGHT),
@@ -119,8 +119,8 @@ class ScreeningAssessmentTest {
         // 双眼映光同样偏鼻侧（κ 角）时，鼻侧坐标差为 0
         val result = strabismus(fixNasal = 0f, refix = 0f)
         assertEquals(0.0, result.features["fixation_hde_prism"]!!, 0.001)
-        assertEquals(ScreeningRiskLevel.LOW, result.riskLevel)
-        assertEquals("正常", result.category)
+        assertEquals(ScreeningRiskLevel.UNCERTAIN, result.riskLevel)
+        assertEquals("斜视风险未定，建议复测", result.category)
     }
 
     @Test fun coverRefixationAboveSixPrismIsSuspicious() {

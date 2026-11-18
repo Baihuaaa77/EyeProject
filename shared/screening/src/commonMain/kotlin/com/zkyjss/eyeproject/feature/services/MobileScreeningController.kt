@@ -190,7 +190,8 @@ class MobileScreeningController(
     fun markPresented(trialId: Int) {
         if (kind == "DRY_EYE") dry.markTrialPresented(trialId,platform.nowMs()) else screening.markTrialPresented(trialId,platform.nowMs())
     }
-    fun reflectionLightOn(): Boolean = screening.reflectionLightOn()
+    fun reflectionChip(): Int = screening.reflectionChip()
+    fun reflectionLightOn(chip: Int): Boolean = screening.reflectionLightOn(chip)
     fun reportReflectionLight(on: Boolean) = screening.reportReflectionLight(on)
     fun feedbackJson(enabled: Boolean): String {
         val frame = when (kind) {

@@ -141,7 +141,7 @@ object ResultReports {
             !valid -> "需要重测"
             strabismus -> when (level) {
                 ScreeningRiskLevel.LOW -> "正常"
-                ScreeningRiskLevel.UNCERTAIN -> "低风险"
+                ScreeningRiskLevel.UNCERTAIN -> "风险未定"
                 ScreeningRiskLevel.MEDIUM -> "可疑"
                 else -> "高度疑似"
             }
@@ -150,20 +150,20 @@ object ResultReports {
         val title = when {
             !valid -> "数据不足，暂时无法判断"
             strabismus -> when (level) {
-                ScreeningRiskLevel.LOW -> "眼位正常"
+                ScreeningRiskLevel.LOW -> "本次未发现明显眼位异常"
                 ScreeningRiskLevel.MEDIUM -> "眼位有可疑表现"
-                ScreeningRiskLevel.UNCERTAIN -> "眼位低风险"
+                ScreeningRiskLevel.UNCERTAIN -> "斜视风险未定"
                 else -> "高度疑似斜视"
             }
             else -> s.category.ifBlank { level.label }
         }
         val advice = when {
             !valid -> "关键数据不足，请改善测试条件并重新完成测试。"
-            level == ScreeningRiskLevel.UNCERTAIN -> if (strabismus) "部分指标在测量误差范围内，建议在光线均匀处、保持 33 cm 再测一次。"
+            level == ScreeningRiskLevel.UNCERTAIN -> if (strabismus) "现有证据不足以明确判断风险，建议在光线均匀处、固定手机后复测。"
                 else "调节能力接近同龄参考线，建议按提示放慢移近再测一次。"
             strabismus && level == ScreeningRiskLevel.HIGH -> "建议尽快到斜视专科就诊，做遮盖试验与三棱镜检查。"
             strabismus && level == ScreeningRiskLevel.MEDIUM -> "建议近期到眼科复查眼位；平时留意孩子是否歪头、眯眼或一只眼往外飘。"
-            strabismus -> "本次眼位正常，建议每半年复测一次。"
+            strabismus -> "本次采集未见明显眼位异常。"
             path == PresbyopiaPath.B -> if (level == ScreeningRiskLevel.LOW) "戴这副眼镜看近基本够用；如果看近处不舒服，仍建议到眼科检查。"
                 else "戴现有眼镜看近仍吃力，建议到眼科验光，看看眼镜度数是否合适。"
             path == PresbyopiaPath.C -> if (level == ScreeningRiskLevel.LOW) "当前状态下看近基本够用；建议验光确认看远的矫正后，再做一次标准测试。"
@@ -193,6 +193,10 @@ object ResultReports {
         )
         val sections = buildList {
             if (strabismus) {
+                s.evidence.firstOrNull { it.key == "riskConfidence" }?.let {
+                    add(ResultSection("风险估计置信度", listOf(ResultRow("等级", it.summary)) +
+                        it.details.map { reason -> ResultRow("依据", reason) }))
+                }
                 add(ResultSection("注视眼位", listOf(
                     ResultRow("水平偏斜", "${fmt1(f["fixation_hde_prism"])} Δ（误差 ±${fmt1(f["fixation_hde_ci_half_prism"])}）"),
                     ResultRow("垂直偏斜", "${fmt1(f["fixation_vde_prism"])} Δ（误差 ±${fmt1(f["fixation_vde_ci_half_prism"])}）"),
@@ -208,7 +212,7 @@ object ResultReports {
                     ResultRow("再注视中位偏移", "${fmt1(f["cover_refix_median_prism"])} Δ"),
                     ResultRow("可用事件", "${f["cover_refix_events"]?.toInt() ?: 0} 次"),
                     ResultRow("无遮盖时的抖动", f["cover_noise_floor_prism"]?.let { "${fmt1(it)} Δ" } ?: "—"),
-                    ResultRow("相机识别动作", "${s.coverMarks.size}/${StrabismusProtocol.COVER_SEQUENCE.size} 个动作"),
+                    ResultRow("相机识别动作", "${s.coverMarks.count { it.source == "CAMERA" }}/${StrabismusProtocol.COVER_SEQUENCE.size} 个动作"),
                 )))
                 add(ResultSection("跟随移动目标", listOf(
                     ResultRow("双眼对称性指数 BSI", f["bsi"]?.let { decimalString(it, 2) } ?: "—"),

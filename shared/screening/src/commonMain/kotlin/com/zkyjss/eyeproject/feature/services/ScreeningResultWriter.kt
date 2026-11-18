@@ -155,6 +155,7 @@ internal class ScreeningResultWriter(private val host: ScreeningEngine) {
                             put("targetScreenY", sample.targetScreenY?.toDouble() ?: RecordObject.NULL)
                             put("leftGazeX", sample.leftGazeX?.toDouble() ?: RecordObject.NULL); put("leftGazeY", sample.leftGazeY?.toDouble() ?: RecordObject.NULL)
                             put("rightGazeX", sample.rightGazeX?.toDouble() ?: RecordObject.NULL); put("rightGazeY", sample.rightGazeY?.toDouble() ?: RecordObject.NULL)
+                            put("gazeX", sample.gazeX?.toDouble() ?: RecordObject.NULL); put("gazeY", sample.gazeY?.toDouble() ?: RecordObject.NULL)
                             put("gazeOnTarget", sample.gazeOnTarget ?: RecordObject.NULL)
                             put("leftOpticalX", sample.leftOpticalX?.toDouble() ?: RecordObject.NULL)
                             put("leftOpticalY", sample.leftOpticalY?.toDouble() ?: RecordObject.NULL)

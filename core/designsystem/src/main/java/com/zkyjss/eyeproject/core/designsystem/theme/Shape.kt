@@ -24,7 +24,7 @@ object EyeControlSizes {
     val homePortraitHeight = 160.dp
     val homePortraitInset = 8.dp
     val homeChatMinHeight = 180.dp
-    val gazeCanvasHeight = 480.dp
+    val gazeCanvasHeight = 600.dp
     val gazeCanvasMinHeight = 160.dp
     val answerKey = 68.dp
     val answerKeyCompact = 56.dp

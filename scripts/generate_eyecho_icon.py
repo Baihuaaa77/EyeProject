@@ -2,7 +2,7 @@
 
 输入：scripts/assets/eyecho_icon_source.png（真人数字人照片 docs/素材/Aike.png 抠绿幕后裁出的头到胸口，
 见 generate_eyecho_portrait.py；下沿在胸前「EYE」标志之上）。
-采用 App 问诊卡的纯深棕底，保留爱科头肩与白大褂原色。
+采用上浅下深的暖陶棕渐变，爱科采用紧凑的头肩构图并保留白大褂原色。
 输出：
   - 安卓自适应图标前景位图 mipmap-*/ic_launcher_foreground.png（108dp 画布，头部位于平台遮罩安全区内）；
     背景 drawable/ic_launcher_background.xml 读取暖棕令牌；
@@ -37,11 +37,23 @@ def color(name: str) -> tuple[int, int, int, int]:
     return red, green, blue, alpha
 
 
-BACKGROUND = color('eye_icon_background')
+BACKGROUND_TOP = color('eye_icon_terracotta_top')
+BACKGROUND_BOTTOM = color('eye_icon_terracotta_bottom')
 DENSITIES = {'mdpi': 1, 'hdpi': 1.5, 'xhdpi': 2, 'xxhdpi': 3, 'xxxhdpi': 4}
 IOS_SIZE = 1024
-PORTRAIT_WIDTH = 0.92
-PORTRAIT_BOTTOM = 1.02
+PORTRAIT_WIDTH = 1.04
+PORTRAIT_BOTTOM = 1.025
+
+
+def gradient(size: int, inset: int = 0) -> Image.Image:
+    """安卓自适应底图从可见区顶部到下沿渐变，外围延续端点颜色。"""
+    span = max(1, size - 2 * inset - 1)
+    strip = Image.new('RGBA', (1, size))
+    for y in range(size):
+        t = min(1.0, max(0.0, (y - inset) / span))
+        strip.putpixel((0, y), tuple(round(start + (end - start) * t)
+                          for start, end in zip(BACKGROUND_TOP, BACKGROUND_BOTTOM)))
+    return strip.resize((size, size), Image.Resampling.NEAREST)
 
 
 def portrait(canvas: Image.Image, src: Image.Image, width: float, bottom: float) -> None:
@@ -60,14 +72,15 @@ def foreground(px: int, src: Image.Image) -> Image.Image:
 
 def flattened(px: int, src: Image.Image) -> Image.Image:
     """背景 + 前景叠好，再裁掉自适应图标被遮住的外圈（旧版回退位图用）。"""
-    big = Image.new('RGBA', (px * 108 // 72, px * 108 // 72), BACKGROUND)
-    big.alpha_composite(foreground(big.width, src))
-    m = (big.width - px) // 2
+    size = px * 108 // 72
+    m = (size - px) // 2
+    big = gradient(size, inset=m)
+    big.alpha_composite(foreground(size, src))
     return big.crop((m, m, m + px, m + px))
 
 
 def ios(src: Image.Image) -> Image.Image:
-    canvas = Image.new('RGBA', (IOS_SIZE, IOS_SIZE), BACKGROUND)
+    canvas = gradient(IOS_SIZE)
     portrait(canvas, src, IOS_SIZE * PORTRAIT_WIDTH, IOS_SIZE * PORTRAIT_BOTTOM)
     return canvas.convert('RGB')
 

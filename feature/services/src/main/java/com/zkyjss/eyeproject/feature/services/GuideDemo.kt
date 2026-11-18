@@ -7,7 +7,7 @@ internal data class GuideScene(val motion: GuideMotion, val cycleMs: Int, val be
 internal enum class GuidePose { OPEN, BLINK, LEFT, RIGHT, LIGHTING_OPEN, LIGHTING_LEFT, LIGHTING_RIGHT, SIDE_FAR, SIDE_NEAR }
 
 internal fun guideScene(motion: GuideMotion): GuideScene = when (motion) {
-    GuideMotion.LIGHTING -> GuideScene(motion, 5000, listOf(GuideBeat(0f, "① 手机固定在支架上，正对双眼"), GuideBeat(0.35f, "② 屏幕白点提供映光"), GuideBeat(0.7f, "③ 本人按提示遮眼，不压眼球")), 0.5f)
+    GuideMotion.LIGHTING -> GuideScene(motion, 5000, listOf(GuideBeat(0f, "① 手机固定在支架上，正对双眼"), GuideBeat(0.35f, "② 按提示遮眼"), GuideBeat(0.7f, "③ 不要压眼球")), 0.5f)
     GuideMotion.REST -> GuideScene(motion, 4000, listOf(GuideBeat(0f, "① 轻轻闭眼，放松休息"), GuideBeat(0.5f, "② 倒计时结束后再睁眼")), 0.5f)
     GuideMotion.POSTURE -> GuideScene(motion, 5200, listOf(GuideBeat(0.0f, "① 正对屏幕，露出双眼"), GuideBeat(0.25f, "② 前后微调到提示的距离"), GuideBeat(0.6f, "③ 光线均匀，避免逆光")), 0.7f)
     GuideMotion.BLINK -> GuideScene(motion, 4200, listOf(GuideBeat(0.0f, "① 正对屏幕，保持放松"), GuideBeat(0.15f, "② 像平时一样自然眨眼"), GuideBeat(0.55f, "③ 应用自动记录眨眼")), 0.6f)

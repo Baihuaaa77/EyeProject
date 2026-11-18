@@ -31,7 +31,7 @@ struct EyeTestView: View {
 
     var body: some View {
         Group {
-        if isReflectionTask { darkGazeSession } else {
+        if isReflectionTask { darkGazeSession } else if isFullScreenCalibration { calibrationGazeSession } else {
         VStack(spacing: 0) {
             TestTopBar(title: runtime.string("title").isEmpty ? "眼健康自测" : runtime.string("title"),
                 onBack: { if needsExitConfirm { confirmingExit = true } else { runtime.close(); dismiss() } },
@@ -137,6 +137,32 @@ struct EyeTestView: View {
                      : phase == "FAR_FIXATION" ? "越过手机看6米外 · \(Int(runtime.number("secondsLeft")))秒"
                      : "\(Int(runtime.number("secondsLeft")))秒"
     }
+    /// 九点标定占满屏幕，目标覆盖安全区内的完整显示范围，底部只保留距离提醒。
+    private var calibrationGazeSession: some View {
+        ZStack(alignment: .bottom) {
+            EyeStyle.reflectionBackground.ignoresSafeArea()
+            GazeTargetView(runtime: runtime, pixelsPerMm: pixelsPerMm)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .ignoresSafeArea()
+            VStack(spacing: 8) {
+                TestDistanceBanner(runtime: runtime)
+                if runtime.bool("gazeCalibrationFailed") {
+                    Text(runtime.string("warning")).font(EyeStyle.body).foregroundStyle(EyeStyle.testTooClose)
+                    HStack {
+                        Button("继续测试") { runtime.act("continueWithoutCalibration") }.buttonStyle(EyeButtonStyle())
+                        Button("重试校准") { runtime.act("calibrate") }.buttonStyle(EyeButtonStyle(role: .secondary))
+                    }
+                }
+                HStack {
+                    Button("退出") { confirmingExit = true }
+                    Spacer()
+                    Text("注视校准 · \(Int(runtime.number("gazeCalibrationIndex")) + 1)/\(Int(runtime.number("calibrationCount")))")
+                        .font(EyeStyle.body).foregroundStyle(EyeStyle.reflectionTarget)
+                }
+            }
+            .padding(.horizontal, 16).padding(.bottom, 8)
+        }
+    }
     private var darkGazeSession: some View {
         ZStack(alignment: .bottom) {
             EyeStyle.reflectionBackground.ignoresSafeArea()
@@ -213,6 +239,9 @@ struct EyeTestView: View {
     private var isGazeTask: Bool {
         pixelsPerMm > 0 && !runtime.bool("guidePending") && ["GAZE_CALIBRATION","FIXATION","FAR_FIXATION","COVER","PURSUIT"].contains(phase)
     }
+    private var isFullScreenCalibration: Bool {
+        displayReady && !runtime.bool("guidePending") && phase == "GAZE_CALIBRATION"
+    }
     /// 映光采集使用黑底白色光源；九点标定和眼动跟随使用黑底主题橙色圆点。
     private var isReflectionTask: Bool {
         pixelsPerMm > 0 && !runtime.bool("guidePending") && ["FIXATION","FAR_FIXATION","COVER"].contains(phase)
@@ -236,7 +265,7 @@ struct EyeTestView: View {
             }
             TestGuideView(motion: runtime.kind == "STRABISMUS" ? .fixate : .posture, title: runtime.kind == "DRY_EYE" ? "调整姿势 · 约 40 cm" : "调整姿势",
                 cue: runtime.kind == "DRY_EYE" ? "正对屏幕，手机距离眼睛约 40 厘米，光线均匀"
-                    : runtime.kind == "STRABISMUS" ? "正对屏幕，约 33 厘米；本人按提示遮眼，请屏幕白点提供映光" : "正对屏幕，约 40 厘米")
+                    : runtime.kind == "STRABISMUS" ? "正对屏幕，约 33 厘米" : "正对屏幕，约 40 厘米")
             Button("开始测试") { runtime.act("begin") }.buttonStyle(EyeButtonStyle())
             Button("重试相机") { runtime.act("retryCamera") }.buttonStyle(EyeButtonStyle(role: .secondary))
             DisclosureGroup("测距校准") {
@@ -516,7 +545,7 @@ private struct FarFixationPanel: View {
             } else {
                 Text("\(seconds)").font(EyeStyle.headline).monospacedDigit().foregroundStyle(.white)
                 Text("眼睛越过手机，看着远处的目标").font(EyeStyle.subtitle).foregroundStyle(.white).multilineTextAlignment(.center)
-                Text("保持屏幕白点常亮；本人看远处，头和手机不动").font(EyeStyle.bodySecondary).foregroundStyle(.white.opacity(0.72))
+                Text("本人看远处，头和手机不动").font(EyeStyle.bodySecondary).foregroundStyle(.white.opacity(0.72))
                     .multilineTextAlignment(.center)
             }
         }
@@ -564,7 +593,8 @@ private struct GazeTargetView: View {
     let pixelsPerMm: Float
     private var reflection: Bool { ["FIXATION","FAR_FIXATION","COVER"].contains(runtime.string("phase")) }
     var body: some View {
-        if reflection { canvas } else {
+        if runtime.string("phase") == "GAZE_CALIBRATION" { canvas }
+        else if reflection { canvas } else {
             canvas.stageHeight(EyeStyle.gazeCanvasBaseHeight(UIScreen.main.bounds.height))
                 .clipShape(RoundedRectangle(cornerRadius: EyeStyle.radius))
         }
@@ -573,8 +603,9 @@ private struct GazeTargetView: View {
         GeometryReader { geometry in
             let size = geometry.size
             let phase = runtime.string("phase")
-            TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: !["PURSUIT","FIXATION"].contains(phase) || runtime.bool("stabilityInterrupted"))) { _ in
-                let lightOn = runtime.controller.reflectionLightOn()
+            TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: !["PURSUIT","FIXATION","FAR_FIXATION","COVER"].contains(phase) || runtime.bool("stabilityInterrupted"))) { _ in
+                let lightChip = runtime.controller.reflectionChip()
+                let lightOn = runtime.controller.reflectionLightOn(chip: lightChip)
                 let trajectory = runtime.controller.pursuitTargetNow()
                 let point = target(in: size, trajectory: CGPoint(x: CGFloat(trajectory.x), y: CGFloat(trajectory.y)))
                 ZStack(alignment: .topLeading) {
@@ -592,7 +623,10 @@ private struct GazeTargetView: View {
                     }
                 }
                     .onAppear { report(geometry, point); runtime.controller.reportReflectionLight(on: lightOn) }
-                    .onChange(of: lightOn) { value in runtime.controller.reportReflectionLight(on: value) }
+                    .onChange(of: lightChip) { _ in
+                        if reflection { report(geometry, point) }
+                        runtime.controller.reportReflectionLight(on: lightOn)
+                    }
                     .onChange(of: point) { value in report(geometry, value) }
                     .onChange(of: runtime.stateKeyForTarget) { _ in report(geometry, point) }
                     .onChange(of: geometry.frame(in: .global).origin) { _ in report(geometry, point) }
@@ -603,7 +637,9 @@ private struct GazeTargetView: View {
     private func target(in size: CGSize, trajectory: CGPoint) -> CGPoint {
         if runtime.string("phase") == "GAZE_CALIBRATION" {
             // 点位由共用核心给出，两端一致。
-            return CGPoint(x: size.width * runtime.number("calibrationX"),y: size.height * runtime.number("calibrationY"))
+            let inset = min(10, size.width / 2, size.height / 2)
+            return CGPoint(x: min(size.width - inset, max(inset, size.width * runtime.number("calibrationX"))),
+                           y: min(size.height - inset, max(inset, size.height * runtime.number("calibrationY"))))
         }
         if runtime.string("phase") == "PURSUIT" {
             let ppm = Double(pixelsPerMm) / Double(UIScreen.main.scale)
@@ -620,6 +656,7 @@ private struct GazeTargetView: View {
         return CGPoint(x: size.width / 2, y: width / 2 + 4)
     }
     private func report(_ geometry: GeometryProxy,_ point: CGPoint) {
+        guard geometry.size.width > 1, geometry.size.height > 1 else { return }
         let frame = geometry.frame(in: .global), scale = UIScreen.main.scale
         runtime.controller.reportTarget(xPx: Float((frame.minX + point.x) * scale), yPx: Float((frame.minY + point.y) * scale))
         if runtime.string("phase") == "PURSUIT" {

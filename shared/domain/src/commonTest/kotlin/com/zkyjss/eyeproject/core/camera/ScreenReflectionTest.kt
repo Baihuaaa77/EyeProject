@@ -21,9 +21,10 @@ class ScreenReflectionTest {
             earPoints = eye.earPoints.map { it.copy(x = it.x+2) })
         assertEquals(36f,tracker.measure(image(listOf(Triple(36,28,245))),moved)?.cornealReflex?.x)
     }
-    @Test fun eyelidAndSixtyPercentAreaMaskRejectOutsidePoints() {
+    @Test fun eyelidAndSeventyPercentRadiusRejectOutsidePoints() {
         val tracker = ScreenOpticsForTest()
-        assertNull(tracker.measure(image(listOf(Triple(53,32,245))),eye)?.cornealReflex)
+        assertNotNull(tracker.measure(image(listOf(Triple(48,32,245))),eye)?.cornealReflex)
+        assertNull(tracker.measure(image(listOf(Triple(49,32,245))),eye)?.cornealReflex)
         assertNull(tracker.measure(image(listOf(Triple(32,14,245))),eye)?.cornealReflex)
     }
     @Test fun blankAndDimReflectionsRemainUnmeasurable() {
