@@ -142,10 +142,26 @@ class HomeVisualTest {
         capture("01-首页-首屏")
         compose.onNodeWithText("查看本周趋势  ›").performScrollTo().performClick()
         assertTrue(trend)
-        compose.onNodeWithText("AI问诊").performScrollTo().performClick()
+        compose.onNodeWithText("智能挂号").assertDoesNotExist()
+        compose.onNodeWithText("AI 问诊").performScrollTo().performClick()
         assertTrue(chat)
         compose.onNodeWithText("休息一下").performScrollTo().performClick()
         assertTrue(reminder)
+    }
+
+    @Test fun dryEyeInquiryDemoShowsBookingAfterSummaryWithoutSendingChat() {
+        val sent = mutableListOf<String>()
+        compose.setContent { EyeProjectTheme {
+            EyeChatContent(null, {}, {}, { text, _, _ -> sent += text }, {}) {}
+        } }
+        compose.onNodeWithText("体验干眼问诊").performScrollTo().performClick()
+        compose.onNodeWithText("最近几天").assertIsDisplayed().performClick()
+        compose.onNodeWithText("长时间看屏幕后").assertIsDisplayed().performClick()
+        compose.onNodeWithText("问诊总结").assertIsDisplayed()
+        compose.onNodeWithText("查看干眼门诊挂号预览").performClick()
+        compose.onNodeWithText("曾庆延 · 主任医师").assertIsDisplayed()
+        compose.onNodeWithText("当前为挂号演示，暂无可查询号源。").assertIsDisplayed()
+        assertTrue(sent.isEmpty())
     }
 
     @Test @Config(qualifiers = "zh-rCN-w390dp-h2600dp-mdpi")

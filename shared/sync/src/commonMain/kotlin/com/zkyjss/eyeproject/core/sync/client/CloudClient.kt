@@ -5,6 +5,7 @@ import com.zkyjss.eyeproject.core.sync.AdviceRequest
 import com.zkyjss.eyeproject.core.sync.Advices
 import com.zkyjss.eyeproject.core.sync.ChatEntry
 import com.zkyjss.eyeproject.core.sync.Chats
+import com.zkyjss.eyeproject.core.sync.DryEyeBookingPreview
 import com.zkyjss.eyeproject.core.sync.ConsentDto
 import com.zkyjss.eyeproject.core.sync.ConsentInput
 import com.zkyjss.eyeproject.core.sync.ConsentType
@@ -448,6 +449,7 @@ class CloudClient(
                 put("sources", JsonArray(e.sources.map { JsonPrimitive("${it.title}（${it.publisher}）") }))
             }
         }))
+        put("dryEyeBooking", DryEyeBookingPreview.shouldOffer(chatHistory))
         put("sending", chatSending)
         put("error", chatError)
         put("suggestions", JsonArray(Chats.SUGGESTIONS.map(::JsonPrimitive)))

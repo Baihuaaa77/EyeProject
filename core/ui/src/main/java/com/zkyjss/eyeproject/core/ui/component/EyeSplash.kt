@@ -54,7 +54,7 @@ fun EyeSplash(onFinished: () -> Unit, modifier: Modifier = Modifier) {
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
             val appear = (progress.value * 2.5f).coerceAtMost(1f)
-            EyeBrandMark(Modifier.graphicsLayer {
+            EyeAppIcon(Modifier.graphicsLayer {
                 val k = 0.92f + 0.08f * appear
                 scaleX = k; scaleY = k; this.alpha = appear
             }, size = 88.dp)

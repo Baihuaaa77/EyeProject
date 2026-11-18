@@ -61,6 +61,7 @@ import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
 import com.zkyjss.eyeproject.core.sync.AdviceRequest
 import com.zkyjss.eyeproject.core.sync.ChatEntry
 import com.zkyjss.eyeproject.core.sync.Chats
+import com.zkyjss.eyeproject.core.sync.DryEyeBookingPreview
 import com.zkyjss.eyeproject.core.ui.component.AiCardText
 import com.zkyjss.eyeproject.core.ui.component.AiExplanationCard
 import com.zkyjss.eyeproject.core.ui.component.EyeButton
@@ -91,7 +92,7 @@ class ChatViewModel @Inject constructor(private val chat: ChatRepository) : View
 }
 
 /** 对话页标题（两端一致）；首页入口是爱科卡（见 HomeScreen 的 EyechoCard）。 */
-internal const val CHAT_TITLE = "AI问诊"
+internal const val CHAT_TITLE = "AI 问诊"
 
 /**
  * 「AI 主动问诊」对话页：由爱尔眼科数字人「爱科 Eyecho」主持。顶部是爱科的自我介绍，接着是今天的综合建议卡片，
@@ -152,6 +153,8 @@ internal fun EyeChatContent(
     var skipOptionConfirmation by rememberSaveable { mutableStateOf(false) }
     val needsConsent = state?.access == ChatAccess.NEEDS_CONSENT
     val messages = state?.messages.orEmpty()
+    var demoOpen by rememberSaveable { mutableStateOf(false) }
+    var bookingOpen by rememberSaveable { mutableStateOf(false) }
     fun send(text: String, agree: Boolean, quiet: Boolean) {
         onSend(text, agree, quiet)
         if (text == input) input = ""
@@ -188,6 +191,7 @@ internal fun EyeChatContent(
         EyechoIntro()
         opening()
         if (messages.isEmpty()) {
+            EyeButton("体验干眼问诊", EyeButtonRole.SECONDARY, { demoOpen = true }, Modifier.fillMaxWidth())
             EyeText("可以这样问爱科", style = typography.bodySecondary, color = colors.textSecondary)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Chats.SUGGESTIONS.forEach { text -> ChoiceChip(text, false) { selectOption(text) } }
@@ -196,6 +200,9 @@ internal fun EyeChatContent(
         messages.forEachIndexed { index, entry ->
             ChatBubble(entry, active = index == messages.lastIndex && state?.sending != true &&
                 state?.access != ChatAccess.NEEDS_ACCOUNT, onOption = { selectOption(it) })
+        }
+        if (state?.sending != true && DryEyeBookingPreview.shouldOffer(messages)) {
+            EyeButton(DryEyeBookingPreview.action, EyeButtonRole.PRIMARY, { bookingOpen = true }, Modifier.fillMaxWidth())
         }
         if (state?.sending != true && messages.isNotEmpty()) {
             val pending = Chats.pendingQuestion(messages)
@@ -214,6 +221,53 @@ internal fun EyeChatContent(
                 EyeButton("取消", EyeButtonRole.SECONDARY, { confirmClear = false }, Modifier.weight(1f))
             } else EyeText("清空对话", Modifier.clip(EyeShapes.chip).clickable(role = Role.Button) { confirmClear = true }
                 .padding(vertical = 8.dp), style = typography.body, color = colors.primary)
+        }
+    }
+    if (demoOpen) DryEyeInquiryDemo(onClose = { demoOpen = false }, onBooking = { bookingOpen = true })
+    if (bookingOpen) DryEyeBookingPage(onClose = { bookingOpen = false })
+}
+
+@Composable
+private fun DryEyeBookingPage(onClose: () -> Unit) {
+    val preview = DryEyeBookingPreview
+    val colors = LocalEyeColors.current
+    val typography = LocalEyeTypography.current
+    com.zkyjss.eyeproject.core.ui.component.EyeFullScreenPage(onClose) {
+        EyeSubPage(preview.title, onClose) {
+            Column(Modifier.fillMaxWidth().eyeGlass(colors, EyeShapes.card).padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                EyeText(preview.doctor, style = typography.title, color = colors.textPrimary)
+                EyeText(preview.clinic, style = typography.body, color = colors.textPrimary)
+                EyeText(preview.specialty, style = typography.bodySecondary, color = colors.textSecondary)
+            }
+            EyeText(preview.availability, style = typography.body, color = colors.textSecondary)
+        }
+    }
+}
+
+@Composable
+private fun DryEyeInquiryDemo(onClose: () -> Unit, onBooking: () -> Unit) {
+    val preview = DryEyeBookingPreview
+    val colors = LocalEyeColors.current
+    val typography = LocalEyeTypography.current
+    var duration by rememberSaveable { mutableStateOf<String?>(null) }
+    var context by rememberSaveable { mutableStateOf<String?>(null) }
+    com.zkyjss.eyeproject.core.ui.component.EyeFullScreenPage(onClose) {
+        EyeSubPage(preview.demoTitle, onClose) {
+            if (duration == null || context == null) {
+                val askingDuration = duration == null
+                EyeText(preview.demoIntro, style = typography.body, color = colors.textSecondary)
+                EyeText(if (askingDuration) preview.durationQuestion else preview.contextQuestion,
+                    style = typography.title, color = colors.textPrimary)
+                val choices = if (askingDuration) preview.durationOptions else preview.contextOptions
+                for (choice in choices) EyeButton(choice, EyeButtonRole.SECONDARY, {
+                    if (askingDuration) duration = choice else context = choice
+                }, Modifier.fillMaxWidth())
+            } else {
+                EyeText(preview.summaryTitle, style = typography.title, color = colors.textPrimary)
+                EyeText(preview.summary(duration.orEmpty(), context.orEmpty()), style = typography.body, color = colors.textPrimary)
+                EyeText(preview.summaryNextStep, style = typography.body, color = colors.textSecondary)
+                EyeButton(preview.action, EyeButtonRole.PRIMARY, onBooking, Modifier.fillMaxWidth())
+            }
         }
     }
 }

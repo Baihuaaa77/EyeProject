@@ -1,7 +1,8 @@
 import SwiftUI
+import EyeScreening
 
 /// 对话页标题（与安卓 CHAT_TITLE 一致）；首页入口是爱科卡（EyechoCard）。
-let chatTitle = "AI问诊"
+let chatTitle = "AI 问诊"
 
 /// 「AI 主动问诊」对话页：由爱尔眼科数字人「爱科 Eyecho」主持。顶部是爱科的自我介绍，接着是今天的综合建议卡片，
 /// 下面和爱科自由对话；记录只存在本机，可清空。
@@ -12,6 +13,8 @@ struct AiChatPage: View {
     @ObservedObject private var cloud = CloudModel.shared
     @ObservedObject private var store = EyeCareStore.shared
     @State private var referenceOpen = false
+    @State private var demoOpen = false
+    @State private var bookingOpen = false
     @State private var draft = ""
     @State private var confirmClear = false
     /// 本次进入对话页是否已弹过同意说明；还没同意时每次发送都要弹
@@ -32,11 +35,17 @@ struct AiChatPage: View {
                     VStack(alignment: .leading, spacing: 12) {
                         EyechoIntro()
                         Button("今日护眼参考") { referenceOpen = true }.buttonStyle(EyeButtonStyle(role: .secondary))
-                        if messages.isEmpty { suggestions(info) }
+                        if messages.isEmpty {
+                            Button("体验干眼问诊") { demoOpen = true }.buttonStyle(EyeButtonStyle(role: .secondary))
+                            suggestions(info)
+                        }
                         ForEach(Array(messages.enumerated()), id: \.offset) { index, m in
                             ChatBubble(message: m, urgentNotice: info["urgentNotice"] as? String ?? "",
                                 active: index == messages.count - 1 && !sending && (info["state"] as? String) != "locked",
                                 onOption: { selectOption($0, info: info) })
+                        }
+                        if !sending && (info["dryEyeBooking"] as? Bool == true) {
+                            Button(DryEyeBookingPreview.shared.action) { bookingOpen = true }.buttonStyle(EyeButtonStyle())
                         }
                         if !sending && !messages.isEmpty {
                             let pending = (messages.last?["question"] as? [String: Any]) != nil
@@ -67,6 +76,8 @@ struct AiChatPage: View {
                 }.toolbar { ToolbarItem(placement: .confirmationAction) { Button("关闭") { referenceOpen = false } } }
             }
         }
+        .fullScreenCover(isPresented: $demoOpen) { DryEyeInquiryDemo() }
+        .fullScreenCover(isPresented: $bookingOpen) { DryEyeBookingPage() }
         .overlay {
             if let choice = pendingOption {
                 OptionAnswerConfirmView(choice: choice, confirm: { dontAsk in
@@ -330,3 +341,56 @@ extension AiChatPage {
     }
 }
 #endif
+
+
+private struct DryEyeInquiryDemo: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var duration: String?
+    @State private var context: String?
+    @State private var bookingOpen = false
+    private let preview = DryEyeBookingPreview.shared
+
+    var body: some View {
+        NavigationStack {
+            SubPage(title: preview.demoTitle) {
+                if let duration, let context {
+                    Text(preview.summaryTitle).font(EyeStyle.title)
+                    Text(preview.summary(duration: duration, context: context)).font(EyeStyle.body)
+                    Text(preview.summaryNextStep).font(EyeStyle.body).foregroundStyle(EyeStyle.secondary)
+                    Button(preview.action) { bookingOpen = true }.buttonStyle(EyeButtonStyle())
+                } else {
+                    Text(preview.demoIntro).font(EyeStyle.body).foregroundStyle(EyeStyle.secondary)
+                    let askingDuration = duration == nil
+                    Text(askingDuration ? preview.durationQuestion : preview.contextQuestion).font(EyeStyle.title)
+                    ForEach(askingDuration ? preview.durationOptions : preview.contextOptions, id: \.self) { choice in
+                        Button(choice) {
+                            if askingDuration { duration = choice } else { context = choice }
+                        }.buttonStyle(EyeButtonStyle(role: .secondary))
+                    }
+                }
+            }
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("关闭") { dismiss() } } }
+        }
+        .fullScreenCover(isPresented: $bookingOpen) { DryEyeBookingPage() }
+    }
+}
+
+private struct DryEyeBookingPage: View {
+    @Environment(\.dismiss) private var dismiss
+    private let preview = DryEyeBookingPreview.shared
+
+    var body: some View {
+        NavigationStack {
+            SubPage(title: preview.title) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(preview.doctor).font(EyeStyle.title)
+                    Text(preview.clinic).font(EyeStyle.body)
+                    Text(preview.specialty).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
+                }
+                .padding(16).frame(maxWidth: .infinity, alignment: .leading).eyeGlass()
+                Text(preview.availability).font(EyeStyle.body).foregroundStyle(EyeStyle.secondary)
+            }
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("关闭") { dismiss() } } }
+        }
+    }
+}

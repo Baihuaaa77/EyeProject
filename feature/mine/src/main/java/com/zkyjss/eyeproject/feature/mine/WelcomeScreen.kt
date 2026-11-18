@@ -34,7 +34,7 @@ import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
 import com.zkyjss.eyeproject.core.designsystem.util.screenHorizontalPaddingLarge
 import com.zkyjss.eyeproject.core.ui.component.EyeText
 import com.zkyjss.eyeproject.core.ui.component.eyeBackdrop
-import com.zkyjss.eyeproject.core.ui.component.EyeBrandMark
+import com.zkyjss.eyeproject.core.ui.component.EyeAppIcon
 import com.zkyjss.eyeproject.core.ui.component.rememberEyeHaptics
 
 /**
@@ -65,7 +65,7 @@ internal fun WelcomeContent(busy: Boolean, message: String?, actions: AccountAct
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Spacer(Modifier.height(24.dp))
-        EyeBrandMark(size = 88.dp)
+        EyeAppIcon(size = 88.dp)
         EyeText("欢迎来到眼健康助手", style = typography.title, color = colors.textPrimary)
         EyeText("登录后，测试记录可以加密保存到云端，换手机也不丢；还能和爱科聊聊今天的用眼感受。",
             style = typography.body, color = colors.textSecondary, textAlign = TextAlign.Center)

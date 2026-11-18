@@ -131,3 +131,36 @@ object Chats {
         return ChatRequest(kept, context, inquiryVersion.coerceIn(0, 1))
     }
 }
+
+
+/** 干眼问诊后的就医演示。地区、医生与门诊为预设示例。 */
+object DryEyeBookingPreview {
+    val title = "挂号预览"
+    val doctor = "曾庆延 · 主任医师"
+    val clinic = "湖北 · 武汉爱尔眼科医院汉口医院"
+    val specialty = "角膜及眼表 · 干眼诊疗"
+    val availability = "当前为挂号演示，暂无可查询号源。"
+    val action = "查看干眼门诊挂号预览"
+    val demoTitle = "干眼问诊演示"
+    val demoIntro = "示例情景：在湖北武汉，最近眼睛常有干涩。"
+    val durationQuestion = "干涩持续多久了？"
+    val durationOptions = listOf("最近几天", "已经几周")
+    val contextQuestion = "通常什么时候更明显？"
+    val contextOptions = listOf("长时间看屏幕后", "一天中反复出现")
+    val summaryTitle = "问诊总结"
+    val summaryNextStep = "可以了解角膜及眼表门诊。"
+
+    fun summary(duration: String, context: String) = "示例中，干涩持续情况为「$duration」，「$context」更明显。"
+
+    /** 只在本次干眼问诊的总结后展示，急症及中途结束保留原流程。 */
+    fun shouldOffer(history: List<ChatEntry>): Boolean {
+        val summary = history.lastOrNull() ?: return false
+        if (summary.role != Chats.ASSISTANT || !summary.inquiryComplete || summary.question != null || summary.urgent) return false
+        val inquiry = history.dropLast(1).asReversed().takeWhile {
+            !it.inquiryComplete && !(it.role == Chats.USER && it.text == Chats.START_INQUIRY)
+        }
+        if (inquiry.any { it.urgent }) return false
+        if (inquiry.firstOrNull { it.role == Chats.USER }?.text == Chats.STOP_INQUIRY) return false
+        return inquiry.any { it.role == Chats.USER && listOf("干涩", "干眼", "眼睛干", "眼干").any(it.text::contains) }
+    }
+}

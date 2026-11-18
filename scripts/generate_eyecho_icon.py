@@ -2,11 +2,10 @@
 
 输入：scripts/assets/eyecho_icon_source.png（真人数字人照片 docs/素材/Aike.png 抠绿幕后裁出的头到胸口，
 见 generate_eyecho_portrait.py；下沿在胸前「EYE」标志之上）。
-构图仿豆包图标：白底，中间一个浅灰蓝圆盘（#C5D0E2，低饱和），头肩放在圆里，
-肩膀被圆的下沿裁掉，头顶稍稍探出圆外，显得立体。
+采用 App 问诊卡的纯深棕底，保留爱科头肩与白大褂原色。
 输出：
-  - 安卓自适应图标前景位图 mipmap-*/ic_launcher_foreground.png（108dp 画布，圆盘直径 58 居中，探出的头顶仍在可见区内）；
-    背景 drawable/ic_launcher_background.xml 为白色；
+  - 安卓自适应图标前景位图 mipmap-*/ic_launcher_foreground.png（108dp 画布，头部位于平台遮罩安全区内）；
+    背景 drawable/ic_launcher_background.xml 读取暖棕令牌；
     旧版回退位图 mipmap-*/ic_launcher(_round).webp（minSdk 26 实际用不到，保持一致）。
   - iOS 1024 px 不透明图标（同一构图）。
   - 应用内展示用的同款 512 px 图标（安卓 drawable-nodpi/eyecho_app_icon.png、iOS EyechoAppIcon）。
@@ -16,6 +15,7 @@
 """
 from pathlib import Path
 import sys
+from xml.etree import ElementTree
 
 from PIL import Image, ImageDraw
 
@@ -26,38 +26,35 @@ IOS_ICON = ROOT / 'iosApp/Sources/Assets.xcassets/AppIcon.appiconset/AppIcon.png
 IN_APP_ANDROID = ROOT / 'core/designsystem/src/main/res/drawable-nodpi/eyecho_app_icon.png'
 IN_APP_IOS = ROOT / 'iosApp/Sources/Assets.xcassets/EyechoAppIcon.imageset/eyecho_app_icon.png'
 SOURCE = ROOT / 'scripts/assets/eyecho_icon_source.png'
-BACKGROUND = (0xFF, 0xFF, 0xFF, 255)
-DISC = (0xC5, 0xD0, 0xE2, 255)  # 浅灰蓝（低饱和），白大褂与圆盘仍看得出边界
+PALETTE = ElementTree.parse(ROOT / 'core/designsystem/src/main/res/values/colors.xml').getroot()
+
+
+def color(name: str) -> tuple[int, int, int, int]:
+    value = PALETTE.findtext(f"color[@name='{name}']")
+    if value is None:
+        raise ValueError(f"缺少图标颜色令牌 {name}")
+    alpha, red, green, blue = bytes.fromhex(value.removeprefix('#'))
+    return red, green, blue, alpha
+
+
+BACKGROUND = color('eye_icon_background')
 DENSITIES = {'mdpi': 1, 'hdpi': 1.5, 'xhdpi': 2, 'xxhdpi': 3, 'xxxhdpi': 4}
-
-# 头像相对圆盘直径 D：宽 AV_SCALE·D，底边比圆盘下沿再低 AV_DROP·D（肩膀被裁），于是头顶探出圆外约 (AV_SCALE−1−AV_DROP)·D
-AV_SCALE, AV_DROP = 0.96, 0.03
-# 安卓 108 单位画布：可见区是中间 72（18–90），圆盘直径 58、圆心略低于中心，探出的头顶约到 21
-FG_DISC, FG_CENTER_Y = 58.0, 56.0
-# iOS：圆盘直径占 78%，圆心略低于中心
-IOS_DISC, IOS_CENTER_Y, IOS_SIZE = 0.78, 0.53, 1024
+IOS_SIZE = 1024
+PORTRAIT_WIDTH = 0.92
+PORTRAIT_BOTTOM = 1.02
 
 
-def badge(canvas: Image.Image, src: Image.Image, diameter: float, cy: float) -> None:
-    """在 canvas 上画圆盘与头像：圆盘下半只露圆内的部分，上半允许头发探出。"""
-    cx, r = canvas.width / 2, diameter / 2
-    ImageDraw.Draw(canvas).ellipse((cx - r, cy - r, cx + r, cy + r), fill=DISC)
-    w = round(diameter * AV_SCALE)
-    head = src.resize((w, w * src.height // src.width), Image.LANCZOS)
-    layer = Image.new('RGBA', canvas.size, (0, 0, 0, 0))
-    layer.alpha_composite(head, (round(cx - w / 2), round(cy + r + diameter * AV_DROP) - head.height))
-    clip = Image.new('L', canvas.size, 0)
-    d = ImageDraw.Draw(clip)
-    d.ellipse((cx - r, cy - r, cx + r, cy + r), fill=255)
-    d.rectangle((0, 0, canvas.width, cy), fill=255)
-    layer.putalpha(Image.composite(layer.getchannel('A'), Image.new('L', canvas.size, 0), clip))
-    canvas.alpha_composite(layer)
+def portrait(canvas: Image.Image, src: Image.Image, width: float, bottom: float) -> None:
+    w = round(width)
+    head = src.resize((w, round(w * src.height / src.width)), Image.LANCZOS)
+    canvas.alpha_composite(head, ((canvas.width - w) // 2, round(bottom) - head.height))
 
 
 def foreground(px: int, src: Image.Image) -> Image.Image:
     k = px / 108
     canvas = Image.new('RGBA', (px, px), (0, 0, 0, 0))
-    badge(canvas, src, FG_DISC * k, FG_CENTER_Y * k)
+    # 肩部延伸过系统遮罩下沿，头顶留在自适应图标安全区。
+    portrait(canvas, src, 72 * PORTRAIT_WIDTH * k, (18 + 72 * PORTRAIT_BOTTOM) * k)
     return canvas
 
 
@@ -71,7 +68,7 @@ def flattened(px: int, src: Image.Image) -> Image.Image:
 
 def ios(src: Image.Image) -> Image.Image:
     canvas = Image.new('RGBA', (IOS_SIZE, IOS_SIZE), BACKGROUND)
-    badge(canvas, src, IOS_SIZE * IOS_DISC, IOS_SIZE * IOS_CENTER_Y)
+    portrait(canvas, src, IOS_SIZE * PORTRAIT_WIDTH, IOS_SIZE * PORTRAIT_BOTTOM)
     return canvas.convert('RGB')
 
 

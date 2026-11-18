@@ -18,7 +18,6 @@ struct BrownHomePage: View {
     @ObservedObject private var store = EyeCareStore.shared
     @StateObject private var reminder = EyeReminder()
     @State private var feeling = false
-    @State private var booking = false
     @State private var careTimer: String?
     @State private var allData = false
     @State private var exercise = false
@@ -69,10 +68,7 @@ struct BrownHomePage: View {
                         metric("今日用屏", signal("screen"))
                     }.padding(.top, 4)
                 }
-                HStack(spacing: 10) {
-                    quick("AI问诊",.chat,BrownStyle.consult) { navigate(.chat) }
-                    quick("智能挂号",.document,BrownStyle.feeling) { booking = true }
-                }
+                quick("AI 问诊", BrownStyle.consult) { navigate(.chat) }
                 WarmCard(fill: BrownStyle.trend, spacing: 2) {
                     HStack {
                         Text("本周用眼趋势").font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text)
@@ -114,13 +110,6 @@ struct BrownHomePage: View {
         .fullScreenCover(isPresented: Binding(get: { careTimer != nil },set: { if !$0 { careTimer = nil } })) {
             companionTimerPage
         }
-        .sheet(isPresented: $booking) {
-            VStack(alignment: .leading,spacing: 20) {
-                HStack { Text("智能挂号").font(EyeStyle.title); Spacer(); Button("关闭") { booking = false } }
-                Text("预约服务尚未接入，当前仅供预览挂号入口。").font(EyeStyle.body)
-                Button("返回首页") { booking = false }.buttonStyle(EyeButtonStyle())
-            }.padding(24).presentationDetents([.height(220)]).presentationDragIndicator(.visible)
-        }
         .overlay {
             if feeling {
                 FeelingSheet(initial: report.checkedInToday ? (report.todaySymptoms.isEmpty ? ["没有不适"] : report.todaySymptoms) : [],
@@ -156,10 +145,10 @@ struct BrownHomePage: View {
     private func metric(_ title: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 4) { Text(title).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary); EyeStyle.reading(value).lineLimit(1).minimumScaleFactor(0.7) }.frame(maxWidth: .infinity, alignment: .leading)
     }
-    private func quick(_ title: String, _ glyph: EyeGlyph, _ fill: LinearGradient, _ action: @escaping () -> Void) -> some View {
+    private func quick(_ title: String, _ fill: LinearGradient, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
             WarmCard(fill: fill, padding: 14) {
-                HStack { Spacer(); Text(title == "今日感受" ? (report.checkedInToday ? "已记录" : "记录") : "↗").font(EyeStyle.caption).foregroundStyle(EyeStyle.secondary) }
+                HStack { Spacer(); Text("↗").font(EyeStyle.caption).foregroundStyle(EyeStyle.secondary) }
                 Text(title).font(EyeStyle.navigationTitle).foregroundStyle(EyeStyle.text).padding(.top, 6)
             }
         }.buttonStyle(PressScale(scale: 0.98))

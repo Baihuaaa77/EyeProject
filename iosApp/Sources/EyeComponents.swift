@@ -559,7 +559,7 @@ struct BarChartView: View {
 
 // MARK: - 应用图标与启动动画
 
-/// 应用图标的展示（关于页）：与桌面图标同一张图（爱科头像 + 浅灰蓝圆盘）。
+/// 应用图标的展示（关于页）：与桌面图标同一张图（爱科头像与纯棕底）。
 struct AppIconView: View {
     var body: some View {
         GeometryReader { geometry in
@@ -582,7 +582,7 @@ struct SplashView: View {
         ZStack {
             EyeStyle.background.ignoresSafeArea()
             VStack(spacing: 0) {
-                BrandMark(size: 88).scaleEffect(0.92 + 0.08 * min(1, progress * 2.5)).opacity(Double(min(1, progress * 2.5)))
+                AppIconView().frame(width: 88, height: 88).scaleEffect(0.92 + 0.08 * min(1, progress * 2.5)).opacity(Double(min(1, progress * 2.5)))
                 Text("眼健康助手").font(EyeStyle.title).foregroundStyle(EyeStyle.text).padding(.top, 20)
                 Text("你的主动眼健康助手").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary).padding(.top, 6)
                 ZStack(alignment: .leading) {

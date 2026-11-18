@@ -8,7 +8,7 @@ settings:
   base:
     SWIFT_VERSION: "5.0"
     MARKETING_VERSION: "0.2.0"
-    CURRENT_PROJECT_VERSION: "5"
+    CURRENT_PROJECT_VERSION: "6"
     FRAMEWORK_SEARCH_PATHS: "$(inherited) $(SRCROOT)/../shared/screening/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)"
     OTHER_LDFLAGS: "$(inherited) -framework EyeScreening -lc++"
 targets:
@@ -42,7 +42,7 @@ targets:
         UIUserInterfaceStyle: Dark
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
-        # 系统启动页底色 = 启动动画顶部的浅主色，衔接应用内启动动画（SplashView）
+        # 系统启动页底色与应用背景一致，衔接应用内启动动画（SplashView）
         UILaunchScreen:
           UIColorName: LaunchBackground
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]

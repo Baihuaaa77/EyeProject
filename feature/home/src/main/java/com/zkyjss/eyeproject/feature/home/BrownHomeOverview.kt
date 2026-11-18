@@ -39,7 +39,6 @@ internal fun BrownHomeOverview(
     val report = state.report
     var exercise by rememberSaveable { mutableStateOf(false) }
     var feeling by rememberSaveable { mutableStateOf(false) }
-    var booking by rememberSaveable { mutableStateOf(false) }
     var careTimer by rememberSaveable { mutableStateOf<String?>(null) }
     var allData by rememberSaveable { mutableStateOf(false) }
     var liveRequests by rememberSaveable { mutableIntStateOf(0) }
@@ -165,10 +164,7 @@ internal fun BrownHomeOverview(
                 }
             }
         }
-        Row(Modifier.height(IntrinsicSize.Min),horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            WarmQuick("AI问诊",EyeGlyph.CHAT,EyeBrown.consult,Modifier.weight(1f).fillMaxHeight(),navigation.onOpenChat)
-            WarmQuick("智能挂号",EyeGlyph.DOCUMENT,EyeBrown.feeling,Modifier.weight(1f).fillMaxHeight(),{ booking = true })
-        }
+        WarmQuick("AI 问诊", EyeBrown.consult, Modifier.fillMaxWidth(), navigation.onOpenChat)
         EyeWarmCard(fill = EyeBrown.trend, spacing = 2.dp) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 EyeText("本周用眼趋势", Modifier.weight(1f), style = t.subtitle, color = c.textPrimary)
@@ -250,16 +246,6 @@ internal fun BrownHomeOverview(
             hint = when (key) { "闭眼休息" -> "轻轻闭眼。\n让眼睛休息30秒。"; "热敷眼睛" -> "准备温度舒适的热敷用品。\n遵循用品说明，不适时停止。"; else -> "看向6米外的远处。\n放松视线，持续20秒。" },
             onComplete = { actions.careCheckIn(key) })
     }
-    if (booking) androidx.compose.ui.window.Dialog(onDismissRequest = { booking = false }) {
-        EyeWarmCard {
-            Row(Modifier.fillMaxWidth()) {
-                EyeText("智能挂号",Modifier.weight(1f),style = t.title,color = c.textPrimary)
-                EyeButton("关闭",EyeButtonRole.SECONDARY,{ booking = false })
-            }
-            EyeText("预约服务尚未接入，当前仅供预览挂号入口。",style = t.body,color = c.textSecondary)
-            EyeButton("返回首页",EyeButtonRole.PRIMARY,{ booking = false },Modifier.fillMaxWidth())
-        }
-    }
     if (allData)
         EyeFullScreenPage({ allData = false }) {
             EyeSubPage("全部数据", { allData = false }) {
@@ -290,18 +276,16 @@ private fun WarmLink(text: String, action: () -> Unit) {
 @Composable
 private fun WarmQuick(
     title: String,
-    glyph: EyeGlyph,
     fill: androidx.compose.ui.graphics.Brush,
     modifier: Modifier,
     action: () -> Unit,
-    badge: String? = null,
 ) {
     val c = LocalEyeColors.current
     val t = LocalEyeTypography.current
     EyeWarmCard(modifier.clickable(role = Role.Button, onClick = action), fill, padding = 14.dp) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Spacer(Modifier.weight(1f))
-            EyeText(badge ?: "↗", style = t.caption, color = c.textSecondary)
+            EyeText("↗", style = t.caption, color = c.textSecondary)
         }
         EyeText(
             title,

@@ -9,7 +9,7 @@ struct WelcomeView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
-                BrandMark(size: 88).padding(.top, 48)
+                AppIconView().frame(width: 88, height: 88).padding(.top, 48)
                 VStack(spacing: 8) {
                     Text("欢迎来到眼健康助手").font(EyeStyle.title).foregroundStyle(EyeStyle.text)
                     Text("登录后，测试记录可以加密保存到云端，换手机也不丢；还能和爱科聊聊今天的用眼感受。")
