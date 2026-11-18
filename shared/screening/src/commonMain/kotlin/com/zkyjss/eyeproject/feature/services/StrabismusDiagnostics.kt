@@ -15,9 +15,11 @@ internal class StrabismusDiagnostics(private val platform: ScreeningPlatform) {
         targets.addLast(PresentedTarget(step, time, GazePoint(x / platform.display.widthPixels, y / platform.display.heightPixels)))
         while (targets.size > 256) targets.removeFirst()
     }
-    private val lights = ArrayDeque<Pair<Long, Boolean>>()
-    fun reportLight(timeMs: Long, on: Boolean) {
-        lights.addLast(timeMs to on)
+    private data class PresentedLight(val step: ScreeningStep, val time: Long, val chip: Int, val on: Boolean)
+    private val lights = ArrayDeque<PresentedLight>()
+    fun reportLight(step: ScreeningStep, timeMs: Long, chip: Int, on: Boolean) {
+        if (!active || lights.lastOrNull()?.let { it.step == step && it.chip == chip } == true) return
+        lights.addLast(PresentedLight(step, timeMs, chip, on))
         while (lights.size > 256) lights.removeFirst()
     }
     private var serial = 0
@@ -75,10 +77,11 @@ internal class StrabismusDiagnostics(private val platform: ScreeningPlatform) {
             put("imageWidth", frame.sourceWidth); put("imageHeight", frame.sourceHeight)
             put("displayWidth", platform.display.widthPixels); put("displayHeight", platform.display.heightPixels)
             put("targetRenderTimeMs", presented?.time ?: targetRenderTimeMs)
-            val light = lights.lastOrNull { it.first <= sessionTime }
-            put("lightRenderTimeMs", light?.first)
+            val light = lights.lastOrNull { it.step == state.step && it.time <= sessionTime }
+            put("lightRenderTimeMs", light?.time)
+            put("lightChip", light?.chip)
             put("targetVisible", actualTarget != null && !state.guidePending &&
-                (state.step !in setOf(ScreeningStep.FIXATION, ScreeningStep.COVER, ScreeningStep.FAR_FIXATION) || light?.second == true))
+                (state.step !in setOf(ScreeningStep.FIXATION, ScreeningStep.COVER, ScreeningStep.FAR_FIXATION) || light?.on == true))
             put("targetColor", if (state.step in setOf(ScreeningStep.FIXATION, ScreeningStep.COVER, ScreeningStep.FAR_FIXATION)) "white" else "orange")
             put("target", point(actualTarget)); put("leftGaze", point(estimates?.first)); put("rightGaze", point(estimates?.second))
             put("gaze", point(fusedEstimate ?: fuse(estimates?.first, estimates?.second)))

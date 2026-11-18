@@ -24,7 +24,7 @@ data class OpticalEyeMeasurement(
 }
 
 /** 候选点保留原图像素和局部对比度，供随设备移动的眼区光码解码。 */
-data class ReflexCandidate(val point: Point2f, val contrast: Float, val brightness: Float)
+data class ReflexCandidate(val point: Point2f, val contrast: Float, val brightness: Float, val quality: Float = 0.5f)
 
  /** MediaPipe 面部变换矩阵估计的相对头姿；角度只用于采集质量检查。 */
 data class HeadPoseEstimate(val yawDeg: Float, val pitchDeg: Float, val rollDeg: Float)

@@ -622,10 +622,10 @@ private struct GazeTargetView: View {
                         }
                     }
                 }
-                    .onAppear { report(geometry, point); runtime.controller.reportReflectionLight(on: lightOn) }
-                    .onChange(of: lightChip) { _ in
+                    .onAppear { report(geometry, point); runtime.controller.reportReflectionLight(chip: lightChip) }
+                    .onChange(of: lightChip) { newChip in
                         if reflection { report(geometry, point) }
-                        runtime.controller.reportReflectionLight(on: lightOn)
+                        runtime.controller.reportReflectionLight(chip: newChip)
                     }
                     .onChange(of: point) { value in report(geometry, value) }
                     .onChange(of: runtime.stateKeyForTarget) { _ in report(geometry, point) }

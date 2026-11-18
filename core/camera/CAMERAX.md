@@ -1,6 +1,6 @@
 # core:camera
 
-> 2026-11-17：斜视通过 opticalPrecision 单独请求高分辨率原像素；MediaPipe 推理长边最多1280，ScreenPointOptics 在原像素中提取虹膜60%面积圆与眼睑交集的映光。其他用途保留原分辨率策略。
+> 斜视通过 opticalPrecision 单独请求高分辨率原像素。MediaPipe 推理长边最多 1280，ScreenPointOptics 在虹膜半径 60% 的圆与眼睑可见区域的交集中提取多尺度局部亮点。共享斜视流程在虹膜局部坐标中关联相邻帧候选。
 
 > 前置摄像头采集 + MediaPipe FaceLandmarker 逐帧关键点分析的基础能力模块；**全项目唯一的 CameraX 绑定点**，预览可选（自测可以只分析帧，实验页可以展示预览）。
 

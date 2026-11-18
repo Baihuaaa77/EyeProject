@@ -370,13 +370,13 @@ class ScreeningEngine(platform: ScreeningPlatform, internal val scope: Coroutine
     fun reflectionLightOn(chip: Int): Boolean =
         chip < 0 || ReflectionCodeVerifier.lightOn(chip * ReflectionCodeVerifier.CHIP_MS)
 
-    /** 平台绘制亮点后回报实际明暗，解码不把计划时刻当作显示证据。 */
-    fun reportReflectionLight(on: Boolean) {
+    /** 以实际绘制的码元及回报时刻解码。 */
+    fun reportReflectionLight(chip: Int) {
         if (helpSession.paused) return
         val now = platform.nowMs()
         val step = _state.value.step
-        diagnostics.reportLight(now, on)
-        if (reflectionCoding(step, now)) reflectionCode.present(step, now, on, now-stepStartMs)
+        diagnostics.reportLight(step, now, chip, reflectionLightOn(chip))
+        if (reflectionCoding(step, now)) reflectionCode.present(step, now, chip)
     }
 
     internal fun interruptStability(reason: String, timeMs: Long = platform.nowMs(), distanceCm: Float = _state.value.distanceCm) {

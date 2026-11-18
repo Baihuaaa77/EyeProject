@@ -21,17 +21,20 @@ class ScreenReflectionTest {
             earPoints = eye.earPoints.map { it.copy(x = it.x+2) })
         assertEquals(36f,tracker.measure(image(listOf(Triple(36,28,245))),moved)?.cornealReflex?.x)
     }
-    @Test fun eyelidAndSeventyPercentRadiusRejectOutsidePoints() {
+    @Test fun eyelidAndSixtyPercentRadiusRejectOutsidePoints() {
         val tracker = ScreenOpticsForTest()
-        assertNotNull(tracker.measure(image(listOf(Triple(48,32,245))),eye)?.cornealReflex)
-        assertNull(tracker.measure(image(listOf(Triple(49,32,245))),eye)?.cornealReflex)
-        assertNull(tracker.measure(image(listOf(Triple(32,14,245))),eye)?.cornealReflex)
+        assertNotNull(tracker.measure(image(listOf(Triple(46,32,245))),eye)?.cornealReflex)
+        assertNull(tracker.measure(image(listOf(Triple(47,32,245))),eye)?.cornealReflex)
+        val narrower = eye.copy(earPoints = eye.earPoints.map { it.copy(y = 32f + (it.y - 32f) * 0.5f) })
+        assertNull(tracker.measure(image(listOf(Triple(32,21,245))),narrower)?.cornealReflex)
     }
-    @Test fun blankAndDimReflectionsRemainUnmeasurable() {
+    @Test fun localContrastDetectsDimPointAndRejectsBlankOrBroadReflection() {
         val tracker = ScreenOpticsForTest()
         assertNull(tracker.measure(image(emptyList()),eye)?.cornealReflex)
-        assertNull(tracker.measure(image(listOf(Triple(26,30,135))),eye)?.cornealReflex)
-        assertNotNull(tracker.measure(image(listOf(Triple(26,30,245))),eye)?.cornealReflex)
+        assertNull(tracker.measure(image(listOf(Triple(26,30,45))),eye)?.cornealReflex)
+        assertNotNull(tracker.measure(image(listOf(Triple(26,30,135))),eye)?.cornealReflex)
+        val patch = (25..38).flatMap { y -> (24..39).map { x -> Triple(x,y,150) } }
+        assertNull(tracker.measure(image(patch),eye)?.cornealReflex)
         assertNull(tracker.measure(image(emptyList()),eye)?.cornealReflex)
     }
     private class ScreenOpticsForTest {

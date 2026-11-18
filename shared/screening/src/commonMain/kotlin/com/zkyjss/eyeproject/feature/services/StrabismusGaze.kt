@@ -34,8 +34,10 @@ class StrabismusGaze private constructor(
      * 屏幕上的注视只有一个点。两眼映射后先做双眼融合，再交给任务监督，
      * 避免把两只眼的检测抖动当成两个屏幕目标，也避免用“任一眼命中”放宽质量门控。
      */
-    fun estimatePoint(leftEye: GazePoint?, rightEye: GazePoint?): GazePoint? {
-        val mapped = estimate(leftEye, rightEye)
+    fun estimatePoint(leftEye: GazePoint?, rightEye: GazePoint?): GazePoint? =
+        fuseEstimate(leftEye, rightEye, estimate(leftEye, rightEye))
+
+    internal fun fuseEstimate(leftEye: GazePoint?, rightEye: GazePoint?, mapped: Pair<GazePoint?, GazePoint?>): GazePoint? {
         return fuse(mapped.first, mapped.second)
             ?: binocular?.let {
                 fuse(leftEye, rightEye)?.let(it::estimate)
@@ -330,6 +332,65 @@ internal class GazeBlinkGate {
     }
 }
 
+internal data class ScreenGazeEstimate(val left: GazePoint?, val right: GazePoint?, val point: GazePoint?)
+
+/** 每秒最多六次屏幕映射，在后续相机帧间线性插值，眨眼时冻结上一显示值。 */
+internal class GazeEstimateSampler {
+    private companion object {
+        const val ESTIMATES_PER_SECOND = 6
+        const val STALE_AFTER_MS = 350L
+    }
+    private var origin: Long? = null
+    private var slot = -1L
+    private var sampleTime = 0L
+    private var start: ScreenGazeEstimate? = null
+    private var end: ScreenGazeEstimate? = null
+    private var displayed: ScreenGazeEstimate? = null
+    private var heldBlink = false
+
+    fun clear() {
+        origin = null; slot = -1L; sampleTime = 0L
+        start = null; end = null; displayed = null; heldBlink = false
+    }
+
+    fun update(time: Long, available: Boolean, blinking: Boolean, estimate: () -> ScreenGazeEstimate): ScreenGazeEstimate? {
+        if (blinking) {
+            heldBlink = true
+            return displayed
+        }
+        if (!available) {
+            if (time - sampleTime > STALE_AFTER_MS) clear()
+            return null
+        }
+        if (!heldBlink && end != null && time - sampleTime > STALE_AFTER_MS) clear()
+        val initial = origin ?: time.also { origin = it }
+        val currentSlot = ((time - initial) * ESTIMATES_PER_SECOND + ESTIMATES_PER_SECOND / 2) / 1000
+        if (currentSlot > slot) {
+            val next = estimate()
+            start = if (heldBlink) displayed else interpolate(time)
+            end = next
+            sampleTime = time
+            slot = currentSlot
+            heldBlink = false
+        }
+        if (!heldBlink) displayed = interpolate(time)
+        return displayed
+    }
+
+    private fun interpolate(time: Long): ScreenGazeEstimate? {
+        val destination = end ?: return null
+        val source = start ?: return destination
+        val fraction = ((time - sampleTime) * ESTIMATES_PER_SECOND / 1000f).coerceIn(0f, 1f)
+        fun blend(a: GazePoint?, b: GazePoint?): GazePoint? = when {
+            b == null -> null
+            a == null -> b
+            else -> GazePoint(a.x + fraction * (b.x - a.x), a.y + fraction * (b.y - a.y))
+        }
+        return ScreenGazeEstimate(blend(source.left, destination.left), blend(source.right, destination.right),
+            blend(source.point, destination.point))
+    }
+}
+
 /**
  * 任务内动态纠偏。九点标定只提供眼动范围和初始映射，进入每个屏幕目标阶段后，
  * 用受试者开始阶段持续注视的实际目标重新估计整体偏移，适应手机与人脸相对位置变化。
@@ -337,30 +398,33 @@ internal class GazeBlinkGate {
 internal class GazeDriftCorrector {
     private var stage: ScreeningStep? = null
     private var startedAt = 0L
+    private var previousSampleTime = 0L
     private var offset = GazePoint(0f, 0f)
     private val raw = ArrayDeque<GazePoint>(30)
     private val targets = ArrayDeque<GazePoint>(30)
     private var anchored = false
 
     fun clear() {
-        stage = null; startedAt = 0L; offset = GazePoint(0f, 0f)
+        stage = null; startedAt = 0L; previousSampleTime = 0L; offset = GazePoint(0f, 0f)
         raw.clear(); targets.clear(); anchored = false
     }
 
     fun begin(step: ScreeningStep, time: Long) {
         if (stage == step) return
-        stage = step; startedAt = time; offset = GazePoint(0f, 0f)
+        stage = step; startedAt = time; previousSampleTime = time; offset = GazePoint(0f, 0f)
         raw.clear(); targets.clear(); anchored = false
     }
 
     fun update(time: Long, estimate: GazePoint?, target: GazePoint?): GazePoint? {
         estimate ?: return null
         if (target == null || stage == ScreeningStep.FAR_FIXATION) return estimate.shift(offset)
+        val elapsed = (time - previousSampleTime).coerceIn(0L, 200L)
+        previousSampleTime = time
         if (!anchored) {
             raw.addLast(estimate); targets.addLast(target)
             while (raw.size > 30) raw.removeFirst()
             while (targets.size > 30) targets.removeFirst()
-            if (time - startedAt >= 700L && raw.size >= 8) {
+            if (time - startedAt >= 700L && raw.size >= 4) {
                 val source = GazePoint(median(raw.map { it.x }), median(raw.map { it.y }))
                 val destination = GazePoint(median(targets.map { it.x }), median(targets.map { it.y }))
                 offset = GazePoint(destination.x - source.x, destination.y - source.y)
@@ -370,7 +434,7 @@ internal class GazeDriftCorrector {
             // 只在当前点已接近目标时缓慢跟随漂移，走神时不把偏移吸收到模型里。
             val corrected = estimate.shift(offset)
             if (StrabismusGaze.onTarget(corrected, target)) {
-                val alpha = 0.012f
+                val alpha = (1.0 - kotlin.math.exp(-elapsed / 2700.0)).toFloat()
                 offset = GazePoint(offset.x + alpha * (target.x - corrected.x), offset.y + alpha * (target.y - corrected.y))
             }
         }

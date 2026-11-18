@@ -33,6 +33,29 @@ class StrabismusSignalTest {
         assertEquals(end.y,filtered.y,0.025f)
     }
 
+    @Test fun screenEstimateSamplesAtSixHertzAndInterpolatesBetweenObservations() {
+        val sampler = GazeEstimateSampler()
+        var estimates = 0
+        fun frame(time: Long, blink: Boolean = false): GazePoint? = sampler.update(time, true, blink) {
+            val point = GazePoint(estimates++ * 0.1f, 0.5f)
+            ScreenGazeEstimate(point, point, point)
+        }?.point
+
+        val points = (0..29).map { frame(kotlin.math.round(it * 1000.0 / 30).toLong())!! }
+        assertEquals(6, estimates)
+        assertEquals(0f, points[5].x, 0.001f)
+        assertEquals(0.04f, points[7].x, 0.001f)
+        val last = points.last()
+        assertEquals(last, frame(1_000, blink = true))
+        assertEquals(last, frame(1_100, blink = true))
+        assertEquals(6, estimates)
+        assertEquals(last, frame(1_167))
+        assertEquals(7, estimates)
+        assertTrue(frame(1_200)!!.x > last.x)
+        sampler.clear()
+        assertNull(frame(1_300, blink = true))
+    }
+
     @Test fun codeChoosesModulatedPositionAcrossIrisMotionAndRejectsStableBrightSpot() {
         val verifier = ReflectionCodeVerifier()
         fun eye(x: Float) = EyeLandmarks("LEFT", emptyList(),listOf(Point2f(x,40f)),24f)
@@ -45,20 +68,41 @@ class StrabismusSignalTest {
         repeat(16) { chip ->
             val start = chip * ReflectionCodeVerifier.CHIP_MS
             val on = ReflectionCodeVerifier.lightOn(start)
-            verifier.present(stage,start,on,start)
+            // 显示回报晚于名义边界时，仍以实际绘制的编号为准。
+            verifier.present(stage,start + 20,chip)
             repeat(4) { frame ->
                 val x = 50f + (chip + frame) % 7
                 val face = FaceMetrics(BoundingBox(0f,0f,100f,100f),eye(x),eye(x),optics(x,on),optics(x,false))
-                verifier.observe(stage,start + 115 + frame * 35,face)
+                verifier.observe(stage,start + 120 + frame * 35,face)
             }
         }
-        val left = assertNotNull(verifier.measure(stage,eye(55f),optics(55f,true),true))
+        val left = assertNotNull(verifier.measure(stage,4_850L,eye(55f),optics(55f,true),true))
         assertEquals(Point2f(59f,40f),left.cornealReflex)
         assertTrue(left.reflexCodeMatched)
-        val right = assertNotNull(verifier.measure(stage,eye(55f),optics(55f,true),false))
+        val right = assertNotNull(verifier.measure(stage,4_850L,eye(55f),optics(55f,true),false))
         assertFalse(right.reflexCodeMatched)
-        assertNull(verifier.measure(stage,eye(55f),optics(55f,false),true)?.cornealReflex)
-        assertFalse(assertNotNull(verifier.measure(ScreeningStep.FAR_FIXATION,eye(55f),optics(55f,true),true)).reflexCodeMatched)
+        assertNull(verifier.measure(stage,4_880L,eye(55f),optics(55f,false),true)?.cornealReflex)
+        assertFalse(assertNotNull(verifier.measure(ScreeningStep.FAR_FIXATION,4_850L,eye(55f),optics(55f,true),true)).reflexCodeMatched)
+    }
+
+    @Test fun consecutiveLocalPeaksFollowIrisAndDoNotInventMissingObservations() {
+        val verifier = ReflectionCodeVerifier()
+        val stage = ScreeningStep.FIXATION
+        verifier.begin(stage)
+        fun measure(time: Long, irisX: Float, spots: List<ReflexCandidate>, visibility: Float = 25f): OpticalEyeMeasurement? {
+            val center = Point2f(irisX, 40f)
+            val eye = EyeLandmarks("LEFT", emptyList(), listOf(center), 40f)
+            val optics = OpticalEyeMeasurement(center, null, 40f, 30f, 0f, null,
+                irisVisibilityContrast = visibility, reflexCandidates = spots)
+            return verifier.measure(stage, time, eye, optics, true)
+        }
+        fun peak(x: Float, quality: Float) = ReflexCandidate(Point2f(x, 38f), 60f, 135f, quality)
+        assertNull(measure(4_800L, 50f, listOf(peak(52f, 0.5f)))?.cornealReflex)
+        val tracked = assertNotNull(measure(4_833L, 56f, listOf(peak(64f, 0.75f), peak(58f, 0.45f))))
+        assertEquals(Point2f(58f, 38f), tracked.cornealReflex)
+        assertFalse(tracked.reflexCodeMatched)
+        assertNull(measure(4_866L, 56f, emptyList())?.cornealReflex)
+        assertNull(measure(4_899L, 56f, listOf(peak(58f, 0.75f)), visibility = 2f)?.cornealReflex)
     }
 
     @Test fun noCalibrationAndShortGapsRetainPositiveAlignmentEvidence() {

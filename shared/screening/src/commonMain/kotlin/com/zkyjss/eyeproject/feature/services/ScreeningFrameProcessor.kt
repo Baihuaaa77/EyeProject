@@ -16,9 +16,10 @@ internal class ScreeningFrameProcessor(private val host: ScreeningEngine) {
     private val leftBlink = GazeBlinkGate()
     private val rightBlink = GazeBlinkGate()
     private val gazeDrift = GazeDriftCorrector()
+    private val gazeSampler = GazeEstimateSampler()
     private var smoothingStep: ScreeningStep? = null
 
-    fun resetGazeDrift() = gazeDrift.clear()
+    fun resetGazeDrift() { gazeDrift.clear(); gazeSampler.clear() }
 
     fun processFrame(time: Long, step: ScreeningStep, frame: FaceLandmarkFrame) {
         with(host) {
@@ -58,8 +59,8 @@ internal class ScreeningFrameProcessor(private val host: ScreeningEngine) {
             val opticalState = _state.value
             val applyCode = !coding && opticalState.step == step && !opticalState.guidePending &&
                 !opticalState.farWaiting && !opticalState.stabilityInterrupted && time >= stepStartMs
-            val leftOptical = if (applyCode) reflectionCode.measure(step, face?.leftEye, face?.leftOptical, true) else face?.leftOptical
-            val rightOptical = if (applyCode) reflectionCode.measure(step, face?.rightEye, face?.rightOptical, false) else face?.rightOptical
+            val leftOptical = if (applyCode) reflectionCode.measure(step, time, face?.leftEye, face?.leftOptical, true) else face?.leftOptical
+            val rightOptical = if (applyCode) reflectionCode.measure(step, time, face?.rightEye, face?.rightOptical, false) else face?.rightOptical
             fun opticalQuality(eye: com.zkyjss.eyeproject.core.model.OpticalEyeMeasurement?): String =
                 eye?.let {
                     "虹膜 ${decimalString(it.irisDiameterPx.toDouble(), 1)} px；瞳孔对比 ${decimalString(it.pupilContrast.toDouble(), 0)}；反光对比 ${decimalString(it.reflexContrast.toDouble(), 0)}"
@@ -152,7 +153,7 @@ internal class ScreeningFrameProcessor(private val host: ScreeningEngine) {
             } else null
             if (smoothingStep != step) {
                 leftSmoother.clear(); rightSmoother.clear()
-                leftBlink.clear(); rightBlink.clear(); gazeDrift.clear(); smoothingStep = step
+                leftBlink.clear(); rightBlink.clear(); resetGazeDrift(); smoothingStep = step
             }
             fun ear(eye: EyeLandmarks?, which: VisionEye) =
                 eye?.takeUnless { covered == which }?.let { BlinkDetector.ear(it.earPoints) }
@@ -162,6 +163,8 @@ internal class ScreeningFrameProcessor(private val host: ScreeningEngine) {
             val rightBlinking = rightBlink.isBlinking(time,rightEar)
             val gazeLeft = left?.takeIf { !leftBlinking && leftEar != null }?.let { GazePoint(it.first,it.second) }
             val gazeRight = right?.takeIf { !rightBlinking && rightEar != null }?.let { GazePoint(it.first,it.second) }
+            if (leftBlinking) leftSmoother.heldDuringBlink(time)
+            if (rightBlinking) rightSmoother.heldDuringBlink(time)
             // 标定和正式监督使用同一套稳健时序滤波，避免用原始虹膜跳点拟合出错误映射。
             // 注视信号与映光/距离质量分开。质量不合格的帧不会计入诊断样本，
             // 但保留连续眼动滤波状态，避免距离读数的一次抖动把注视轨迹切断。
@@ -198,17 +201,24 @@ internal class ScreeningFrameProcessor(private val host: ScreeningEngine) {
                 if (paused != _state.value.gazeCalibrationPaused) _state.update { it.copy(gazeCalibrationPaused = paused,
                     gazeWarning = if (paused) "校准已暂停：请把头摆正、保持约 33 cm，眼睛看着圆点" else null) }
             }
-            val estimates = gaze?.estimate(smoothLeft, smoothRight)
-            val displayedEstimates = gaze?.estimate(
-                smoothLeft ?: if (poseStable && leftBlinking) leftSmoother.heldDuringBlink(time) else null,
-                smoothRight ?: if (poseStable && rightBlinking) rightSmoother.heldDuringBlink(time) else null)
-            val fusedEstimate = gaze?.estimatePoint(smoothLeft, smoothRight)
-            val targetForDrift = rendered?.takeUnless { step == ScreeningStep.FAR_FIXATION }?.point
-            if (gaze != null && step in setOf(ScreeningStep.FIXATION, ScreeningStep.COVER, ScreeningStep.PURSUIT))
-                gazeDrift.begin(step, time)
-            val correctedEstimate = gazeDrift.update(time, fusedEstimate, targetForDrift)
+            val blinking = leftBlinking || rightBlinking
+            val screenEstimate = gaze?.let { mapping ->
+                val available = poseStable && !blinking && (smoothLeft != null || smoothRight != null)
+                val targetForDrift = rendered?.takeUnless { step == ScreeningStep.FAR_FIXATION }?.point
+                if (step in setOf(ScreeningStep.FIXATION, ScreeningStep.COVER, ScreeningStep.PURSUIT)) gazeDrift.begin(step, time)
+                gazeSampler.update(time, available, poseStable && blinking) {
+                    val mapped = mapping.estimate(smoothLeft, smoothRight)
+                    val fused = mapping.fuseEstimate(smoothLeft, smoothRight, mapped)
+                    ScreenGazeEstimate(mapped.first, mapped.second, gazeDrift.update(time, fused, targetForDrift))
+                }
+            }
+            val displayedEstimates = screenEstimate?.let { estimate ->
+                estimate.left?.takeIf { blinking || smoothLeft != null } to
+                    estimate.right?.takeIf { blinking || smoothRight != null }
+            }
+            val correctedEstimate = screenEstimate?.point
             // 遮盖时以未遮眼的纠偏估计发出提醒；缺测保留为空，去遮盖眼动由映光独立评估。
-            val gazeOnTarget = rendered?.takeUnless { step == ScreeningStep.FAR_FIXATION }?.let { target ->
+            val gazeOnTarget = rendered?.takeUnless { step == ScreeningStep.FAR_FIXATION || blinking }?.let { target ->
                 correctedEstimate?.let { StrabismusGaze.onTarget(it, target.point) }
             }
             if (_state.value.kind == ScreeningKind.STRABISMUS) diagnostics.frame(frame,
@@ -259,8 +269,8 @@ internal class ScreeningFrameProcessor(private val host: ScreeningEngine) {
                             rightOptical?.pupilCenter?.x, rightOptical?.pupilCenter?.y,
                             rightOptical?.cornealReflex?.x, rightOptical?.cornealReflex?.y,
                             leftNasal, rightNasal, leftVertical, rightVertical, pursuit?.third ?: -1,
-                            rendered?.point?.x, rendered?.point?.y, estimates?.first?.x, estimates?.first?.y,
-                            estimates?.second?.x, estimates?.second?.y, correctedEstimate?.x, correctedEstimate?.y,
+                            rendered?.point?.x, rendered?.point?.y, displayedEstimates?.first?.x, displayedEstimates?.first?.y,
+                            displayedEstimates?.second?.x, displayedEstimates?.second?.y, correctedEstimate?.x, correctedEstimate?.y,
                             gazeOnTarget,
                             leftVisible?.reflexCodeMatched == true && rightVisible?.reflexCodeMatched == true))
                     }

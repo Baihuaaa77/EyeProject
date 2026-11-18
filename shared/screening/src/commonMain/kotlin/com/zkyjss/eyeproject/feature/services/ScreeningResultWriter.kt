@@ -48,7 +48,7 @@ internal class ScreeningResultWriter(private val host: ScreeningEngine) {
                         if (s.kind == ScreeningKind.STRABISMUS) {
                             put("stimulusSource", "brief-code-then-steady-dot-v2")
                             put("acquisitionVersion", "completion-first-1")
-                            put("opticsAlgorithm", "screen-point-baseline-60-area-lid-v1")
+                            put("opticsAlgorithm", "screen-point-multiscale-track-60-radius-v1")
                             // 仅表示起始短光码的双眼候选通过核查，不代表后续每帧都已验证。
                             put("sourceIdentityVerified", capturedReflectionCode)
                             put("stabilityInterruptions", s.stabilityInterruptions)

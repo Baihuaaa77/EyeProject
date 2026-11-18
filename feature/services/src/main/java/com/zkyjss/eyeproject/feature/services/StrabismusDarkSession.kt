@@ -45,9 +45,10 @@ internal fun StrabismusDarkSession(s: ScreeningState, vm: ScreeningTestViewModel
             val diameter = StrabismusProtocol.targetDiameterMm(s.fields["年龄"]?.toIntOrNull()) * ppm
             val radius = (diameter / 2f).coerceAtMost(minOf(size.width, size.height) / 4f)
             val point = Offset(center.x, radius + 4.dp.toPx())
-            val lightOn = vm.engine.reflectionLightOn(lightChip)
+            val drawnChip = lightChip
+            val lightOn = vm.engine.reflectionLightOn(drawnChip)
             if (lightOn) drawCircle(colors.white, radius, point)
-            vm.engine.reportReflectionLight(lightOn)
+            vm.engine.reportReflectionLight(drawnChip)
             vm.reportGazeTarget(origin.x + point.x, origin.y + point.y)
         }
         Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().onSizeChanged { footerHeight = with(density) { it.height.toDp() } }.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

@@ -192,7 +192,7 @@ class MobileScreeningController(
     }
     fun reflectionChip(): Int = screening.reflectionChip()
     fun reflectionLightOn(chip: Int): Boolean = screening.reflectionLightOn(chip)
-    fun reportReflectionLight(on: Boolean) = screening.reportReflectionLight(on)
+    fun reportReflectionLight(chip: Int) = screening.reportReflectionLight(chip)
     fun feedbackJson(enabled: Boolean): String {
         val frame = when (kind) {
             "DRY_EYE" -> screeningFeedbackFrame(dry.uiState.value)

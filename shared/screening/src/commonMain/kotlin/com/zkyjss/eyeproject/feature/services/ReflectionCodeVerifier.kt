@@ -1,6 +1,7 @@
 package com.zkyjss.eyeproject.feature.services
 
 import com.zkyjss.eyeproject.core.model.*
+import com.zkyjss.eyeproject.core.domain.BlinkDetector
 import kotlin.math.hypot
 
 /** 以实绘明暗作参考，在虹膜局部坐标中逐候选位置校验；前半段选点，后半段独立复核。 */
@@ -16,12 +17,18 @@ internal class ReflectionCodeVerifier {
     private data class Spot(val point: Point2f, val signal: Float)
     private data class Reading(val chip: Int, val on: Boolean, val spots: List<Spot>)
     private data class Lock(val point: Point2f, val correlation: Double)
+    private data class Observation(val point: Point2f, val time: Long)
+    private class EyeTrack {
+        var last: Observation? = null
+    }
     private class Phase {
         val display = mutableListOf<Display>()
         val left = mutableListOf<Reading>()
         val right = mutableListOf<Reading>()
         var leftLock: Lock? = null
         var rightLock: Lock? = null
+        val leftTrack = EyeTrack()
+        val rightTrack = EyeTrack()
         var finalized = false
     }
     private val phasesByStep = mutableMapOf<ScreeningStep, Phase>()
@@ -30,11 +37,11 @@ internal class ReflectionCodeVerifier {
     fun active(step: ScreeningStep) = step in phasesByStep
     fun begin(step: ScreeningStep) { phasesByStep[step] = Phase() }
 
-    fun present(step: ScreeningStep, time: Long, on: Boolean, elapsed: Long) {
+    fun present(step: ScreeningStep, time: Long, chip: Int) {
         val phase = phasesByStep[step] ?: return
-        val chip = (elapsed/CHIP_MS).toInt()
-        if (elapsed !in 0L until DURATION_MS || phase.display.lastOrNull()?.chip == chip || on != bits[chip]) return
-        phase.display += Display(time,on,chip)
+        val on = bits.getOrNull(chip) ?: return
+        if (phase.display.lastOrNull()?.let { chip <= it.chip || time <= it.time } == true) return
+        phase.display += Display(time, on, chip)
     }
 
     fun observe(step: ScreeningStep, time: Long, face: FaceMetrics?) {
@@ -45,7 +52,8 @@ internal class ReflectionCodeVerifier {
         if (time-event.time !in 100L until CHIP_MS || phase.left.size >= 500 || phase.right.size >= 500) return
         fun add(target: MutableList<Reading>, optical: OpticalEyeMeasurement?, eye: EyeLandmarks?) {
             val center = eye?.irisPoints?.firstOrNull() ?: return
-            if (optical == null || optical.irisDiameterPx < 12f || (optical.irisVisibilityContrast ?: 0f) < 8f) return
+            if (!visible(eye, optical)) return
+            optical ?: return
             target += Reading(event.chip,event.on,optical.reflexCandidates.map {
                 Spot(normalized(it.point,center,optical.irisDiameterPx),it.contrast)
             })
@@ -75,31 +83,55 @@ internal class ReflectionCodeVerifier {
         return best.copy(correlation = minOf(best.correlation,heldOutCorrelation))
     }
 
-    fun measure(step: ScreeningStep, eye: EyeLandmarks?, optical: OpticalEyeMeasurement?, isLeft: Boolean): OpticalEyeMeasurement? {
+    fun measure(step: ScreeningStep, time: Long, eye: EyeLandmarks?, optical: OpticalEyeMeasurement?,
+                isLeft: Boolean): OpticalEyeMeasurement? {
         val phase = phasesByStep[step] ?: return optical
         if (!phase.finalized) {
             phase.leftLock = decode(phase.left); phase.rightLock = decode(phase.right); phase.finalized = true
         }
-        val lock = (if (isLeft) phase.leftLock else phase.rightLock) ?: return optical
+        val lock = if (isLeft) phase.leftLock else phase.rightLock
+        val track = if (isLeft) phase.leftTrack else phase.rightTrack
         optical ?: return null
-        val center = eye?.irisPoints?.firstOrNull() ?: return optical
-        // 保持对同一光源的约束，同时容许去遮盖后的再注视。每帧仍需实际检出候选。
-        val matches = optical.reflexCandidates.map { it to distance(normalized(it.point,center,optical.irisDiameterPx),lock.point) }
-        val candidate = matches.filter { it.second <= if (step == ScreeningStep.COVER) 0.24f else 0.17f }
-            .maxByOrNull { (spot,offset) -> spot.contrast - 300f * offset }
-        if (candidate == null) return optical.copy(cornealReflex = null, reflexContrast = 0f, reflexConfidence = null,
-            rejectionReason = "已确认的屏幕映光在当前帧缺失")
-        return optical.copy(cornealReflex = candidate.first.point, reflexContrast = candidate.first.contrast,
-            rejectionReason = null, reflexCodeMatched = true,
-            reflexConfidence = (0.50 + 0.30 * lock.correlation + candidate.first.contrast.coerceAtMost(120f) / 600 - candidate.second).toFloat().coerceIn(0f, 1f))
+        fun missing(reason: String) = optical.copy(cornealReflex = null, reflexContrast = 0f,
+            reflexConfidence = null, reflexCodeMatched = false, rejectionReason = reason)
+        val center = eye?.irisPoints?.firstOrNull()
+        if (center == null || !visible(eye, optical)) return missing("眼区不可见，缺少当前帧映光观测")
+
+        // 以虹膜坐标跟踪，抵消手机短时平移缩放。去遮盖允许眼球在连续帧间移动得更快。
+        val previous = track.last?.takeIf { time - it.time in 1L..180L }
+        val trackingRadius = if (step == ScreeningStep.COVER) 0.095f else 0.065f
+        val lockRadius = if (step == ScreeningStep.COVER) 0.24f else 0.17f
+        val match = optical.reflexCandidates.asSequence().map { spot ->
+            spot to normalized(spot.point, center, optical.irisDiameterPx)
+        }.filter { (spot, point) ->
+            (lock != null || spot.quality >= if (previous == null) 0.32f else 0.25f) &&
+                (lock == null || distance(point, lock.point) <= lockRadius) &&
+                (previous == null || distance(point, previous.point) <= trackingRadius)
+        }.maxByOrNull { (spot, point) ->
+            spot.quality - 4f * (previous?.let { distance(point, it.point) } ?: 0f) -
+                2.5f * (lock?.let { distance(point, it.point) } ?: 0f)
+        } ?: return missing(if (lock == null) "当前帧缺少连续的角膜反光候选" else "已确认的屏幕映光在当前帧缺失")
+
+        val (candidate, position) = match
+        track.last = Observation(position, time)
+        if (lock == null && previous == null) return missing("等待相邻帧确认角膜反光")
+        // 跟踪只用于匹配，始终以当前图像的峰值坐标测量，不补造丢失或眨眼帧。
+        return optical.copy(cornealReflex = candidate.point, reflexContrast = candidate.contrast,
+            rejectionReason = null, reflexCodeMatched = lock != null,
+            reflexConfidence = if (lock == null) candidate.quality.coerceIn(0.15f, 0.62f) else
+                (0.50 + 0.30 * lock.correlation + 0.20 * candidate.quality - distance(position, lock.point)).toFloat().coerceIn(0f, 1f))
     }
+
+    private fun visible(eye: EyeLandmarks?, optical: OpticalEyeMeasurement?): Boolean =
+        eye != null && optical != null && optical.irisDiameterPx >= 12f &&
+            (optical.irisVisibilityContrast ?: 0f) >= 8f && (BlinkDetector.ear(eye.earPoints) ?: 1f) >= 0.14f
 
     private fun normalized(point: Point2f, center: Point2f, diameter: Float) =
         Point2f((point.x-center.x)/diameter,(point.y-center.y)/diameter)
     private fun distance(a: Point2f, b: Point2f) = hypot(a.x-b.x,a.y-b.y)
 
     fun record() = RecordObject().apply {
-        put("version","position-display-code-2"); put("durationMs",DURATION_MS)
+        put("version","position-display-code-3"); put("durationMs",DURATION_MS)
         phasesByStep.forEach { (step,phase) -> put(step.name, RecordObject().apply {
             put("leftVerified",phase.leftLock != null); put("rightVerified",phase.rightLock != null)
             put("leftSamples",phase.left.size); put("rightSamples",phase.right.size)

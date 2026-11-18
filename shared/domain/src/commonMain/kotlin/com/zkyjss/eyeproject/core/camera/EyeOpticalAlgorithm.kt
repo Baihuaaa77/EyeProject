@@ -18,11 +18,12 @@ object EyeOpticalAlgorithm {
     /** 旧版光码实验的全虹膜基线；保留供历史回放比较，主 App 使用 measureScreenPoint。 */
     fun measureFullIris(bitmap: GrayImage, eye: EyeLandmarks?): OpticalEyeMeasurement? = measure(bitmap, eye, 1f)
 
-    /** 主 App：虹膜半径70%的圆与眼睑可见区域的交集；仍保留高对比度拒判。 */
+    /** 主 App 的黑屏白点分支：原像素局部峰，搜索范围为虹膜半径的 60%。 */
     fun measureScreenPoint(bitmap: GrayImage, eye: EyeLandmarks?): OpticalEyeMeasurement? =
-        measure(bitmap,eye,0.70f,screenPoint = true)
+        measure(bitmap,eye,screenPoint = true)
 
-    private fun measure(bitmap: GrayImage, eye: EyeLandmarks?, searchRadiusFraction: Float, screenPoint: Boolean = false): OpticalEyeMeasurement? {
+    private fun measure(bitmap: GrayImage, eye: EyeLandmarks?, searchRadiusFraction: Float = 0.75f,
+                        screenPoint: Boolean = false): OpticalEyeMeasurement? {
         eye ?: return null
         val iris = eye.irisPoints.firstOrNull() ?: return null
         val diameter = eye.irisDiameterPx
@@ -62,29 +63,27 @@ object EyeOpticalAlgorithm {
             pupilWeight += weight
         }
         val pupil = if (pupilContrast >= 12f && pupilWeight >= 8f) Point2f(pupilX / pupilWeight, pupilY / pupilWeight) else null
+        val visibility = visibilityContrast(bitmap, eye, dark)
+        if (screenPoint) {
+            val candidates = ScreenGlintDetection.find(gray, width, height, Point2f(iris.x - x0, iris.y - y0), radius,
+                eye.earPoints.map { Point2f(it.x - x0, it.y - y0) }).map {
+                it.copy(point = Point2f(it.point.x + x0, it.point.y + y0))
+            }
+            val best = candidates.firstOrNull()?.takeIf { it.quality >= 0.32f }
+            return OpticalEyeMeasurement(pupil ?: iris, best?.point, diameter, pupilContrast, best?.contrast ?: 0f,
+                if (best == null) "未识别到可靠角膜反光点" else null, referenceFromIris = pupil == null,
+                irisVisibilityContrast = visibility, reflexCandidates = candidates, reflexConfidence = best?.quality)
+        }
 
         // 仅接受虹膜内部很小的高亮连通域，避免把眼白、镜片反射或整屏亮斑当作角膜反光点。
-        // 屏幕白点在前置相机自动曝光下常落到 180~205 灰度；先缩小搜索区，再降低门槛，
-        // 让轻微失焦、眼镜反光和暗肤色场景仍有候选，最终由短光码与时序一致性确认。
-        val threshold = if (screenPoint) maxOf(125, median + 20, bright - 28) else maxOf(205, median + 55, bright - 8)
+        val threshold = maxOf(205, median + 55, bright - 8)
         val visited = BooleanArray(gray.size)
         var bestScore = Float.NEGATIVE_INFINITY
         var glint: Point2f? = null
         var glintContrast = 0f
-        val candidates = mutableListOf<ReflexCandidate>()
         fun search(x: Int,y: Int): Boolean {
             val px = (x+x0).toFloat(); val py = (y+y0).toFloat()
-            if (hypot(px-iris.x,py-iris.y)>radius*searchRadiusFraction) return false
-            if (!screenPoint) return true
-            val lid = eye.earPoints
-            if (lid.size != 6) return false
-            var inside = false; var j = lid.lastIndex
-            for (i in lid.indices) {
-                val a = lid[i]; val b = lid[j]
-                if ((a.y>py)!=(b.y>py) && px<(b.x-a.x)*(py-a.y)/(b.y-a.y)+a.x) inside = !inside
-                j = i
-            }
-            return inside
+            return hypot(px-iris.x,py-iris.y) <= radius*searchRadiusFraction
         }
         val queue = IntArray(gray.size)
         val maxArea = maxOf(2, (kotlin.math.PI * radius * radius * 0.10).toInt())
@@ -112,17 +111,14 @@ object EyeOpticalAlgorithm {
             val candidate = Point2f(sumX / tail, sumY / tail)
             val brightness = sumBrightness / tail
             val contrast = brightness - median
-            if (screenPoint && contrast >= 22f) candidates += ReflexCandidate(candidate, contrast, brightness)
             val score = contrast - 2f * hypot(candidate.x - iris.x, candidate.y - iris.y)
-            val minimumContrast = if (screenPoint) 35f else 55f
-            if (contrast >= minimumContrast && (!screenPoint || brightness >= 180f) && score > bestScore) {
+            if (contrast >= 55f && score > bestScore) {
                 bestScore = score; glint = candidate; glintContrast = contrast
             }
         }
         val reason = if (glint == null) "未识别到可靠角膜反光点" else null
         return OpticalEyeMeasurement(pupil ?: iris, glint, diameter, pupilContrast, glintContrast, reason,
-            referenceFromIris = pupil == null, irisVisibilityContrast = visibilityContrast(bitmap, eye, dark),
-            reflexCandidates = candidates.sortedByDescending { it.contrast }.take(8),
+            referenceFromIris = pupil == null, irisVisibilityContrast = visibility,
             reflexConfidence = glint?.let { (glintContrast / 150f).coerceIn(0.15f, 0.65f) })
     }
 
