@@ -9,16 +9,28 @@ internal class ScreenGazeFilter {
     private var average: ScreenGazePoint? = null
     private var displayed: ScreenGazePoint? = null
     private var lastTime: Long? = null
+    private var outsidePrevious = false
 
     fun clear() {
         window.clear()
         average = null
         displayed = null
         lastTime = null
+        outsidePrevious = false
     }
 
     fun update(point: ScreenGazePoint, time: Long, width: Int, height: Int): ScreenGazePoint? {
         val elapsed = lastTime?.let { time - it } ?: 0L
+        if (!point.isOnScreen()) {
+            // 只忽略一次越界尖峰；连续越界时移除圆点。
+            if (!outsidePrevious && elapsed in 1L..400L) {
+                outsidePrevious = true
+                return displayed
+            }
+            clear()
+            return null
+        }
+        outsidePrevious = false
         if (elapsed !in 1L..400L) {
             clear()
             repeat(3) { window.addLast(point) }
@@ -28,12 +40,6 @@ internal class ScreenGazeFilter {
         }
         lastTime = time
         val center = medianPoint(window)
-        if (!center.isOnScreen()) {
-            average = null
-            displayed = null
-            return null
-        }
-
         val diagonal = hypot(width.toFloat(), height.toFloat())
         fun distance(a: ScreenGazePoint, b: ScreenGazePoint) =
             hypot((a.x - b.x) * width, (a.y - b.y) * height) / diagonal
