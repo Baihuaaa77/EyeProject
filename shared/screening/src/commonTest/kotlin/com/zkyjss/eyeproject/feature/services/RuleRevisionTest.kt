@@ -253,7 +253,7 @@ class RuleRevisionTest {
     // region 斜视
 
     private fun strabismus(nasal: (Int) -> Float, pursuitDeg: Pair<Float, Float>? = null, coordinated: Boolean = true,
-                           far: ((Int) -> Float)? = null, farFrames: Int = 100): ScreeningAssessment {
+                           far: ((Int) -> Float)? = null, farFrames: Int = 100, farPhoneCm: Float = 33f): ScreeningAssessment {
         val fixation = List(120) { i -> EyeMotionSample(i * 100L, ScreeningStep.FIXATION, 0f, 0f, 0f, 0f, 33f,
             leftNasal = 0.1f + nasal(i), rightNasal = 0.1f, leftVertical = 0f, rightVertical = 0f, reflectionCodeMatched = true) }
         val marks = listOf(CoverMark("移开遮盖，双眼注视", 15_000, uncovered = VisionEye.RIGHT),
@@ -271,12 +271,12 @@ class RuleRevisionTest {
                 targetScreenX = 0.5f + lx, targetScreenY = 0.5f + ly)
         }
         return ScreeningAssessmentModel.strabismus(ScreeningState(kind = ScreeningKind.STRABISMUS, coverMarks = marks,
-            pursuitMaxDeg = pursuitDeg), fixation + cover + pursuit + farSamples(far, farFrames), 100, 90)
+            pursuitMaxDeg = pursuitDeg), fixation + cover + pursuit + farSamples(far, farFrames, farPhoneCm), 100, 90)
     }
 
     /** 看远 10 秒（每 100 ms 一帧）。 */
-    private fun farSamples(far: ((Int) -> Float)?, frames: Int) = if (far == null) emptyList() else List(frames) { i ->
-        EyeMotionSample(30_000 + i * 100L, ScreeningStep.FAR_FIXATION, 0f, 0f, 0f, 0f, 33f,
+    private fun farSamples(far: ((Int) -> Float)?, frames: Int, phoneCm: Float) = if (far == null) emptyList() else List(frames) { i ->
+        EyeMotionSample(30_000 + i * 100L, ScreeningStep.FAR_FIXATION, 0f, 0f, 0f, 0f, phoneCm,
             leftNasal = 0.1f + far(i), rightNasal = 0.1f, leftVertical = 0f, rightVertical = 0f, reflectionCodeMatched = true)
     }
 
@@ -285,10 +285,18 @@ class RuleRevisionTest {
         val result = strabismus({ 0f }, far = { 0.1f })
         assertEquals(EvidenceStatus.NORMAL, result.evidence.first { it.key == "alignment" }.status)
         assertEquals(EvidenceStatus.ABNORMAL, result.evidence.first { it.key == "far" }.status)
-        assertEquals(ScreeningRiskLevel.HIGH, result.riskLevel)
+        assertEquals(ScreeningRiskLevel.UNCERTAIN, result.riskLevel)
         assertTrue(result.findings.any { "远距视标下核查" in it })
         // 前 1.5 秒视线转向远处、调节放松，不计入
         assertEquals(85.0, result.features["far_frames"])
+    }
+
+    @Test fun farReflectionAtTwentyFourCentimetersIsExcludedDespiteOpticalCode() {
+        val result = strabismus({ 0.04f }, far = { 0.145f }, farPhoneCm = 24.3f)
+        assertNull(result.features["far_hde_prism"])
+        assertEquals(85.0, result.features["far_distance_rejected_frames"])
+        assertEquals(EvidenceStatus.UNAVAILABLE, result.evidence.first { it.key == "far" }.status)
+        assertTrue(result.findings.any { "手机距离超出" in it })
     }
 
     @Test fun missingDistanceDataOnlySkipsTheDistanceEvidence() {

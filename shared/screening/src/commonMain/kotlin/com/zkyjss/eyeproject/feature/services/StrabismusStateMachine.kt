@@ -192,8 +192,8 @@ internal class StrabismusStateMachine(private val host: ScreeningEngine) {
         with(host) {
             resetGazeWindow()
             stepStartMs = platform.nowMs()
-            _state.update { it.copy(step = ScreeningStep.PURSUIT, guidePending = true, secondsLeft = StrabismusProtocol.PURSUIT_SECONDS,
-                instruction = "只用眼睛跟随移动的圆点：水平 8 秒、垂直 8 秒、斜向 6 秒。", warning = null) }
+            _state.update { it.copy(step = ScreeningStep.PURSUIT, guidePending = true, secondsLeft = StrabismusProtocol.PURSUIT_SECONDS, pursuitMaxDeg = null,
+                instruction = guideCue(ScreeningStep.PURSUIT), warning = null) }
 
         }
     }

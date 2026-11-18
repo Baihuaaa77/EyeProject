@@ -97,8 +97,9 @@ object PursuitMotionCheck {
             if (pairs.size < 10 || pairs.size * 2 < points.size) return false
             val eye = pairs.map { it.first }
             val target = pairs.map { it.second }
-            return centralRange(target) >= 0.06 && centralRange(eye) >= 0.035 &&
-                (StrabismusMeasures.correlation(eye, target) ?: 0.0) >= 0.50
+            // 位移以眼宽计。保留小幅有效运动，同时要求较强的目标时序相关。
+            return centralRange(target) >= 0.06 && centralRange(eye) >= 0.012 &&
+                (StrabismusMeasures.correlation(eye, target) ?: 0.0) >= 0.60
         }
 
         // 任一眼跟随即可验证任务参与，两眼之间的一致性由协调指标评估。

@@ -99,6 +99,8 @@ object StrabismusProtocol {
     /** 距离平滑后，采样与提示统一遵守33±5厘米；持续超限中断本段。 */
     const val DISTANCE_GATE_CM = DISTANCE_TOLERANCE_CM
     const val FIXATION_SECONDS = 12
+    /** 较近距离在窄屏上也能提供较大的视角。 */
+    const val PURSUIT_DISTANCE_CM = 25f
     const val PURSUIT_SECONDS = 22
 
     /**
@@ -109,6 +111,9 @@ object StrabismusProtocol {
     const val FAR_FIXATION_SECONDS = 10
     const val FAR_SETTLE_MS = 1_500L
     const val FAR_TARGET_M = 6
+
+    fun farCameraDistanceOk(distanceCm: Float) =
+        distanceCm in (DISTANCE_CM - DISTANCE_TOLERANCE_CM)..(DISTANCE_CM + DISTANCE_TOLERANCE_CM)
     /** 手机放低到视线下方，相机看到的头部俯仰会比正对时大：看远时放宽到 20°（其余任务 10°）。 */
     const val FAR_PITCH_LIMIT_DEG = 20f
 
@@ -146,6 +151,24 @@ object StrabismusProtocol {
 
     /** 追踪：幅度 ±10°，水平/垂直正弦周期 4 秒各 2 次，45° 斜向直线往复周期 3 秒 2 次。 */
     const val PURSUIT_AMPLITUDE_DEG = 10f
+
+    fun pursuitDisplayDistance(measuredCm: Float) =
+        measuredCm.takeIf { it.isFinite() && it > 0f } ?: PURSUIT_DISTANCE_CM
+
+    /** 有效画布边缘距中心的最大可显示视角。 */
+    fun pursuitDisplayLimit(halfSpanMm: Float, distanceCm: Float): Float =
+        (kotlin.math.atan(halfSpanMm.coerceAtLeast(0f) / (distanceCm * 10f)) * 180f / kotlin.math.PI.toFloat())
+            .coerceAtMost(PURSUIT_AMPLITUDE_DEG)
+
+    /** 水平、垂直各用其画布限幅，斜向保留原斜率。返回距画布中心的毫米位移。 */
+    fun pursuitDisplayOffset(target: GazePoint, maxX: Float, maxY: Float, distanceCm: Float): GazePoint {
+        val diagonal = target.x != 0f && target.y != 0f
+        val xLimit = if (diagonal) minOf(maxX, maxY) else maxX
+        val yLimit = if (diagonal) minOf(maxX, maxY) else maxY
+        fun toMm(degrees: Float, limit: Float) =
+            kotlin.math.tan(degrees * limit / PURSUIT_AMPLITUDE_DEG * kotlin.math.PI / 180.0).toFloat() * distanceCm * 10f
+        return GazePoint(toMm(target.x, xLimit), toMm(target.y, yLimit))
+    }
 
     /** 返回 (x°, y°, 段号 0 水平 / 1 垂直 / 2 斜向)。 */
     fun pursuitTarget(seconds: Float): Triple<Float, Float, Int> = when {

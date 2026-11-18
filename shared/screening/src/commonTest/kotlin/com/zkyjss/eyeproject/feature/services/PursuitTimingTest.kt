@@ -8,6 +8,19 @@ import kotlin.test.*
 /** 绘制时刻的轨迹独立于状态快照频率，并与采样使用同一单调时钟。 */
 @OptIn(ExperimentalCoroutinesApi::class)
 class PursuitTimingTest {
+    @Test fun closerDistanceAndIndependentAxesUseMoreOfTallScreen() {
+        val distance = StrabismusProtocol.PURSUIT_DISTANCE_CM
+        assertEquals(25f to 5f, screeningDistanceTarget(ScreeningState(kind = ScreeningKind.STRABISMUS, step = ScreeningStep.PURSUIT)))
+        val xLimit = StrabismusProtocol.pursuitDisplayLimit(28f, distance)
+        val yLimit = StrabismusProtocol.pursuitDisplayLimit(65f, distance)
+        assertTrue(xLimit > StrabismusProtocol.pursuitDisplayLimit(28f, 33f))
+        assertEquals(10f, yLimit)
+        val vertical = StrabismusProtocol.pursuitDisplayOffset(GazePoint(0f, 10f), xLimit, yLimit, distance)
+        val diagonal = StrabismusProtocol.pursuitDisplayOffset(GazePoint(7f, -7f), xLimit, yLimit, distance)
+        assertTrue(vertical.y > 40f)
+        assertEquals(diagonal.x, -diagonal.y, 0.001f)
+    }
+
     @Test fun renderPositionAdvancesBetweenStateTicksAndUsesProtocolTime() = runTest {
         val platform = object : ScreeningPlatform {
             override val display = DisplayGeometry(400, 800, 160f, 160f)

@@ -3,6 +3,7 @@ package com.zkyjss.eyeproject.core.camera
 import android.content.Context
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
+import com.zkyjss.eyeproject.core.domain.DepthFromIris
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -11,8 +12,8 @@ import kotlin.math.tan
 /**
  * 前置相机焦距（像素），用于 Depth-from-Iris 测距：距离 = 虹膜直径(mm) × 焦距(px) / 虹膜像素直径。
  *
- * - 真机：焦距(px) = 物理焦距(mm) × 分析图长边(px) / 传感器物理宽(mm)（假设分析图为传感器全视野等比缩放；
- *   CameraX 若发生裁切会引入近似误差，需实物校准）。Camera2 参数只读取一次并缓存。
+ * - 真机：先从 Camera2 有效像素区域推算有效物理尺寸，再按分析图宽高比居中裁切及等比缩放。
+ *   这是默认全视野取流的近似，仍需用尺子核对不同设备。Camera2 参数只读取一次并缓存。
  * - Debug 模拟器 + 电脑摄像头输入：模拟器上报的是虚构的镜头参数，与电脑摄像头毫无关系，
  *   因此改按电脑摄像头的固定水平视场角估算：焦距(px) = (图像长边/2) / tan(HFOV/2)。
  *   16:9 画面取笔记本摄像头常见的 65°；4:3 画面通常是从 16:9 传感器左右裁切得到，视场角约 51°。
@@ -54,11 +55,10 @@ class CameraIntrinsicsProvider @Inject constructor(
                 "电脑摄像头画面；按固定水平视场角 ${hfov}° 估算焦距（未标定）")
         }
         val l = lens ?: return null
-        // 竖屏图像的长边来自传感器横向；按短边计算会低估焦距和距离。
-        val focalPx = l.focalMm * longSide / l.sensorWidthMm
+        val focalPx = DepthFromIris.focalLengthForCenterCrop(l.focalMm, l.sensorWidthMm, l.sensorHeightMm, imageWidth, imageHeight)
         return Geometry(l.cameraId, imageWidth, imageHeight, l.focalMm, l.sensorWidthMm, l.sensorHeightMm,
             focalPx, imageWidth / 2f, imageHeight / 2f,
-            "Camera2 物理焦距和传感器尺寸；主点取图像中心；CameraX 裁切待实物校准")
+            "Camera2 物理焦距、有效传感器尺寸与取流宽高比；主点取图像中心")
     }
 
     fun focalLengthPx(imageWidth: Int, imageHeight: Int): Float =
@@ -81,8 +81,14 @@ class CameraIntrinsicsProvider @Inject constructor(
             if (c.get(CameraCharacteristics.LENS_FACING) != CameraCharacteristics.LENS_FACING_FRONT) return@firstNotNullOfOrNull null
             val focal = c.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)?.firstOrNull() ?: return@firstNotNullOfOrNull null
             val sensor = c.get(CameraCharacteristics.SENSOR_INFO_PHYSICAL_SIZE) ?: return@firstNotNullOfOrNull null
-            if (focal <= 0f || sensor.width <= 0f || sensor.height <= 0f) null
-            else Lens(id, focal, sensor.width, sensor.height)
+            if (focal <= 0f || sensor.width <= 0f || sensor.height <= 0f) return@firstNotNullOfOrNull null
+            val array = c.get(CameraCharacteristics.SENSOR_INFO_PIXEL_ARRAY_SIZE)
+            val active = c.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE)
+            val scaleX = if (array != null && active != null && active.width() in 1..array.width)
+                active.width().toFloat() / array.width else 1f
+            val scaleY = if (array != null && active != null && active.height() in 1..array.height)
+                active.height().toFloat() / array.height else 1f
+            Lens(id, focal, sensor.width * scaleX, sensor.height * scaleY)
         }
     } catch (_: Exception) {
         null

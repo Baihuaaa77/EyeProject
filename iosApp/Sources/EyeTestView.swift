@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import EyeScreening
 
 struct EyeTestView: View {
     @StateObject private var runtime: EyeRuntime
@@ -571,7 +572,7 @@ private struct GazeTargetView: View {
                 let lightChip = runtime.controller.reflectionChip()
                 let lightOn = runtime.controller.reflectionLightOn(chip: lightChip)
                 let trajectory = runtime.controller.pursuitTargetNow()
-                let point = target(in: size, trajectory: CGPoint(x: CGFloat(trajectory.x), y: CGFloat(trajectory.y)))
+                let point = target(in: size, trajectory: trajectory)
                 ZStack(alignment: .topLeading) {
                     EyeStyle.reflectionBackground
                     if reflection {
@@ -593,29 +594,35 @@ private struct GazeTargetView: View {
             }
         }
     }
-    private func target(in size: CGSize, trajectory: CGPoint) -> CGPoint {
+    private func target(in size: CGSize, trajectory: GazePoint) -> CGPoint {
         if runtime.string("phase") == "PURSUIT" {
-            let ppm = Double(pixelsPerMm) / Double(UIScreen.main.scale)
-            let distance = max(runtime.number("distanceCm"), 1) * 10
-            let radius = 5 * ppm
-            let xMax = atan(max(0,(size.width / 2 - radius)) / (distance * ppm)) * 180 / .pi
-            let yMax = atan(max(0,(size.height / 2 - radius)) / (distance * ppm)) * 180 / .pi
-            let scale = min(1,min(xMax / 10,yMax / 10))
-            return CGPoint(x: size.width / 2 + tan(Double(trajectory.x) * scale * .pi / 180) * distance * ppm,
-                y: size.height / 2 - tan(Double(trajectory.y) * scale * .pi / 180) * distance * ppm)
+            let limits = pursuitLimits(in: size)
+            let offset = StrabismusProtocol.shared.pursuitDisplayOffset(
+                target: trajectory, maxX: limits.x, maxY: limits.y, distanceCm: pursuitDistanceCm)
+            let pointsPerMm = CGFloat(pixelsPerMm) / UIScreen.main.scale
+            return CGPoint(x: size.width / 2 + CGFloat(offset.x) * pointsPerMm,
+                           y: size.height / 2 - CGFloat(offset.y) * pointsPerMm)
         }
         // 注视、遮盖：目标放在画布顶部、尽量靠近顶部的映光点（专家建议），头顶嫩芽也留在画布内
         let width = CGFloat(runtime.number("targetDiameterMm") * Double(pixelsPerMm)) / UIScreen.main.scale
         return CGPoint(x: size.width / 2, y: width / 2 + 4)
+    }
+    private var pursuitDistanceCm: Float {
+        StrabismusProtocol.shared.pursuitDisplayDistance(measuredCm: Float(runtime.number("distanceCm")))
+    }
+    private func pursuitLimits(in size: CGSize) -> (x: Float, y: Float) {
+        let pointsPerMm = CGFloat(pixelsPerMm) / UIScreen.main.scale
+        let protocolRules = StrabismusProtocol.shared
+        return (protocolRules.pursuitDisplayLimit(halfSpanMm: Float((size.width / 2 - 16) / pointsPerMm), distanceCm: pursuitDistanceCm),
+                protocolRules.pursuitDisplayLimit(halfSpanMm: Float((size.height / 2 - 16) / pointsPerMm), distanceCm: pursuitDistanceCm))
     }
     private func report(_ geometry: GeometryProxy,_ point: CGPoint) {
         guard geometry.size.width > 1, geometry.size.height > 1 else { return }
         let frame = geometry.frame(in: .global), scale = UIScreen.main.scale
         runtime.controller.reportTarget(xPx: Float((frame.minX + point.x) * scale), yPx: Float((frame.minY + point.y) * scale))
         if runtime.string("phase") == "PURSUIT" {
-            let ppm = Double(pixelsPerMm) / Double(scale), distance = max(runtime.number("distanceCm"),1) * 10
-            runtime.controller.reportPursuitCapacity(xDeg: Float(atan(max(0,geometry.size.width / 2 - 5 * ppm) / (distance * ppm)) * 180 / .pi),
-                yDeg: Float(atan(max(0,geometry.size.height / 2 - 5 * ppm) / (distance * ppm)) * 180 / .pi))
+            let limits = pursuitLimits(in: geometry.size)
+            runtime.controller.reportPursuitCapacity(xDeg: limits.x, yDeg: limits.y)
         }
     }
 }

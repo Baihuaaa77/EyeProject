@@ -176,7 +176,7 @@ object ResultReports {
         fun status(key: String) = s.evidence.firstOrNull { it.key == key }?.status ?: EvidenceStatus.UNAVAILABLE
         val metrics = if (strabismus) listOf(
             ResultMetric("看近水平偏斜", f["fixation_hde_prism"]?.let { "${fmt1(kotlin.math.abs(it))} Δ" } ?: "—", status("alignment")),
-            ResultMetric("看远水平偏斜", f["far_hde_prism"]?.takeIf { status("far") != EvidenceStatus.UNAVAILABLE }
+            ResultMetric("看远水平映光差", f["far_hde_prism"]?.takeIf { status("far") != EvidenceStatus.UNAVAILABLE }
                 ?.let { "${fmt1(kotlin.math.abs(it))} Δ" } ?: "—", status("far")),
             ResultMetric("遮盖后眼睛移动", f["cover_refix_median_prism"]?.let { "${fmt1(it)} Δ" } ?: "—", status("cover")),
             ResultMetric("双眼协调", f["bsi"]?.let { decimalString(it, 2) } ?: "—", status("coordination")),
@@ -203,7 +203,7 @@ object ResultReports {
                     ResultRow("逐帧标准差", "${fmt1(f["fixation_hde_sd_prism"])} / ${fmt1(f["fixation_vde_sd_prism"])} Δ"),
                     ResultRow("有效帧 / 最长连续", "${f["fixation_frames"]?.toInt() ?: 0} 帧 / ${fmt1((f["fixation_continuous_ms"] ?: 0.0) / 1000)} 秒"),
                 )))
-                add(ResultSection("看远眼位", listOf(
+                add(ResultSection("看远映光差", listOf(
                     ResultRow("水平偏斜", f["far_hde_ci_half_prism"]?.let { "${fmt1(f["far_hde_prism"])} Δ（误差 ±${fmt1(it)}）" } ?: "未评估"),
                     ResultRow("垂直偏斜", f["far_vde_ci_half_prism"]?.let { "${fmt1(f["far_vde_prism"])} Δ（误差 ±${fmt1(it)}）" } ?: "未评估"),
                     ResultRow("有效帧 / 最长连续", "${f["far_frames"]?.toInt() ?: 0} 帧 / ${fmt1((f["far_continuous_ms"] ?: 0.0) / 1000)} 秒"),

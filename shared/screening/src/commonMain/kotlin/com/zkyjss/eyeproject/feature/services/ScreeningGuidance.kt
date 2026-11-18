@@ -40,6 +40,7 @@ fun screeningGuidance(s: ScreeningState): String? {
 /** 当前步骤要求的（目标距离, 容差）；移近法、遮盖、问卷与结果页不做距离约束时返回 null。 */
 fun screeningDistanceTarget(s: ScreeningState): Pair<Float, Float>? = when (s.step) {
     ScreeningStep.PROFILE, ScreeningStep.RESULT, ScreeningStep.PUSH_UP -> null
+    ScreeningStep.PURSUIT -> if (s.kind == ScreeningKind.STRABISMUS) StrabismusProtocol.PURSUIT_DISTANCE_CM to StrabismusProtocol.DISTANCE_TOLERANCE_CM else null
     ScreeningStep.COVER -> if (s.kind == ScreeningKind.STRABISMUS) StrabismusProtocol.DISTANCE_CM to StrabismusProtocol.DISTANCE_TOLERANCE_CM else null
     ScreeningStep.FLIPPER -> (if (s.trialIndex % 2 == 0) PresbyopiaProtocol.FLIPPER_FAR_CM else PresbyopiaProtocol.FLIPPER_NEAR_CM) to
         PresbyopiaProtocol.DISTANCE_TOLERANCE_CM

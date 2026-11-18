@@ -49,7 +49,7 @@ class StrabismusStabilityTest {
 
     @Test fun shortLargeTrackingSpikeDoesNotInterruptAndStillSupervisesPursuitPhoneMovement() {
         val guard = StrabismusStability()
-        fun read(t: Long,shift: Float) = guard.observe(t,ScreeningStep.PURSUIT,eyes(shift),33f,true,false)
+        fun read(t: Long,shift: Float) = guard.observe(t,ScreeningStep.PURSUIT,eyes(shift),25f,true,false)
         read(0,0f)
         assertNull(read(100,0.10f).reason)
         assertTrue(read(500,0f).ready)

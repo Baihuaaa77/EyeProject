@@ -53,6 +53,8 @@ internal class StrabismusDiagnostics(private val platform: ScreeningPlatform) {
             if (state.distanceCm !in 20f..55f) add("距离不可用或超范围")
             if (pose == null) add("头姿不可用")
             if (pose != null && (abs(pose.yawDeg) > 25f || abs(pose.pitchDeg) > (if (state.step == ScreeningStep.FAR_FIXATION) 30f else 25f) || abs(pose.rollDeg) > 20f)) add("头姿偏离")
+            if (state.step == ScreeningStep.FAR_FIXATION && !state.farWaiting && !state.guidePending &&
+                !StrabismusProtocol.farCameraDistanceOk(state.distanceCm)) add("看远手机距离超出 33±5 厘米")
             if (!valid) add("采样质量门控未通过")
             if (inputLeft == null && inputRight == null) add("无可用的睁眼虹膜位置")
             if (actualTarget == null) add("目标绘制位置缺失")

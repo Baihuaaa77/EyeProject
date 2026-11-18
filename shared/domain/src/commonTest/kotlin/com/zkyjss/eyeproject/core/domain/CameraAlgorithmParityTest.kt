@@ -30,6 +30,13 @@ class CameraAlgorithmParityTest {
         detector.update(0.2f, t)
         assertEquals(1,detector.blinkCount)
     }
+    @Test fun focalLengthUsesTheCroppedSensorWidthWhenStreamIsNarrower() {
+        // 16:9 有效区域 6.4 × 3.6 mm，输出 4:3 横向裁成 4.8 × 3.6 mm。
+        assertEquals(800f, DepthFromIris.focalLengthForCenterCrop(4f, 6.4f, 3.6f, 720, 960), 0.001f)
+        assertEquals(800f, DepthFromIris.focalLengthForCenterCrop(4f, 6.4f, 3.6f, 1280, 720), 0.001f)
+        assertEquals(0f, DepthFromIris.focalLengthForCenterCrop(4f, 6.4f, 0f, 720, 960))
+    }
+
     @Test fun irisDistanceAndEventQueueKeepTheirUnitsAndOrder() {
         assertEquals(40f,DepthFromIris.distanceCm(11.7f,400f),0.001f)
         val queue = TimeEventQueue(); queue.add(10); queue.add(20)

@@ -56,6 +56,13 @@ class PursuitMotionTest {
         assertTrue(assessment.findings.first().contains("双眼运动明显不同步"))
     }
 
+    @Test fun smallVerticalSignalCanProduceABinocularScore() {
+        val samples = pursuit().map { it.copy(leftY = (it.leftY - 0.5f) * 0.065f, rightY = (it.rightY - 0.5f) * 0.065f) }
+        val result = ScreeningAssessmentModel.strabismus(ScreeningState(kind = ScreeningKind.STRABISMUS), samples, 0, 0)
+        assertEquals(true, PursuitMotionCheck.follows(samples, 1))
+        assertEquals(EvidenceStatus.NORMAL, result.evidence.first { it.key == "coordination" }.status)
+    }
+
     @Test fun stationaryEyesWithoutOpticalEvidenceReportsUndeterminedRisk() {
         val samples = pursuit(behavior = "still")
         val result = ScreeningAssessmentModel.strabismus(ScreeningState(kind = ScreeningKind.STRABISMUS), samples, 100, 100)

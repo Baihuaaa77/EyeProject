@@ -28,9 +28,9 @@ fun guideCue(step: ScreeningStep) = when (step) {
     ScreeningStep.DISTANCE_CURVE -> "依次在 67、50、33 cm 停稳，看 E 选方向，记录不同距离下的视力"
     ScreeningStep.FLIPPER -> "可选，约 1 分钟：先在 50 cm 和 25 cm 各看清一次 E，再来回移动手机，停稳后点选开口方向"
     ScreeningStep.FIXATION -> "手机放稳在眼前约 33 厘米，只转眼看九个圆点"
-    ScreeningStep.FAR_FIXATION -> "请看 6 米外的目标，头和手机保持不动"
+    ScreeningStep.FAR_FIXATION -> "手机离双眼约 33 厘米，越过手机正上方看 6 米外的目标，头和手机保持不动"
     ScreeningStep.COVER -> "请按提示遮眼，不要压眼球"
-    ScreeningStep.PURSUIT -> "只用眼睛跟随圆点，头不要动"
+    ScreeningStep.PURSUIT -> "把手机移到约 25 厘米并固定，只用眼睛跟随圆点"
     else -> "正对屏幕，保持光线均匀"
 }
 

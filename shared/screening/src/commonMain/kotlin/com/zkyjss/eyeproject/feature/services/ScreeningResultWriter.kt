@@ -43,7 +43,7 @@ internal class ScreeningResultWriter(private val host: ScreeningEngine) {
             recordScope.launch(recordDispatcher) {
                 runCatching {
                     val data = RecordObject().apply {
-                        put("protocolVersion", if (s.kind == ScreeningKind.STRABISMUS) 10 else 4)
+                        put("protocolVersion", if (s.kind == ScreeningKind.STRABISMUS) 11 else 4)
                         if (s.kind == ScreeningKind.STRABISMUS) {
                             put("stimulusSource", "brief-code-then-steady-dot-v2")
                             put("acquisitionVersion", "completion-first-1")
@@ -164,6 +164,7 @@ internal class ScreeningResultWriter(private val host: ScreeningEngine) {
                             put("leftVertical", sample.leftVertical?.toDouble() ?: RecordObject.NULL)
                             put("rightVertical", sample.rightVertical?.toDouble() ?: RecordObject.NULL)
                             put("pursuitSegment", sample.pursuitSegment)
+                            put("reflectionCodeMatched", sample.reflectionCodeMatched)
                         }) } })
                         put("summary", RecordArray(result))
                     }

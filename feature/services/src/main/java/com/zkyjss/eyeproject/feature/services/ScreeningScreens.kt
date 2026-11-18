@@ -496,8 +496,7 @@ internal fun PursuitContent(s: ScreeningState, vm: ScreeningTestViewModel) {
     val colors = LocalEyeColors.current
     val metrics = LocalContext.current.resources.displayMetrics
     val pxPerMm = metrics.xdpi / 25.4f
-    val distanceMm = (if (s.distanceCm > 0f) s.distanceCm else StrabismusProtocol.DISTANCE_CM) * 10f
-    val radiusPx = 10f / 2f * pxPerMm // 保持原有 1 cm 目标包络和轨迹边界。
+    val distanceCm = StrabismusProtocol.pursuitDisplayDistance(s.distanceCm)
     var origin by remember { mutableStateOf(Offset.Zero) }
     var renderTime by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
     LaunchedEffect(vm) {
@@ -507,18 +506,15 @@ internal fun PursuitContent(s: ScreeningState, vm: ScreeningTestViewModel) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Canvas(Modifier.fillMaxWidth().height(gazeCanvasBaseHeight(LocalConfiguration.current.screenHeightDp.dp) + rememberStageExtra()).clip(EyeShapes.medium).background(colors.black)
                 .onGloballyPositioned { origin = it.positionInWindow() }) {
-                val halfW = size.width / 2f - radiusPx
-                val halfH = size.height / 2f - radiusPx
-                // 原文 ±10° 按实测距离换算像素；超出画布时等比缩小并上报实际可显示角度
-                fun degToPx(deg: Float) = (kotlin.math.tan(Math.toRadians(deg.toDouble())) * distanceMm * pxPerMm).toFloat()
-                val maxX = Math.toDegrees(kotlin.math.atan((halfW / pxPerMm / distanceMm).toDouble())).toFloat()
-                val maxY = Math.toDegrees(kotlin.math.atan((halfH / pxPerMm / distanceMm).toDouble())).toFloat()
+                val haloRadius = 16.dp.toPx()
+                val maxX = StrabismusProtocol.pursuitDisplayLimit((size.width / 2f - haloRadius) / pxPerMm, distanceCm)
+                val maxY = StrabismusProtocol.pursuitDisplayLimit((size.height / 2f - haloRadius) / pxPerMm, distanceCm)
                 vm.reportPursuitCapacity(maxX, maxY)
-                val scale = minOf(1f, maxX / StrabismusProtocol.PURSUIT_AMPLITUDE_DEG, maxY / StrabismusProtocol.PURSUIT_AMPLITUDE_DEG)
                 val target = vm.engine.pursuitTargetAt(renderTime)
-                val x = size.width / 2f + degToPx(target.x * scale)
-                val y = size.height / 2f - degToPx(target.y * scale)
-                drawCircle(colors.primary.copy(alpha = 0.18f), radius = 16.dp.toPx(), center = Offset(x, y))
+                val offset = StrabismusProtocol.pursuitDisplayOffset(target, maxX, maxY, distanceCm)
+                val x = size.width / 2f + offset.x * pxPerMm
+                val y = size.height / 2f - offset.y * pxPerMm
+                drawCircle(colors.primary.copy(alpha = 0.18f), radius = haloRadius, center = Offset(x, y))
                 drawCircle(colors.primary, radius = 8.dp.toPx(), center = Offset(x, y))
                 vm.reportGazeTarget(origin.x + x, origin.y + y)
             }
