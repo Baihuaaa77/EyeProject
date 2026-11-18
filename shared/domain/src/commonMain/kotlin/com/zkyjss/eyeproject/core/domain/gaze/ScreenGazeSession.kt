@@ -1,7 +1,6 @@
 package com.zkyjss.eyeproject.core.domain.gaze
 
 import com.zkyjss.eyeproject.core.model.FaceMetrics
-import kotlin.math.exp
 import kotlin.math.hypot
 import kotlin.math.roundToInt
 
@@ -57,9 +56,8 @@ class ScreenGazeSession {
     private var run: Run? = null
     private var observation: GazeObservation? = null
     private var lastFrame: Long? = null
-    private var lastPointAt: Long? = null
     private var lastProfile: GazeProfile? = null
-    private var filtered: ScreenGazePoint? = null
+    private val filter = ScreenGazeFilter()
     private var report: String? = null
 
     fun tick(now: Long) {
@@ -161,7 +159,7 @@ class ScreenGazeSession {
         }
         if (active.samples.lastOrNull()?.let { time - it.time > 280L } == true) active.samples.clear()
         active.samples += Sample(time, sample, error)
-        if (active.samples.size < 7 || time - active.samples.first().time < 620L) {
+        if (active.samples.size < 5 || time - active.samples.first().time < 620L) {
             publish("继续注视圆点")
             return
         }
@@ -207,22 +205,16 @@ class ScreenGazeSession {
     private fun track(sample: GazeObservation?, time: Long) {
         val profile = sample?.let { nearestProfile(it.pose) }
         val raw = sample?.let { profile?.project(it) }
-        if (raw == null || !raw.isOnScreen()) {
-            clearFilter()
-            publish(when {
-                raw != null -> "估计落点超出画布"
-                sample != null && profile != null -> "眼部跟踪暂不稳定"
-                else -> liveStatus()
-            })
+        if (profile !== lastProfile && sample != null) {
+            filter.clear()
+            lastProfile = profile
+        }
+        if (raw == null || !raw.x.isFinite() || !raw.y.isFinite()) {
+            publish(if (profile != null) "眼部跟踪暂不稳定" else liveStatus())
             return
         }
-        val gap = lastPointAt?.let { time - it }
-        filtered = if (gap != null && gap in 1L..250L && lastProfile === profile) {
-            filtered?.mix(raw, (1.0 - exp(-gap / 60.0)).toFloat()) ?: raw
-        } else raw
-        lastPointAt = time
-        lastProfile = profile
-        publish("正在追踪", filtered)
+        val point = filter.update(raw, time, width, height)
+        publish(if (point != null) "正在追踪" else "估计落点超出画布", point)
     }
 
     private fun liveStatus(): String {
@@ -235,8 +227,7 @@ class ScreenGazeSession {
     }
 
     private fun clearFilter() {
-        filtered = null
-        lastPointAt = null
+        filter.clear()
         lastProfile = null
     }
 

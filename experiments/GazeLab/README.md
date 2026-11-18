@@ -15,6 +15,8 @@ APK 位于 `experiments/GazeLab/build/outputs/apk/debug/gaze-lab-debug.apk`。�
 
 GitHub Actions 的「屏幕注视追踪 iOS IPA」生成未签名的 iPhone 真机 IPA。下载 `gaze-lab-ios-unsigned-ipa` 并解压，然后用 Sideloadly 或 AltStore 重新签名安装。应用最低支持 iOS 16，首次运行需允许相机权限。
 
+iPhone 版从 0.1.1 起每秒分析 6 帧。实时落点用三次估计的中值和时间低通抑制跳点和小幅波动，界面在有效结果之间线性插值。标定和误差验证仍按真实相机样本计算。
+
 ## 当前算法与可用范围
 
 - 将虹膜中心投影到眼角局部坐标，用眼角间距归一化。九点样本取中位数，对单眼分别拟合二维映射。双眼结果相差过大时隐藏落点，有单眼映射且信号可用时允许单眼输出。

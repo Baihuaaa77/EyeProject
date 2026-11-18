@@ -4,6 +4,8 @@ import EyeScreening
 import SwiftUI
 import UIKit
 
+private let estimatesPerSecond = 6.0
+
 @main
 struct GazeLabApp: App {
     var body: some Scene {
@@ -35,6 +37,7 @@ private final class GazeLabModel: ObservableObject {
     init() {
         state = engine.state
         camera.measureOptics = false
+        camera.analysisFramesPerSecond = estimatesPerSecond
         let frames = mailbox
         camera.onFrame = { face, width, height, _, time, _ in
             frames.post(Frame(face: face, width: width, height: height, time: time))
@@ -133,6 +136,7 @@ private struct GazeLabScreen: View {
     @StateObject private var model = GazeLabModel()
     @Environment(\.scenePhase) private var phase
     @Environment(\.displayScale) private var displayScale
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private let clock = Timer.publish(every: 0.12, on: .main, in: .common).autoconnect()
 
     var body: some View {
@@ -236,6 +240,8 @@ private struct GazeLabScreen: View {
                 .frame(width: isTarget ? 15 : 8, height: isTarget ? 15 : 8)
         }
         .position(x: CGFloat(point.x) * size.width, y: CGFloat(point.y) * size.height)
+        .animation(isTarget || reduceMotion ? nil : .linear(duration: 1 / estimatesPerSecond),
+                   value: CGPoint(x: CGFloat(point.x) * size.width, y: CGFloat(point.y) * size.height))
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
