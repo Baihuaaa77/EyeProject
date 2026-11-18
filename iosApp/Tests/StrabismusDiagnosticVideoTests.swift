@@ -8,8 +8,21 @@ import UIKit
 final class StrabismusDiagnosticVideoTests: XCTestCase {
     func testIncrementalEncodingAndReplayManifest() async throws { try await encode(width: 640, height: 480, count: 24) }
     func testNative4kSourceCanBeArchived() async throws { try await encode(width: 2160, height: 3840, count: 60) }
-    private func encode(width: Int, height: Int, count: Int) async throws {
-        let recorder = StrabismusDiagnosticVideo()
+    func testOverloadedQueueKeepsLatestFrameAndFullAudit() async throws {
+        try await encode(width: 640, height: 480, count: 24, burstAfterFirstFrame: true)
+    }
+
+    private func encode(width: Int, height: Int, count: Int, burstAfterFirstFrame: Bool = false) async throws {
+        let encodingQueue = DispatchQueue(label: "eye.test.diagnostic.video", qos: .utility, autoreleaseFrequency: .workItem)
+        let recorder = StrabismusDiagnosticVideo(encodingQueue: encodingQueue)
+        var queueSuspended = false
+        defer { if queueSuspended { encodingQueue.resume() } }
+        func waitForFrameAndAudit() async {
+            // 等待该帧的取像、编码和分析行处理，避免把云端调度波动当成编码正确性。
+            await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
+                encodingQueue.async { done.resume() }
+            }
+        }
         let id = "strabismus_\(Int64(Date().timeIntervalSince1970 * 1000))_0"
         let directory = StrabismusDiagnosticVideo.root.appendingPathComponent(id)
         func send(_ type: String, _ values: [String: Any] = [:]) throws {
@@ -40,7 +53,20 @@ final class StrabismusDiagnosticVideoTests: XCTestCase {
             recorder.capture(pixel, face: nil, time: Int64(10_000 + i*100))
             try send("frame", ["captureTimeMs": 10_000 + i*100, "phase": "PURSUIT", "calibrated": true,
                 "target": [0.5, 0.25], "leftGaze": [0.4, 0.3], "rightGaze": [0.6, 0.4], "displayWidth": 390, "displayHeight": 844])
-            try await Task.sleep(nanoseconds: 100_000_000)
+            if !burstAfterFirstFrame || i == 0 {
+                await waitForFrameAndAudit()
+                if burstAfterFirstFrame {
+                    // 暂停消费者后提交整段突发帧，确定性覆盖待处理槽，再恢复真实编码。
+                    encodingQueue.suspend()
+                    queueSuspended = true
+                } else {
+                    try await Task.sleep(nanoseconds: 100_000_000)
+                }
+            }
+        }
+        if queueSuspended {
+            encodingQueue.resume()
+            queueSuspended = false
         }
         let began = Date()
         try send("end", ["reason": "编码测试"])
@@ -55,7 +81,13 @@ final class StrabismusDiagnosticVideoTests: XCTestCase {
         let backup = try StrabismusDiagnosticVideo.root.resourceValues(forKeys: [.isExcludedFromBackupKey])
         XCTAssertEqual(backup.isExcludedFromBackup, true)
         XCTAssertEqual(manifest["state"] as? String, "ready", "\(manifest)")
-        XCTAssertGreaterThanOrEqual(manifest["frames"] as? Int ?? 0, 8)
+        if burstAfterFirstFrame {
+            XCTAssertEqual(manifest["frames"] as? Int, 2, "队列过载时应保留首帧和末帧")
+        } else {
+            XCTAssertGreaterThanOrEqual(manifest["frames"] as? Int ?? 0, 8, "\(manifest)")
+        }
+        let durationSeconds = try XCTUnwrap(manifest["durationSeconds"] as? Double)
+        XCTAssertEqual(durationSeconds, Double(count - 1) / 10, accuracy: 0.001, "应保留真实末帧时刻")
         for (file, size) in [("original.mp4", CGSize(width: manifest["originalWidth"] as? Int ?? width, height: manifest["originalHeight"] as? Int ?? height)), ("comparison.mp4", CGSize(width: 1280, height: 720))] {
             let asset = AVURLAsset(url: directory.appendingPathComponent(file))
             let tracks = try await asset.loadTracks(withMediaType: .video)

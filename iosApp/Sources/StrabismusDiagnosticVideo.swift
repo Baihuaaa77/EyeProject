@@ -5,7 +5,7 @@ import EyeScreening
 /// 实时增量编码，结束时仅封装MP4；队列最多保留两幅源图，不能拖住相机分析。
 final class StrabismusDiagnosticVideo {
     static var root: URL { EyeRuntime.recordsDirectory.appendingPathComponent("strabismus-diagnostics", isDirectory: true) }
-    private let queue = DispatchQueue(label: "eye.strabismus.video", qos: .utility, autoreleaseFrequency: .workItem)
+    private let queue: DispatchQueue
     private let lock = NSLock()
     private var accepting = false
     private struct Source { let buffer: CVPixelBuffer; let face: FaceMetrics?; let time: Int64; let id: String }
@@ -15,6 +15,9 @@ final class StrabismusDiagnosticVideo {
     private var lastSubmitted: Int64 = -1
     private var session: Session?
 
+    init(encodingQueue: DispatchQueue = DispatchQueue(label: "eye.strabismus.video", qos: .utility, autoreleaseFrequency: .workItem)) {
+        queue = encodingQueue
+    }
 
     func event(_ json: String) {
         guard let data = json.data(using: .utf8), let row = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return }
