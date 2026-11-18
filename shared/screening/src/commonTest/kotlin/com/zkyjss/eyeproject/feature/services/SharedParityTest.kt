@@ -42,37 +42,25 @@ class SharedParityTest {
     }
     @Test fun strabismusGoldenSessionProducesHighRisk() {
         val fixation = List(40) { i -> EyeMotionSample(i * 100L,ScreeningStep.FIXATION,0f,0f,0f,0f,33f,
-            leftNasal = 0.18f,rightNasal = 0.1f,leftVertical = 0f,rightVertical = 0f,gazeOnTarget = true,reflectionCodeMatched = true) }
+            leftNasal = 0.18f,rightNasal = 0.1f,leftVertical = 0f,rightVertical = 0f,reflectionCodeMatched = true) }
         val marks = listOf(CoverMark("移开遮盖，双眼注视",5_000,uncovered = VisionEye.RIGHT),
             CoverMark("移开遮盖，双眼注视",6_000,uncovered = VisionEye.LEFT))
         val cover = marks.flatMap { mark -> listOf(100L,400L).map { offset ->
             EyeMotionSample(mark.timeMs + offset,ScreeningStep.COVER,0f,0f,0f,0f,33f,
-                leftNasal = 0.1f,rightNasal = 0.1f,leftVertical = 0f,rightVertical = 0f,gazeOnTarget = true)
+                leftNasal = 0.1f,rightNasal = 0.1f,leftVertical = 0f,rightVertical = 0f)
         }}
         val pursuit = List(72) { i ->
             val segment = i / 24; val a = sin(i * 0.3f) * 0.2f
             val x = if (segment == 1) 0f else a; val y = if (segment == 0) 0f else a
             EyeMotionSample(7_000 + i * 100L,ScreeningStep.PURSUIT,x,y,x,y,33f,pursuitSegment = segment,
-                targetScreenX = 0.5f + x,targetScreenY = 0.5f + y,
-                leftGazeX = 0.5f + x,leftGazeY = 0.5f + y,rightGazeX = 0.5f + x,rightGazeY = 0.5f + y,gazeOnTarget = true)
+                targetScreenX = 0.5f + x,targetScreenY = 0.5f + y)
         }
         val result = ScreeningAssessmentModel.strabismus(ScreeningState(kind = ScreeningKind.STRABISMUS,
-            coverMarks = marks,gazeCalibrated = true),fixation + cover + pursuit,100,90)
+            coverMarks = marks),fixation + cover + pursuit,100,90)
         assertEquals(ScreeningRiskLevel.HIGH,result.riskLevel)
         assertEquals("高度疑似斜视",result.category)
         assertEquals(14.04,result.features["fixation_hde_prism"]!!,0.05)
         assertEquals(1.0,result.features["bsi"]!!,0.01)
-    }
-    @Test fun oneReliableEyeCanCalibrateWithoutHidingTheOtherEye() {
-        val samples = StrabismusGaze.calibrationTargets.flatMapIndexed { index,p ->
-            List(6) { GazeCalibrationSample(index,p,GazePoint((p.x - 0.5f) / 5,(p.y - 0.5f) / 3),null) }
-        }
-        val mapping = assertNotNull(StrabismusGaze.calibrate(samples))
-        val estimate = mapping.estimate(GazePoint(0f,0f),null)
-        assertTrue(StrabismusGaze.onTarget(estimate.first,GazePoint(0.5f,0.5f)))
-        assertNull(estimate.second)
-        assertEquals(2_000L,StrabismusGaze.CALIBRATION_POINT_MS)
-        assertEquals(800L,StrabismusGaze.SETTLE_MS)
     }
     @Test fun opticalPixelsAreProcessedByTheSameAlgorithm() {
         val image = object : GrayImage {
@@ -117,7 +105,7 @@ class SharedParityTest {
             }
         } finally { controller.close(); Dispatchers.resetMain() }
     }
-    @Test fun calibrationFailureAndInterruptionDoNotAdvanceOldTimers() = runTest {
+    @Test fun confirmedGuideStartsTimedFixationWithoutCalibrationFrames() = runTest {
         val platform = TestPlatform { 1_000 + testScheduler.currentTime }
         val engine = ScreeningEngine(platform,backgroundScope)
         engine.configure(ScreeningKind.STRABISMUS); engine.setField("年龄","6"); engine.nextFromProfile(); engine.startCamera()
@@ -136,44 +124,19 @@ class SharedParityTest {
         assertEquals(listOf(ScreeningFeedbackCue.START), platform.feedbackEvents)
         engine.answer(0); engine.markCover()
         assertEquals(listOf(ScreeningFeedbackCue.START), platform.feedbackEvents, "非作答与遮盖阶段不确认输入")
-        assertEquals(ScreeningStep.GAZE_CALIBRATION,engine.state.value.step)
-        // 没有有效帧时校准暂停、每点顺延：按原 3 秒/点不会结束，到每点最长等待后才判失败
-        advanceTimeBy(StrabismusGaze.calibrationTargets.size * StrabismusGaze.CALIBRATION_POINT_MS); runCurrent()
-        assertFalse(engine.state.value.gazeCalibrationFailed)
-        advanceTimeBy(StrabismusGaze.calibrationTargets.size * StrabismusGaze.CALIBRATION_POINT_MAX_MS); runCurrent()
-        assertTrue(engine.state.value.gazeCalibrationFailed,"没有有效帧时按原校准超时失败，不能判成校准成功")
-        assertFalse(engine.state.value.gazeCalibrated)
-        assertFalse(engine.state.value.stabilityInterrupted,"标定不进入新增的位置中断逻辑")
-        engine.retryGazeCalibration(); runCurrent()
-        assertFalse(engine.state.value.gazeCalibrationFailed)
+        assertEquals(ScreeningStep.FIXATION, engine.state.value.step)
+        assertFalse(engine.state.value.guidePending)
+        assertEquals(12, engine.state.value.secondsLeft)
+        assertNotNull(engine.diagnostics.sessionId)
+        advanceTimeBy(11_000); runCurrent()
+        assertEquals(ScreeningStep.FIXATION, engine.state.value.step)
+        assertEquals(1, engine.state.value.secondsLeft)
+        advanceTimeBy(1_000); runCurrent()
+        assertEquals(ScreeningStep.FAR_FIXATION, engine.state.value.step)
+        assertTrue(engine.state.value.guidePending)
         engine.interruptTest()
         advanceTimeBy(30_000); runCurrent()
         assertEquals(ScreeningStep.ENVIRONMENT,engine.state.value.step)
-        assertFalse(engine.state.value.gazeCalibrated)
-        engine.close()
-    }
-    @Test fun calibrationPausesWhileEyesAreNotTrackedAndResumes() = runTest {
-        val platform = TestPlatform { 1_000 + testScheduler.currentTime }
-        val engine = ScreeningEngine(platform,backgroundScope)
-        engine.configure(ScreeningKind.STRABISMUS); engine.setField("年龄","8"); engine.nextFromProfile(); engine.startCamera(); runCurrent()
-        val eye = EyeLandmarks("LEFT",listOf(Point2f(0f,0f),Point2f(20f,-10f),Point2f(60f,-10f),Point2f(80f,0f),Point2f(60f,10f),Point2f(20f,10f)),
-            listOf(Point2f(40f,0f)),11.7f * 400 / 330)
-        fun frame(withFace: Boolean) {
-            val now = platform.nowMs()
-            platform.onFrame!!(FaceLandmarkFrame(if (withFace) listOf(FaceMetrics(BoundingBox(0f,0f,300f,300f),eye,eye,
-                headPose = HeadPoseEstimate(0f,0f,0f))) else emptyList(),400,400,now,0,30f,150f,now))
-        }
-        repeat(8) { frame(true); advanceTimeBy(100); runCurrent() }
-        engine.begin(); engine.confirmGuide(); runCurrent()
-        assertEquals(ScreeningStep.GAZE_CALIBRATION,engine.state.value.step)
-        repeat(40) { frame(false); advanceTimeBy(100); runCurrent() } // 4 秒：旧逻辑 3 秒就换点
-        assertTrue(engine.state.value.gazeCalibrationPaused,"丢眼时仍保留原有的标定采样暂停")
-        assertFalse(engine.state.value.stabilityInterrupted,"采样等待不应升级为整段位置中断")
-        assertEquals(0,engine.state.value.gazeCalibrationIndex,"等待有效样本期间不换点")
-        repeat(12) { frame(true); advanceTimeBy(100); runCurrent() }
-        assertFalse(engine.state.value.stabilityInterrupted,"双眼恢复后直接继续标定，无需手动重做九点")
-        assertFalse(engine.state.value.gazeCalibrationPaused)
-        assertEquals(0,engine.state.value.gazeCalibrationIndex)
         engine.close()
     }
     @Test fun presbyopiaRoutesFromIntakeAndConfirmsGlassesFirst() = runTest {

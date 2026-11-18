@@ -184,34 +184,23 @@ class ScreenWalkthroughCapture {
         state.value = base.copy(step = ScreeningStep.ENVIRONMENT, distanceCm = 42f, trackingStatus = "双眼跟踪与测距正常")
         shot("斜视-02b-准备-太远")
         state.value = base.copy(step = ScreeningStep.FIXATION, guidePending = true)
-        shot("斜视-03-注视与校准说明")
-        state.value = base.copy(step = ScreeningStep.GAZE_CALIBRATION, gazeCalibrationIndex = 1)
-        shot("斜视-04-注视校准")
-        state.value = base.copy(step = ScreeningStep.GAZE_CALIBRATION, gazeCalibrationIndex = 1, gazeCalibrationPaused = true,
-            gazeWarning = "校准已暂停：请把头摆正、保持约 33 cm，眼睛看着圆点")
-        shot("斜视-05-注视校准-异常暂停")
-        state.value = base.copy(step = ScreeningStep.GAZE_CALIBRATION, gazeCalibrationIndex = 3, distanceCm = 41f, gazeCalibrationPaused = true,
-            gazeWarning = "校准已暂停：请把头摆正、保持约 33 cm，眼睛看着圆点")
-        shot("斜视-05a-注视校准-太远暂停")
-        state.value = base.copy(step = ScreeningStep.GAZE_CALIBRATION, gazeCalibrationIndex = 4, gazeCalibrationFailed = true,
-            warning = "未获得可靠注视校准。请在光线均匀处保持头部不动后重试。")
-        shot("斜视-06-注视校准-失败重试")
-        state.value = base.copy(step = ScreeningStep.FIXATION, gazeCalibrated = true, secondsLeft = 9, targetX = 1f)
+        shot("斜视-03-看近映光说明")
+        state.value = base.copy(step = ScreeningStep.FIXATION, secondsLeft = 9, targetX = 1f)
         shot("斜视-07-稳定注视")
         state.value = state.value.copy(distanceCm = 26f, gazeWarning = "注视明显偏离，请看着屏幕上的圆点")
         shot("斜视-07a-稳定注视-太近且偏离")
         state.value = state.value.copy(distanceCm = 0f, faceDetected = false, gazeWarning = "暂时无法确认注视，请保持头部稳定并看着屏幕目标")
         shot("斜视-07b-稳定注视-未看到双眼")
-        state.value = base.copy(step = ScreeningStep.COVER, gazeCalibrated = true,
+        state.value = base.copy(step = ScreeningStep.COVER,
             coverMarks = listOf(CoverMark("遮右眼", 0L, covered = VisionEye.RIGHT)), coverHolding = true, instruction = "保持：遮右眼")
         shot("斜视-08-交替遮盖")
-        state.value = base.copy(step = ScreeningStep.PURSUIT, gazeCalibrated = true, secondsLeft = 15, targetX = 6f, targetY = 0f)
+        state.value = base.copy(step = ScreeningStep.PURSUIT, secondsLeft = 15, targetX = 6f, targetY = 0f)
         shot("斜视-09-追踪")
         state.value = state.value.copy(distanceCm = 40f, gazeWarning = "未检测到有效跟随，请只用眼睛跟随移动的圆点")
         shot("斜视-09a-追踪-太远且未跟随")
 
         val (samples, marks) = strabismusSamples()
-        val measured = base.copy(coverMarks = marks, gazeCalibrated = true, pursuitMaxDeg = 9f to 9f)
+        val measured = base.copy(coverMarks = marks, pursuitMaxDeg = 9f to 9f)
         val assessment = ScreeningAssessmentModel.strabismus(measured, samples, 100, 92)
         state.value = measured.copy(step = ScreeningStep.RESULT, riskLevel = assessment.riskLevel, category = assessment.category,
             findings = assessment.findings, limitations = assessment.limitations, features = assessment.features,
@@ -226,19 +215,18 @@ class ScreenWalkthroughCapture {
     /** 约 4Δ 的轻度水平偏差、遮盖后小幅移动、协调良好的演示数据。 */
     private fun strabismusSamples(): Pair<List<EyeMotionSample>, List<CoverMark>> {
         val fixation = List(120) { i -> EyeMotionSample(i * 100L, ScreeningStep.FIXATION, 0f, 0f, 0f, 0f, 33f,
-            leftNasal = 0.123f + if (i % 2 == 0) 0.004f else -0.004f, rightNasal = 0.1f, leftVertical = 0.002f, rightVertical = 0f, gazeOnTarget = true) }
+            leftNasal = 0.123f + if (i % 2 == 0) 0.004f else -0.004f, rightNasal = 0.1f, leftVertical = 0.002f, rightVertical = 0f) }
         val marks = listOf(CoverMark("移开遮盖，双眼注视", 15_000, uncovered = VisionEye.RIGHT),
             CoverMark("移开遮盖，双眼注视", 16_000, uncovered = VisionEye.LEFT))
         val cover = marks.flatMap { mark -> listOf(100L to 0.1f, 400L to 0.115f).map { (offset, nasal) ->
             EyeMotionSample(mark.timeMs + offset, ScreeningStep.COVER, 0f, 0f, 0f, 0f, 33f,
-                leftNasal = nasal, rightNasal = nasal, leftVertical = 0f, rightVertical = 0f, gazeOnTarget = true)
+                leftNasal = nasal, rightNasal = nasal, leftVertical = 0f, rightVertical = 0f)
         } }
         val pursuit = List(72) { i ->
             val segment = i / 24; val a = sin(i * 0.3f) * 0.2f
             val x = if (segment == 1) 0f else a; val y = if (segment == 0) 0f else a
             EyeMotionSample(17_000 + i * 100L, ScreeningStep.PURSUIT, x, y, x * 0.98f, y * 0.98f, 33f, pursuitSegment = segment,
-                targetScreenX = 0.5f + x, targetScreenY = 0.5f + y,
-                leftGazeX = 0.5f + x, leftGazeY = 0.5f + y, rightGazeX = 0.5f + x, rightGazeY = 0.5f + y, gazeOnTarget = true)
+                targetScreenX = 0.5f + x, targetScreenY = 0.5f + y)
         }
         return fixation + cover + pursuit to marks
     }

@@ -101,17 +101,13 @@ fun screeningProgress(s: ScreeningState): TestProgress? {
         }
         progressOf(stagesAt(durations, order.coerceAtMost(durations.lastIndex), elapsed))
     } else {
-        val calibration = StrabismusGaze.calibrationTargets.size * StrabismusGaze.CALIBRATION_POINT_MS / 1000f
-        val durations = listOf(calibration, StrabismusProtocol.FIXATION_SECONDS.toFloat(),
+        val durations = listOf(StrabismusProtocol.FIXATION_SECONDS.toFloat(),
             StrabismusProtocol.FAR_FIXATION_SECONDS.toFloat(), est.COVER_TOTAL, StrabismusProtocol.PURSUIT_SECONDS.toFloat())
         val (order, elapsed) = when (s.step) {
-            // 首个引导页仍处于注视步骤，但校准尚未开始。
-            ScreeningStep.FIXATION -> if (!s.gazeCalibrated) 0 to 0f
-                else 1 to (StrabismusProtocol.FIXATION_SECONDS - s.secondsLeft).toFloat()
-            ScreeningStep.GAZE_CALIBRATION -> 0 to s.gazeCalibrationIndex.coerceAtLeast(0) * StrabismusGaze.CALIBRATION_POINT_MS / 1000f
-            ScreeningStep.FAR_FIXATION -> 2 to if (s.guidePending || s.farWaiting) 0f else (StrabismusProtocol.FAR_FIXATION_SECONDS - s.secondsLeft).toFloat()
-            ScreeningStep.COVER -> 3 to s.coverMarks.size * est.COVER_TOTAL / StrabismusProtocol.COVER_SEQUENCE.size
-            else -> 4 to if (s.guidePending) 0f else (StrabismusProtocol.PURSUIT_SECONDS - s.secondsLeft).toFloat()
+            ScreeningStep.FIXATION -> 0 to if (s.guidePending) 0f else (StrabismusProtocol.FIXATION_SECONDS - s.secondsLeft).toFloat()
+            ScreeningStep.FAR_FIXATION -> 1 to if (s.guidePending || s.farWaiting) 0f else (StrabismusProtocol.FAR_FIXATION_SECONDS - s.secondsLeft).toFloat()
+            ScreeningStep.COVER -> 2 to s.coverMarks.size * est.COVER_TOTAL / StrabismusProtocol.COVER_SEQUENCE.size
+            else -> 3 to if (s.guidePending) 0f else (StrabismusProtocol.PURSUIT_SECONDS - s.secondsLeft).toFloat()
         }
         progressOf(stagesAt(durations, order, elapsed))
     }

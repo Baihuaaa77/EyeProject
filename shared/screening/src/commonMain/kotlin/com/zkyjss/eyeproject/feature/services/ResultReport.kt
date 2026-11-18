@@ -141,7 +141,7 @@ object ResultReports {
             !valid -> "需要重测"
             strabismus -> when (level) {
                 ScreeningRiskLevel.LOW -> "正常"
-                ScreeningRiskLevel.UNCERTAIN -> "风险未定"
+                ScreeningRiskLevel.UNCERTAIN -> "风险未排除"
                 ScreeningRiskLevel.MEDIUM -> "可疑"
                 else -> "高度疑似"
             }
@@ -152,14 +152,14 @@ object ResultReports {
             strabismus -> when (level) {
                 ScreeningRiskLevel.LOW -> "本次未发现明显眼位异常"
                 ScreeningRiskLevel.MEDIUM -> "眼位有可疑表现"
-                ScreeningRiskLevel.UNCERTAIN -> "斜视风险未定"
+                ScreeningRiskLevel.UNCERTAIN -> "斜视风险未排除"
                 else -> "高度疑似斜视"
             }
             else -> s.category.ifBlank { level.label }
         }
         val advice = when {
             !valid -> "关键数据不足，请改善测试条件并重新完成测试。"
-            level == ScreeningRiskLevel.UNCERTAIN -> if (strabismus) "现有证据不足以明确判断风险，建议在光线均匀处、固定手机后复测。"
+            level == ScreeningRiskLevel.UNCERTAIN -> if (strabismus) "建议在光线均匀处固定手机后复测。"
                 else "调节能力接近同龄参考线，建议按提示放慢移近再测一次。"
             strabismus && level == ScreeningRiskLevel.HIGH -> "建议尽快到斜视专科就诊，做遮盖试验与三棱镜检查。"
             strabismus && level == ScreeningRiskLevel.MEDIUM -> "建议近期到眼科复查眼位；平时留意孩子是否歪头、眯眼或一只眼往外飘。"
@@ -266,6 +266,9 @@ object ResultReports {
             kind = s.kind.name, level = level, badge = badge, title = title, advice = advice, mood = mood(level),
             metrics = metrics, evidence = s.evidence, problems = if (valid) emptyList() else s.findings,
             sections = sections, version = ScreeningAssessmentModel.version(s.kind),
+            qualityNotes = if (strabismus) s.evidence.firstOrNull { it.key == "riskConfidence" }?.let { confidence ->
+                listOf(listOfNotNull(confidence.summary, s.findings.firstOrNull()).joinToString("。"))
+            }.orEmpty() else emptyList(),
             highlight = if (valid && !strabismus && path.standardAmplitude) eyeAge(f) else null,
         )
     }

@@ -135,8 +135,6 @@ class MobileScreeningController(
             "retryCover" -> screening.retryCoverDetection()
             "restartStableStage" -> screening.restartStableStage()
             "farStart" -> screening.startFarCountdown()
-            "calibrate" -> screening.retryGazeCalibration()
-            "continueWithoutCalibration" -> screening.continueWithoutCalibration()
             "extended" -> dry.startExtended()
             "rest" -> dry.startRestRetest()
             "resume" -> dry.resumeFromPause()
@@ -307,7 +305,6 @@ class MobileScreeningController(
                 put("guideText",screeningGuideText(s)); put("glassesCheck",s.glassesCheckPending)
                 PresbyopiaIntake.glassesCheck(s.fields).let { put("glassesTitle",it.title); put("glassesButton",it.button) }
                 put("flipperCheck",s.flipperCheck); put("pushEye",s.visionEye.label); put("pushDone",s.nearPoints.count { it.eye == s.visionEye })
-                put("calibrationPaused",s.gazeCalibrationPaused)
                 put("stabilityInterrupted",s.stabilityInterrupted); put("stabilityReason",s.stabilityReason); put("stabilityReady",s.stabilityReady)
                 put("cameraSourceWidth",s.cameraSourceWidth); put("cameraSourceHeight",s.cameraSourceHeight); put("analysisFps",s.analysisFps)
                 put("distanceCm",s.distanceCm); put("faceDetected",s.faceDetected); put("warning",s.gazeWarning ?: s.warning ?: screeningGuidance(s)?.takeUnless { it == "保持稳定" || it.startsWith("请移动到") })
@@ -321,8 +318,6 @@ class MobileScreeningController(
                 put("direction",s.direction); put("optotypePx",s.trialOptotypePx); put("eye",s.visionEye.name)
                 put("nearAwaitingEyeReady",s.nearAwaitingEyeReady); put("pushStage",s.pushStage.name)
                 put("targetX",s.targetX); put("targetY",s.targetY); put("savedFile",s.savedFile); put("saveError",s.saveError)
-                put("gazeCalibrationIndex",s.gazeCalibrationIndex); put("gazeCalibrationRound",s.gazeCalibrationRound)
-                put("gazeCalibrationFailed",s.gazeCalibrationFailed)
                 put("targetDiameterMm",StrabismusProtocol.targetDiameterMm(s.fields["年龄"]?.toIntOrNull()))
                 put("farTargetM",StrabismusProtocol.FAR_TARGET_M); put("farWaiting",s.farWaiting)
                 put("coverSelf",usesSelfCover(s.fields)); put("coverHolding",s.coverHolding)
@@ -334,8 +329,6 @@ class MobileScreeningController(
                 put("risk",s.riskLevel.name); put("category",s.category); put("findings",RecordArray(s.findings + s.limitations))
                 put("voiceActive",s.trialVisible || s.nearAwaitingEyeReady || s.step == ScreeningStep.PUSH_UP)
                 screeningProgress(s).let { p -> put("overallProgress",p?.fraction); put("remainingText",p?.remainingText) }
-                StrabismusGaze.calibrationTargets.getOrNull(s.gazeCalibrationIndex)?.let { put("calibrationX",it.x); put("calibrationY",it.y) }
-                put("calibrationCount",StrabismusGaze.calibrationTargets.size)
                 ResultReports.screening(s)?.let { put("report",it.toRecordObject()) }
             }
         }

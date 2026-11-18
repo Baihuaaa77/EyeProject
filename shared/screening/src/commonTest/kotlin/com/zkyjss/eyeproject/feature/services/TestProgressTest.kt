@@ -35,12 +35,11 @@ class TestProgressTest {
 
     @Test fun strabismusStepsFollowTheTaskOrder() {
         val guide = screeningProgress(ScreeningState(kind = ScreeningKind.STRABISMUS, step = ScreeningStep.FIXATION, guidePending = true))!!
-        val calibration = screeningProgress(ScreeningState(kind = ScreeningKind.STRABISMUS, step = ScreeningStep.GAZE_CALIBRATION, gazeCalibrationIndex = 4))!!
         val fixation = screeningProgress(ScreeningState(kind = ScreeningKind.STRABISMUS, step = ScreeningStep.FIXATION,
-            gazeCalibrated = true, secondsLeft = 6))!!
+            secondsLeft = 6))!!
         val pursuit = screeningProgress(ScreeningState(kind = ScreeningKind.STRABISMUS, step = ScreeningStep.PURSUIT, secondsLeft = 2))!!
         assertEquals(0f, guide.fraction)
-        assertTrue(guide.fraction < calibration.fraction && calibration.fraction < fixation.fraction && fixation.fraction < pursuit.fraction)
+        assertTrue(guide.fraction < fixation.fraction && fixation.fraction < pursuit.fraction)
         assertEquals(2, pursuit.remainingSeconds)
     }
 

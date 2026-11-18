@@ -284,8 +284,8 @@ class ServiceVisualTest {
                             trialVisible = true, trialOptotypePx = 12f, faceDetected = true, distanceCm = 50f), vm)
                         1 -> TrialContent(DryEyeTestUiState(phase = DryEyePhase.Natural, trialVisible = true,
                             optotypePx = 24f, remainingSeconds = 48, instruction = "请持续看 E 并选择方向")) {}
-                        else -> GazeCalibrationContent(ScreeningState(kind = ScreeningKind.STRABISMUS,
-                            step = ScreeningStep.GAZE_CALIBRATION), vm)
+                        else -> PursuitContent(ScreeningState(kind = ScreeningKind.STRABISMUS,
+                            step = ScreeningStep.PURSUIT, distanceCm = 33f, secondsLeft = 15), vm)
                     }
                 }
             }
@@ -310,7 +310,7 @@ class ServiceVisualTest {
         capture("session-dry-eye")
         task = 2
         compose.onNodeWithText("只用眼睛看着圆点，头和手机保持不动。").assertDoesNotExist()
-        capture("session-calibration")
+        capture("session-pursuit")
     }
 
     @Test fun voiceSettingsAreInTheGearMenuAndPersistAcrossTests() {
@@ -616,30 +616,6 @@ class ServiceVisualTest {
         capture("dry-eye-screen-natural")
     }
 
-    @Test fun calibrationCoversNineWidePoints() {
-        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
-        val vm = ScreeningTestViewModel(context,
-            com.zkyjss.eyeproject.core.camera.CameraController(context),
-            com.zkyjss.eyeproject.core.camera.CameraIntrinsicsProvider(context), TestScreeningRecordRepository(context), TestSubjectRepository(), TestExplanationRepository())
-        var index by androidx.compose.runtime.mutableIntStateOf(0)
-        compose.setContent {
-            EyeProjectTheme {
-                TestSessionLayout("眼位自测", {}, {}, true, statusAtBottom = true,
-                    progress = screeningProgress(ScreeningState(kind = ScreeningKind.STRABISMUS,
-                        step = ScreeningStep.GAZE_CALIBRATION, gazeCalibrationIndex = index)),
-                    status = { DistanceBanner(distanceStatus(33f, true, 33f, 5f), compact = true) }) {
-                    GazeCalibrationContent(ScreeningState(kind = ScreeningKind.STRABISMUS,
-                        step = ScreeningStep.GAZE_CALIBRATION, gazeCalibrationIndex = index), vm)
-                }
-            }
-        }
-        for (i in StrabismusGaze.calibrationTargets.indices) {
-            index = i
-            compose.onNodeWithText("注视校准 · ${i + 1}/9").assertExists()
-            capture("calibration-9-$i")
-        }
-    }
-
     @Test fun backDuringATestAsksFirstAndDistanceWaitsForTheHelper() {
         val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
         val vm = ScreeningTestViewModel(context,
@@ -788,24 +764,6 @@ class ServiceVisualTest {
         }
         compose.onAllNodesWithText("眼健康助手").assertCountEquals(2)
         capture("brand")
-    }
-
-    @Test fun gazeCalibrationRetryIsVisible() {
-        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
-        val vm = ScreeningTestViewModel(context,
-            com.zkyjss.eyeproject.core.camera.CameraController(context),
-            com.zkyjss.eyeproject.core.camera.CameraIntrinsicsProvider(context), TestScreeningRecordRepository(context), TestSubjectRepository(), TestExplanationRepository())
-        compose.setContent {
-            EyeProjectTheme {
-                Column(Modifier.fillMaxSize().background(LocalEyeColors.current.appBackground).padding(20.dp)) {
-                    GazeCalibrationContent(ScreeningState(kind = ScreeningKind.STRABISMUS,
-                        step = ScreeningStep.GAZE_CALIBRATION, gazeCalibrationIndex = 3, gazeCalibrationFailed = true), vm)
-                }
-            }
-        }
-        compose.onNodeWithText("注视校准 · 4/9").assertIsDisplayed()
-        compose.onNodeWithText("重试注视校准").assertIsDisplayed().assertIsEnabled()
-        capture("gaze-calibration")
     }
 
     @Test fun coverRecoveryRemainsReachableAndRestartsWithoutMarkingAnAction() {

@@ -39,17 +39,12 @@ class StrabismusStabilityTest {
         assertTrue(read(2700,33f,0f,true).ready)
     }
 
-    @Test fun eyeRotationDoesNotMoveThePhoneReferenceAndCalibrationNeverInterrupts() {
+    @Test fun eyeRotationDoesNotMoveThePhoneReference() {
         val corners = listOf(Point2f(300f,400f),Point2f(330f,390f),Point2f(370f,390f),
             Point2f(400f,400f),Point2f(370f,410f),Point2f(330f,410f))
         val eye = EyeLandmarks("LEFT",corners,listOf(Point2f(340f,400f)),40f)
         val movedIris = eye.copy(irisPoints = listOf(Point2f(390f,410f)),irisDiameterPx = 30f)
         assertEquals(eyeFramePosition(eye,1000,1800),eyeFramePosition(movedIris,1000,1800))
-        val guard = StrabismusStability()
-        for (t in listOf(0L,1000L,10000L)) {
-            val reading = guard.observe(t,ScreeningStep.GAZE_CALIBRATION,eyes(0.2f),33f,true,false)
-            assertNull(reading.reason); assertTrue(reading.ready)
-        }
     }
 
     @Test fun shortLargeTrackingSpikeDoesNotInterruptAndStillSupervisesPursuitPhoneMovement() {
@@ -94,7 +89,7 @@ class StrabismusStabilityTest {
         }
         val engine = ScreeningEngine(platform,backgroundScope)
         engine.configure(ScreeningKind.STRABISMUS)
-        engine._state.value = engine.state.value.copy(step = ScreeningStep.GAZE_CALIBRATION)
+        engine._state.value = engine.state.value.copy(step = ScreeningStep.ENVIRONMENT)
         engine.interruptStability("手机或头部位置变化较大",platform.nowMs(),33f)
         assertFalse(engine.state.value.stabilityInterrupted)
         engine._state.value = engine.state.value.copy(step = ScreeningStep.FIXATION)

@@ -58,8 +58,6 @@ class ScreeningTestViewModel @Inject constructor(
     fun confirmGlasses() = engine.confirmGlasses()
     fun skipFlipper() = engine.skipFlipper()
     fun retestWithOtherGlasses() = engine.retestWithOtherGlasses()
-    fun retryGazeCalibration() = engine.retryGazeCalibration()
-    fun continueWithoutCalibration() = engine.continueWithoutCalibration()
     fun reportGazeTarget(xPx: Float, yPx: Float) = engine.reportGazeTarget(xPx, yPx)
     fun reportPursuitCapacity(maxXDeg: Float, maxYDeg: Float) = engine.reportPursuitCapacity(maxXDeg, maxYDeg)
     fun interruptTest() = engine.interruptTest()

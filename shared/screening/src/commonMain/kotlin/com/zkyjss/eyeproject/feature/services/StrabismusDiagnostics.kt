@@ -3,7 +3,7 @@ package com.zkyjss.eyeproject.feature.services
 import com.zkyjss.eyeproject.core.model.*
 import kotlin.math.abs
 
-/** 不改变判定的逐帧审计：失败帧也保留，眼区为未镜像原像素，注视为全屏归一化坐标。 */
+/** 不改变判定的逐帧审计：失败帧也保留，眼区为未镜像原像素，目标用全屏坐标，眼动用各眼局部坐标。 */
 internal class StrabismusDiagnostics(private val platform: ScreeningPlatform) {
     var sessionId: String? = null
         private set
@@ -31,22 +31,20 @@ internal class StrabismusDiagnostics(private val platform: ScreeningPlatform) {
         sessionId = "strabismus_${platform.epochMs()}_${serial++}"
         active = true; reasons.clear(); phases.clear(); lights.clear(); targets.clear()
         emit(RecordObject().apply {
-            put("event", "start"); put("createdAtMs", platform.epochMs()); put("version", 1)
+            put("event", "start"); put("createdAtMs", platform.epochMs()); put("version", 2)
             put("displayWidth", platform.display.widthPixels); put("displayHeight", platform.display.heightPixels)
         })
     }
 
     fun frame(frame: FaceLandmarkFrame, state: ScreeningState, valid: Boolean, opticalReady: Boolean,
-              target: GazePoint?, estimates: Pair<GazePoint?, GazePoint?>?, onTarget: Boolean?,
-              calibrated: Boolean, coding: Boolean, sessionTime: Long,
-              inputLeft: GazePoint? = null, inputRight: GazePoint? = null, calibrationSamples: Int = 0, sampleAccepted: Boolean = false, targetRenderTimeMs: Long? = null,
+              coding: Boolean, sessionTime: Long,
+              inputLeft: GazePoint? = null, inputRight: GazePoint? = null,
               leftMeasurement: OpticalEyeMeasurement? = frame.faces.singleOrNull()?.leftOptical,
               rightMeasurement: OpticalEyeMeasurement? = frame.faces.singleOrNull()?.rightOptical,
-              leftBlinking: Boolean = false, rightBlinking: Boolean = false,
-              fusedEstimate: GazePoint? = null) {
+              leftBlinking: Boolean = false, rightBlinking: Boolean = false) {
         if (!active || state.kind != ScreeningKind.STRABISMUS) return
         val presented = targets.lastOrNull { it.step == state.step && it.time <= sessionTime }
-        val actualTarget = if (targets.isEmpty()) target else presented?.point
+        val actualTarget = presented?.point
         val face = frame.faces.singleOrNull()
         val pose = face?.headPose
         val rejected = buildList {
@@ -56,14 +54,12 @@ internal class StrabismusDiagnostics(private val platform: ScreeningPlatform) {
             if (pose == null) add("头姿不可用")
             if (pose != null && (abs(pose.yawDeg) > 25f || abs(pose.pitchDeg) > (if (state.step == ScreeningStep.FAR_FIXATION) 30f else 25f) || abs(pose.rollDeg) > 20f)) add("头姿偏离")
             if (!valid) add("采样质量门控未通过")
-            if (inputLeft == null && inputRight == null) add("无可用睁眼注视输入")
+            if (inputLeft == null && inputRight == null) add("无可用的睁眼虹膜位置")
             if (actualTarget == null) add("目标绘制位置缺失")
             if (state.guidePending) add("方法演示中，不采样")
             if (state.stabilityInterrupted) add("稳定性中断")
             if (state.farWaiting) add("等待看远开始")
             if (coding) add("起始光码段，不计正式映光")
-            if (!calibrated) add(if (state.step == ScreeningStep.GAZE_CALIBRATION && !state.gazeCalibrationFailed) "标定进行中，暂未建立映射" else "无可靠注视标定")
-            if (onTarget == false) add("估计注视偏离目标")
             if (!opticalReady) add("双眼映光不完整")
         }
         rejected.forEach { reasons[it] = (reasons[it] ?: 0) + 1 }
@@ -71,25 +67,20 @@ internal class StrabismusDiagnostics(private val platform: ScreeningPlatform) {
         emit(RecordObject().apply {
             put("event", "frame"); put("captureTimeMs", frame.sourceElapsedRealtimeMs ?: frame.analysisElapsedRealtimeMs ?: sessionTime)
             put("inputLeft", point(inputLeft)); put("inputRight", point(inputRight))
-            put("calibrationSamples", calibrationSamples); put("calibrationSampleAccepted", sampleAccepted)
-            put("calibrationFailed", state.gazeCalibrationFailed)
             put("sessionTimeMs", sessionTime); put("phase", state.step.name)
             put("imageWidth", frame.sourceWidth); put("imageHeight", frame.sourceHeight)
             put("displayWidth", platform.display.widthPixels); put("displayHeight", platform.display.heightPixels)
-            put("targetRenderTimeMs", presented?.time ?: targetRenderTimeMs)
+            put("targetRenderTimeMs", presented?.time)
             val light = lights.lastOrNull { it.step == state.step && it.time <= sessionTime }
             put("lightRenderTimeMs", light?.time)
             put("lightChip", light?.chip)
             put("targetVisible", actualTarget != null && !state.guidePending &&
                 (state.step !in setOf(ScreeningStep.FIXATION, ScreeningStep.COVER, ScreeningStep.FAR_FIXATION) || light?.on == true))
             put("targetColor", if (state.step in setOf(ScreeningStep.FIXATION, ScreeningStep.COVER, ScreeningStep.FAR_FIXATION)) "white" else "orange")
-            put("target", point(actualTarget)); put("leftGaze", point(estimates?.first)); put("rightGaze", point(estimates?.second))
-            put("gaze", point(fusedEstimate ?: fuse(estimates?.first, estimates?.second)))
-            put("calibrated", calibrated); put("gazeOnTarget", onTarget)
+            put("target", point(actualTarget))
+            put("guidePending", state.guidePending)
             put("leftBlinking", leftBlinking); put("rightBlinking", rightBlinking)
             put("valid", valid); put("opticalReady", opticalReady); put("coding", coding)
-            put("guidePending", state.guidePending); put("calibrationIndex", state.gazeCalibrationIndex)
-            put("calibrationRound", state.gazeCalibrationRound); put("calibrationPaused", state.gazeCalibrationPaused)
             put("distanceCm", state.distanceCm); put("fps", frame.fps)
             put("warning", state.gazeWarning ?: state.warning ?: state.stabilityReason)
             put("reasons", RecordArray(rejected)); put("left", eye(face?.leftEye, leftMeasurement))
@@ -114,10 +105,6 @@ internal class StrabismusDiagnostics(private val platform: ScreeningPlatform) {
         runCatching { platform.diagnosticEvent(data.toString()) }
     }
     private fun point(p: GazePoint?) = p?.let { RecordArray(listOf(it.x, it.y)) }
-    private fun fuse(left: GazePoint?, right: GazePoint?): GazePoint? = when {
-        left != null && right != null -> GazePoint((left.x + right.x) * 0.5f, (left.y + right.y) * 0.5f)
-        else -> left ?: right
-    }
     private fun eye(eye: EyeLandmarks?, optical: OpticalEyeMeasurement?) = RecordObject().apply {
         put("lid", RecordArray(eye?.earPoints.orEmpty().map { RecordArray(listOf(it.x, it.y)) }))
         put("iris", RecordArray(eye?.irisPoints.orEmpty().map { RecordArray(listOf(it.x, it.y)) }))

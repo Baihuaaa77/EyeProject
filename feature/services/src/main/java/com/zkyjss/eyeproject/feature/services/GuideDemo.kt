@@ -74,7 +74,7 @@ internal fun guideMotion(step: ScreeningStep, fields: Map<String, String> = empt
     ScreeningStep.PUSH_UP -> GuideMotion.MOVE
     ScreeningStep.DISTANCE_CURVE -> GuideMotion.CURVE
     ScreeningStep.FLIPPER -> GuideMotion.SWITCH
-    ScreeningStep.FIXATION, ScreeningStep.GAZE_CALIBRATION -> GuideMotion.FIXATE
+    ScreeningStep.FIXATION -> GuideMotion.FIXATE
     ScreeningStep.FAR_FIXATION -> GuideMotion.FAR
     ScreeningStep.COVER -> GuideMotion.COVER_SELF
     ScreeningStep.PURSUIT -> GuideMotion.FOLLOW

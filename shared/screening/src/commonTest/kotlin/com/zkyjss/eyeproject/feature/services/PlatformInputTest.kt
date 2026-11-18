@@ -36,43 +36,6 @@ class PlatformInputTest {
         assertEquals(VoiceCommand.Unsure, VoiceCommandParser.parse("跳过"))
     }
 
-    private fun calibration(skip: Set<Int> = emptySet(), lookAway: Set<Int> = emptySet()) =
-        StrabismusGaze.calibrationTargets.flatMapIndexed { index, p ->
-            if (index in skip) emptyList() else List(6) {
-                val eye = if (index in lookAway) GazePoint(0.1f, -0.1f) else GazePoint((p.x - 0.5f) / 5, (p.y - 0.5f) / 3)
-                GazeCalibrationSample(index, p, eye, eye)
-            }
-        }
-
-    @Test fun threeLookAwayPointsAreDroppedWhenTheRestStillCoverTheCanvas() {
-        assertTrue(StrabismusGaze.calibrate(calibration(lookAway = setOf(2, 4, 7))) != null)
-    }
-
-    @Test fun missingRowIsRetakenInsteadOfRestartingTheWholeCalibration() {
-        val partial = calibration(skip = setOf(1, 2, 3))
-        assertEquals(null, StrabismusGaze.calibrate(partial))
-        assertEquals(listOf(1, 2, 3), StrabismusGaze.pointsToRetake(partial))
-        // 补测后通过
-        val retaken = partial + calibration().filter { it.index in setOf(1, 2, 3) }
-        assertTrue(StrabismusGaze.calibrate(retaken) != null)
-        // 大部分点不可用时不补测，整体重做
-        assertEquals(emptyList(), StrabismusGaze.pointsToRetake(calibration(skip = setOf(1, 2, 3, 4, 5))))
-    }
-
-    /** iPhone 实测：屏幕窄、水平眼动信号弱，逐点固定偏差使水平均方根误差约 0.12 屏幕，仍应通过。 */
-    @Test fun weakHorizontalSignalStillCalibratesButFailureSaysWhy() {
-        val noisy = StrabismusGaze.calibrationTargets.flatMapIndexed { index, p ->
-            val bias = if (index % 2 == 0) 0.025f else -0.025f
-            List(6) {
-                val eye = GazePoint((p.x - 0.5f) / 5 + bias, (p.y - 0.5f) / 3)
-                GazeCalibrationSample(index, p, eye, eye)
-            }
-        }
-        assertTrue(StrabismusGaze.calibrate(noisy) != null)
-        val empty = calibration(skip = setOf(1, 2, 3, 4, 5))
-        assertTrue(StrabismusGaze.failureReason(empty).startsWith("有 5 个圆点没有采到有效画面"))
-    }
-
     @Test fun changedTargetDistanceAsksToMoveThereInsteadOfTooCloseOrFar() {
         val moving = ScreeningState(kind = ScreeningKind.PRESBYOPIA, step = ScreeningStep.FLIPPER, trialIndex = 1,
             faceDetected = true, distanceCm = 50f, lux = 300f, distanceMoveToCm = 25f)

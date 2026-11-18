@@ -113,16 +113,7 @@ final class ScreenshotCatalogTests: XCTestCase {
             }
 
             try await testShot("70-眼位-注视方法演示", "STRABISMUS", "FIXATION", dark,
-                values: ["guidePending": true, "stepTitle": "注视校准", "guideText": "看着屏幕圆点，头和手机保持不动。"])
-            let points: [(Double, Double)] = [(0.5,0.5),(0.08,0.08),(0.5,0.08),(0.92,0.08),(0.92,0.5),(0.92,0.92),(0.5,0.92),(0.08,0.92),(0.08,0.5)]
-            for (index, point) in points.enumerated() {
-                try await testShot("71-眼位-九点校准-\(index + 1)", "STRABISMUS", "GAZE_CALIBRATION", dark,
-                    values: ["calibrationX": point.0, "calibrationY": point.1, "gazeCalibrationIndex": index])
-            }
-            try await testShot("72-眼位-校准暂停", "STRABISMUS", "GAZE_CALIBRATION", dark,
-                values: ["calibrationPaused": true, "warning": "请保持头部稳定，校准已暂停"])
-            try await testShot("73-眼位-校准失败重试", "STRABISMUS", "GAZE_CALIBRATION", dark,
-                values: ["gazeCalibrationFailed": true, "warning": "还没有看稳，请重试注视校准"])
+                values: ["guidePending": true, "stepTitle": "看近映光", "guideText": "看着屏幕圆点，头和手机保持不动。"])
             try await testShot("74-眼位-正式注视", "STRABISMUS", "FIXATION", dark)
             for (tag, cm) in [("太近了", 20.0), ("太远了", 52.0)] {
                 try await testShot("75-眼位-注视-" + tag, "STRABISMUS", "FIXATION", dark, values: ["distanceCm": cm])
@@ -191,7 +182,6 @@ final class ScreenshotCatalogTests: XCTestCase {
             "faceDetected": true, "gateReady": true, "trialVisible": true, "trialId": 1, "direction": 0, "optotypePx": 42.0,
             "secondsLeft": 18, "naturalSeconds": 60, "overallProgress": 0.35, "remainingText": "剩余约 2 分钟",
             "eye": "RIGHT", "pushEye": "右眼", "pushStage": "MOVING", "targetX": 0.5, "targetY": 0.5,
-            "calibrationX": 0.5, "calibrationY": 0.5, "calibrationCount": 9, "gazeCalibrationIndex": 0,
             "targetDiameterMm": 8, "farTargetM": 6, "subjectId": "capture-self", "subjectName": "示例用户"]
         // 与核心快照一致：选人、结果、休息和不采集距离的阶段不额外塞入距离条。
         if ["Profile", "PROFILE", "Result", "RESULT"].contains(phase) {

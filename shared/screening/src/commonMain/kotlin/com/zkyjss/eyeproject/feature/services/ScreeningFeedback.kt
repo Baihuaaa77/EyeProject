@@ -19,7 +19,6 @@ enum class ScreeningFeedbackCue(val sound: String, val priority: Int) {
 
 data class ScreeningFeedbackFrame(
     val stage: String, val taskActive: Boolean = false, val complete: Boolean = false,
-    val calibrationPoint: Int = -1, val calibrationFailed: Boolean = false,
     val countdown: Int = 0,
     val coverReady: Boolean = false,
     /** -1 过近、1 过远、0 合适、2 未知、3 当前任务不要求固定距离。 */
@@ -40,8 +39,6 @@ fun screeningFeedbackFrame(s: ScreeningState, coverRemainingMs: Long = -1): Scre
     // 移动到新目标距离途中不算偏离，不发距离警示音
     val target = if (s.guidePending || s.distanceMoveToCm != null) null else screeningDistanceTarget(s)
     return ScreeningFeedbackFrame(s.step.name + suffix, active, s.step == ScreeningStep.RESULT,
-        if (active && s.step == ScreeningStep.GAZE_CALIBRATION && !s.gazeCalibrationFailed) s.gazeCalibrationIndex else -1,
-        s.step == ScreeningStep.GAZE_CALIBRATION && s.gazeCalibrationFailed,
         // 看远的最后 3 秒响节拍音：受试者不看屏幕，听到结束音再看回手机
         countdown = if (active && s.step == ScreeningStep.FAR_FIXATION && s.secondsLeft in 1..3) s.secondsLeft else 0,
         coverReady = active && s.step == ScreeningStep.COVER && !s.guidePending && s.coverMarks.isNotEmpty() &&
@@ -95,11 +92,9 @@ class ScreeningFeedbackSession {
         if (old != null) {
             when {
                 frame.complete && !old.complete -> cues += ScreeningFeedbackCue.COMPLETE
-                frame.calibrationFailed && !old.calibrationFailed -> cues += ScreeningFeedbackCue.RETRY
                 // 倒计时 3、2、1 只用节拍音，归零进入任务时才给开始音。
                 frame.countdown > 0 -> Unit
-                frame.taskActive && (!old.taskActive || old.calibrationFailed && !frame.calibrationFailed || old.countdown > 0) -> cues += ScreeningFeedbackCue.START
-                frame.calibrationPoint >= 0 && frame.calibrationPoint != old.calibrationPoint -> cues += ScreeningFeedbackCue.TARGET
+                frame.taskActive && (!old.taskActive || old.countdown > 0) -> cues += ScreeningFeedbackCue.START
                 frame.coverReady && !old.coverReady -> cues += ScreeningFeedbackCue.PHASE
                 // 到达新的目标距离：一声提示音代替「好，就保持这个距离」，远近切换时不必每题都说话
                 old.movingToTarget && !frame.movingToTarget && frame.taskActive -> cues += ScreeningFeedbackCue.RECOVER

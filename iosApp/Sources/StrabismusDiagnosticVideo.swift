@@ -384,17 +384,18 @@ enum DiagnosticPanelRenderer {
                     if px < 0 || px > 1 || py < 0 || py > 1 { text("屏外估计", CGRect(x: phone.minX, y: phone.maxY+2, width: 200, height: 20), color, size: 13) }
                 }
             }
-            text("实心：实际目标   绿色：双眼融合注视点", CGRect(x: 334, y: 623, width: 890, height: 24), UIColor(EyeStyle.primary), size: 15)
+            let usesIrisMotion = row["inputLeft"] != nil && row["calibrated"] == nil
+            text(usesIrisMotion ? "实心：实际目标 · 眼部标注见左侧" : "实心：实际目标   绿色：双眼融合注视点", CGRect(x: 334, y: 623, width: 890, height: 24), UIColor(EyeStyle.primary), size: 15)
             let phaseKey = row["phase"] as? String ?? "未知阶段"
             let phase = ["GAZE_CALIBRATION": "注视标定", "FIXATION": "定点映光", "FAR_FIXATION": "看远", "COVER": "交替遮盖", "PURSUIT": "移动点注视"][phaseKey] ?? phaseKey
-            let calibrated = phaseKey == "GAZE_CALIBRATION" && row["calibrationFailed"] as? Bool != true
+            let acquisition = usesIrisMotion ? (row["valid"] as? Bool == true ? "采集质量合格" : "本帧质量未通过") : phaseKey == "GAZE_CALIBRATION" && row["calibrationFailed"] as? Bool != true
                 ? "标定中 · 入样 \(row["calibrationSamples"] as? Int ?? 0)"
                 : (row["calibrated"] as? Bool == true ? "已标定" : "未获得可靠标定，不绘制估计")
             func number(_ key: String) -> String {
                 guard let n = (row[key] as? NSNumber)?.doubleValue, n.isFinite, n > 0 else { return "—" }
                 return String(format: "%.1f", n)
             }
-            let status = String(format: "%.2f s", elapsed) + "  \(phase)  \(calibrated)  距离 \(number("distanceCm")) cm  分析 \(number("fps")) 帧/秒"
+            let status = String(format: "%.2f s", elapsed) + "  \(phase)  \(acquisition)  距离 \(number("distanceCm")) cm  分析 \(number("fps")) 帧/秒"
             text(status, CGRect(x: 16, y: 646, width: 1230, height: 24))
             text(row["warning"] as? String ?? "", CGRect(x: 16, y: 672, width: 1240, height: 22), UIColor(EyeStyle.secondary), size: 14)
             let reasons = (row["reasons"] as? [String] ?? []).joined(separator: "；")

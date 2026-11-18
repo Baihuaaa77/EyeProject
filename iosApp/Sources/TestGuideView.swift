@@ -29,7 +29,7 @@ enum GuideMotion { case posture, acuity, fva, blink, open, near, move, curve, fl
         case "PUSH_UP": .move
         case "DISTANCE_CURVE": .curve
         case "FLIPPER": .flip
-        case "FIXATION", "GAZE_CALIBRATION": .fixate
+        case "FIXATION": .fixate
         case "FAR_FIXATION": .far
         case "COVER": .coverSelf
         case "PURSUIT": .follow

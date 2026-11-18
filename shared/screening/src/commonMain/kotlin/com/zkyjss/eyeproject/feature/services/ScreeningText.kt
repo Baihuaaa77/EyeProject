@@ -9,7 +9,6 @@ fun stepTitle(step: ScreeningStep) = when (step) {
     ScreeningStep.FLIPPER -> "远近切换（可选）"
     ScreeningStep.FIXATION -> "注视圆点"
     ScreeningStep.FAR_FIXATION -> "看远处"
-    ScreeningStep.GAZE_CALIBRATION -> "注视校准"
     ScreeningStep.COVER -> "交替遮盖"
     ScreeningStep.PURSUIT -> "跟随圆点"
     ScreeningStep.RESULT -> "测试结果"

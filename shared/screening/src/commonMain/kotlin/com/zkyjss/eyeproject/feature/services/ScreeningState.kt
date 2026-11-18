@@ -3,7 +3,7 @@ package com.zkyjss.eyeproject.feature.services
 import com.zkyjss.eyeproject.core.model.HeadPoseEstimate
 
 enum class ScreeningKind { PRESBYOPIA, STRABISMUS }
-enum class ScreeningStep { PROFILE, ENVIRONMENT, NEAR_VISION, PUSH_UP, DISTANCE_CURVE, FLIPPER, GAZE_CALIBRATION, FIXATION, FAR_FIXATION, COVER, PURSUIT, RESULT }
+enum class ScreeningStep { PROFILE, ENVIRONMENT, NEAR_VISION, PUSH_UP, DISTANCE_CURVE, FLIPPER, FIXATION, FAR_FIXATION, COVER, PURSUIT, RESULT }
 enum class VisionEye(val label: String) { RIGHT("右眼"), LEFT("左眼"), BOTH("双眼") }
 enum class PushStage { READY, APPROACH }
 
@@ -32,24 +32,16 @@ data class EyeMotionSample(
     val rightPupilY: Float? = null,
     val rightReflexX: Float? = null,
     val rightReflexY: Float? = null,
-    /** 映光点相对瞳孔中心的鼻侧偏心（虹膜直径单位），正值偏鼻侧。 */
+    /** 映光点相对虹膜中心的鼻侧偏心（虹膜直径单位），正值偏鼻侧。 */
     val leftNasal: Float? = null,
     val rightNasal: Float? = null,
-    /** 映光点相对瞳孔中心的垂直偏心（虹膜直径单位）。 */
+    /** 映光点相对虹膜中心的垂直偏心（虹膜直径单位）。 */
     val leftVertical: Float? = null,
     val rightVertical: Float? = null,
     /** 追踪段：0 水平 / 1 垂直 / 2 斜向；其他任务为 -1。 */
     val pursuitSegment: Int = -1,
     val targetScreenX: Float? = null,
     val targetScreenY: Float? = null,
-    val leftGazeX: Float? = null,
-    val leftGazeY: Float? = null,
-    val rightGazeX: Float? = null,
-    val rightGazeY: Float? = null,
-    /** 双眼融合后的单一屏幕注视点，正式质量监督优先使用它。 */
-    val gazeX: Float? = null,
-    val gazeY: Float? = null,
-    val gazeOnTarget: Boolean? = null,
     val reflectionCodeMatched: Boolean = false,
 )
 
@@ -178,15 +170,8 @@ data class ScreeningState(
     val coverRetryAvailable: Boolean = false,
     val targetX: Float = 0f,
     val targetY: Float = 0f,
-    val gazeCalibrated: Boolean = false,
     /** 看远：示范已确认，等协助者确认受试者已经在看 6 米外的目标，之后才计时、采集 */
     val farWaiting: Boolean = false,
-    val gazeCalibrationIndex: Int = 0,
-    /** 第几轮校准（首轮 0，补测 1）；界面据此在同一点重看时也重新上报位置、重播换点动效。 */
-    val gazeCalibrationRound: Int = 0,
-    val gazeCalibrationFailed: Boolean = false,
-    /** 校准因异常（看不到双眼、头偏、距离超出）暂停中：本点不采样、计时顺延，界面淡化圆点并提示。 */
-    val gazeCalibrationPaused: Boolean = false,
     val gazeWarning: String? = null,
     val warning: String? = null,
     val result: List<String> = emptyList(),

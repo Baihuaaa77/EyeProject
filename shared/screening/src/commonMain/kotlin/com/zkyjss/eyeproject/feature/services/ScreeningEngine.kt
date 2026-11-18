@@ -26,20 +26,8 @@ class ScreeningEngine(platform: ScreeningPlatform, internal val scope: Coroutine
     val state: StateFlow<ScreeningState> = _state.asStateFlow()
     internal val frames = Channel<Triple<Long, ScreeningStep, FaceLandmarkFrame>>(Channel.UNLIMITED)
     internal val samples = mutableListOf<EyeMotionSample>()
-    internal var gaze: StrabismusGaze? = null
-    internal val gazeCalibration = mutableListOf<GazeCalibrationSample>()
-    internal var calibrationPointStartMs = 0L
-    /** 校准异常（人脸丢失、头偏、距离超出、闭眼）开始的时刻；异常期间不采样、本点计时暂停。 */
-    internal var calibrationPausedSinceMs: Long? = null
-    /** 异常恢复的时刻：恢复后需重新稳定 [StrabismusGaze.RESETTLE_MS] 才继续采样。 */
-    internal var calibrationResumeMs = 0L
-    /** 当前点在屏幕上的实际位置发生移动（如提示条挤动布局）的时刻：移动后视线需重新稳定。 */
-    internal var calibrationTargetMovedMs = 0L
-    /** 当前点已累计的有效采样时长与上一次采样时刻。 */
-    internal var calibrationSampledMs = 0L
-    internal var lastCalibrationSampleMs = 0L
     internal val voiceGuard = VoiceRepeatGuard()
-    internal data class RenderedTarget(val timeMs: Long, val step: ScreeningStep, val index: Int, val point: GazePoint)
+    internal data class RenderedTarget(val timeMs: Long, val step: ScreeningStep, val point: GazePoint)
     internal val renderedTargets = ArrayDeque<RenderedTarget>()
     internal var gazeBadSinceMs: Long? = null
     internal var lastGazeFrameMs = 0L
@@ -313,7 +301,7 @@ class ScreeningEngine(platform: ScreeningPlatform, internal val scope: Coroutine
             ScreeningStep.NEAR_VISION -> readyForNearEye()
             // 先确认两个距离都看得清，确认通过后才开始计时（见 answerFlipperCheck）
             ScreeningStep.FLIPPER -> { flipperCheckMisses = 0; _state.update { it.copy(flipperCheck = true, trialIndex = 0) } }
-            ScreeningStep.FIXATION -> retryGazeCalibration()
+            ScreeningStep.FIXATION -> strabismus.beginFixation()
             ScreeningStep.PURSUIT -> runTimedStep(StrabismusProtocol.PURSUIT_SECONDS) { finish() }
             ScreeningStep.FAR_FIXATION -> _state.update { it.copy(farWaiting = true) }
             ScreeningStep.COVER -> {
@@ -324,15 +312,10 @@ class ScreeningEngine(platform: ScreeningPlatform, internal val scope: Coroutine
         }
     }
 
-    /** 校准只辅助注视监督，未通过也继续完成正式采集。 */
-    fun retryGazeCalibration() = strabismus.retryGazeCalibration()
-    fun continueWithoutCalibration() = strabismus.continueWithoutCalibration()
-
     /** 记录实际画出的目标，而非未考虑画布缩放、滚动和布局位置的理论轨迹。 */
     fun reportGazeTarget(xPx: Float, yPx: Float) = strabismus.reportGazeTarget(xPx, yPx)
 
     internal fun resetGazeWindow() {
-        frameProcessor.resetGazeDrift()
         strabismus.resetGazeWindow()
     }
 
@@ -391,7 +374,7 @@ class ScreeningEngine(platform: ScreeningPlatform, internal val scope: Coroutine
         }
         platform.feedback(ScreeningFeedbackCue.RETRY)
         _state.update { it.copy(stabilityInterrupted = true,stabilityReason = reason,stabilityReady = false,
-            stabilityInterruptions = it.stabilityInterruptions+1,gazeWarning = reason,
+            stabilityInterruptions = it.stabilityInterruptions+1,warning = reason,
             stabilityEvents = it.stabilityEvents+AcquisitionInterruption(current.step,timeMs,reason,distanceCm),
             instruction = reason+"。请回到原来的位置，稳定后重新开始本段。") }
     }
@@ -404,10 +387,7 @@ class ScreeningEngine(platform: ScreeningPlatform, internal val scope: Coroutine
         _state.update { it.copy(stabilityInterrupted = false,stabilityReason = null,stabilityReady = false,gazeWarning = null,warning = null) }
         when (current.step) {
             ScreeningStep.FIXATION -> {
-                stepStartMs = platform.nowMs()
-                reflectionCode.begin(ScreeningStep.FIXATION)
-                _state.update { it.copy(secondsLeft = StrabismusProtocol.FIXATION_SECONDS,instruction = "请看着白点，保持约33厘米。") }
-                runTimedStep(StrabismusProtocol.FIXATION_SECONDS) { startFarFixation() }
+                strabismus.beginFixation()
             }
             ScreeningStep.FAR_FIXATION -> startFarFixation()
             ScreeningStep.COVER -> { _state.update { it.copy(coverRetryAvailable = true) }; retryCoverDetection() }
@@ -424,7 +404,7 @@ class ScreeningEngine(platform: ScreeningPlatform, internal val scope: Coroutine
         timer?.cancel(); coverHoldJob?.cancel(); coverMonitorJob?.cancel(); coverDetector.clear()
         stopCamera()
         samples.clear()
-        gaze = null; gazeCalibration.clear(); renderedTargets.clear(); reflectionCode.clear(); resetGazeWindow()
+        renderedTargets.clear(); reflectionCode.clear(); resetGazeWindow()
         distanceTracker.clear()
         stability.clear(); stabilityStep = null; stabilityCounts = null
         // 环境检查尚未开始计时，切后台只需释放相机，不提示「测试已中断」。
@@ -437,7 +417,7 @@ class ScreeningEngine(platform: ScreeningPlatform, internal val scope: Coroutine
     fun restart() {
         diagnostics.finish("重新开始测试")
         timer?.cancel(); coverHoldJob?.cancel(); coverMonitorJob?.cancel(); stopCamera(); samples.clear(); distanceTracker.clear(); coverDetector.clear()
-        gaze = null; gazeCalibration.clear(); renderedTargets.clear(); reflectionCode.clear(); resetGazeWindow()
+        renderedTargets.clear(); reflectionCode.clear(); resetGazeWindow()
         stability.clear(); stabilityStep = null; stabilityCounts = null
         _state.value = ScreeningState(kind = _state.value.kind)
     }

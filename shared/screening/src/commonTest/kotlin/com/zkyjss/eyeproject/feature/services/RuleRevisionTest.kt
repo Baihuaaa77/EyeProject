@@ -255,12 +255,12 @@ class RuleRevisionTest {
     private fun strabismus(nasal: (Int) -> Float, pursuitDeg: Pair<Float, Float>? = null, coordinated: Boolean = true,
                            far: ((Int) -> Float)? = null, farFrames: Int = 100): ScreeningAssessment {
         val fixation = List(120) { i -> EyeMotionSample(i * 100L, ScreeningStep.FIXATION, 0f, 0f, 0f, 0f, 33f,
-            leftNasal = 0.1f + nasal(i), rightNasal = 0.1f, leftVertical = 0f, rightVertical = 0f, gazeOnTarget = true, reflectionCodeMatched = true) }
+            leftNasal = 0.1f + nasal(i), rightNasal = 0.1f, leftVertical = 0f, rightVertical = 0f, reflectionCodeMatched = true) }
         val marks = listOf(CoverMark("移开遮盖，双眼注视", 15_000, uncovered = VisionEye.RIGHT),
             CoverMark("移开遮盖，双眼注视", 16_000, uncovered = VisionEye.LEFT))
         val cover = marks.flatMap { mark -> listOf(100L, 400L).map { offset ->
             EyeMotionSample(mark.timeMs + offset, ScreeningStep.COVER, 0f, 0f, 0f, 0f, 33f,
-                leftNasal = 0.1f, rightNasal = 0.1f, leftVertical = 0f, rightVertical = 0f, gazeOnTarget = true)
+                leftNasal = 0.1f, rightNasal = 0.1f, leftVertical = 0f, rightVertical = 0f)
         } }
         val pursuit = List(72) { i ->
             val segment = i / 24; val a = sin(i * 0.3f) * 0.2f
@@ -268,14 +268,13 @@ class RuleRevisionTest {
             val (lx, ly) = when (segment) { 0 -> a to 0f; 1 -> 0f to a; else -> a to a }
             val (rx, ry) = when (segment) { 0 -> b to 0f; 1 -> 0f to b; else -> b to b }
             EyeMotionSample(17_000 + i * 100L, ScreeningStep.PURSUIT, lx, ly, rx, ry, 33f, pursuitSegment = segment,
-                targetScreenX = 0.5f + lx, targetScreenY = 0.5f + ly,
-                leftGazeX = 0.5f + lx, leftGazeY = 0.5f + ly, rightGazeX = 0.5f + lx, rightGazeY = 0.5f + ly, gazeOnTarget = true)
+                targetScreenX = 0.5f + lx, targetScreenY = 0.5f + ly)
         }
         return ScreeningAssessmentModel.strabismus(ScreeningState(kind = ScreeningKind.STRABISMUS, coverMarks = marks,
-            gazeCalibrated = true, pursuitMaxDeg = pursuitDeg), fixation + cover + pursuit + farSamples(far, farFrames), 100, 90)
+            pursuitMaxDeg = pursuitDeg), fixation + cover + pursuit + farSamples(far, farFrames), 100, 90)
     }
 
-    /** 看远 10 秒（每 100 ms 一帧）；看远不监督屏幕注视，gazeOnTarget 为空。 */
+    /** 看远 10 秒（每 100 ms 一帧）。 */
     private fun farSamples(far: ((Int) -> Float)?, frames: Int) = if (far == null) emptyList() else List(frames) { i ->
         EyeMotionSample(30_000 + i * 100L, ScreeningStep.FAR_FIXATION, 0f, 0f, 0f, 0f, 33f,
             leftNasal = 0.1f + far(i), rightNasal = 0.1f, leftVertical = 0f, rightVertical = 0f, reflectionCodeMatched = true)
@@ -320,7 +319,7 @@ class RuleRevisionTest {
         val result = strabismus({ 0f }, pursuitDeg = 4.8f to 8.4f, coordinated = false)
         assertEquals(EvidenceStatus.UNAVAILABLE, result.evidence.first { it.key == "coordination" }.status)
         assertEquals(ScreeningRiskLevel.UNCERTAIN, result.riskLevel)
-        assertEquals(ScreeningRiskLevel.UNCERTAIN, strabismus({ 0f }, pursuitDeg = 9f to 9f, coordinated = false).riskLevel)
+        assertEquals(ScreeningRiskLevel.MEDIUM, strabismus({ 0f }, pursuitDeg = 9f to 9f, coordinated = false).riskLevel)
     }
 
     @Test fun lowContrastPupilFallsBackToIrisCenter() {

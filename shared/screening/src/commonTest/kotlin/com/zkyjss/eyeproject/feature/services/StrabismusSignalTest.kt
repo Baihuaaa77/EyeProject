@@ -33,29 +33,6 @@ class StrabismusSignalTest {
         assertEquals(end.y,filtered.y,0.025f)
     }
 
-    @Test fun screenEstimateSamplesAtSixHertzAndInterpolatesBetweenObservations() {
-        val sampler = GazeEstimateSampler()
-        var estimates = 0
-        fun frame(time: Long, blink: Boolean = false): GazePoint? = sampler.update(time, true, blink) {
-            val point = GazePoint(estimates++ * 0.1f, 0.5f)
-            ScreenGazeEstimate(point, point, point)
-        }?.point
-
-        val points = (0..29).map { frame(kotlin.math.round(it * 1000.0 / 30).toLong())!! }
-        assertEquals(6, estimates)
-        assertEquals(0f, points[5].x, 0.001f)
-        assertEquals(0.04f, points[7].x, 0.001f)
-        val last = points.last()
-        assertEquals(last, frame(1_000, blink = true))
-        assertEquals(last, frame(1_100, blink = true))
-        assertEquals(6, estimates)
-        assertEquals(last, frame(1_167))
-        assertEquals(7, estimates)
-        assertTrue(frame(1_200)!!.x > last.x)
-        sampler.clear()
-        assertNull(frame(1_300, blink = true))
-    }
-
     @Test fun codeChoosesModulatedPositionAcrossIrisMotionAndRejectsStableBrightSpot() {
         val verifier = ReflectionCodeVerifier()
         fun eye(x: Float) = EyeLandmarks("LEFT", emptyList(),listOf(Point2f(x,40f)),24f)
@@ -105,11 +82,23 @@ class StrabismusSignalTest {
         assertNull(measure(4_899L, 56f, listOf(peak(58f, 0.75f)), visibility = 2f)?.cornealReflex)
     }
 
+    @Test fun reflectionUsesIrisCenterAndRejectsClosedOrMissingEyes() {
+        val lid = listOf(Point2f(0f, 10f), Point2f(5f, 5f), Point2f(15f, 5f),
+            Point2f(20f, 10f), Point2f(15f, 15f), Point2f(5f, 15f))
+        val eye = EyeLandmarks("LEFT", lid, listOf(Point2f(10f, 10f)), 16f)
+        val optics = OpticalEyeMeasurement(Point2f(9f, 9f), Point2f(12f, 9f), 16f, 20f, 20f, null)
+        assertEquals(GazePoint(0.125f, -0.0625f), reflectionOffset(eye, optics, ScreeningStep.FIXATION, false))
+        assertEquals(reflectionOffset(eye, optics, ScreeningStep.FIXATION, false),
+            reflectionOffset(eye, optics.copy(pupilCenter = null), ScreeningStep.FIXATION, false))
+        assertNull(reflectionOffset(eye, optics, ScreeningStep.FIXATION, true))
+        assertNull(reflectionOffset(eye, optics.copy(cornealReflex = null), ScreeningStep.FIXATION, false))
+    }
+
     @Test fun noCalibrationAndShortGapsRetainPositiveAlignmentEvidence() {
         val samples = (0..65).filter { it % 10 < 6 }.map { frame ->
             EyeMotionSample(frame * 50L,ScreeningStep.FIXATION,0f,0f,0f,0f,33f,leftNasal = 0.15f,
                 rightNasal = 0.05f,leftVertical = 0f,rightVertical = 0f,
-                gazeOnTarget = if (frame % 3 == 0) false else null,reflectionCodeMatched = true)
+                reflectionCodeMatched = true)
         }
         val result = ScreeningAssessmentModel.strabismus(ScreeningState(kind = ScreeningKind.STRABISMUS),samples,100,40)
         assertEquals(ScreeningRiskLevel.HIGH,result.riskLevel)

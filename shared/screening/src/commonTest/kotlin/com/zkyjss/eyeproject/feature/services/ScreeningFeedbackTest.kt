@@ -12,18 +12,6 @@ class ScreeningFeedbackTest {
         assertTrue(feedback.poll(hold.copy(coverReady = true), 3000, true).isEmpty())
     }
 
-    @Test fun calibrationMovesOncePerPointAndRetryHasItsOwnCue() {
-        val feedback = ScreeningFeedbackSession()
-        val idle = ScreeningFeedbackFrame("ENVIRONMENT")
-        val point = ScreeningFeedbackFrame("GAZE_CALIBRATION", taskActive = true, calibrationPoint = 0)
-        assertTrue(feedback.poll(idle, 0, true).isEmpty())
-        assertEquals(listOf(ScreeningFeedbackCue.START), feedback.poll(point, 1000, true))
-        repeat(20) { assertTrue(feedback.poll(point, 1100L + it * 100, true).isEmpty()) }
-        assertEquals(listOf(ScreeningFeedbackCue.TARGET), feedback.poll(point.copy(calibrationPoint = 1), 4000, true))
-        assertEquals(listOf(ScreeningFeedbackCue.RETRY), feedback.poll(point.copy(calibrationPoint = -1, calibrationFailed = true), 7000, true))
-        assertEquals(listOf(ScreeningFeedbackCue.START), feedback.poll(point, 8000, true))
-    }
-
     @Test fun distanceDebouncesAndBlinksDoNotRearmTheSameWarning() {
         val feedback = ScreeningFeedbackSession()
         val near = ScreeningFeedbackFrame("NEAR_VISION", true, distanceZone = -1)

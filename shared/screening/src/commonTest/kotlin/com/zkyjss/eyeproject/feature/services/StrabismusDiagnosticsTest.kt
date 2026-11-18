@@ -19,7 +19,7 @@ class StrabismusDiagnosticsTest {
         override suspend fun compareHistory(state: ScreeningState, assessment: ScreeningAssessment) = emptyList<String>()
         override fun diagnosticEvent(json: String) { rows += Json.parseToJsonElement(json).jsonObject }
     }
-    @Test fun rejectedFrameKeepsSourceClockAndNullEstimates() {
+    @Test fun rejectedFrameKeepsSourceClockAndNullIrisInput() {
         val platform = Platform(); val audit = StrabismusDiagnostics(platform)
         audit.start(); val id = audit.sessionId; audit.start()
         val source = FaceLandmarkFrame(emptyList(), 640, 480, 9000, 12, 15f, analysisElapsedRealtimeMs = 5000)
@@ -27,17 +27,17 @@ class StrabismusDiagnosticsTest {
         audit.reportLight(ScreeningStep.FIXATION, 4000, 1, false)
         audit.reportLight(ScreeningStep.FIXATION, 4500, 2, true) // 后来的亮点不能倒灌到更早的相机帧
         audit.frame(adjusted, ScreeningState(kind = ScreeningKind.STRABISMUS, step = ScreeningStep.FIXATION),
-            false, false, GazePoint(0.5f, 0.1f), null, null, false, true, 4000)
+            false, false, true, 4000)
         audit.finish("中途退出"); audit.finish("重复结束")
         assertEquals(3, platform.rows.size)
         val frame = platform.rows[1]
         assertEquals(5000, frame["captureTimeMs"]!!.jsonPrimitive.long)
         assertEquals(4000, frame["sessionTimeMs"]!!.jsonPrimitive.long)
-        assertEquals(JsonNull, frame["leftGaze"])
+        assertEquals(JsonNull, frame["inputLeft"])
         assertEquals(1, frame["lightChip"]!!.jsonPrimitive.int)
         assertFalse(frame["targetVisible"]!!.jsonPrimitive.boolean)
         assertEquals("white", frame["targetColor"]!!.jsonPrimitive.content)
-        assertTrue(frame["reasons"]!!.jsonArray.any { it.jsonPrimitive.content == "无可靠注视标定" })
+        assertTrue(frame["reasons"]!!.jsonArray.any { it.jsonPrimitive.content == "无可用的睁眼虹膜位置" })
         assertEquals(id, platform.rows.last()["sessionId"]!!.jsonPrimitive.content)
         audit.start(); assertNotEquals(id, audit.sessionId)
     }
@@ -47,7 +47,7 @@ class StrabismusDiagnosticsTest {
         audit.reportTarget(ScreeningStep.PURSUIT, 972f, 2160f, 2000)
         val frame = FaceLandmarkFrame(emptyList(), 640, 480, 1500, 0, 10f, analysisElapsedRealtimeMs = 1500)
         audit.frame(frame, ScreeningState(kind = ScreeningKind.STRABISMUS, step = ScreeningStep.PURSUIT, stabilityInterrupted = true),
-            false, false, GazePoint(0.5f, 0.5f), null, null, false, false, 1500)
+            false, false, false, 1500)
         val row = platform.rows.last()
         assertEquals(0.1f, row["target"]!!.jsonArray[0].jsonPrimitive.float)
         assertEquals(0.1f, row["target"]!!.jsonArray[1].jsonPrimitive.float)

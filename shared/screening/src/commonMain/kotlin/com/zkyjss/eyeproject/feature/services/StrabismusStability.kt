@@ -25,7 +25,6 @@ internal class StrabismusStability {
     fun clear() { step = null; anchors.clear(); badSince = null; badReason = null; recoveredSince = null }
     fun observe(time: Long, phase: ScreeningStep, positions: List<EyeFramePosition>, distance: Float,
                 poseGood: Boolean, interrupted: Boolean): StabilityReading {
-        // 标定本身要求眼球转动，只保留原有的距离/头姿采样检查，不触发整段移动中断。
         if (phase !in setOf(ScreeningStep.FIXATION,ScreeningStep.FAR_FIXATION,ScreeningStep.COVER,ScreeningStep.PURSUIT)) {
             clear(); return StabilityReading(ready = true)
         }

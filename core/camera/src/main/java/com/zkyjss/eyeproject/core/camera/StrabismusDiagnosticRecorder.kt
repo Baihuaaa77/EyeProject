@@ -219,10 +219,13 @@ internal class DiagnosticPanelRenderer(private val p: DiagnosticVideoPalette) : 
                 if(x !in 0f..1f || y !in 0f..1f) text("屏外估计",phone.left,phone.bottom+18,color,13f) }
         }
         paint.style=Paint.Style.FILL
-        text("实心：实际目标   青/粉：左/右注视估计",334f,640f,p.target,15f)
-        val calibration = if (row.optString("phase") == "GAZE_CALIBRATION" && !row.optBoolean("calibrationFailed")) "标定中 · 入样 ${row.optInt("calibrationSamples")}"
+        val usesIrisMotion = row.has("inputLeft") && !row.has("calibrated")
+        text(if (usesIrisMotion) "实心：实际目标 · 眼部标注见左侧" else "实心：实际目标   青/粉：左/右注视估计",334f,640f,p.target,15f)
+        val acquisition = if (usesIrisMotion) {
+            if (row.optBoolean("valid")) "采集质量合格" else "本帧质量未通过"
+        } else if (row.optString("phase") == "GAZE_CALIBRATION" && !row.optBoolean("calibrationFailed")) "标定中 · 入样 ${row.optInt("calibrationSamples")}"
             else if(row.optBoolean("calibrated")) "已标定" else "未获得可靠标定，不绘制估计"
-        text("%.2f s  %s  %s  距离 %.1f cm  分析 %.1f 帧/秒".format(elapsed,(mapOf("GAZE_CALIBRATION" to "注视标定", "FIXATION" to "定点映光", "FAR_FIXATION" to "看远", "COVER" to "交替遮盖", "PURSUIT" to "移动点注视")[row.optString("phase")] ?: row.optString("phase")),calibration,row.optDouble("distanceCm"),row.optDouble("fps")),16f,658f)
+        text("%.2f s  %s  %s  距离 %.1f cm  分析 %.1f 帧/秒".format(elapsed,(mapOf("GAZE_CALIBRATION" to "注视标定", "FIXATION" to "定点映光", "FAR_FIXATION" to "看远", "COVER" to "交替遮盖", "PURSUIT" to "移动点注视")[row.optString("phase")] ?: row.optString("phase")),acquisition,row.optDouble("distanceCm"),row.optDouble("fps")),16f,658f)
         text(row.optString("warning").takeUnless { it == "null" }.orEmpty(),16f,682f,p.secondary,14f)
         val reasons=row.optJSONArray("reasons")
         text(if(reasons==null || reasons.length()==0) "质量门控通过；标注只是诊断观测" else (0 until reasons.length()).joinToString("；") { reasons.optString(it) },16f,705f,p.secondary,14f)

@@ -22,7 +22,6 @@ internal class ScreeningResultWriter(private val host: ScreeningEngine) {
                 qualityEligibleFrames, qualityEligibleValidFrames, s.pursuitMaxDeg)
             val result = assessment.displayLines() + metrics
             val capturedSamples = samples.toList()
-            val capturedCalibration = gazeCalibration.toList()
             val capturedReflectionCode = reflectionCode.record()
             val capturedTotal = totalFrames
             val capturedValid = validFrames
@@ -44,7 +43,7 @@ internal class ScreeningResultWriter(private val host: ScreeningEngine) {
             recordScope.launch(recordDispatcher) {
                 runCatching {
                     val data = RecordObject().apply {
-                        put("protocolVersion", if (s.kind == ScreeningKind.STRABISMUS) 9 else 4)
+                        put("protocolVersion", if (s.kind == ScreeningKind.STRABISMUS) 10 else 4)
                         if (s.kind == ScreeningKind.STRABISMUS) {
                             put("stimulusSource", "brief-code-then-steady-dot-v2")
                             put("acquisitionVersion", "completion-first-1")
@@ -57,14 +56,6 @@ internal class ScreeningResultWriter(private val host: ScreeningEngine) {
                             } }))
                         }
                         if (s.kind == ScreeningKind.STRABISMUS) put("coverDetectionVersion", "camera-cover-3-completion")
-                        if (s.kind == ScreeningKind.STRABISMUS) {
-                            put("gazeCalibrated", s.gazeCalibrated)
-                            put("gazeCalibration", RecordArray().apply { capturedCalibration.forEach { c -> put(RecordObject().apply {
-                                put("index", c.index); put("targetX", c.target.x.toDouble()); put("targetY", c.target.y.toDouble())
-                                put("leftX", c.left?.x?.toDouble() ?: RecordObject.NULL); put("leftY", c.left?.y?.toDouble() ?: RecordObject.NULL)
-                                put("rightX", c.right?.x?.toDouble() ?: RecordObject.NULL); put("rightY", c.right?.y?.toDouble() ?: RecordObject.NULL)
-                            }) } })
-                        }
                         put("kind", s.kind.name)
                         if (s.kind == ScreeningKind.STRABISMUS) put("diagnosticSessionId", capturedDiagnosticSessionId)
                         put("assessment", RecordObject().apply {
@@ -153,10 +144,6 @@ internal class ScreeningResultWriter(private val host: ScreeningEngine) {
                             put("targetX", sample.targetX.toDouble()); put("targetY", sample.targetY.toDouble())
                             put("targetScreenX", sample.targetScreenX?.toDouble() ?: RecordObject.NULL)
                             put("targetScreenY", sample.targetScreenY?.toDouble() ?: RecordObject.NULL)
-                            put("leftGazeX", sample.leftGazeX?.toDouble() ?: RecordObject.NULL); put("leftGazeY", sample.leftGazeY?.toDouble() ?: RecordObject.NULL)
-                            put("rightGazeX", sample.rightGazeX?.toDouble() ?: RecordObject.NULL); put("rightGazeY", sample.rightGazeY?.toDouble() ?: RecordObject.NULL)
-                            put("gazeX", sample.gazeX?.toDouble() ?: RecordObject.NULL); put("gazeY", sample.gazeY?.toDouble() ?: RecordObject.NULL)
-                            put("gazeOnTarget", sample.gazeOnTarget ?: RecordObject.NULL)
                             put("leftOpticalX", sample.leftOpticalX?.toDouble() ?: RecordObject.NULL)
                             put("leftOpticalY", sample.leftOpticalY?.toDouble() ?: RecordObject.NULL)
                             put("rightOpticalX", sample.rightOpticalX?.toDouble() ?: RecordObject.NULL)

@@ -20,7 +20,7 @@ fun ScreeningRiskLevel.labelFor(kind: ScreeningKind): String = when (kind) {
         ScreeningRiskLevel.LOW -> "正常"
         ScreeningRiskLevel.MEDIUM -> "可疑阳性"
         ScreeningRiskLevel.HIGH -> "高度疑似斜视"
-        ScreeningRiskLevel.UNCERTAIN -> "斜视风险未定，建议复测"
+        ScreeningRiskLevel.UNCERTAIN -> "斜视风险未排除"
         ScreeningRiskLevel.UNKNOWN -> "测试质量不佳，请重新测试"
     }
     ScreeningKind.PRESBYOPIA -> label
@@ -50,7 +50,7 @@ object ScreeningAssessmentModel {
     /**
      * 斜视 rules-2：眼位按中位数误差判定、再注视扣除噪声底、双眼协调受屏幕幅度限制时不评估；新增「结果不确定」。
      */
-    const val VERSION = "protocol-9.18-rules-4-partial-evidence"
+    const val VERSION = "protocol-9.18-rules-5-iris-motion"
 
     /**
      * 老视 rules-3（专家 2026-11-02）：按测前戴镜问卷分 A1 / A2 / B / C 检查路径；只有 A1 / A2 做单眼移近法
@@ -221,7 +221,9 @@ object ScreeningAssessmentModel {
     // region 斜视
 
     fun strabismus(state: ScreeningState, samples: List<EyeMotionSample>, eligible: Int, eligibleValid: Int): ScreeningAssessment {
-        val m = StrabismusMeasures.compute(samples, state.coverMarks)
+        val followed = (0..2).filter { PursuitMotionCheck.follows(samples, it) == true }.toSet()
+        val amplitudeOk = state.pursuitMaxDeg?.let { (x, y) -> minOf(x, y) >= StrabismusProtocol.BSI_MIN_AMPLITUDE_DEG } ?: true
+        val m = StrabismusMeasures.compute(samples, state.coverMarks, followed.takeIf { amplitudeOk && it.size >= 2 }.orEmpty())
         val qualityRate = if (eligible > 0) eligibleValid.toDouble() / eligible else 0.0
         val features = linkedMapOf<String, Double?>(
             "age_years" to state.fields["年龄"]?.toDoubleOrNull(),
@@ -241,6 +243,7 @@ object ScreeningAssessmentModel {
             "cover_refix_median_prism" to median(m.refixations.map { it.amplitudePrism }),
             "cover_refix_events" to m.refixations.size.toDouble(),
             "bsi" to m.bsi,
+            "pursuit_followed_segments" to followed.size.toDouble(),
             "pursuit_r_h" to m.rH,
             "pursuit_r_v" to m.rV,
             "pursuit_d_norm" to m.dNorm,
@@ -251,7 +254,7 @@ object ScreeningAssessmentModel {
         val farMeasured = m.farFrames >= 12 && m.farObservedMs >= 1_200L
         val riskScope = "看近（33 cm）与看远眼位偏斜及双眼协调"
         val qualityReasons = buildList {
-            if (qualityRate < 0.5) add("可测阶段有效帧率低于 50%")
+            if (eligible > 0 && qualityRate < 0.5) add("可测阶段有效帧率低于 50%")
             if (!nearMeasured) add("看近映光有效数据不足")
             else if (m.fixationObservedMs < 3_000L) add("看近可观测映光累计不足 3 秒")
             if (!farMeasured) add("看远映光有效数据不足")
@@ -286,10 +289,8 @@ object ScreeningAssessmentModel {
             else -> EvidenceStatus.ABNORMAL
         }
         val bsi = m.bsi
-        val amplitudeOk = state.pursuitMaxDeg?.let { (x, y) -> minOf(x, y) >= StrabismusProtocol.BSI_MIN_AMPLITUDE_DEG } ?: true
-        val followedSegments = (0..2).count { PursuitGazeCheck.follows(samples, it) == true }
         val coordinationStatus = when {
-            bsi == null || !amplitudeOk || followedSegments < 2 -> EvidenceStatus.UNAVAILABLE
+            bsi == null -> EvidenceStatus.UNAVAILABLE
             bsi < StrabismusProtocol.BSI_ABNORMAL -> EvidenceStatus.ABNORMAL
             bsi < StrabismusProtocol.BSI_SUSPECT -> EvidenceStatus.UNCERTAIN
             else -> EvidenceStatus.NORMAL
@@ -311,8 +312,8 @@ object ScreeningAssessmentModel {
                 if (!nearMeasured) listOf("双眼映光 ${m.fixationFrames} 帧，累计 ${fmt(m.fixationObservedMs / 1000.0)} 秒")
                 else listOf("水平偏斜 ${fmt(h)}Δ（误差 ±${fmt(hHalf)}，判定线 ${StrabismusProtocol.HIGH_H_PRISM.toInt()}Δ）",
                     "垂直偏斜 ${fmt(v)}Δ（误差 ±${fmt(vHalf)}，判定线 ${StrabismusProtocol.HIGH_V_PRISM.toInt()}Δ）",
-                    "逐帧标准差 ${fmt(m.hdeSdPrism ?: 0.0)}/${fmt(m.vdeSdPrism ?: 0.0)}Δ（${if (stable) "注视稳定" else "抖动较大"}），有效 ${m.fixationFrames} 帧",
-                    "误差范围下界越过判定线，或注视稳定且测得值越线，才判异常")),
+                    "逐帧标准差 ${fmt(m.hdeSdPrism ?: 0.0)}/${fmt(m.vdeSdPrism ?: 0.0)}Δ（${if (stable) "映光测量稳定" else "抖动较大"}），有效 ${m.fixationFrames} 帧",
+                    "误差范围下界越过判定线，或映光测量稳定且测得值越线，才判异常")),
             Evidence("far", "看远时眼位", farStatus,
                 when (farStatus) {
                     EvidenceStatus.ABNORMAL -> "看远处时两眼位置持续不对称（水平约 ${fmt(farH)}Δ、垂直约 ${fmt(farV)}Δ）"
@@ -344,16 +345,17 @@ object ScreeningAssessmentModel {
                 when (coordinationStatus) {
                     EvidenceStatus.ABNORMAL -> "跟随移动目标时两眼配合明显不一致"
                     EvidenceStatus.UNCERTAIN -> "跟随时两眼配合略有不一致，建议复测"
-                    EvidenceStatus.UNAVAILABLE -> if (!amplitudeOk) "本机屏幕能显示的追踪幅度太小，不评估双眼协调" else "追踪数据不足，不评估双眼协调"
+                    EvidenceStatus.UNAVAILABLE -> if (!amplitudeOk) "本机屏幕能显示的追踪幅度太小，不评估双眼协调" else "可与目标轨迹匹配的双眼运动数据不足"
                     EvidenceStatus.NORMAL -> "跟随移动目标时两眼配合良好"
                 },
                 buildList {
+                    add("3 段轨迹中 ${followed.size} 段检测到眼动随目标变化")
                     add("双眼对称性指数 BSI ${bsi?.let(::fmt) ?: "—"}（r_h ${m.rH?.let(::fmt) ?: "—"}、r_v ${m.rV?.let(::fmt) ?: "—"}、d_norm ${m.dNorm?.let(::fmt) ?: "—"}），参考 ≥ 0.7")
                     state.pursuitMaxDeg?.let { (x, y) -> add("屏幕可显示追踪幅度 水平 ±${fmt(x.toDouble())}°、垂直 ±${fmt(y.toDouble())}°（评估需 ≥ ±${StrabismusProtocol.BSI_MIN_AMPLITUDE_DEG.toInt()}°）") }
                 }),
         )
-        val findings = buildList {
-            if (nearMeasured) add("注视眼位：水平偏斜约 ${fmt(h)}Δ、垂直约 ${fmt(v)}Δ（标准差 ${fmt(m.hdeSdPrism ?: 0.0)}/${fmt(m.vdeSdPrism ?: 0.0)}Δ，${if (stable) "注视稳定" else "注视不稳定"}）。")
+        val measurements = buildList {
+            if (nearMeasured) add("注视眼位：水平偏斜约 ${fmt(h)}Δ、垂直约 ${fmt(v)}Δ（标准差 ${fmt(m.hdeSdPrism ?: 0.0)}/${fmt(m.vdeSdPrism ?: 0.0)}Δ，${if (stable) "映光测量稳定" else "映光测量波动较大"}）。")
             add(if (farMeasured) "看远眼位：水平偏斜约 ${fmt(farH)}Δ、垂直约 ${fmt(farV)}Δ（标准差 ${fmt(m.farHdeSdPrism ?: 0.0)}/${fmt(m.farVdeSdPrism ?: 0.0)}Δ）。"
                 else "看远眼位：有效画面不足，本次未评估。")
             if (m.refixations.isNotEmpty()) add("遮盖解除后再注视：中位偏移 ${fmt(refixMedian)}Δ（${m.refixations.size} 次事件）；" +
@@ -366,16 +368,33 @@ object ScreeningAssessmentModel {
         val riskLevel = when {
             (eyeStatus == EvidenceStatus.ABNORMAL && m.nearCodeConfirmed) ||
                 (farStatus == EvidenceStatus.ABNORMAL && m.farCodeConfirmed) -> ScreeningRiskLevel.HIGH
-            eyeStatus == EvidenceStatus.ABNORMAL || farStatus == EvidenceStatus.ABNORMAL || coverStatus == EvidenceStatus.ABNORMAL -> ScreeningRiskLevel.MEDIUM
+            eyeStatus == EvidenceStatus.ABNORMAL || farStatus == EvidenceStatus.ABNORMAL ||
+                coverStatus == EvidenceStatus.ABNORMAL || coordinationStatus == EvidenceStatus.ABNORMAL -> ScreeningRiskLevel.MEDIUM
             eyeStatus == EvidenceStatus.NORMAL && farStatus == EvidenceStatus.NORMAL && coverStatus == EvidenceStatus.NORMAL &&
                 m.nearCodeConfirmed && m.farCodeConfirmed && stable && farStable &&
                 coordinationStatus !in listOf(EvidenceStatus.ABNORMAL, EvidenceStatus.UNCERTAIN) -> ScreeningRiskLevel.LOW
             else -> ScreeningRiskLevel.UNCERTAIN
         }
         val confidence = when {
-            !nearMeasured && !farMeasured && m.refixations.isEmpty() -> 0
-            qualityReasons.isEmpty() && stable && farStable && riskLevel != ScreeningRiskLevel.UNCERTAIN -> 2
+            !nearMeasured && !farMeasured && m.refixations.isEmpty() && bsi == null -> 0
+            qualityReasons.isEmpty() && stable && farStable && bsi != null && riskLevel != ScreeningRiskLevel.UNCERTAIN -> 2
             else -> 1
+        }
+        val confidenceLabel = when (confidence) { 2 -> "中等"; 1 -> "低"; else -> "极低" }
+        val reasons = buildList {
+            if (eyeStatus == EvidenceStatus.ABNORMAL) add("看近时双眼映光相对虹膜的偏移超出参考线")
+            if (farStatus == EvidenceStatus.ABNORMAL) add("看远时双眼映光相对虹膜的偏移超出参考线")
+            if (coverStatus == EvidenceStatus.ABNORMAL) add("去遮盖后眼位移动超过参考线")
+            if (coordinationStatus == EvidenceStatus.ABNORMAL) add("跟随时双眼运动明显不同步")
+            if (riskLevel == ScreeningRiskLevel.LOW) add("看近、看远的映光和去遮盖眼位变化均在参考范围内")
+            if (riskLevel == ScreeningRiskLevel.UNCERTAIN) {
+                if (eyeStatus == EvidenceStatus.UNCERTAIN || farStatus == EvidenceStatus.UNCERTAIN) add("测得偏斜接近参考线，采集波动使结果难以确认")
+                if ((nearMeasured && !stable) || (farMeasured && !farStable)) add("映光偏移随时间波动较大")
+                if (coverStatus == EvidenceStatus.UNCERTAIN) add("去遮盖眼位变化尚难确认")
+                if (coordinationStatus == EvidenceStatus.UNCERTAIN) add("跟随时双眼运动略有不一致")
+                addAll(qualityReasons)
+            }
+            if (coordinationStatus == EvidenceStatus.UNAVAILABLE) add("本次双眼跟随协调性未能评定")
         }
         features["risk_evidence_confidence"] = confidence.toDouble()
         features["fixation_hde_ci_half_prism"] = hHalf.takeIf { nearMeasured }
@@ -383,22 +402,23 @@ object ScreeningAssessmentModel {
         features["far_hde_ci_half_prism"] = if (farMeasured) farHHalf else null
         features["far_vde_ci_half_prism"] = if (farMeasured) farVHalf else null
         features["cover_noise_floor_prism"] = noiseFloor
-        return ScreeningAssessment(VERSION, "探索性评估 · ${if (confidence == 0) "证据不足" else if (confidence == 1) "低置信度" else "中等置信度"}", riskLevel, riskScope, riskLevel.labelFor(ScreeningKind.STRABISMUS),
-            features, findings,
+        return ScreeningAssessment(VERSION, "探索性评估 · 置信度$confidenceLabel", riskLevel, riskScope, riskLevel.labelFor(ScreeningKind.STRABISMUS),
+            features, listOf("分级理由：${reasons.joinToString("；")}。") + measurements,
             listOf("双眼角膜反光不对称也可能来自视线偏移、光源位置或个体角κ差异。", "棱镜度为估算值：以平均角膜直径 ${StrabismusProtocol.CORNEA_DIAMETER_MM} mm 作像素尺度、按 Hirschberg ${StrabismusProtocol.PRISM_PER_MM.toInt()}Δ/mm 换算，未针对本机标定；阈值待临床金标准验证。"),
             evidence + Evidence("riskConfidence", "风险估计置信度",
                 if (confidence == 0) EvidenceStatus.UNAVAILABLE else if (confidence == 1) EvidenceStatus.UNCERTAIN else EvidenceStatus.NORMAL,
-                when (confidence) { 2 -> "中等"; 1 -> "低"; else -> "证据不足" },
+                "置信度$confidenceLabel",
                 buildList {
                     add("看近 ${m.fixationFrames} 帧、看远 ${m.farFrames} 帧，可测去遮盖 ${m.refixations.size} 次。")
                     addAll(qualityReasons)
+                    if (coordinationStatus == EvidenceStatus.UNAVAILABLE) add("移动目标下的双眼协调性未能评定")
                     if ((nearMeasured && !stable) || (farMeasured && !farStable)) add("部分映光偏移随时间波动较大")
                     add("这是当前采集证据的可信程度，尚未标定为患病概率。")
                 }))
     }
 
     /**
-     * 原文红旗：注视稳定且 ≥ 10Δ / 5Δ。rules-2 增加：即使逐帧抖动大（多为测量噪声），中位数的误差范围下界仍越线也算——
+     * 原文红旗：映光测量稳定且 ≥ 10Δ / 5Δ。rules-2 增加：即使逐帧抖动大（多为测量噪声），中位数的误差范围下界仍越线也算——
      * 噪声不能把高度疑似压低。测得值越线但误差范围覆盖参考线 → 不确定。看近、看远同一规则。
      */
     private fun alignmentStatus(h: Double, v: Double, hHalf: Double, vHalf: Double, stable: Boolean) = when {
@@ -462,7 +482,9 @@ data class StrabismusMeasures(
          * - 追踪：BSI = 0.5·r_h + 0.3·r_v + 0.2·(1 − d_norm)（原文初版公式）；r_h 取水平与斜向段、
          *   r_v 取垂直与斜向段的双眼速度相关；d_norm 为双眼相对位置波动 RMS / 眼动幅度，截断到 [0,1]
          */
-        fun compute(samples: List<EyeMotionSample>, marks: List<CoverMark>): StrabismusMeasures {
+        fun compute(
+            samples: List<EyeMotionSample>, marks: List<CoverMark>, pursuitSegments: Set<Int> = setOf(0, 1, 2),
+        ): StrabismusMeasures {
             val k = StrabismusProtocol.PRISM_PER_IRIS_UNIT
             val fixed = samples.filter {
                 it.step == ScreeningStep.FIXATION && it.leftNasal != null && it.rightNasal != null &&
@@ -502,13 +524,15 @@ data class StrabismusMeasures(
                 )
             }
 
-            val pursuit = samples.filter { it.step == ScreeningStep.PURSUIT && it.leftX.isFinite() && it.leftY.isFinite() && it.rightX.isFinite() && it.rightY.isFinite() }
+            val pursuit = samples.filter { it.step == ScreeningStep.PURSUIT && it.pursuitSegment in pursuitSegments && it.leftX.isFinite() && it.leftY.isFinite() && it.rightX.isFinite() && it.rightY.isFinite() }
             fun velocityCorr(segments: Set<Int>, horizontal: Boolean): Double? {
                 val pairs = pursuit.filter { it.pursuitSegment in segments }.zipWithNext()
                     .filter { (a, b) -> b.timeMs > a.timeMs && b.timeMs - a.timeMs <= 200L && a.pursuitSegment == b.pursuitSegment }
+                if (pairs.size < 10 || pairs.sumOf { (a, b) -> b.timeMs - a.timeMs } < 1_000L) return null
                 val l = pairs.map { (a, b) -> ((if (horizontal) b.leftX - a.leftX else b.leftY - a.leftY) / (b.timeMs - a.timeMs)).toDouble() }
                 val r = pairs.map { (a, b) -> ((if (horizontal) b.rightX - a.rightX else b.rightY - a.rightY) / (b.timeMs - a.timeMs)).toDouble() }
-                return correlation(l, r)
+                // 一眼有明显追踪、另一眼的速度接近常量时，按无速度相关处理。
+                return correlation(l, r) ?: if ((sd(l) ?: 0.0) + (sd(r) ?: 0.0) >= 1e-6) 0.0 else null
             }
             val rH = velocityCorr(setOf(0, 2), horizontal = true)
             val rV = velocityCorr(setOf(1, 2), horizontal = false)
@@ -517,8 +541,12 @@ data class StrabismusMeasures(
                 val mx = diffs.map { it.first }.average()
                 val my = diffs.map { it.second }.average()
                 val rms = sqrt(diffs.map { (it.first - mx) * (it.first - mx) + (it.second - my) * (it.second - my) }.average())
-                val horizontalSeg = pursuit.filter { it.pursuitSegment == 0 }.map { ((it.leftX + it.rightX) / 2f).toDouble() }
-                val amplitude = if (horizontalSeg.size >= 5) (horizontalSeg.max() - horizontalSeg.min()) / 2 else null
+                val horizontal = pursuit.filter { it.pursuitSegment in setOf(0, 2) }
+                val amplitude = if (horizontal.size >= 5) {
+                    val left = horizontal.maxOf { it.leftX } - horizontal.minOf { it.leftX }
+                    val right = horizontal.maxOf { it.rightX } - horizontal.minOf { it.rightX }
+                    maxOf(left, right).toDouble() / 2
+                } else null
                 amplitude?.takeIf { it > 0.01 }?.let { (rms / it).coerceIn(0.0, 1.0) }
             } else null
             val bsi = if (rH != null && rV != null && dNorm != null) 0.5 * rH + 0.3 * rV + 0.2 * (1 - dNorm) else null

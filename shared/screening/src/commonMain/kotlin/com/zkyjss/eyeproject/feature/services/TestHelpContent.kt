@@ -10,7 +10,7 @@ fun screeningHelp(s: ScreeningState): TestHelpContent = TestHelpContent(
         ScreeningStep.PUSH_UP -> "MOVE"
         ScreeningStep.DISTANCE_CURVE -> "CURVE"
         ScreeningStep.FLIPPER -> "SWITCH"
-        ScreeningStep.FIXATION, ScreeningStep.GAZE_CALIBRATION -> "FIXATE"
+        ScreeningStep.FIXATION -> "FIXATE"
         ScreeningStep.FAR_FIXATION -> "FAR"
         ScreeningStep.COVER -> "COVER_SELF"
         ScreeningStep.PURSUIT -> "FOLLOW"
@@ -20,8 +20,6 @@ fun screeningHelp(s: ScreeningState): TestHelpContent = TestHelpContent(
     cue = if (s.step == ScreeningStep.COVER) coverGuideCue(s.fields)
         else if (s.step == ScreeningStep.ENVIRONMENT && s.kind == ScreeningKind.STRABISMUS)
             "把手机固定在支架上，正对双眼约 33 厘米。本人按提示遮眼，协助者在手机旁打光，保持双眼光照均匀。"
-        else if (s.step == ScreeningStep.GAZE_CALIBRATION)
-            "只用眼睛依次看着圆点，头和手机保持不动；每个圆点停稳后自动进入下一点。"
         else guideCue(s.step),
 )
 

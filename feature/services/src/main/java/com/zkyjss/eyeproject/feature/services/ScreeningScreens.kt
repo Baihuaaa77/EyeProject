@@ -139,7 +139,6 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, onEditSubje
         ScreeningStep.FLIPPER -> if (s.flipperCheck) "先确认两个距离都能看清。停稳后视标会自动出现，请选择开口方向。" else "停稳后视标会自动出现，请选择开口方向。"
         ScreeningStep.FIXATION -> "请看着白点，保持三十三厘米。"
         ScreeningStep.FAR_FIXATION -> if (s.farWaiting) FAR_WAIT_PROMPT else "请看六米外的目标，头和手机不动。"
-        ScreeningStep.GAZE_CALIBRATION -> "请只转动眼睛依次看圆点。"
         ScreeningStep.COVER -> coverSpokenPrompt(s)
         ScreeningStep.PURSUIT -> "请只用眼睛跟随圆点，头不要动。"
         ScreeningStep.RESULT -> "测试完成，请查看结果。"
@@ -197,7 +196,7 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, onEditSubje
         onDispose { owner.lifecycle.removeObserver(observer) }
     }
     val activeTest = !s.guidePending && s.step !in setOf(ScreeningStep.PROFILE, ScreeningStep.ENVIRONMENT, ScreeningStep.RESULT)
-    val gazeTask = activeTest && s.step in setOf(ScreeningStep.GAZE_CALIBRATION, ScreeningStep.FIXATION, ScreeningStep.FAR_FIXATION,
+    val gazeTask = activeTest && s.step in setOf(ScreeningStep.FIXATION, ScreeningStep.FAR_FIXATION,
         ScreeningStep.COVER, ScreeningStep.PURSUIT)
     val opticTask = activeTest && !gazeTask
     val notice = s.gazeWarning ?: s.warning ?: guidance?.takeUnless {
@@ -207,8 +206,7 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, onEditSubje
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
     Box(modifier.fillMaxSize()) {
-        if (gazeTask && s.step == ScreeningStep.GAZE_CALIBRATION) StrabismusCalibrationSession(s, viewModel, { viewModel.stopCamera(); onBack() }, { settingsOpen = true })
-        else if (gazeTask && s.step in setOf(ScreeningStep.FIXATION, ScreeningStep.FAR_FIXATION, ScreeningStep.COVER)) StrabismusDarkSession(s, viewModel, { viewModel.stopCamera(); onBack() }, { settingsOpen = true }, openHelp) {
+        if (gazeTask && s.step in setOf(ScreeningStep.FIXATION, ScreeningStep.FAR_FIXATION, ScreeningStep.COVER)) StrabismusDarkSession(s, viewModel, { viewModel.stopCamera(); onBack() }, { settingsOpen = true }, openHelp) {
             distance?.let { DistanceBanner(it, compact = true, singleLine = true) }
         } else TestSessionLayout(
             title = if (kind == ScreeningKind.PRESBYOPIA) "老视自测" else "眼位自测",
@@ -241,7 +239,6 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, onEditSubje
                 ScreeningStep.PUSH_UP -> PushUpContent(s, viewModel)
                 ScreeningStep.DISTANCE_CURVE -> CurveContent(s, viewModel)
                 ScreeningStep.FLIPPER -> FlipperContent(s, viewModel)
-                ScreeningStep.GAZE_CALIBRATION -> GazeCalibrationContent(s, viewModel)
                 ScreeningStep.FIXATION -> FixationContent(s, viewModel)
                 ScreeningStep.FAR_FIXATION -> FarFixationContent(s, viewModel::startFarCountdown)
                 ScreeningStep.COVER -> CoverContent(s, viewModel)
@@ -441,46 +438,6 @@ private fun FixationTarget(diameterMm: Float, bright: Boolean, vm: ScreeningTest
 }
 
 @Composable
-internal fun GazeCalibrationContent(s: ScreeningState, vm: ScreeningTestViewModel) {
-    val colors = LocalEyeColors.current
-    var origin by remember { mutableStateOf(Offset.Zero) }
-    // 换点时外圈从大收拢，帮助视线找到新位置；圆点中心即上报位置，立即到位。
-    val reduced = com.zkyjss.eyeproject.core.designsystem.theme.rememberReducedMotion()
-    val halo = remember { androidx.compose.animation.core.Animatable(1f) }
-    // 补测轮重看同一点时 round 变化，也会重播动效并触发重绘上报位置。
-    LaunchedEffect(s.gazeCalibrationIndex, s.gazeCalibrationRound, s.gazeCalibrationFailed) {
-        if (reduced || s.gazeCalibrationFailed) halo.snapTo(1f) else {
-            halo.snapTo(2.4f)
-            halo.animateTo(1f, com.zkyjss.eyeproject.core.designsystem.theme.EyeMotion.settleSpring())
-        }
-    }
-    TestStageCard(expanded = true) {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            val configuration = LocalConfiguration.current
-            val expansion = if (configuration.screenHeightDp > configuration.screenWidthDp) 1.10f else 1f
-            val height = gazeCanvasBaseHeight(configuration.screenHeightDp.dp) * expansion + rememberStageExtra()
-            Canvas(Modifier.fillMaxWidth().height(height).clip(EyeShapes.medium).background(colors.black)
-                .onGloballyPositioned { origin = it.positionInWindow() }) {
-                val target = StrabismusGaze.calibrationTargets[s.gazeCalibrationIndex]
-                val inset = minOf(16.dp.toPx(), size.width / 2f, size.height / 2f)
-                val point = Offset((size.width * target.x).coerceIn(inset, size.width - inset),
-                    (size.height * target.y).coerceIn(inset, size.height - inset))
-                // 暂停时圆点变淡：位置不变，提示受试者校准在等待
-                val dim = if (s.gazeCalibrationPaused) 0.35f else 1f
-                drawCircle(colors.primary.copy(alpha = 0.18f * dim), radius = 16.dp.toPx() * halo.value, center = point)
-                drawCircle(colors.primary.copy(alpha = dim), radius = 8.dp.toPx(), center = point)
-                vm.reportGazeTarget(origin.x + point.x, origin.y + point.y)
-            }
-            StageCaption("注视校准 · ${s.gazeCalibrationIndex + 1}/${StrabismusGaze.calibrationTargets.size}")
-            if (s.gazeCalibrationFailed) {
-                EyeButton("继续测试", EyeButtonRole.PRIMARY, vm::continueWithoutCalibration, Modifier.fillMaxWidth())
-                EyeButton("重试注视校准", EyeButtonRole.SECONDARY, vm::retryGazeCalibration, Modifier.fillMaxWidth())
-            }
-        }
-    }
-}
-
-@Composable
 internal fun CoverContent(s: ScreeningState, vm: ScreeningTestViewModel) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
@@ -535,7 +492,7 @@ private fun CoverSequenceStrip(done: Int) {
 }
 
 @Composable
-private fun PursuitContent(s: ScreeningState, vm: ScreeningTestViewModel) {
+internal fun PursuitContent(s: ScreeningState, vm: ScreeningTestViewModel) {
     val colors = LocalEyeColors.current
     val metrics = LocalContext.current.resources.displayMetrics
     val pxPerMm = metrics.xdpi / 25.4f
@@ -561,7 +518,6 @@ private fun PursuitContent(s: ScreeningState, vm: ScreeningTestViewModel) {
                 val target = vm.engine.pursuitTargetAt(renderTime)
                 val x = size.width / 2f + degToPx(target.x * scale)
                 val y = size.height / 2f - degToPx(target.y * scale)
-                // 与注视标定使用相同的圆点和外圈；保留原有轨迹边界及位置上报。
                 drawCircle(colors.primary.copy(alpha = 0.18f), radius = 16.dp.toPx(), center = Offset(x, y))
                 drawCircle(colors.primary, radius = 8.dp.toPx(), center = Offset(x, y))
                 vm.reportGazeTarget(origin.x + x, origin.y + y)
@@ -589,7 +545,7 @@ internal fun ScreeningResultContent(s: ScreeningState, vm: ScreeningTestViewMode
     }
 }
 
-/** 追踪与注视校准共用的画布高度。 */
+/** 追踪画布高度。 */
 internal fun gazeCanvasBaseHeight(screenHeight: Dp): Dp =
     minOf(EyeControlSizes.gazeCanvasHeight, screenHeight * if (screenHeight < EyeControlSizes.gazeCanvasHeight) 0.52f else 0.72f).coerceAtLeast(EyeControlSizes.gazeCanvasMinHeight)
 
