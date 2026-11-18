@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 周、星期与三条曲线共用选择状态；缺测保留断点，不补造完整数据。
+/// 眨眼趋势按周与星期查看，缺测日期保持断点。
 struct V16WeeklyTrendView: View {
     let report: CareReport
     @State private var week = 0
@@ -23,33 +23,26 @@ struct V16WeeklyTrendView: View {
         let history = report.historyDays.isEmpty ? report.days : report.historyDays
         return dates.map { date in history.first { $0.id == key(date) } }
     }
-    private struct Metric {
-        let title: String; let unit: String; let values: [Double?]; let color: Color
-    }
-    private var metrics: [Metric] {
-        [Metric(title: "平均每日用屏",unit: "分钟",values: days.map { $0?.screenMinutes.map(Double.init) },color: EyeStyle.screen),
-         Metric(title: "平均连续使用时长",unit: "分钟",values: days.map { $0?.longestSessionMinutes.map(Double.init) },color: EyeStyle.sun),
-         Metric(title: "平均眨眼频率",unit: "次/分",values: days.map { $0?.blinksPerMinute },color: EyeStyle.ice)]
+    private var blinkValues: [Double?] {
+        days.map { $0?.blinksPerMinute }
     }
     var body: some View {
         SegmentedPicker(options: [(0,"本周"),(1,"上周")],selected: week) { week = $0 }
         Text("\(key(dates[0])) — \(key(dates[6]))").font(EyeStyle.subtitle)
         weekdays
-        ForEach(Array(metrics.enumerated()),id: \.offset) { _,metric in
-            WarmCard {
-                Text(metric.title).font(EyeStyle.subtitle)
-                let values = metric.values.compactMap { $0 }
-                Text(values.isEmpty ? "—" : "\(Int((values.reduce(0,+)/Double(values.count)).rounded())) \(metric.unit)")
+        WarmCard {
+            Text("平均眨眼频率").font(EyeStyle.subtitle)
+            let values = blinkValues.compactMap { $0 }
+            if values.isEmpty {
+                Text(week == 0 ? "本周暂无眨眼记录" : "上周暂无眨眼记录").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
+            } else {
+                Text("\(Int((values.reduce(0, +) / Double(values.count)).rounded())) 次/分")
                     .font(EyeStyle.metricValue).monospacedDigit()
-                if values.isEmpty { Text("暂无记录").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary) }
-                line(metric).frame(height: 112).accessibilityHidden(true)
-                weekdays
-                Text("\(key(dates[selected])) · \(metric.values[selected].map { "\(Int($0.rounded())) \(metric.unit)" } ?? "无记录")")
+                line(blinkValues).frame(height: 112).accessibilityHidden(true)
+                Text("\(key(dates[selected])) · \(blinkValues[selected].map { "\(Int($0.rounded())) 次/分" } ?? "无记录")")
                     .font(EyeStyle.body).monospacedDigit()
             }
         }
-        Text(metrics.allSatisfy { $0.values[selected] == nil } ? "这一天暂无可用记录。" : "当天原始读数见上方；平均值仅包含有记录的日期。")
-            .font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
     }
     private var weekdays: some View {
         ScrollView(.horizontal,showsIndicators: false) {
@@ -69,9 +62,9 @@ struct V16WeeklyTrendView: View {
             }
         }
     }
-    private func line(_ metric: Metric) -> some View {
+    private func line(_ values: [Double?]) -> some View {
         Canvas { context,size in
-            let maximum = max(1,metric.values.compactMap { $0 }.max() ?? 1)*1.1
+            let maximum = max(1,values.compactMap { $0 }.max() ?? 1)*1.1
             func point(_ i: Int,_ value: Double) -> CGPoint {
                 CGPoint(x: 6+(size.width-12)*CGFloat(i)/6,y: size.height-6-(size.height-12)*CGFloat(value/maximum))
             }
@@ -81,13 +74,13 @@ struct V16WeeklyTrendView: View {
                 context.stroke(grid,with: .color(EyeStyle.borderSubtle),lineWidth: 1)
             }
             var path = Path(); var connected = false
-            for (i,value) in metric.values.enumerated() {
+            for (i,value) in values.enumerated() {
                 guard let value else { connected = false; continue }
                 let p = point(i,value),r: CGFloat = selected == i ? 5 : 3
                 if connected { path.addLine(to: p) } else { path.move(to: p) }; connected = true
-                context.fill(Path(ellipseIn: CGRect(x: p.x-r,y: p.y-r,width: r*2,height: r*2)),with: .color(metric.color))
+                context.fill(Path(ellipseIn: CGRect(x: p.x-r,y: p.y-r,width: r*2,height: r*2)),with: .color(EyeStyle.ice))
             }
-            context.stroke(path,with: .color(metric.color),lineWidth: 2)
+            context.stroke(path,with: .color(EyeStyle.ice),lineWidth: 2)
         }
     }
 }

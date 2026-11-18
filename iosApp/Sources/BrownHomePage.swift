@@ -31,7 +31,9 @@ struct BrownHomePage: View {
     private var today: String {
         let f = DateFormatter(); f.locale = Locale(identifier: "zh_CN"); f.dateFormat = "M月d日 EEEE"; return f.string(from: Date())
     }
-    private func signal(_ key: String) -> String { report.signals.first { $0.id == key }?.value ?? "—" }
+    private var availableSignals: [CareReport.Signal] {
+        report.signals.filter { !["light", "screen", "longest", "night"].contains($0.id) }
+    }
     private var weekScores: [Int?] {
         var calendar = Calendar(identifier: .iso8601); calendar.timeZone = .current
         guard let monday = calendar.dateInterval(of: .weekOfYear, for: Date())?.start else { return Array(repeating: nil, count: 7) }
@@ -48,7 +50,7 @@ struct BrownHomePage: View {
                 WarmCard(fill: BrownStyle.hero, padding: 16, spacing: 2) {
                     HStack(spacing: 0) {
                         Text("今日用眼负荷").font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text)
-                        HelpButton(title: "今日用眼负荷", text: "根据已有用屏、休息与自测数据进行评估，不替代医学诊断。")
+                        HelpButton(title: "今日用眼负荷", text: "根据已有实时检测、打卡与自测数据进行评估，不替代医学诊断。")
                         Spacer(minLength: 0)
                         Button { allData = true } label: { Text("全部数据  ›").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.primary).frame(minHeight: 44) }.buttonStyle(.plain)
                     }
@@ -61,12 +63,6 @@ struct BrownHomePage: View {
                     }
                     LoadRail(score: report.score)
                     HStack { Text("较轻"); Spacer(); Text("较大") }.font(EyeStyle.caption).foregroundStyle(EyeStyle.secondary)
-                    Rectangle().fill(EyeStyle.borderSubtle).frame(height: 1).padding(.top, 4)
-                    HStack(alignment: .top, spacing: 16) {
-                        metric("环境光", signal("light"))
-                        Rectangle().fill(EyeStyle.borderSubtle).frame(width: 1, height: 54)
-                        metric("今日用屏", signal("screen"))
-                    }.padding(.top, 4)
                 }
                 quick("AI 问诊", BrownStyle.consult) { navigate(.chat) }
                 WarmCard(fill: BrownStyle.trend, spacing: 2) {
@@ -103,7 +99,7 @@ struct BrownHomePage: View {
         .fullScreenCover(isPresented: $exercise) { EyeExerciseView() }
         .fullScreenCover(isPresented: $allData) {
             NavigationStack {
-                SubPage(title: "全部数据") { ForEach(report.signals) { item in ListRow(title: item.label, value: item.value) } }
+                SubPage(title: "全部数据") { ForEach(availableSignals) { item in ListRow(title: item.label, value: item.value) } }
                     .toolbar { ToolbarItem(placement: .navigationBarLeading) { Button("关闭") { allData = false } } }
             }
         }
@@ -141,9 +137,6 @@ struct BrownHomePage: View {
             Text(grade).font(report.score == nil ? EyeStyle.title : EyeStyle.display).foregroundStyle(tone).fixedSize(horizontal: true, vertical: false)
             Button(action: rescan) { Label(report.score == nil ? "检测" : "复测", systemImage: "arrow.clockwise").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary).padding(.vertical, 8) }.buttonStyle(.plain)
         }
-    }
-    private func metric(_ title: String, _ value: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) { Text(title).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary); EyeStyle.reading(value).lineLimit(1).minimumScaleFactor(0.7) }.frame(maxWidth: .infinity, alignment: .leading)
     }
     private func quick(_ title: String, _ fill: LinearGradient, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
