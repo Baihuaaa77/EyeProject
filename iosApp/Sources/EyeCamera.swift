@@ -119,6 +119,7 @@ final class EyeCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
     private var pressureObservation: NSKeyValueObservation?
     private var pressureThrottled = false
     private var notificationTokens: [NSObjectProtocol] = []
+    private var videoOrientation: AVCaptureVideoOrientation = .portrait
 
     override init() {
         super.init()
@@ -174,6 +175,17 @@ final class EyeCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
         get { let value = UserDefaults.standard.float(forKey: "eye.distanceScale"); return value > 0 ? value : 1 }
         set { UserDefaults.standard.set(newValue, forKey: "eye.distanceScale") }
     }
+    /// 独立注视实验按当前界面方向分析，默认仍为主 App 使用的竖屏。
+    func setVideoOrientation(_ orientation: AVCaptureVideoOrientation) {
+        queue.async {
+            self.videoOrientation = orientation
+            for output in self.session.outputs {
+                guard let connection = output.connection(with: .video), connection.isVideoOrientationSupported else { continue }
+                connection.videoOrientation = orientation
+            }
+        }
+    }
+
     func start() {
         requestLock.lock(); requestNumber += 1; let ticket = requestNumber; requestLock.unlock()
         switch AVCaptureDevice.authorizationStatus(for: .video) {
@@ -219,7 +231,7 @@ final class EyeCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
                 session.sessionPreset = session.canSetSessionPreset(requested) ? requested
                     : session.canSetSessionPreset(.hd1920x1080) ? .hd1920x1080 : .hd1280x720
                 if let connection = output.connection(with: .video) {
-                    if connection.isVideoOrientationSupported { connection.videoOrientation = .portrait }
+                    if connection.isVideoOrientationSupported { connection.videoOrientation = videoOrientation }
                     if connection.isVideoMirroringSupported { connection.automaticallyAdjustsVideoMirroring = false; connection.isVideoMirrored = false }
                     if connection.isCameraIntrinsicMatrixDeliverySupported { connection.isCameraIntrinsicMatrixDeliveryEnabled = true }
                 }

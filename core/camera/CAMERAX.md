@@ -20,6 +20,8 @@
 | `CameraIntrinsicsProvider` | 读取前置相机焦距：`focalLengthPx(analysisWidth): Float`（失败返回 0） |
 | `FaceLandmarkerAnalyzer` | `ImageAnalysis.Analyzer` 实现，由 `CameraController` 内部创建，业务层不直接接触 |
 
+仅使用关键点的独立注视实验可以传入 `measureOptics = false`，略过普通分辨率路径中的光学计算。
+
 ## 数据流
 
 ```mermaid

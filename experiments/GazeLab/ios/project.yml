@@ -1,0 +1,48 @@
+name: GazeLab
+options:
+  deploymentTarget: {iOS: "16.0"}
+  xcodeVersion: "26.4"
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    TARGETED_DEVICE_FAMILY: "1"
+    FRAMEWORK_SEARCH_PATHS: "$(inherited) $(SRCROOT)/../../../shared/screening/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)"
+    OTHER_LDFLAGS: "$(inherited) -framework EyeScreening -lc++"
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+targets:
+  GazeLab:
+    type: application
+    platform: iOS
+    sources:
+      - Sources
+      - ../../../iosApp/Sources/EyeCamera.swift
+      - ../../../core/designsystem/ios/CornealLabStyle.swift
+      - path: ../../../core/camera/src/main/assets/face_landmarker.task
+        buildPhase: resources
+    info:
+      path: Info.plist
+      properties:
+        CFBundleDisplayName: 屏幕注视追踪
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        NSCameraUsageDescription: 在本机使用前置摄像头估计并显示屏幕上的注视点。
+        UIUserInterfaceStyle: Dark
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UILaunchScreen: {}
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.zkyjss.gazelab
+        GENERATE_INFOPLIST_FILE: NO
+    preBuildScripts:
+      - name: 构建共用注视核心
+        script: |
+          set -eu
+          cd "$SRCROOT/../../.."
+          ./gradlew -p shared :screening:embedAndSignAppleFrameworkForXcode
+        basedOnDependencyAnalysis: false
+    scheme: {}

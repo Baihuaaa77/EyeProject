@@ -17,6 +17,7 @@
 |---|---|
 | `BlinkDetector` | EAR 眨眼检测：EAR = (‖p2−p6‖+‖p3−p5‖)/(2‖p1−p4‖)，阈值 0.23、连续 3 帧判闭眼，回升记一次眨眼。`update(ear)` 逐帧驱动、`blinkCount` 累计、`reset()` 每采样区间清零、`interrupt()` 跟踪中断时只清闭眼状态；伴生对象提供 `averageEar` / `ear` |
 | `DepthFromIris` | object：距离(cm) = 虹膜物理直径 11.7mm × 焦距(px) / 虹膜像素直径(px) / 10 |
+| `ScreenGazeSession` | 独立注视应用的九点标定、姿势匹配、落点估计和独立验点。由安卓和 iOS 的界面线程驱动 |
 
 ### 系统能力接口（实现在 app 层，经 Hilt 绑定）
 
