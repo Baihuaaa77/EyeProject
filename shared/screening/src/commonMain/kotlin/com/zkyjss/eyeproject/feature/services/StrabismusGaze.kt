@@ -258,7 +258,7 @@ object PursuitGazeCheck {
     }
 }
 
-/** 三帧中值去除跳点，再按真实时间低通；短眨眼在显示层沿用上次稳定值。 */
+/** 五帧中值去除跳点，再按真实时间低通；短眨眼在显示层沿用上次稳定值。 */
 internal class GazeSmoother {
     /** 五帧中值去掉单帧跳点，再用较慢的时间常数保留真正的扫视。 */
     private val window = ArrayDeque<GazePoint>(5)

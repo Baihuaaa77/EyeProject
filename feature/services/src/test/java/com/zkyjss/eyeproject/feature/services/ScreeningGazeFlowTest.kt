@@ -116,15 +116,23 @@ class ScreeningGazeFlowTest {
                 eye("RIGHT", 300f, rightX, rightY), headPose = HeadPoseEstimate(0f, 0f, 0f))
             process.invoke(vm.engine, now, ScreeningStep.COVER, FaceLandmarkFrame(listOf(face), 400, 400, now, 0L, 10f))
         }
-        repeat(30) { feed(0.09f, 0.15f) }  // 看偏持续 2.5 秒以上才提醒
-        assertTrue(vm.state.value.gazeWarning!!.contains("偏离"))
         @Suppress("UNCHECKED_CAST")
         val samples = field("samples").get(vm.engine) as List<EyeMotionSample>
+        // 任务开始时看住目标，用未遮眼建立动态偏移；初始映射偏右不算看偏。
+        repeat(14) { feed(0.08f, 0f) }
+        assertEquals(true, samples.last().gazeOnTarget)
+        assertNull(samples.last().leftGazeX)
+        assertNull(vm.state.value.gazeWarning)
+
+        // 遮眼侧的预测仍居中，但未遮眼在基线建立后持续看偏。
+        repeat(40) { feed(0.20f, 0.16f) }
         assertEquals(false, samples.last().gazeOnTarget)
         assertNull(samples.last().leftGazeX)
-        repeat(4) { feed(0f, 0f) }
-        assertEquals("抗噪短窗口结束后应恢复注视估计",true,samples.last().gazeOnTarget)
-        repeat(8) { feed(0f,0f) }
+        assertTrue(vm.state.value.gazeWarning.orEmpty().contains("偏离"))
+
+        repeat(12) { feed(0.08f, 0f) }
+        assertEquals("抗噪短窗口结束后应恢复注视估计", true, samples.last().gazeOnTarget)
+        assertNull(vm.state.value.gazeWarning)
         assertFalse("恢复注视不能被误判成手机或头部移动",vm.state.value.stabilityInterrupted)
         vm.interruptTest()
     }

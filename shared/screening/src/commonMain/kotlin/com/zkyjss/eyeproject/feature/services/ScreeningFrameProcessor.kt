@@ -207,8 +207,8 @@ internal class ScreeningFrameProcessor(private val host: ScreeningEngine) {
             if (gaze != null && step in setOf(ScreeningStep.FIXATION, ScreeningStep.COVER, ScreeningStep.PURSUIT))
                 gazeDrift.begin(step, time)
             val correctedEstimate = gazeDrift.update(time, fusedEstimate, targetForDrift)
-            // 遮盖时手部会挡住目标，注视监督只用于看近和跟随；去遮盖事件由眼位窗口单独分析。
-            val gazeOnTarget = rendered?.takeUnless { step == ScreeningStep.FAR_FIXATION || step == ScreeningStep.COVER }?.let { target ->
+            // 遮盖时以未遮眼的纠偏估计发出提醒；缺测保留为空，去遮盖眼动由映光独立评估。
+            val gazeOnTarget = rendered?.takeUnless { step == ScreeningStep.FAR_FIXATION }?.let { target ->
                 correctedEstimate?.let { StrabismusGaze.onTarget(it, target.point) }
             }
             if (_state.value.kind == ScreeningKind.STRABISMUS) diagnostics.frame(frame,
@@ -266,7 +266,7 @@ internal class ScreeningFrameProcessor(private val host: ScreeningEngine) {
                     }
                 }
                 if (_state.value.kind == ScreeningKind.STRABISMUS &&
-                    step in setOf(ScreeningStep.FIXATION, ScreeningStep.PURSUIT)) {
+                    step in setOf(ScreeningStep.FIXATION, ScreeningStep.COVER, ScreeningStep.PURSUIT)) {
                     if (time - lastGazeFrameMs > 500L) gazeBadSinceMs = null
                     lastGazeFrameMs = time
                     if (step == ScreeningStep.PURSUIT && time - lastPursuitCheckMs >= 500L) {

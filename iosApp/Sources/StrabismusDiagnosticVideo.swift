@@ -369,7 +369,7 @@ enum DiagnosticPanelRenderer {
             UIColor.black.setFill(); UIBezierPath(roundedRect: phone, cornerRadius: 20).fill()
             UIColor(EyeStyle.secondary).setStroke(); UIBezierPath(roundedRect: phone, cornerRadius: 20).stroke()
             text("手机屏幕 · 全屏坐标", CGRect(x: 968, y: 12, width: 300, height: 28))
-            for (key, color, radius) in [("target", UIColor(EyeStyle.primary), CGFloat(7)), ("gaze", UIColor(EyeStyle.diagnosticReference), CGFloat(7))] {
+            for (key, color, radius) in [("target", UIColor(EyeStyle.primary), CGFloat(7)), ("gaze", EyeStyle.diagnosticReference, CGFloat(7))] {
                 if key == "target" && row["targetVisible"] as? Bool == false { continue }
                 let color = key == "target" && row["targetColor"] as? String == "white" ? EyeStyle.diagnosticGlint : color
                 guard let a = row[key] as? [NSNumber], a.count >= 2 else { continue }
