@@ -9,100 +9,76 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import com.zkyjss.eyeproject.core.designsystem.theme.EyeBrown
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
-import com.zkyjss.eyeproject.core.eyecare.EyeCareReport
+import com.zkyjss.eyeproject.core.eyecare.DailyEyeRecord
 import com.zkyjss.eyeproject.core.ui.component.*
-import java.time.LocalDate
 import kotlinx.coroutines.launch
 
-private val metrics = listOf(
-    "screen" to "今日用屏",
-    "longest" to "最长连续使用",
-    "light" to "环境光",
-    "brightness" to "屏幕亮度",
-    "distance" to "用眼距离",
-    "night" to "夜间使用",
-)
-
 @Composable
-internal fun V16DailyRecords(report: EyeCareReport?, onBack: () -> Unit, openUsageAccess: (() -> Unit)?) {
-    var offset by rememberSaveable { mutableIntStateOf(0) }
-    var detail by rememberSaveable { mutableStateOf<Int?>(null) }
-    val today = LocalDate.now()
-    val date = today.plusDays(offset.toLong())
-    val history = report?.trend?.historyDays.orEmpty()
-    val day = history.firstOrNull { it.day == date.toString() }
+internal fun V16DailyRecords(
+    records: List<DailyEyeRecord>,
+    detail: Int?,
+    onOpenDetail: (Int) -> Unit,
+    onBack: () -> Unit,
+    openUsageAccess: (() -> Unit)?,
+) {
+    var selectedDate by rememberSaveable { mutableStateOf<String?>(null) }
+    val dateIndex = records.indexOfFirst { it.day == selectedDate }
+        .takeIf { it >= 0 } ?: records.lastIndex
+    val day = records.getOrNull(dateIndex)
+    val metrics = day?.metrics.orEmpty()
+    val item = detail?.let(metrics::getOrNull)
     val colors = LocalEyeColors.current
     val type = LocalEyeTypography.current
-    val total = metrics.size
-    val middle = (Int.MAX_VALUE / 2 / total) * total
-    val pager = rememberPagerState(initialPage = middle) { Int.MAX_VALUE }
+    val pager = rememberPagerState { metrics.size }
     val scope = rememberCoroutineScope()
-    val selected = pager.currentPage % total
-    val signals = report?.signals.orEmpty().associateBy { it.key }
 
-    fun value(index: Int): String {
-        val key = metrics[index].first
-        if (offset == 0) return signals[key]?.value ?: "—"
-        val minutes = when (key) {
-            "screen" -> day?.screenMinutes
-            "longest" -> day?.longestSessionMinutes
-            "night" -> day?.nightMinutes
-            else -> null
-        }
-        return minutes?.let { "${it / 60}小时${it % 60}分" } ?: "—"
-    }
-
-    EyeSubPage(detail?.let { metrics[it].second } ?: "用眼全记录", {
-        if (detail != null) detail = null else onBack()
-    }) {
-        val item = detail
-        if (item != null) {
+    EyeSubPage(item?.title ?: "用眼全记录", onBack) {
+        if (day == null) {
+            EyeWarmCard { EyeText("正在读取记录…", style = type.body, color = colors.textSecondary) }
+        } else if (item != null) {
             EyeWarmCard {
-                EyeText("${date.monthValue}月${date.dayOfMonth}日", style = type.label, color = colors.textSecondary)
-                EyeText(value(item), style = type.display, color = colors.textPrimary)
-                if (offset == 0) signals[metrics[item].first]?.note?.takeIf { it.isNotBlank() }?.let {
-                    EyeText(it, style = type.body, color = colors.textSecondary)
-                }
+                EyeText(day.dateLabel, style = type.label, color = colors.textSecondary)
+                EyeText(item.value ?: "暂无记录", style = type.metricValue, color = colors.textPrimary)
+                EyeText(item.note, style = type.body, color = colors.textSecondary)
             }
         } else {
+            EyeText(day.dateLabel, style = type.subtitle, color = colors.textPrimary)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                EyeButton("前一天", EyeButtonRole.SECONDARY, { offset-- }, Modifier.weight(1f), offset > -13)
-                EyeButton("后一天", EyeButtonRole.SECONDARY, { offset++ }, Modifier.weight(1f), offset < 0)
+                EyeButton("前一天", EyeButtonRole.SECONDARY, {
+                    selectedDate = records.getOrNull(dateIndex - 1)?.day
+                }, Modifier.weight(1f), dateIndex > 0)
+                EyeButton("后一天", EyeButtonRole.SECONDARY, {
+                    selectedDate = records.getOrNull(dateIndex + 1)?.day
+                }, Modifier.weight(1f), dateIndex < records.lastIndex)
             }
             EyeWarmCard {
-                EyeText("${date.monthValue}月${date.dayOfMonth}日用眼负荷", style = type.subtitle, color = colors.textPrimary)
-                EyeText(day?.score?.let { "$it / 100" } ?: "—", style = type.metricValue, color = colors.textPrimary)
-                if (offset == 0) report?.tips?.firstOrNull()?.text?.let {
+                EyeText("用眼负荷", style = type.subtitle, color = colors.textPrimary)
+                val score = day.score
+                EyeText(score?.let { "$it / 100" } ?: "暂无记录", style = type.metricValue,
+                    color = score?.let(EyeBrown::loadColor) ?: colors.textSecondary)
+                day.tip?.takeIf { score != null }?.let {
                     EyeText(it, style = type.body, color = colors.textSecondary)
                 }
             }
-            BoxWithConstraints(Modifier.fillMaxWidth()) {
-                HorizontalPager(
-                    state = pager,
-                    contentPadding = PaddingValues(end = maxWidth / 3),
-                    pageSpacing = 10.dp,
-                ) { page ->
-                    val index = page % total
-                    EyeWarmCard(Modifier.clickable(role = Role.Button) {
-                        scope.launch { pager.scrollToPage(page) }
-                        detail = index
-                    }) {
-                        EyeText(metrics[index].second, style = type.navigationTitle, color = colors.textPrimary)
-                        EyeText(value(index), style = type.metricValue, color = colors.textPrimary)
-                    }
+            HorizontalPager(state = pager) { index ->
+                val metric = metrics[index]
+                EyeWarmCard(Modifier.clickable(role = Role.Button) { onOpenDetail(index) }) {
+                    EyeText(metric.title, style = type.navigationTitle, color = colors.textPrimary)
+                    EyeText(metric.value ?: "暂无记录", style = type.metricValue, color = colors.textPrimary)
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 EyeButton("上一项", EyeButtonRole.SECONDARY, {
                     scope.launch { pager.animateScrollToPage(pager.currentPage - 1) }
-                }, Modifier.weight(1f))
+                }, Modifier.weight(1f), pager.currentPage > 0)
                 EyeButton("下一项", EyeButtonRole.SECONDARY, {
                     scope.launch { pager.animateScrollToPage(pager.currentPage + 1) }
-                }, Modifier.weight(1f))
+                }, Modifier.weight(1f), pager.currentPage < metrics.lastIndex)
             }
-            EyeText("${selected + 1} / $total", style = type.caption, color = colors.textSecondary)
+            EyeText("${pager.currentPage + 1} / ${metrics.size}", style = type.caption, color = colors.textSecondary)
             openUsageAccess?.let { EyeButton("开启用屏统计", EyeButtonRole.SECONDARY, it) }
         }
     }

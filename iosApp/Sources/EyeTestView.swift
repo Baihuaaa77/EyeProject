@@ -108,7 +108,10 @@ struct EyeTestView: View {
             .background(EyeStyle.background.ignoresSafeArea())
             // 系统设置以完整页面盖在测试上（不用底部弹窗），右上角「完成」回到测试
             .fullScreenCover(isPresented: $settingsOpen) {
-                NavigationStack { SystemSettingsPage(voice: runtime.voice, feedback: runtime.feedback, inTest: true) }.tint(EyeStyle.primary)
+                NavigationStack {
+                    SystemSettingsPage(voice: runtime.voice, feedback: runtime.feedback, inTest: true,
+                        testVoiceAnswers: runtime.kind == "PRESBYOPIA" ? $runtime.voiceAnswersForThisTest : nil)
+                }.tint(EyeStyle.primary)
             }
             .sheet(isPresented: $diagnosticsOpen) { StrabismusDiagnosticLibrary() }
             .sheet(isPresented: $helpOpen, onDismiss: { runtime.setHelpPresented(false) }) {

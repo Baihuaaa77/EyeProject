@@ -14,6 +14,14 @@ struct CareReport {
     struct Day: Identifiable {
         let id: String; let label: String; let blinksPerMinute: Double?; let score: Int?; var screenMinutes: Int? = nil; var longestSessionMinutes: Int? = nil; var nightMinutes: Int? = nil
     }
+    struct DailyMetric { let title: String; let value: String?; let note: String }
+    struct DailyRecord: Identifiable {
+        let id: String
+        let dateLabel: String
+        let score: Int?
+        let tip: String?
+        let metrics: [DailyMetric]
+    }
 
     var level = "UNKNOWN"
     var score: Int?
@@ -27,7 +35,7 @@ struct CareReport {
     var tips: [Tip] = []
     var consults: [Consult] = []
     var days: [Day] = []
-    var historyDays: [Day] = []
+    var dailyRecords: [DailyRecord] = []
     var summary: [String] = []
     var checkInDays = 0
     var symptomDays = 0
@@ -66,7 +74,14 @@ struct CareReport {
         let trend = o["trend"] as? [String: Any] ?? [:]
         days = list("days", trend).map { d in Day(id: d["day"] as? String ?? UUID().uuidString, label: d["label"] as? String ?? "",
             blinksPerMinute: (d["blinksPerMinute"] as? NSNumber)?.doubleValue, score: d["score"] as? Int, screenMinutes: d["screenMinutes"] as? Int) }
-        historyDays = list("historyDays",trend).map { d in Day(id: d["day"] as? String ?? "",label: d["label"] as? String ?? "",blinksPerMinute: (d["blinksPerMinute"] as? NSNumber)?.doubleValue,score: d["score"] as? Int,screenMinutes: d["screenMinutes"] as? Int,longestSessionMinutes: d["longestSessionMinutes"] as? Int, nightMinutes: d["nightMinutes"] as? Int) }
+        dailyRecords = list("dailyRecords", o).compactMap { day in
+            guard let id = day["day"] as? String, let label = day["dateLabel"] as? String else { return nil }
+            let metrics = list("metrics", day).compactMap { metric -> DailyMetric? in
+                guard let title = metric["title"] as? String else { return nil }
+                return DailyMetric(title: title, value: metric["value"] as? String, note: metric["note"] as? String ?? "")
+            }
+            return DailyRecord(id: id, dateLabel: label, score: day["score"] as? Int, tip: day["tip"] as? String, metrics: metrics)
+        }
         summary = trend["summary"] as? [String] ?? []
         checkInDays = trend["checkInDays"] as? Int ?? 0
         symptomDays = trend["symptomDays"] as? Int ?? 0

@@ -2,98 +2,88 @@ import SwiftUI
 
 struct DailyRecordsView: View {
     let report: CareReport
-    @State private var offset = 0
-    @State private var selected = 0
-    @State private var detail: Int?
-    private let metrics = [
-        ("screen", "今日用屏"), ("longest", "最长连续使用"), ("light", "环境光"),
-        ("brightness", "屏幕亮度"), ("distance", "用眼距离"), ("night", "夜间使用")
-    ]
+    let onClose: () -> Void
+    @State private var selectedDate: String?
+    @State private var selectedMetric = 0
+    @State private var detail: CareReport.DailyMetric?
 
-    private var date: Date { Calendar.current.date(byAdding: .day, value: offset, to: Date()) ?? Date() }
-    private var day: CareReport.Day? {
-        let formatter = DateFormatter()
-        formatter.calendar = Calendar(identifier: .gregorian)
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "yyyy-MM-dd"
-        return report.historyDays.first { $0.id == formatter.string(from: date) }
-    }
-    private var dateLabel: String {
-        let parts = Calendar(identifier: .gregorian).dateComponents([.month, .day], from: date)
-        return "\(parts.month ?? 0)月\(parts.day ?? 0)日"
+    private var dateIndex: Int? {
+        report.dailyRecords.firstIndex { $0.id == selectedDate } ?? report.dailyRecords.indices.last
     }
 
     var body: some View {
         SubPage(title: "用眼全记录") {
-            HStack {
-                Button("前一天") { offset -= 1 }.buttonStyle(EyeButtonStyle(role: .secondary)).disabled(offset <= -13)
-                Button("后一天") { offset += 1 }.buttonStyle(EyeButtonStyle(role: .secondary)).disabled(offset >= 0)
-            }
-            WarmCard {
-                Text(dateLabel + "用眼负荷").font(EyeStyle.subtitle)
-                EyeStyle.reading(day?.score.map { "\($0) / 100" } ?? "—")
-                if offset == 0, let tip = report.tips.first { Text(tip.text).font(EyeStyle.body).foregroundStyle(EyeStyle.secondary) }
-            }
-            GeometryReader { geometry in
-                let width = geometry.size.width * 2 / 3
-                HStack(alignment: .top, spacing: 10) {
-                    tile(selected).frame(width: width)
-                    tile((selected + 1) % metrics.count).frame(width: width)
+            if let dateIndex {
+                let day = report.dailyRecords[dateIndex]
+                Text(day.dateLabel).font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text)
+                HStack(spacing: EyeSpacing.itemGap) {
+                    Button("前一天") { moveDate(from: dateIndex, by: -1) }
+                        .buttonStyle(EyeButtonStyle(role: .secondary)).disabled(dateIndex == 0)
+                    Button("后一天") { moveDate(from: dateIndex, by: 1) }
+                        .buttonStyle(EyeButtonStyle(role: .secondary)).disabled(dateIndex == report.dailyRecords.count - 1)
                 }
-                .frame(width: geometry.size.width, alignment: .leading)
-                .clipped()
-                .contentShape(Rectangle())
-                .simultaneousGesture(DragGesture(minimumDistance: 25).onEnded { gesture in
-                    let delta = gesture.translation
-                    guard abs(delta.width) > abs(delta.height) else { return }
-                    move(delta.width < 0 ? 1 : -1)
-                })
-            }.frame(height: 116)
-            HStack {
-                Button("上一项") { move(-1) }.buttonStyle(EyeButtonStyle(role: .secondary))
-                Button("下一项") { move(1) }.buttonStyle(EyeButtonStyle(role: .secondary))
+                WarmCard {
+                    Text("用眼负荷").font(EyeStyle.subtitle)
+                    Text(day.score.map { "\($0) / 100" } ?? "暂无记录").font(EyeStyle.display)
+                        .foregroundStyle(day.score.map(BrownStyle.loadColor) ?? EyeStyle.secondary)
+                    if day.score != nil, let tip = day.tip {
+                        Text(tip).font(EyeStyle.body).foregroundStyle(EyeStyle.secondary)
+                    }
+                }
+                if !day.metrics.isEmpty { metricPager(day.metrics) }
+            } else {
+                WarmCard { Text("正在读取记录…").font(EyeStyle.body).foregroundStyle(EyeStyle.secondary) }
             }
-            Text("\(selected + 1) / \(metrics.count)").font(EyeStyle.caption).foregroundStyle(EyeStyle.secondary)
         }
-        .navigationDestination(isPresented: Binding(get: { detail != nil }, set: { if !$0 { detail = nil } })) {
-            if let detail {
-                SubPage(title: metrics[detail].1) {
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                if detail == nil { Button("关闭", action: onClose) }
+            }
+        }
+        .navigationDestination(isPresented: Binding(
+            get: { detail != nil }, set: { if !$0 { detail = nil } }
+        )) {
+            if let detail, let dateIndex {
+                SubPage(title: detail.title) {
                     WarmCard {
-                        Text(dateLabel).font(EyeStyle.bodySecondary)
-                        EyeStyle.reading(value(detail), numberFont: EyeStyle.display)
-                        if offset == 0, let note = signal(detail)?.note, !note.isEmpty {
-                            Text(note).font(EyeStyle.body).foregroundStyle(EyeStyle.secondary)
-                        }
+                        Text(report.dailyRecords[dateIndex].dateLabel).font(EyeStyle.bodySecondary)
+                        Text(detail.value ?? "暂无记录").font(EyeStyle.display)
+                        Text(detail.note).font(EyeStyle.body).foregroundStyle(EyeStyle.secondary)
                     }
                 }
             }
         }
     }
 
-    private func tile(_ index: Int) -> some View {
-        Button { selected = index; detail = index } label: {
-            WarmCard {
-                Text(metrics[index].1).font(EyeStyle.navigationTitle).foregroundStyle(EyeStyle.text)
-                EyeStyle.reading(value(index))
+    private func moveDate(from index: Int, by step: Int) {
+        let next = index + step
+        if report.dailyRecords.indices.contains(next) { selectedDate = report.dailyRecords[next].id }
+    }
+
+    private func metricPager(_ metrics: [CareReport.DailyMetric]) -> some View {
+        let index = min(selectedMetric, metrics.count - 1)
+        let metric = metrics[index]
+        return VStack(alignment: .leading, spacing: EyeSpacing.itemGap) {
+            Button { detail = metric } label: {
+                WarmCard {
+                    Text(metric.title).font(EyeStyle.navigationTitle)
+                    Text(metric.value ?? "暂无记录").font(EyeStyle.display)
+                }
+                .foregroundStyle(EyeStyle.text)
+                .contentShape(Rectangle())
             }
-        }.buttonStyle(.plain)
-    }
-
-    private func move(_ step: Int) {
-        selected = (metrics.count + selected + step) % metrics.count
-    }
-
-    private func signal(_ index: Int) -> CareReport.Signal? { report.signals.first { $0.id == metrics[index].0 } }
-
-    private func value(_ index: Int) -> String {
-        if offset == 0 { return signal(index)?.value ?? "—" }
-        let minutes = switch metrics[index].0 {
-        case "screen": day?.screenMinutes
-        case "longest": day?.longestSessionMinutes
-        case "night": day?.nightMinutes
-        default: nil as Int?
+            .buttonStyle(.plain)
+            .simultaneousGesture(DragGesture(minimumDistance: 30).onEnded { gesture in
+                guard abs(gesture.translation.width) > abs(gesture.translation.height) else { return }
+                selectedMetric = max(0, min(index + (gesture.translation.width < 0 ? 1 : -1), metrics.count - 1))
+            })
+            HStack(spacing: EyeSpacing.itemGap) {
+                Button("上一项") { selectedMetric = index - 1 }
+                    .buttonStyle(EyeButtonStyle(role: .secondary)).disabled(index == 0)
+                Button("下一项") { selectedMetric = index + 1 }
+                    .buttonStyle(EyeButtonStyle(role: .secondary)).disabled(index == metrics.count - 1)
+            }
+            Text("\(index + 1) / \(metrics.count)").font(EyeStyle.caption).foregroundStyle(EyeStyle.secondary)
         }
-        guard let minutes else { return "—" }
-        return "\(minutes / 60)小时\(minutes % 60)分"
     }
 }

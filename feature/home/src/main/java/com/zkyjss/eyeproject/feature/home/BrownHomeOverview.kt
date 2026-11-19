@@ -42,6 +42,7 @@ internal fun BrownHomeOverview(
     var careTimer by rememberSaveable { mutableStateOf<String?>(null) }
     var booking by rememberSaveable { mutableStateOf(false) }
     var allData by rememberSaveable { mutableStateOf(false) }
+    var recordDetail by rememberSaveable { mutableStateOf<Int?>(null) }
     var liveRequests by rememberSaveable { mutableIntStateOf(0) }
     val live = remember { BringIntoViewRequester() }
     val scope = rememberCoroutineScope()
@@ -130,8 +131,8 @@ internal fun BrownHomeOverview(
             }
             EyeLoadRail(report?.score, tone = signalColor)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                EyeText("较轻", style = t.caption, color = c.textSecondary)
-                EyeText("较大", style = t.caption, color = c.textSecondary)
+                EyeText("较轻", style = t.caption, color = EyeBrown.loadLow)
+                EyeText("较大", style = t.caption, color = EyeBrown.loadHigh)
             }
             Box(Modifier.fillMaxWidth().padding(top = 4.dp).height(1.dp).background(c.borderSubtle))
             Row(Modifier.fillMaxWidth().padding(top = 2.dp).height(IntrinsicSize.Min)) {
@@ -236,12 +237,14 @@ internal fun BrownHomeOverview(
             hint = when (key) { "闭眼休息" -> "轻轻闭眼。\n让眼睛休息30秒。"; "热敷眼睛" -> "可用干净的温湿毛巾，也可选眼部专用热敷眼罩，按说明加热和清洁。\n先试温，温热不烫再轻放在闭合的眼睑上；感到烫或不舒服就取下。"; else -> "看向6米外的远处。\n放松视线，持续20秒。" },
             onComplete = { actions.careCheckIn(key) })
     }
-    if (allData)
-        EyeFullScreenPage({ allData = false }) {
-            V16DailyRecords(report, { allData = false }, actions.openUsageAccess.takeIf {
+    if (allData) {
+        val back: () -> Unit = { if (recordDetail != null) recordDetail = null else allData = false }
+        EyeFullScreenPage(back) {
+            V16DailyRecords(report?.dailyRecords.orEmpty(), recordDetail, { recordDetail = it }, back, actions.openUsageAccess.takeIf {
                 state.usageAccess == com.zkyjss.eyeproject.core.eyecare.EyeCareEngine.ACCESS_DENIED
             })
         }
+    }
 }
 
 @Composable

@@ -51,7 +51,11 @@ struct BrownHomePage: View {
                         VStack { reading { liveRequests += 1 }; LoadEyeArtwork(level: report.level).frame(height: 112) }
                     }
                     LoadRail(score: report.score, tone: tone)
-                    HStack { Text("较轻"); Spacer(); Text("较大") }.font(EyeStyle.caption).foregroundStyle(EyeStyle.secondary)
+                    HStack {
+                        Text("较轻").foregroundStyle(BrownStyle.loadLow)
+                        Spacer()
+                        Text("较大").foregroundStyle(BrownStyle.loadHigh)
+                    }.font(EyeStyle.caption)
                 }
                 HStack(spacing: EyeSpacing.itemGap) {
                     Button("AI问诊") { navigate(.chat) }.buttonStyle(EyeButtonStyle())
@@ -83,8 +87,7 @@ struct BrownHomePage: View {
         .fullScreenCover(isPresented: $exercise) { EyeExerciseView() }
         .fullScreenCover(isPresented: $allData) {
             NavigationStack {
-                DailyRecordsView(report: report)
-                    .toolbar { ToolbarItem(placement: .navigationBarLeading) { Button("关闭") { allData = false } } }
+                DailyRecordsView(report: report, onClose: { allData = false })
             }
         }
         .fullScreenCover(isPresented: Binding(get: { careTimer != nil },set: { if !$0 { careTimer = nil } })) {

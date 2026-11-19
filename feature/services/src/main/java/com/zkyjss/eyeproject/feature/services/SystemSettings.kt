@@ -53,7 +53,11 @@ fun SystemSettingsScreen(onBack: () -> Unit, onOpenAccount: () -> Unit = {}, onO
     val voiceAnswer = rememberVoiceAnswer(active = false, voice = null, enabled = settings.answersEnabled) {}
     val context = LocalContext.current
     val version = remember {
-        runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull().orEmpty()
+        runCatching {
+            val info = context.packageManager.getPackageInfo(context.packageName, 0)
+            val build = androidx.core.content.pm.PackageInfoCompat.getLongVersionCode(info)
+            "${info.versionName ?: "—"} ($build)"
+        }.getOrNull().orEmpty()
     }
     EyeSubPage("系统设置", onBack) {
         TestSettingsContent(settings, voiceAnswer)

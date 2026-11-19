@@ -26,6 +26,8 @@ final class EyeRuntime: ObservableObject {
     private var closed = false
     private var isForeground = true
     private var settingsPresented = false
+    @Published var voiceAnswersForThisTest = false
+    private var allowsVoiceAnswer: Bool { kind != "PRESBYOPIA" || voiceAnswersForThisTest }
     private lazy var presentation = FramePresentationMarker { [weak self] id in
         guard let self = self, !self.closed, self.isForeground else { return }
         self.controller.markPresented(trialId: id)
@@ -82,7 +84,11 @@ final class EyeRuntime: ObservableObject {
         camera.onError = { [weak self] message in
             DispatchQueue.main.async { self?.error = message; self?.controller.cameraFailed(message: message) }
         }
-        voice.onAnswer = { [weak self] text, echo in Int(self?.controller.voiceAnswer(text: text, echoOf: echo) ?? 0) }
+        voice.onAnswer = { [weak self] text, echo in
+            guard let self, self.isForeground, !self.closed, !self.settingsPresented,
+                self.allowsVoiceAnswer, self.voice.answersEnabled else { return 0 }
+            return Int(self.controller.voiceAnswer(text: text, echoOf: echo))
+        }
     }
     func prepare(pixelsPerMm: Float) {
         guard !prepared else { return }
@@ -113,7 +119,7 @@ final class EyeRuntime: ObservableObject {
             state = Self.object(snapshot)
         }
         speakPrompts()
-        voice.setListening(isForeground && !settingsPresented && bool("voiceActive"))
+        voice.setListening(isForeground && !settingsPresented && allowsVoiceAnswer && bool("voiceActive"))
     }
     /// 与安卓同一套播报：距离偏离优先，持续偏离每 6 秒换一种说法；回到合适距离先肯定一句，主提示有变化再接着说。
     private func speakPrompts() {

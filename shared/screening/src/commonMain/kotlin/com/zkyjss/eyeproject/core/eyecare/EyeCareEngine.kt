@@ -80,6 +80,7 @@ data class TrendDay(
     val blinksPerMinute: Float? = null,
     val score: Int? = null,
     val source: String? = null,
+    val distanceCm: Int? = null,
 )
 
 @Serializable
@@ -116,6 +117,7 @@ data class EyeCareReport(
     val suggestedReminderMinutes: Int,
     val todayNote: String = "",
     val completedCare: List<String> = emptyList(),
+    val dailyRecords: List<DailyEyeRecord> = emptyList(),
 ) {
     fun toJson(): String = LedgerData.JSON.encodeToString(serializer(), this)
 }
@@ -173,6 +175,7 @@ object EyeCareEngine {
             (if (context.profile.isNotEmpty()) 1 else 0)
         val label = when (level) { "LOW" -> "轻松"; "MEDIUM" -> "留意"; "HIGH" -> "偏累"; else -> "待感知" }
         val top = factors.firstOrNull()?.title
+        val tips = tips(actions, factors, level, redFlag)
         return EyeCareReport(
             level = level, score = score, label = label,
             headline = when {
@@ -199,9 +202,10 @@ object EyeCareEngine {
                 LoopStage("INTERVENE", "干预", actions.isNotEmpty(), if (actions.isEmpty()) "暂无" else "${actions.size} 条建议"),
                 LoopStage("FEEDBACK", "反馈", checkIn != null, if (checkIn != null) "今日已打卡" else "待打卡"),
             ),
-            signals = signals, factors = factors, actions = actions, tips = tips(actions, factors, level, redFlag), consults = consults, trend = trend,
+            signals = signals, factors = factors, actions = actions, tips = tips, consults = consults, trend = trend,
             checkedInToday = checkIn != null, todaySymptoms = symptoms, suggestedReminderMinutes = suggested,
             todayNote = checkIn?.note.orEmpty(), completedCare = ledger.careCheckIns.filter { it.day == today }.map { it.key }.distinct(),
+            dailyRecords = dailyEyeRecords(trend.historyDays, context, signals, tips.firstOrNull()?.text),
         )
     }
 
@@ -434,7 +438,8 @@ object EyeCareEngine {
             val score = if (day == c.today) todayScore
                 else if (hasData) dayFactors(u, sessions, symptoms?.symptoms.orEmpty(), child).sumOf { it.points }.coerceAtMost(100) else null
             TrendDay(day, EyeCareDays.label(day, c.today), u?.screenMinutes, u?.longestSessionMinutes, u?.nightMinutes,
-                weightedBlink(sessions)?.let { (it * 10).roundToInt() / 10f }, score, u?.source)
+                weightedBlink(sessions)?.let { (it * 10).roundToInt() / 10f }, score, u?.source,
+                weighted(sessions) { it.meanDistanceCm }?.roundToInt())
         }
         val rows = history.takeLast(7)
         val screen = rows.mapNotNull { it.screenMinutes }

@@ -149,6 +149,28 @@ class HomeVisualTest {
         assertTrue(reminder)
     }
 
+    @Test fun dailyRecordsMoveOneDayAndKeepTheDateOnReturnFromDetails() {
+        val state = demoState()
+        compose.setContent { EyeProjectTheme {
+            HomeContent(state, HomeNavigation(), HomeActions())
+        } }
+        compose.onNodeWithText("用眼全记录  ›").performClick()
+        compose.onNodeWithText("10月23日 · 今天").assertIsDisplayed()
+        compose.onNodeWithText("后一天").assertIsNotEnabled()
+        compose.onNodeWithText("前一天").performClick()
+        compose.onNodeWithText("10月22日 · 周四").assertIsDisplayed()
+        compose.onNodeWithText("累计用屏").performScrollTo().performClick()
+        compose.onNodeWithText("来自这一天的系统用屏统计。").assertIsDisplayed()
+        compose.onNodeWithContentDescription("返回").performClick()
+        compose.onNodeWithText("10月22日 · 周四").assertIsDisplayed()
+        compose.onNodeWithText("后一天").performClick()
+        compose.onNodeWithText("10月23日 · 今天").assertIsDisplayed()
+        compose.onNodeWithText("后一天").assertIsNotEnabled()
+        repeat(13) { compose.onNodeWithText("前一天").performClick() }
+        compose.onNodeWithText("10月10日 · 周六").assertIsDisplayed()
+        compose.onNodeWithText("前一天").assertIsNotEnabled()
+    }
+
     @Test fun dryEyeInquiryDemoShowsBookingAfterSummaryWithoutSendingChat() {
         val sent = mutableListOf<String>()
         compose.setContent { EyeProjectTheme {

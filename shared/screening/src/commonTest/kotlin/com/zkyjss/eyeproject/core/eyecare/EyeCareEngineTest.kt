@@ -43,6 +43,28 @@ class EyeCareEngineTest {
         assertEquals(1, LedgerData.fromJson("""{"manualScreenMinutes":{"$today":30},"checkIns":[{"day":"$today","symptoms":[],"atMs":1}]}""").checkIns.size)
     }
 
+    @Test fun dailyRecordsUseCalendarDatesAndOnlyShowDataForTheSelectedDay() {
+        val previous = "2024-02-29"
+        val today = "2024-03-01"
+        val ledger = LedgerData().withSession(previous, 1L, LiveEyeMonitor.Session(60_000, 9, 9f, 28f, 0.6f, 12.3f))
+        val context = EyeCareContext(today, 10, screenBrightness = 0.5f, usageAccess = EyeCareEngine.ACCESS_GRANTED,
+            systemUsage = listOf(UsageDay(previous, screenMinutes = 0)))
+        val records = EyeCareEngine.report(ledger, context).dailyRecords
+        assertEquals(14, records.size)
+        assertEquals("2024-02-17", records.first().day)
+        assertEquals("2月29日 · 周四", records[12].dateLabel)
+        assertEquals("3月1日 · 今天", records.last().dateLabel)
+        val previousMetrics = records[12].metrics.associate { it.title to it.value }
+        assertEquals("0分钟", previousMetrics["累计用屏"])
+        assertEquals("28 厘米", previousMetrics["用眼距离"])
+        assertNull(previousMetrics["屏幕亮度"])
+        val todayMetrics = records.last().metrics.associate { it.title to it.value }
+        assertNull(todayMetrics["用眼距离"])
+        assertEquals("50%", todayMetrics["屏幕亮度"])
+        val iphone = EyeCareEngine.report(ledger, context.copy(usageAccess = EyeCareEngine.ACCESS_UNSUPPORTED, systemUsage = emptyList()))
+        assertEquals(listOf("环境光", "屏幕亮度", "用眼距离"), iphone.dailyRecords.last().metrics.map { it.title })
+    }
+
     @Test fun withoutDataAsksToPerceiveFirst() {
         val report = EyeCareEngine.report(LedgerData(), EyeCareContext(today, 10, screenBrightness = 0.5f))
         assertEquals("UNKNOWN", report.level)

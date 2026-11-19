@@ -7,13 +7,18 @@ struct SystemSettingsPage: View {
     @ObservedObject var voice: EyeVoice
     @ObservedObject var feedback: EyeFeedback
     var inTest = false
+    var testVoiceAnswers: Binding<Bool>? = nil
     var openAccount: () -> Void = {}
     var openPermissions: () -> Void = {}
     var openCloud: () -> Void = {}
     @State private var editor: String?
     @Environment(\.dismiss) private var dismiss
     private let voices = EyeVoice.chineseVoices
-    private let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
+    private var version: String {
+        guard let name = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String else { return "—" }
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+        return build.map { "\(name) (\($0))" } ?? name
+    }
 
     private static let feedbackHelp = "作答、换阶段和测试完成时的提示音与震动；护眼操和休息的提示音也跟随这里的开关与音量。"
     private static let voiceHelp = "测试中用语音读出提示。想要更自然的声音：在系统「设置 → 辅助功能 → 朗读内容 → 声音 → 中文（中国大陆）」下载标注「增强」或「优化」的声音，再回到这里更换发声人。"
@@ -29,6 +34,13 @@ struct SystemSettingsPage: View {
             }
             ListGroup(title: "语音") {
                 SwitchRow(title: "语音辅助",isOn: Binding(get: { voice.enabled || voice.answersEnabled },set: { voice.enabled = $0; voice.answersEnabled = $0 }),subtitle: "播报与作答")
+                if let testVoiceAnswers {
+                    SwitchRow(title: "本次使用语音作答", isOn: Binding(
+                        get: { voice.answersEnabled && testVoiceAnswers.wrappedValue },
+                        set: { testVoiceAnswers.wrappedValue = $0 }
+                    ), subtitle: "默认点按作答")
+                    .disabled(!voice.answersEnabled)
+                }
                 if voice.enabled || voice.answersEnabled { ListRow(title: "声音与语速",divider: false) { editor = "声音与语速" } }
             }
             if !inTest {
@@ -46,7 +58,7 @@ struct SystemSettingsPage: View {
                         }
                         Spacer()
                     }.padding(16)
-                    ListRow(title: "版本", value: version.isEmpty ? "—" : version)
+                    ListRow(title: "版本", value: version)
                     ListRow(title: "切换登录",action: openAccount)
                     Text("手机初筛结果仅供参考，不能代替医院检查。").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 16).padding(.vertical, 14)

@@ -34,11 +34,11 @@ struct AiChatPage: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
-                        EyechoIntro().id("opening")
+                        EyechoIntro()
                         Button("今日护眼参考") { referenceOpen = true }.buttonStyle(EyeButtonStyle(role: .secondary))
                         if messages.isEmpty || choosingInquiry {
                             Button("体验干眼问诊") { demoOpen = true }.buttonStyle(EyeButtonStyle(role: .secondary))
-                            suggestions(info)
+                            suggestions(info).id("suggestions")
                         }
                         ForEach(Array(messages.enumerated()), id: \.offset) { index, m in
                             ChatBubble(message: m, urgentNotice: info["urgentNotice"] as? String ?? "",
@@ -56,7 +56,6 @@ struct AiChatPage: View {
                                 ChoiceChip(label: "开始新的问询", selected: false) {
                                     choosingInquiry = true
                                     focused = false
-                                    withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo("opening", anchor: .top) }
                                 }
                             }
                         }
@@ -68,6 +67,9 @@ struct AiChatPage: View {
                     }.padding(.horizontal, 16).padding(.top, 4).padding(.bottom, 12)
                 }
                 .scrollDismissesKeyboard(.interactively)
+                .onChange(of: choosingInquiry) { choosing in
+                    if choosing { withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo("suggestions", anchor: .top) } }
+                }
                 .onAppear { proxy.scrollTo("bottom", anchor: .bottom) }
                 .onChange(of: messages.count) { _ in withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo("bottom", anchor: .bottom) } }
                 .onChange(of: sending) { _ in withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo("bottom", anchor: .bottom) } }
