@@ -138,12 +138,12 @@ class HomeVisualTest {
             HomeContent(demoState(), HomeNavigation(onOpenChat = {chat=true},onOpenTrend={trend=true}), HomeActions(toggleReminder={reminder=true}))
         } }
         compose.onNodeWithText("今日用眼负荷").assertIsDisplayed()
-        compose.onNodeWithText("全部数据  ›").assertIsDisplayed()
+        compose.onNodeWithText("用眼全记录  ›").assertIsDisplayed()
         capture("01-首页-首屏")
-        compose.onNodeWithText("查看本周趋势  ›").performScrollTo().performClick()
+        compose.onNodeWithText("查看用眼趋势").performScrollTo().performClick()
         assertTrue(trend)
-        compose.onNodeWithText("智能挂号").assertDoesNotExist()
-        compose.onNodeWithText("AI 问诊").performScrollTo().performClick()
+        compose.onNodeWithText("智能挂号").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("AI问诊").performScrollTo().performClick()
         assertTrue(chat)
         compose.onNodeWithText("休息一下").performScrollTo().performClick()
         assertTrue(reminder)
@@ -179,9 +179,8 @@ class HomeVisualTest {
                 HomeContent(HomeUiState(report = EyeCareEngine.report(LedgerData(), EyeCareContext(today, 21))), HomeNavigation(), HomeActions()) { LiveEyeContent(LiveEyeUiState(), null, {}, {}) {} }
             }
         }
-        // 还没记录：爱科卡问「今天眼睛感觉怎么样？」，给几项快捷感受和「更多」
         compose.onNodeWithText("暂无读数").assertExists()
-        compose.onNodeWithText("暂无趋势记录").assertExists()
+        compose.onNodeWithText("该日暂无用屏记录").assertExists()
         capture("03-首页-深色-还没有数据")
     }
 
