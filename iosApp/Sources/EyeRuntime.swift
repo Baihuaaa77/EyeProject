@@ -62,7 +62,7 @@ final class EyeRuntime: ObservableObject {
         self.kind = kind
         diagnosticVideo = kind == "STRABISMUS" ? StrabismusDiagnosticVideo() : nil
         // 干眼只用关键点与眨眼，不做瞳孔 / 角膜反光测量
-        camera.measureOptics = kind == "STRABISMUS"
+        camera.measureOptics = kind == "STRABISMUS" || kind == "PRESBYOPIA"
         camera.opticalPrecision = kind == "STRABISMUS"
         if kind == "STRABISMUS" {
             controller.setDiagnosticObserver(observer: { [weak self] json in self?.diagnosticVideo?.event(json) })

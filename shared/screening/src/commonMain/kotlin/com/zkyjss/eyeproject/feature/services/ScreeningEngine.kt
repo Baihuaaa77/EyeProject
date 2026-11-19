@@ -95,7 +95,7 @@ class ScreeningEngine(platform: ScreeningPlatform, internal val scope: Coroutine
     }
     internal val coverSequence = StrabismusProtocol.COVER_SEQUENCE
 
-    private val presbyopia = PresbyopiaStateMachine(this)
+    internal val presbyopia = PresbyopiaStateMachine(this)
     private val strabismus = StrabismusStateMachine(this)
     private val frameProcessor = ScreeningFrameProcessor(this)
     private val resultWriter = ScreeningResultWriter(this)
@@ -124,6 +124,11 @@ class ScreeningEngine(platform: ScreeningPlatform, internal val scope: Coroutine
             while (isActive && cameraAttached) {
                 helpSession.delay(1_000)
                 if ((lastCameraFrameMs == 0L || platform.nowMs() - lastCameraFrameMs > 2_500) && _state.value.step != ScreeningStep.RESULT) {
+                    if (presbyopia.needsCoverCheck(_state.value)) {
+                        coverDetector.resetCandidate()
+                        presbyopia.invalidateUnsupervisedTrial()
+                        _state.update { it.copy(presbyopiaCoverReady = false, presbyopiaCoverHint = "等待相机重新确认遮盖") }
+                    }
                     _state.update { it.copy(stabilityReason = "相机帧短暂中断，继续保持当前动作") }
                     _state.update { it.copy(faceDetected = false, distanceCm = 0f, leftOpticalX = null, leftOpticalY = null,
                         rightOpticalX = null, rightOpticalY = null, opticalStatus = "相机帧中断", trackingStatus = "相机未收到新帧",

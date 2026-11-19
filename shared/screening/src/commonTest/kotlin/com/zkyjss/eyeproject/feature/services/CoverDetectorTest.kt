@@ -89,10 +89,11 @@ class CoverDetectorTest {
 
     private data class Session(val engine: ScreeningEngine, val feed: (FaceMetrics?) -> Unit)
 
-    private suspend fun TestScope.readyCoverSession(): Session {
+    private fun TestScope.cameraSession(kind: ScreeningKind): Session {
         var onFrame: ((FaceLandmarkFrame) -> Unit)? = null
         val platform = object : ScreeningPlatform {
-            override val display = DisplayGeometry(400, 800, 160f, 160f)
+            override val display = if (kind == ScreeningKind.PRESBYOPIA) DisplayGeometry(1080, 2400, 420f, 420f)
+                else DisplayGeometry(400, 800, 160f, 160f)
             override fun nowMs() = 1_000L + testScheduler.currentTime
             override fun epochMs() = nowMs()
             override fun cameraGeometry(width: Int, height: Int) = CameraGeometry(width, height, 400f)
@@ -103,13 +104,19 @@ class CoverDetectorTest {
             override suspend fun compareHistory(state: ScreeningState, assessment: ScreeningAssessment) = emptyList<String>()
         }
         val engine = ScreeningEngine(platform, backgroundScope)
-        engine.configure(ScreeningKind.STRABISMUS)
-        engine._state.value = engine.state.value.copy(step = ScreeningStep.FIXATION)
-        engine.startCamera(); runCurrent()
-        val session = Session(engine) { sample ->
+        engine.configure(kind)
+        engine._state.value = engine.state.value.copy(step =
+            if (kind == ScreeningKind.STRABISMUS) ScreeningStep.FIXATION else ScreeningStep.ENVIRONMENT)
+        engine.startCamera()
+        return Session(engine) { sample ->
             val now = platform.nowMs()
             onFrame!!(FaceLandmarkFrame(listOfNotNull(sample), 400, 400, now, 0L, 10f, 150f, now))
         }
+    }
+
+    private suspend fun TestScope.readyCoverSession(): Session {
+        val session = cameraSession(ScreeningKind.STRABISMUS)
+        val engine = session.engine
         feedFor(session, face(), 600L)
         engine.startCover(); engine.confirmGuide()
         assertTrue(engine.state.value.reflectionPreparing)
@@ -120,6 +127,62 @@ class CoverDetectorTest {
 
     private suspend fun TestScope.feedFor(session: Session, sample: FaceMetrics?, duration: Long) {
         repeat((duration / 100).toInt()) { session.feed(sample); runCurrent(); advanceTimeBy(100); runCurrent() }
+    }
+
+
+    private fun atDistance(face: FaceMetrics, irisPx: Float) = face.copy(
+        leftEye = face.leftEye?.copy(irisDiameterPx = irisPx),
+        rightEye = face.rightEye?.copy(irisDiameterPx = irisPx),
+    )
+
+    @Test fun presbyopiaRequiresTheCorrectCoverAndDiscardsAnExposedOptotype() = runTest {
+        val session = cameraSession(ScreeningKind.PRESBYOPIA)
+        val engine = session.engine
+        val both = atDistance(face(), 11.7f)
+        val leftHidden = atDistance(face(left = 0f, leftClosed = true), 11.7f)
+        val rightHidden = atDistance(face(right = 0f, rightClosed = true), 11.7f)
+        feedFor(session, both, 1_400)
+        engine.begin()
+        engine.confirmGlasses()
+        engine.confirmGuide()
+        engine.readyForNearEye()
+        feedFor(session, rightHidden, 1_200)
+        assertTrue(engine.state.value.nearAwaitingEyeReady)
+        assertFalse(engine.state.value.trialVisible)
+        feedFor(session, leftHidden, 2_000)
+        assertTrue(engine.state.value.presbyopiaCoverReady)
+        assertTrue(engine.state.value.trialVisible)
+        val shown = engine.state.value.trialId
+        feedFor(session, both, 100)
+        assertFalse(engine.state.value.trialVisible)
+        engine.answer(0)
+        assertTrue(engine.state.value.answers.isEmpty())
+        feedFor(session, leftHidden, 2_000)
+        assertTrue(engine.state.value.trialVisible)
+        assertNotEquals(shown, engine.state.value.trialId)
+        engine.close()
+    }
+
+    @Test fun presbyopiaPushUpRejectsWrongCoverAndAnInterruptedAttempt() = runTest {
+        val session = cameraSession(ScreeningKind.PRESBYOPIA)
+        val engine = session.engine
+        val both = atDistance(face(), 9f)
+        val leftHidden = atDistance(face(left = 0f, leftClosed = true), 9f)
+        val rightHidden = atDistance(face(right = 0f, rightClosed = true), 9f)
+        feedFor(session, both, 800)
+        engine.startPushUp()
+        engine.confirmGuide()
+        feedFor(session, rightHidden, 1_200)
+        engine.startPushTrial()
+        assertEquals(PushStage.READY, engine.state.value.pushStage)
+        feedFor(session, leftHidden, 1_600)
+        engine.startPushTrial()
+        assertEquals(PushStage.APPROACH, engine.state.value.pushStage)
+        feedFor(session, both, 100)
+        assertEquals(PushStage.READY, engine.state.value.pushStage)
+        engine.markPushBlur()
+        assertTrue(engine.state.value.nearPoints.isEmpty())
+        engine.close()
     }
 
     @Test fun coveredIrisDiameterAndCollapsedLandmarksDoNotBreakDistanceGate() = runTest {

@@ -5,10 +5,12 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.zkyjss.eyeproject.core.designsystem.theme.*
 import com.zkyjss.eyeproject.core.eyecare.EyeCareReport
@@ -48,31 +50,58 @@ internal fun V16WeeklyTrend(report: EyeCareReport?) {
     metrics.forEachIndexed { index,(title,unit,values) ->
         val actual = values.filterNotNull()
         val tint = listOf(colors.screen,colors.sun,colors.ice)[index]
+        val screenTime = index == 0
+        val axisMaximum = screenTimeAxisMaximum(actual.maxOrNull()?.roundToInt() ?: 0)
+        fun label(value: Float): String {
+            val rounded = value.roundToInt()
+            return if (screenTime) "${rounded / 60}时${rounded % 60}分" else "$rounded $unit"
+        }
         EyeWarmCard {
             EyeText(title,style = type.subtitle,color = colors.textPrimary)
-            EyeText(if (actual.isEmpty()) "—" else "${actual.average().roundToInt()} $unit",style = type.metricValue,color = colors.textPrimary)
+            EyeText(if (actual.isEmpty()) "—" else label(actual.average().toFloat()),style = type.metricValue,color = colors.textPrimary)
             if (actual.isEmpty()) EyeText("暂无记录",style = type.bodySecondary,color = colors.textSecondary)
-            Canvas(Modifier.fillMaxWidth().height(112.dp)) {
-                val max = (actual.maxOrNull() ?: 1f).coerceAtLeast(1f)*1.1f
-                val pad = 6.dp.toPx()
-                fun point(i: Int,v: Float) = Offset(pad+(size.width-2*pad)*i/6f,size.height-pad-(size.height-2*pad)*v/max)
-                repeat(3) { i -> val y = pad+(size.height-2*pad)*i/2f; drawLine(colors.borderSubtle,Offset(0f,y),Offset(size.width,y)) }
-                val path = Path(); var connected = false
-                values.forEachIndexed { i,value ->
-                    if (value == null) connected = false else {
-                        val p = point(i,value)
-                        if (connected) path.lineTo(p.x,p.y) else path.moveTo(p.x,p.y)
-                        connected = true
-                        drawCircle(tint,if (selected == i) 5.dp.toPx() else 3.dp.toPx(),p)
+            Row(Modifier.fillMaxWidth()) {
+                if (screenTime) ScreenTimeAxis(axisMaximum, 112.dp)
+                Canvas(Modifier.weight(1f).height(112.dp)) {
+                    val max = if (screenTime) axisMaximum.toFloat() else (actual.maxOrNull() ?: 1f).coerceAtLeast(1f)*1.1f
+                    val pad = 8.dp.toPx()
+                    fun point(i: Int,v: Float) = Offset(pad+(size.width-2*pad)*i/6f,size.height-pad-(size.height-2*pad)*v/max)
+                    repeat(3) { i -> val y = pad+(size.height-2*pad)*i/2f; drawLine(colors.borderSubtle,Offset(0f,y),Offset(size.width,y)) }
+                    val path = Path(); var connected = false
+                    values.forEachIndexed { i,value ->
+                        if (value == null) connected = false else {
+                            val p = point(i,value)
+                            if (connected) path.lineTo(p.x,p.y) else path.moveTo(p.x,p.y)
+                            connected = true
+                            drawCircle(tint,if (selected == i) 5.dp.toPx() else 3.dp.toPx(),p)
+                        }
                     }
+                    drawPath(path,tint,style = Stroke(2.dp.toPx()))
                 }
-                drawPath(path,tint,style = Stroke(2.dp.toPx()))
             }
             chooseDay()
-            EyeText("${dates[selected]} · ${values[selected]?.let { "${it.roundToInt()} $unit" } ?: "无记录"}",style = type.body,color = colors.textPrimary)
+            EyeText("${dates[selected]} · ${values[selected]?.let(::label) ?: "无记录"}",style = type.body,color = colors.textPrimary)
         }
     }
     val chosen = days[selected]
     EyeText(if (chosen == null || metrics.all { it.third[selected] == null }) "这一天暂无可用记录。" else
         "${dates[selected]}的原始读数见上方；平均值仅包含有记录的日期。",style = type.bodySecondary,color = colors.textSecondary)
+}
+
+/** 纵轴使用整小时刻度，保留半程一条网格线。 */
+internal fun screenTimeAxisMaximum(minutes: Int): Int = maxOf(120, ((minutes + 119) / 120) * 120)
+
+@Composable
+internal fun ScreenTimeAxis(maximum: Int, height: Dp, modifier: Modifier = Modifier) {
+    val colors = LocalEyeColors.current
+    val type = LocalEyeTypography.current
+    Column(
+        modifier.widthIn(min = 36.dp).height(height).padding(end = 6.dp),
+        verticalArrangement = Arrangement.SpaceBetween,
+        horizontalAlignment = Alignment.End,
+    ) {
+        listOf(maximum / 60, maximum / 120, 0).forEach { hours ->
+            EyeText("${hours}时", style = type.caption, color = colors.textSecondary)
+        }
+    }
 }

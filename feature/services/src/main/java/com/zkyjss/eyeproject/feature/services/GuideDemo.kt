@@ -21,7 +21,7 @@ internal fun guideScene(motion: GuideMotion): GuideScene = when (motion) {
     GuideMotion.COVER -> GuideScene(motion, 12000, listOf(GuideBeat(0.0f, "① 遮右眼 2 秒 → 移开，双眼注视 2 秒"), GuideBeat(0.3333333333333333f, "② 遮左眼 2 秒 → 移开，双眼注视 2 秒"), GuideBeat(0.6666666666666666f, "③ 右眼、左眼各遮 1 秒，快速交替两轮")), 0.12f)
     GuideMotion.FOLLOW -> GuideScene(motion, 7200, listOf(GuideBeat(0.0f, "① 水平：只用眼睛跟随圆点"), GuideBeat(0.36f, "② 垂直：头保持不动"), GuideBeat(0.72f, "③ 斜向：继续跟随")), 0.2f)
     GuideMotion.ACUITY -> GuideScene(motion, 6000, listOf(GuideBeat(0.0f, "① 看 E 的开口方向"), GuideBeat(0.1f, "② 2 秒内点选对应方向"), GuideBeat(0.4f, "③ 连对两次变小，答错或超时变大")), 0.12f)
-    GuideMotion.FVA -> GuideScene(motion, 7000, listOf(GuideBeat(0.0f, "① 全程看 E，点选开口方向"), GuideBeat(0.12f, "② 前一段像平时一样自然眨眼"), GuideBeat(0.68f, "③ 不停顿，转入尽量保持睁眼")), 0.3f)
+    GuideMotion.FVA -> GuideScene(motion, 7000, listOf(GuideBeat(0.0f, "① 全程看 E，点选开口方向"), GuideBeat(0.12f, "② 前一段像平时一样自然眨眼"), GuideBeat(0.68f, "③ 看到提示后，尽量保持睁眼")), 0.3f)
     GuideMotion.CURVE -> GuideScene(motion, 6600, listOf(GuideBeat(0.0f, "① 移到提示的距离并停稳"), GuideBeat(0.12f, "② 点选 E 的开口方向"), GuideBeat(0.36f, "③ 依次换到下一个距离")), 0.2f)
 }
 

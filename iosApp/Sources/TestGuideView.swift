@@ -128,7 +128,7 @@ struct GuideScene {
         case .cover: GuideScene(motion: motion, cycle: 12.0, beats: [.init(start: 0.0, label: "① 遮右眼 2 秒 → 移开，双眼注视 2 秒"), .init(start: 0.3333333333333333, label: "② 遮左眼 2 秒 → 移开，双眼注视 2 秒"), .init(start: 0.6666666666666666, label: "③ 右眼、左眼各遮 1 秒，快速交替两轮")], keyframe: 0.12)
         case .follow: GuideScene(motion: motion, cycle: 7.2, beats: [.init(start: 0.0, label: "① 水平：只用眼睛跟随圆点"), .init(start: 0.36, label: "② 垂直：头保持不动"), .init(start: 0.72, label: "③ 斜向：继续跟随")], keyframe: 0.2)
         case .acuity: GuideScene(motion: motion, cycle: 6.0, beats: [.init(start: 0.0, label: "① 看 E 的开口方向"), .init(start: 0.1, label: "② 2 秒内点选对应方向"), .init(start: 0.4, label: "③ 连对两次变小，答错或超时变大")], keyframe: 0.12)
-        case .fva: GuideScene(motion: motion, cycle: 7.0, beats: [.init(start: 0.0, label: "① 全程看 E，点选开口方向"), .init(start: 0.12, label: "② 前一段像平时一样自然眨眼"), .init(start: 0.68, label: "③ 不停顿，转入尽量保持睁眼")], keyframe: 0.3)
+        case .fva: GuideScene(motion: motion, cycle: 7.0, beats: [.init(start: 0.0, label: "① 全程看 E，点选开口方向"), .init(start: 0.12, label: "② 前一段像平时一样自然眨眼"), .init(start: 0.68, label: "③ 看到提示后，尽量保持睁眼")], keyframe: 0.3)
         case .curve: GuideScene(motion: motion, cycle: 6.6, beats: [.init(start: 0.0, label: "① 移到提示的距离并停稳"), .init(start: 0.12, label: "② 点选 E 的开口方向"), .init(start: 0.36, label: "③ 依次换到下一个距离")], keyframe: 0.2)
         }
     }

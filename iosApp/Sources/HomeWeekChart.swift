@@ -26,8 +26,20 @@ struct HomeWeekChart: View {
             if reading?.screenMinutes == nil {
                 Text("该日暂无用屏记录").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
             }
-            chart(days, selected: selected)
+            let peak = max(120, ((days.compactMap { $0?.screenMinutes }.max() ?? 0) + 119) / 120 * 120)
+            HStack(spacing: 6) {
+                VStack(alignment: .trailing) {
+                    Text("\(peak / 60)时")
+                    Spacer()
+                    Text("\(peak / 120)时")
+                    Spacer()
+                    Text("0时")
+                }.font(EyeStyle.caption).foregroundStyle(EyeStyle.secondary)
+                    .frame(width: 32, height: 100, alignment: .trailing)
+                chart(days, selected: selected, peak: peak)
+            }
             HStack(spacing: 0) {
+                Spacer().frame(width: 38)
                 ForEach(labels.indices, id: \.self) { index in
                     Button { chosen = index } label: {
                         Text(labels[index]).font(EyeStyle.caption)
@@ -65,14 +77,20 @@ struct HomeWeekChart: View {
         day?.score.map(BrownStyle.loadColor) ?? EyeStyle.secondary
     }
 
-    private func chart(_ days: [CareReport.Day?], selected: Int?) -> some View {
-        let peak = CGFloat(max(60, days.compactMap { $0?.screenMinutes }.max() ?? 0))
-        return GeometryReader { geometry in
+    private func chart(_ days: [CareReport.Day?], selected: Int?, peak: Int) -> some View {
+        GeometryReader { geometry in
             Canvas { context, size in
+                for y in [8.0, size.height / 2, size.height - 8] {
+                    let grid = Path {
+                        $0.move(to: CGPoint(x: 0, y: y))
+                        $0.addLine(to: CGPoint(x: size.width, y: y))
+                    }
+                    context.stroke(grid, with: .color(EyeStyle.borderSubtle), lineWidth: 1)
+                }
                 let points: [CGPoint?] = days.enumerated().map { index, day in
                     day?.screenMinutes.map { minutes in
                         CGPoint(x: size.width * (CGFloat(index) + 0.5) / 7,
-                                y: size.height - 6 - (size.height - 12) * CGFloat(minutes) / peak)
+                                y: size.height - 8 - (size.height - 16) * CGFloat(minutes) / CGFloat(peak))
                     }
                 }
                 for index in 0..<6 {

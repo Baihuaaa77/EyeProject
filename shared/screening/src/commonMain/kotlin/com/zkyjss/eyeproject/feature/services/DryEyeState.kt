@@ -2,9 +2,9 @@ package com.zkyjss.eyeproject.feature.services
 
 /**
  * 干眼流程阶段：问卷 → 准备（40 cm 门禁）→ 练习说明 → 练习 → 正式说明 → 倒计时 →
- * 自然眨眼（60 秒或延长 180 秒）→ 紧接持续睁眼 20 秒 → 结果；可选「闭眼休息 1 分钟」后复测。
+ * 自然眨眼（60 秒或延长 180 秒）→ 屏幕提示 → 持续睁眼 20 秒 → 结果；可选「闭眼休息 1 分钟」后复测。
  */
-enum class DryEyePhase { Profile, Setup, PracticeGuide, Practice, FormalGuide, Countdown, Natural, Open, Rest, Result }
+enum class DryEyePhase { Profile, Setup, PracticeGuide, Practice, FormalGuide, Countdown, Natural, OpenCue, Open, Rest, Result }
 
 /** 单个距离采样：相对正式测试开始的秒数 + 距离。 */
 data class DryEyeDistanceSample(val tSec: Float, val cm: Float)

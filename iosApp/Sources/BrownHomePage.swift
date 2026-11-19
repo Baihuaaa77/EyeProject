@@ -100,21 +100,24 @@ struct BrownHomePage: View {
     @ViewBuilder private var companionTimerPage: some View {
             if let key = careTimer {
                 RestBreakView(title: key,seconds: key == "闭眼休息" ? 30 : key == "热敷眼睛" ? 180 : 20,
-                    hint: key == "热敷眼睛" ? "准备温度舒适的热敷用品。\n遵循用品说明，不适时停止。" : key == "闭眼休息" ? "轻轻闭眼。\n让眼睛休息30秒。" : "看向6米外的远处。\n放松视线，持续20秒。",
+                    hint: key == "热敷眼睛" ? "可用干净的温湿毛巾，也可选眼部专用热敷眼罩，按说明加热和清洁。\n先试温，温热不烫再轻放在闭合的眼睑上；感到烫或不舒服就取下。" : key == "闭眼休息" ? "轻轻闭眼。\n让眼睛休息30秒。" : "看向6米外的远处。\n放松视线，持续20秒。",
                     onComplete: { store.careCheckIn(key) })
             }
     }
     private var companionCheckIns: some View {
                 WarmCard {
+                    let daily = ["闭眼休息", "远眺20秒"]
                     HStack {
                         Text("加油小贴贴").font(EyeStyle.subtitle)
                         Spacer()
-                        Text("今日 \(report.completedCare.count) 项").font(EyeStyle.caption).foregroundStyle(EyeStyle.secondary)
+                        Text("今日 \(daily.filter { report.completedCare.contains($0) }.count) / \(daily.count) 项").font(EyeStyle.caption).foregroundStyle(EyeStyle.secondary)
                     }
-                    ForEach(["闭眼休息","远眺20秒","热敷眼睛"],id: \.self) { key in
+                    ForEach(daily, id: \.self) { key in
                         Button(report.completedCare.contains(key) ? "\(key) · 已完成" : key) { careTimer = key }
                             .buttonStyle(EyeButtonStyle(role: .secondary))
                     }
+                    ListRow(title: "热敷眼睛", value: report.completedCare.contains("热敷眼睛") ? "选做 · 已完成" : "选做",
+                        divider: false) { careTimer = "热敷眼睛" }
                 }
     }
     private func reading(_ rescan: @escaping () -> Void) -> some View {

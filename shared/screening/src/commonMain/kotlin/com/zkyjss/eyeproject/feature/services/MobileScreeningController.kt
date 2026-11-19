@@ -317,6 +317,8 @@ class MobileScreeningController(
                 put("distanceToleranceCm",screeningDistanceTarget(s)?.second)
                 put("direction",s.direction); put("optotypePx",s.trialOptotypePx); put("eye",s.visionEye.name)
                 put("nearAwaitingEyeReady",s.nearAwaitingEyeReady); put("pushStage",s.pushStage.name)
+                put("presbyopiaCoverReady", s.presbyopiaCoverReady)
+                put("presbyopiaCoverHint", s.presbyopiaCoverHint)
                 put("targetX",s.targetX); put("targetY",s.targetY); put("savedFile",s.savedFile); put("saveError",s.saveError)
                 put("targetDiameterMm",StrabismusProtocol.targetDiameterMm(s.fields["年龄"]?.toIntOrNull()))
                 put("farTargetM",StrabismusProtocol.FAR_TARGET_M); put("farWaiting",s.farWaiting)

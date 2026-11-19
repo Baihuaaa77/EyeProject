@@ -164,14 +164,18 @@ internal fun BrownHomeOverview(
             EyeButton("智能挂号", EyeButtonRole.PRIMARY, { booking = true }, Modifier.weight(1f))
         }
         EyeWarmCard {
+            val daily = listOf("闭眼休息", "远眺20秒")
+            val completed = report?.completedCare.orEmpty()
             Row(Modifier.fillMaxWidth(),verticalAlignment = Alignment.CenterVertically) {
                 EyeText("加油小贴贴", Modifier.weight(1f), style = t.subtitle, color = c.textPrimary)
-                EyeText("今日 ${report?.completedCare?.size ?: 0} 项", style = t.caption, color = c.textSecondary)
+                EyeText("今日 ${daily.count { it in completed }} / ${daily.size} 项", style = t.caption, color = c.textSecondary)
             }
-            listOf("闭眼休息","远眺20秒","热敷眼睛").forEach { name ->
-                val label = if (name in report?.completedCare.orEmpty()) "$name · 已完成" else name
+            daily.forEach { name ->
+                val label = if (name in completed) "$name · 已完成" else name
                 EyeButton(label, EyeButtonRole.SECONDARY, { careTimer = name }, Modifier.fillMaxWidth())
             }
+            EyeListRow("热敷眼睛", { careTimer = "热敷眼睛" },
+                value = if ("热敷眼睛" in completed) "选做 · 已完成" else "选做", divider = false)
         }
         V16HomeWeek(report?.trend?.historyDays.orEmpty(), { feeling = true }, navigation.onOpenTrend)
         EyeWarmCard(Modifier.bringIntoViewRequester(live), padding = 14.dp) {
@@ -229,7 +233,7 @@ internal fun BrownHomeOverview(
         )
     careTimer?.let { key ->
         RestBreakPage(onClose = { careTimer = null },title = key,seconds = when (key) { "闭眼休息" -> 30; "热敷眼睛" -> 180; else -> 20 },
-            hint = when (key) { "闭眼休息" -> "轻轻闭眼。\n让眼睛休息30秒。"; "热敷眼睛" -> "准备温度舒适的热敷用品。\n遵循用品说明，不适时停止。"; else -> "看向6米外的远处。\n放松视线，持续20秒。" },
+            hint = when (key) { "闭眼休息" -> "轻轻闭眼。\n让眼睛休息30秒。"; "热敷眼睛" -> "可用干净的温湿毛巾，也可选眼部专用热敷眼罩，按说明加热和清洁。\n先试温，温热不烫再轻放在闭合的眼睑上；感到烫或不舒服就取下。"; else -> "看向6米外的远处。\n放松视线，持续20秒。" },
             onComplete = { actions.careCheckIn(key) })
     }
     if (allData)

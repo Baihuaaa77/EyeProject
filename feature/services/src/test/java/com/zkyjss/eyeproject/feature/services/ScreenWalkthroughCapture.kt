@@ -116,7 +116,8 @@ class ScreenWalkthroughCapture {
         state.value = base.copy(step = ScreeningStep.NEAR_VISION, guidePending = true, glassesCheckPending = true,
             nearAwaitingEyeReady = true, instruction = PresbyopiaIntake.glassesCheck(base.fields).prompt)
         shot("老视-03-戴镜确认")
-        state.value = base.copy(step = ScreeningStep.NEAR_VISION, visionEye = VisionEye.RIGHT, trialVisible = true, trialId = 1,
+        state.value = base.copy(step = ScreeningStep.NEAR_VISION, visionEye = VisionEye.RIGHT, presbyopiaCoverReady = true,
+            trialVisible = true, trialId = 1,
             direction = 2, trialOptotypePx = 20f, visionLevel = 0.5f)
         shot("老视-04-近视力-作答")
         state.value = base.copy(step = ScreeningStep.DISTANCE_CURVE, curveIndex = 0, distanceCm = 67f, trialVisible = true, trialId = 3,

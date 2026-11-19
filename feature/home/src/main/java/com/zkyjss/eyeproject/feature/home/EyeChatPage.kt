@@ -153,9 +153,11 @@ internal fun EyeChatContent(
     var skipOptionConfirmation by rememberSaveable { mutableStateOf(false) }
     val needsConsent = state?.access == ChatAccess.NEEDS_CONSENT
     val messages = state?.messages.orEmpty()
+    var choosingInquiry by rememberSaveable { mutableStateOf(false) }
     var demoOpen by rememberSaveable { mutableStateOf(false) }
     var bookingOpen by rememberSaveable { mutableStateOf(false) }
     fun send(text: String, agree: Boolean, quiet: Boolean) {
+        choosingInquiry = false
         onSend(text, agree, quiet)
         if (text == input) input = ""
     }
@@ -171,7 +173,9 @@ internal fun EyeChatContent(
         if (state?.sending == true) return
         if (!skipOptionConfirmation && state?.confirmOptionAnswers != false) pendingOption = text else requestSend(text)
     }
-    LaunchedEffect(messages.size, state?.sending) { scroll.animateScrollTo(scroll.maxValue) }
+    LaunchedEffect(messages.size, state?.sending, choosingInquiry) {
+        scroll.animateScrollTo(if (choosingInquiry) 0 else scroll.maxValue)
+    }
     if (confirming) ChatConsentDialog(
         onAgree = { quiet -> confirming = false; asked = true; send(pendingConsentMessage ?: input, needsConsent, quiet); pendingConsentMessage = null },
         onDecline = { confirming = false; pendingConsentMessage = null },
@@ -190,7 +194,7 @@ internal fun EyeChatContent(
     }) {
         EyechoIntro()
         opening()
-        if (messages.isEmpty()) {
+        if (messages.isEmpty() || choosingInquiry) {
             EyeButton("体验干眼问诊", EyeButtonRole.SECONDARY, { demoOpen = true }, Modifier.fillMaxWidth())
             EyeText("可以这样问爱科", style = typography.bodySecondary, color = colors.textSecondary)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -207,7 +211,8 @@ internal fun EyeChatContent(
         if (state?.sending != true && messages.isNotEmpty()) {
             val pending = Chats.pendingQuestion(messages)
             val label = if (pending != null) Chats.STOP_INQUIRY else "开始新的问询"
-            ChoiceChip(label, false) { selectOption(if (pending != null) Chats.STOP_INQUIRY else Chats.START_INQUIRY) }
+            if (pending != null) ChoiceChip(label, false) { selectOption(Chats.STOP_INQUIRY) }
+            else if (!choosingInquiry) ChoiceChip(label, false) { choosingInquiry = true }
         }
         if (state?.sending == true) Row(verticalAlignment = Alignment.CenterVertically) {
             EyechoAvatar(EyeControlSizes.chatAvatar)

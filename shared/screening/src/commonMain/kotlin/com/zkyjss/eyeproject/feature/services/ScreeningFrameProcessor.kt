@@ -25,7 +25,16 @@ internal class ScreeningFrameProcessor(private val host: ScreeningEngine) {
             val face = frame.faces.singleOrNull()
             val left = face?.leftEye?.toNormalized()
             val right = face?.rightEye?.toNormalized()
-            val iris = if (step == ScreeningStep.COVER) {
+            val pose = face?.headPose
+            val coverQuality = face != null && (pose == null || abs(pose.yawDeg) < 40f && abs(pose.pitchDeg) < 40f)
+            val state = _state.value
+            if (state.step == step && state.kind == ScreeningKind.PRESBYOPIA) {
+                presbyopia.superviseCover(time, face, coverQuality)
+            }
+            val iris = if (presbyopia.needsCoverCheck(state) && state.visionEye != VisionEye.BOTH && !state.guidePending) {
+                val eye = if (state.visionEye == VisionEye.LEFT) face?.leftEye else face?.rightEye
+                listOfNotNull(eye?.irisDiameterPx?.takeIf { it > 0f })
+            } else if (step == ScreeningStep.COVER) {
                 // 手掌下的虹膜是关键点预测，直径可能失真；遮盖期间只让仍可见的睁眼参与测距。
                 val knownCovered = _state.value.coverMarks.lastOrNull()?.covered
                 listOf(Triple(face?.leftEye, face?.leftOptical, VisionEye.LEFT),
@@ -48,9 +57,11 @@ internal class ScreeningFrameProcessor(private val host: ScreeningEngine) {
             val focalPx = cachedFocalPx
             val rawDistance = if (iris.isNotEmpty()) DepthFromIris.distanceCm(iris.average().toFloat(), focalPx) else 0f
             val distance = rawDistance
-            if (face != null) distanceTracker.add(time, distance)
+            if (face != null && (!presbyopia.needsCoverCheck(state) || state.guidePending ||
+                    _state.value.presbyopiaCoverReady)) {
+                distanceTracker.add(time, distance)
+            }
             val smoothedDistance = if (face != null) distanceTracker.estimate(time)?.distanceCm ?: 0f else 0f
-            val pose = face?.headPose
             val coding = reflectionCoding(step, time)
             if (coding) reflectionCode.observe(step, time, face)
             val opticalState = _state.value
@@ -142,8 +153,9 @@ internal class ScreeningFrameProcessor(private val host: ScreeningEngine) {
                     ((if (step == ScreeningStep.COVER) left != null || right != null else left != null && right != null) &&
                         smoothedDistance in 20f..55f && poseStable)) &&
                 (_state.value.kind == ScreeningKind.STRABISMUS || _state.value.lux == null || _state.value.lux!! >= 50f)
-            if (step == _state.value.step && !_state.value.guidePending && !_state.value.stabilityInterrupted)
-                observeCover(time, face, face != null && (pose == null || abs(pose.yawDeg) < 40f && abs(pose.pitchDeg) < 40f), step)
+            if (state.kind == ScreeningKind.STRABISMUS && step == _state.value.step &&
+                !_state.value.guidePending && !_state.value.stabilityInterrupted)
+                observeCover(time, face, coverQuality, step)
             val rendered = renderedTargets.lastOrNull { it.timeMs <= time && it.step == step }
             val covered = if (step == ScreeningStep.COVER) {
                 if (coverDetector.hasObservation) coverDetector.coveredEye else _state.value.coverMarks.lastOrNull()?.covered

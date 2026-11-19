@@ -78,6 +78,21 @@ struct EyeTestView: View {
         }
         }.foregroundStyle(EyeStyle.text).tint(EyeStyle.primary)
             .overlay {
+                if phase == "OpenCue" {
+                    ZStack {
+                        EyeStyle.background.ignoresSafeArea()
+                        Panel {
+                            VStack(spacing: 12) {
+                                Text("持续睁眼 · 20 秒").font(EyeStyle.subtitle)
+                                Text(runtime.string("instruction")).font(EyeStyle.headline)
+                                    .foregroundStyle(EyeStyle.readableText(EyeStyle.warning)).padding(.vertical, 20)
+                                Text("提示消失后开始计时").font(EyeStyle.body)
+                            }.multilineTextAlignment(.center).frame(maxWidth: .infinity)
+                        }.padding(.horizontal, 16)
+                    }.accessibilityElement(children: .combine)
+                }
+            }
+            .overlay {
                 if confirmingExit {
                     TestExitConfirm(diagnosticSaved: runtime.kind == "STRABISMUS", stay: { confirmingExit = false }, exit: { confirmingExit = false; runtime.close(); dismiss() })
                 }
@@ -230,7 +245,7 @@ struct EyeTestView: View {
         !phase.isEmpty && !["Profile", "PROFILE", "Setup", "ENVIRONMENT", "Result", "RESULT"].contains(phase)
     }
     private var isRunning: Bool {
-        pixelsPerMm > 0 && !runtime.bool("guidePending") && ["Practice","Natural","Open","Countdown","Rest",
+        pixelsPerMm > 0 && !runtime.bool("guidePending") && ["Practice","Natural","OpenCue","Open","Countdown","Rest",
             "NEAR_VISION","PUSH_UP","DISTANCE_CURVE","FLIPPER","FIXATION","FAR_FIXATION","COVER","PURSUIT"].contains(phase)
     }
     @ViewBuilder private var testContent: some View {
@@ -266,7 +281,7 @@ struct EyeTestView: View {
                     .padding(14).background(EyeStyle.accentSoft, in: RoundedRectangle(cornerRadius: EyeStyle.radiusMedium))
             }
             TestGuideView(motion: .fva, title: "正式测试 · \(seconds) 秒 + 20 秒",
-                cue: "全程看 E 选方向。前 \(seconds) 秒自然眨眼，随后不停顿，直接尽量保持睁眼 20 秒", readyTitle: "开始正式测试") {
+                cue: "全程看 E 选方向。前 \(seconds) 秒自然眨眼，看到屏幕提示后，尽量保持睁眼 20 秒", readyTitle: "开始正式测试") {
                 runtime.act("formal")
             }
         } else if runtime.bool("guidePending") && runtime.bool("glassesCheck") {
@@ -302,6 +317,8 @@ struct EyeTestView: View {
                 Button("重新开始整个测试") { runtime.act("restart") }.buttonStyle(EyeButtonStyle(role: .secondary))
             }
             if phase == "COVER" { CoverPanel(runtime: runtime) }
+        } else if phase == "OpenCue" {
+            EmptyView()
         } else if phase == "Countdown" {
             CountdownRing(seconds: Int(runtime.number("secondsLeft")))
         } else if phase == "Rest" {
@@ -327,12 +344,15 @@ struct EyeTestView: View {
             } else if phase == "PUSH_UP" {
                 Text("\(runtime.string("pushEye")) · 第 \(min(Int(runtime.number("pushDone")) + 1, 3))/3 次")
             }
-            if runtime.bool("nearAwaitingEyeReady") {
-                Text(runtime.string("instruction"))
-                Button("遮盖准备好了") { runtime.act("eyeReady") }.buttonStyle(EyeButtonStyle())
+            if phase == "NEAR_VISION" && (runtime.bool("nearAwaitingEyeReady") || !runtime.bool("presbyopiaCoverReady")) {
+                let hint = runtime.string("presbyopiaCoverHint")
+                Text(hint.isEmpty ? "请按提示遮眼，等待相机确认" : hint).font(EyeStyle.subtitle)
             } else if phase == "PUSH_UP" && runtime.string("pushStage") == "READY" {
-                Text((runtime.string("pushEye") == "左眼" ? "遮住右眼，用左眼看" : "遮住左眼，用右眼看") + "；先移到 45 cm 以外")
-                Button("开始第 \(Int(runtime.number("pushDone")) + 1) 次") { runtime.act("pushStart") }.buttonStyle(EyeButtonStyle())
+                let hint = runtime.string("presbyopiaCoverHint")
+                Text(hint.isEmpty ? (runtime.string("pushEye") == "左眼" ? "遮住右眼，用左眼看" : "遮住左眼，用右眼看") + "；先移到 45 cm 以外" : hint)
+                Button("开始第 \(Int(runtime.number("pushDone")) + 1) 次") { runtime.act("pushStart") }
+                    .buttonStyle(EyeButtonStyle()).disabled(!runtime.bool("presbyopiaCoverReady") ||
+                        runtime.number("distanceCm") < 45)
             } else {
                 if phase == "PUSH_UP" {
                     Text("缓慢移近，每秒一两厘米")

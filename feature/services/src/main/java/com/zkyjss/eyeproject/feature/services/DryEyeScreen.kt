@@ -54,6 +54,9 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.platform.LocalContext
@@ -156,8 +159,8 @@ fun DryEyeScreen(
         DryEyePhase.Profile -> ""
         DryEyePhase.Setup -> "建议佩戴最佳矫正视力眼镜。准备好后开始"
         DryEyePhase.PracticeGuide -> guideCueDryEyePractice
-        DryEyePhase.FormalGuide -> "正式测试。先自然眨眼，之后不停顿，直接保持睁眼二十秒"
-        DryEyePhase.Open -> "现在尽量保持睁眼"
+        DryEyePhase.FormalGuide -> "正式测试。先自然眨眼，看到屏幕提示后尽量保持睁眼二十秒"
+        DryEyePhase.OpenCue, DryEyePhase.Open -> "现在尽量保持睁眼"
         DryEyePhase.Rest -> if (state.remainingSeconds <= 1) "请睁开眼睛" else "请闭上眼睛休息"
         DryEyePhase.Result -> "测试完成"
         else -> state.qualityWarning ?: state.instruction
@@ -184,7 +187,7 @@ fun DryEyeScreen(
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
-    val running = state.phase in setOf(DryEyePhase.Practice, DryEyePhase.Countdown, DryEyePhase.Natural, DryEyePhase.Open, DryEyePhase.Rest)
+    val running = state.phase in setOf(DryEyePhase.Practice, DryEyePhase.Countdown, DryEyePhase.Natural, DryEyePhase.OpenCue, DryEyePhase.Open, DryEyePhase.Rest)
     Box(modifier.fillMaxSize()) {
         TestSessionLayout("干眼自测", onBack, { settingsOpen = true }, running, onHelp = openHelp.takeUnless { state.phase == DryEyePhase.Profile || state.phase == DryEyePhase.Result }, progress = dryEyeProgress(state),
             confirmExit = state.phase !in setOf(DryEyePhase.Profile, DryEyePhase.Setup, DryEyePhase.Result),
@@ -205,6 +208,7 @@ fun DryEyeScreen(
                 DryEyePhase.PracticeGuide -> TestGuide(GuideMotion.ACUITY, "视标练习 · 约 12 秒", guideCueDryEyePractice, viewModel::confirmPracticeGuide)
                 DryEyePhase.FormalGuide -> FormalGuideContent(state, viewModel::confirmFormalGuide)
                 DryEyePhase.Countdown -> CountdownContent(state.instruction, state.remainingSeconds)
+                DryEyePhase.OpenCue -> Unit
                 DryEyePhase.Practice, DryEyePhase.Natural, DryEyePhase.Open -> {
                     TrialContent(state) { viewModel.answer(it) }
                 }
@@ -215,6 +219,20 @@ fun DryEyeScreen(
             }
         }
         if (distanceMatters) DistanceEdgeGlow(distance.zone)
+        if (state.phase == DryEyePhase.OpenCue) {
+            val colors = LocalEyeColors.current
+            val typography = LocalEyeTypography.current
+            Box(Modifier.fillMaxSize().background(colors.appBackground)
+                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {}
+                .screenHorizontalPaddingLarge().semantics { liveRegion = LiveRegionMode.Polite }, contentAlignment = Alignment.Center) {
+                TestStageCard(title = "持续睁眼 · 20 秒") {
+                    EyeText(state.instruction, style = typography.headline, color = colors.warning,
+                        textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(vertical = 20.dp))
+                    EyeText("提示消失后开始计时", style = typography.body, color = colors.textPrimary,
+                        textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                }
+            }
+        }
         if (state.paused) PauseDialog(state.pauseReason, state.gateReady, viewModel::resumeFromPause) {
             viewModel.backToSetup("已结束，本次结果不计入")
         }
@@ -270,7 +288,7 @@ private fun FormalGuideContent(state: DryEyeTestUiState, onStart: () -> Unit) {
     TestGuide(
         GuideMotion.FVA,
         "正式测试 · ${state.naturalSeconds} 秒 + 20 秒",
-        "全程看 E 选方向。前 ${state.naturalSeconds} 秒自然眨眼，随后不停顿，直接尽量保持睁眼 20 秒",
+        "全程看 E 选方向。前 ${state.naturalSeconds} 秒自然眨眼，看到屏幕提示后，尽量保持睁眼 20 秒",
     )
     EyeButton("开始正式测试", EyeButtonRole.PRIMARY, onStart, Modifier.fillMaxWidth(), state.gateReady)
     state.error?.let { EyeText(it, style = LocalEyeTypography.current.body, color = colors.danger) }

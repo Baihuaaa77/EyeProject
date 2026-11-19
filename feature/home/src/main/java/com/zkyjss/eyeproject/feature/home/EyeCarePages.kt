@@ -17,6 +17,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -43,14 +47,28 @@ import kotlin.math.roundToInt
 @Composable
 fun EyeTrendScreen(onBack: () -> Unit, viewModel: HomeViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    var asked by rememberSaveable { mutableStateOf(false) }
+    val needsAccess = state.report != null && state.usageAccess == EyeCareEngine.ACCESS_DENIED
+    val openUsageSettings: () -> Unit = {
+        runCatching { context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)) }
+    }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.refresh() }
-    EyeTrendContent(state.report, onBack)
+    LaunchedEffect(needsAccess) {
+        if (needsAccess && !asked) {
+            asked = true
+            openUsageSettings()
+        }
+    }
+    EyeTrendContent(state.report, onBack, openUsageSettings.takeIf { needsAccess })
 }
 
 @Composable
-internal fun EyeTrendContent(report: EyeCareReport?, onBack: () -> Unit) {
-    EyeSubPage("用眼趋势",onBack) { V16WeeklyTrend(report) }
-
+internal fun EyeTrendContent(report: EyeCareReport?, onBack: () -> Unit, openUsageSettings: (() -> Unit)? = null) {
+    EyeSubPage("用眼趋势", onBack) {
+        openUsageSettings?.let { EyeButton("开启用屏统计", EyeButtonRole.SECONDARY, it) }
+        V16WeeklyTrend(report)
+    }
 }
 
 /** 眼健康指数 = 100 − 用眼负荷分（规则仍按负荷算，界面只展示指数，越高越好）。 */

@@ -7,7 +7,7 @@ import kotlin.math.pow
  * 干眼功能性连续视力测试协议（对齐《智能眼科-整合9.18》研究内容一）。
  *
  * 原文明确：40 cm、提示佩戴最佳矫正眼镜、练习 10–15 秒（0.3 起，错/无反应增大一档，
- * 答对后同大小再显示一次、再次答对缩小一档）、正式 60 秒自然眨眼 + 紧接 20 秒睁眼（中间不休息），
+ * 答对后同大小再显示一次、再次答对缩小一档）、正式 60 秒自然眨眼 + 转段提示 + 20 秒睁眼，
  * 每个视标显示 2 秒、2 秒内无反应记错；可延长至 3–5 分钟；可闭眼休息 1 分钟后复测；
  * 平均眨眼 10–16 次/分钟为正常、正常眨眼间隔 > 10 秒。
  *
@@ -25,6 +25,7 @@ object DryEyeProtocol {
     const val PRACTICE_SECONDS = 12
     const val NATURAL_SECONDS = 60
     const val EXTENDED_NATURAL_SECONDS = 180
+    const val OPEN_CUE_MS = 2_200L
     const val OPEN_SECONDS = 20
     const val REST_SECONDS = 60
     const val TRIAL_TIMEOUT_MS = 2_000L

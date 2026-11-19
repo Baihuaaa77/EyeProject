@@ -24,6 +24,7 @@ struct AiChatPage: View {
     @State private var pendingConsentMessage: String?
     @AppStorage("eye.chat.confirmOptionAnswers") private var confirmOptionAnswers = true
     @FocusState private var focused: Bool
+    @State private var choosingInquiry = false
 
     var body: some View {
         let info = cloud.chat()
@@ -33,9 +34,9 @@ struct AiChatPage: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
-                        EyechoIntro()
+                        EyechoIntro().id("opening")
                         Button("今日护眼参考") { referenceOpen = true }.buttonStyle(EyeButtonStyle(role: .secondary))
-                        if messages.isEmpty {
+                        if messages.isEmpty || choosingInquiry {
                             Button("体验干眼问诊") { demoOpen = true }.buttonStyle(EyeButtonStyle(role: .secondary))
                             suggestions(info)
                         }
@@ -49,8 +50,14 @@ struct AiChatPage: View {
                         }
                         if !sending && !messages.isEmpty {
                             let pending = (messages.last?["question"] as? [String: Any]) != nil
-                            ChoiceChip(label: pending ? "结束问询" : "开始新的问询", selected: false) {
-                                selectOption(pending ? "结束问询" : "帮我一步步梳理眼部不适", info: info)
+                            if pending {
+                                ChoiceChip(label: "结束问询", selected: false) { selectOption("结束问询", info: info) }
+                            } else if !choosingInquiry {
+                                ChoiceChip(label: "开始新的问询", selected: false) {
+                                    choosingInquiry = true
+                                    focused = false
+                                    withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo("opening", anchor: .top) }
+                                }
                             }
                         }
                         if sending { typing }
@@ -110,6 +117,7 @@ struct AiChatPage: View {
     }
 
     private func send(_ text: String, agreeFirst: Bool, dontAskAgain: Bool) {
+        choosingInquiry = false
         cloud.sendChat(text, agreeFirst: agreeFirst, dontAskAgain: dontAskAgain)
         if text == draft { draft = "" }
     }

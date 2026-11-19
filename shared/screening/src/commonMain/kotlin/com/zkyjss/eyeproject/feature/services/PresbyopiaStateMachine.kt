@@ -11,9 +11,60 @@ import kotlinx.coroutines.flow.*
 
 /** 老视任务状态机：近视力、多距离、移近法与远近切换。 */
 internal class PresbyopiaStateMachine(private val host: ScreeningEngine) {
+    /** 与眼位自测共用像素证据，并按当前测试眼核对遮盖方向。 */
+    fun superviseCover(time: Long, face: FaceMetrics?, quality: Boolean) = with(host) {
+        val s = _state.value
+        val requiresCoverCheck = needsCoverCheck(s)
+        val learn = !requiresCoverCheck || s.glassesCheckPending || !coverDetector.hasBaseline || s.visionEye == VisionEye.BOTH
+        coverDetector.observe(time, face, quality, learn)
+        if (!requiresCoverCheck || s.guidePending || s.glassesCheckPending) return@with
+        val ready = coverIsCurrent(s, time)
+        val hint = when {
+            ready -> null
+            !coverDetector.hasBaseline -> "先移开遮挡，双眼睁开并正对屏幕"
+            s.visionEye == VisionEye.BOTH -> "请移开遮挡，用双眼看屏幕"
+            s.visionEye == VisionEye.RIGHT -> "请轻遮左眼，露出右眼"
+            else -> "请轻遮右眼，露出左眼"
+        }
+        if (!ready && s.presbyopiaCoverReady) distanceTracker.clear()
+        if (ready != s.presbyopiaCoverReady || hint != s.presbyopiaCoverHint) {
+            _state.update { it.copy(presbyopiaCoverReady = ready, presbyopiaCoverHint = hint) }
+        }
+        if (ready && s.nearAwaitingEyeReady) readyForNearEye()
+        else if (!ready) invalidateUnsupervisedTrial()
+    }
+
+    fun needsCoverCheck(s: ScreeningState): Boolean =
+        s.kind == ScreeningKind.PRESBYOPIA && (s.step == ScreeningStep.NEAR_VISION || s.step == ScreeningStep.PUSH_UP)
+
+    private fun coverIsCurrent(s: ScreeningState, time: Long) = with(host) {
+        if (!needsCoverCheck(s)) return@with true
+        val covered = when (s.visionEye) {
+            VisionEye.RIGHT -> VisionEye.LEFT
+            VisionEye.LEFT -> VisionEye.RIGHT
+            VisionEye.BOTH -> null
+        }
+        coverDetector.matchesCover(covered, time)
+    }
+
+    fun invalidateUnsupervisedTrial() = with(host) {
+        val s = _state.value
+        if (!needsCoverCheck(s) || !s.trialVisible) return@with
+        questionStartMs = 0L
+        if (s.step == ScreeningStep.PUSH_UP) pushTrace.clear()
+        _state.update {
+            it.copy(trialVisible = false, pushStage = PushStage.READY, pushSpeedCmPerSec = null,
+                invalidTrialCount = it.invalidTrialCount + 1,
+                direction = if (it.step == ScreeningStep.NEAR_VISION) Random.nextInt(4) else it.direction,
+                warning = "遮盖中断，本次不计，请重新遮好再测")
+        }
+    }
+
     fun startNearVision() {
         with(host) {
             timer?.cancel()
+            coverDetector.resetCandidate()
+            distanceTracker.clear()
             // 先确认已按本次戴镜状态戴好或摘下眼镜：同一组测试的矫正状态必须一致
             val check = PresbyopiaIntake.glassesCheck(_state.value.fields)
             _state.update { it.copy(step = ScreeningStep.NEAR_VISION, guidePending = true, visionEye = VisionEye.RIGHT,
@@ -27,7 +78,8 @@ internal class PresbyopiaStateMachine(private val host: ScreeningEngine) {
     fun readyForNearEye() {
         with(host) {
             val s = _state.value
-            if (s.step != ScreeningStep.NEAR_VISION || !s.nearAwaitingEyeReady) return
+            if (s.step != ScreeningStep.NEAR_VISION || !s.nearAwaitingEyeReady || s.guidePending ||
+                !coverIsCurrent(s, platform.nowMs())) return
             platform.feedback(ScreeningFeedbackCue.PHASE)
             _state.update { it.copy(nearAwaitingEyeReady = false, warning = null,
                 instruction = "${s.visionEye.label}测试：保持约 40 cm，点按显示视标后选择 E 开口方向。") }
@@ -38,7 +90,7 @@ internal class PresbyopiaStateMachine(private val host: ScreeningEngine) {
         with(host) {
             if (helpSession.paused || _state.value.guidePending) return
             val s = _state.value
-            if (s.trialVisible || s.nearAwaitingEyeReady) return
+            if (s.trialVisible || s.nearAwaitingEyeReady || !coverIsCurrent(s, platform.nowMs())) return
             val target = trialTargetCm(s) ?: return
             val tolerance = nearDistanceToleranceCm
             if (!distanceStable(target, tolerance)) {
@@ -96,6 +148,7 @@ internal class PresbyopiaStateMachine(private val host: ScreeningEngine) {
                 (s.step != ScreeningStep.NEAR_VISION && s.step != ScreeningStep.FLIPPER && s.step != ScreeningStep.DISTANCE_CURVE)) return
             val target = trialTargetCm(s) ?: return
             val now = platform.nowMs()
+            if (!coverIsCurrent(s, now)) { invalidateUnsupervisedTrial(); return }
             if (byVoice && !voiceGuard.accept(now)) return
             val answerDistance = distanceTracker.estimate(now)?.distanceCm
             if (!distanceTracker.acceptableAnswer(target, s.trialDistanceCm, PresbyopiaProtocol.ANSWER_TOLERANCE_CM, now)) {
@@ -162,13 +215,18 @@ internal class PresbyopiaStateMachine(private val host: ScreeningEngine) {
                 VisionEye.BOTH -> null
             }
             if (next == null) startDistanceCurve()
-            else _state.update { it.copy(visionEye = next, nearAwaitingEyeReady = true,
+            else {
+                coverDetector.resetCandidate()
+                distanceTracker.clear()
+                _state.update { it.copy(visionEye = next, nearAwaitingEyeReady = true,
+                    presbyopiaCoverReady = false, presbyopiaCoverHint = null,
                 nearDescending = false, trialVisible = false, trialIndex = 0, visionLevel = 0.3f,
                 direction = Random.nextInt(4), nearStopReason = null, instruction = when (next) {
-                    VisionEye.LEFT -> "请遮住右眼，露出左眼；准备好后继续。"
-                    VisionEye.BOTH -> "请移开遮盖，双眼注视屏幕；准备好后继续。"
+                    VisionEye.LEFT -> "请轻遮右眼，露出左眼，等待相机确认。"
+                    VisionEye.BOTH -> "请移开遮盖，用双眼看屏幕，等待相机确认。"
                     else -> ""
                 }) }
+            }
         }
     }
 
@@ -195,7 +253,9 @@ internal class PresbyopiaStateMachine(private val host: ScreeningEngine) {
     fun startPushUp() {
         with(host) {
             stepStartMs = platform.nowMs()
-            _state.update { it.copy(step = ScreeningStep.PUSH_UP, guidePending = true, nearPoints = emptyList(), trialIndex = 0,
+            coverDetector.resetCandidate()
+            distanceTracker.clear()
+            _state.update { it.copy(step = ScreeningStep.PUSH_UP, presbyopiaCoverReady = false, presbyopiaCoverHint = null, guidePending = true, nearPoints = emptyList(), trialIndex = 0,
                 pushStage = PushStage.READY, trialVisible = false, visionEye = VisionEye.RIGHT, visionLevel = pushLevel(VisionEye.RIGHT),
                 pushSpeedCmPerSec = null, instruction = pushInstruction(VisionEye.RIGHT), warning = null) }
         }
@@ -210,6 +270,7 @@ internal class PresbyopiaStateMachine(private val host: ScreeningEngine) {
             val s = _state.value
             if (s.step != ScreeningStep.PUSH_UP || s.pushStage != PushStage.READY || s.guidePending) return
             val now = platform.nowMs()
+            if (!coverIsCurrent(s, now)) return
             val distance = distanceTracker.estimate(now)?.distanceCm
             if (distance == null || distance < PresbyopiaProtocol.PUSH_START_MIN_CM) {
                 _state.update { it.copy(warning = "请先把手机移到 ${PresbyopiaProtocol.PUSH_START_MIN_CM.toInt()} cm 以外再开始") }
@@ -231,6 +292,7 @@ internal class PresbyopiaStateMachine(private val host: ScreeningEngine) {
             val s = _state.value
             if (s.step != ScreeningStep.PUSH_UP || s.pushStage != PushStage.APPROACH) return
             val now = platform.nowMs()
+            if (!coverIsCurrent(s, now)) { invalidateUnsupervisedTrial(); return }
             if (questionStartMs == 0L || now - questionStartMs < 1_000L) {
                 _state.update { it.copy(warning = "请先看清 E 再慢慢移近") }; return
             }
@@ -265,7 +327,12 @@ internal class PresbyopiaStateMachine(private val host: ScreeningEngine) {
             if (done < PresbyopiaProtocol.PUSH_REPEATS) return
             val next = PresbyopiaProtocol.PUSH_EYES.getOrNull(PresbyopiaProtocol.PUSH_EYES.indexOf(eye) + 1)
             if (next == null) startFlipper()
-            else _state.update { it.copy(visionEye = next, trialIndex = 0, visionLevel = pushLevel(next), instruction = pushInstruction(next)) }
+            else {
+                coverDetector.resetCandidate()
+                distanceTracker.clear()
+                _state.update { it.copy(visionEye = next, trialIndex = 0, visionLevel = pushLevel(next),
+                    presbyopiaCoverReady = false, presbyopiaCoverHint = null, instruction = pushInstruction(next)) }
+            }
         }
     }
 

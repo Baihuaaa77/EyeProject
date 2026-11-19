@@ -300,9 +300,9 @@ internal fun VisionContent(s: ScreeningState, vm: ScreeningTestViewModel) {
     val size = with(LocalDensity.current) { s.trialOptotypePx.toDp() }
     TestStageCard(title = "${s.visionEye.label} · ${s.trialIndex + 1} / 4") {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-            if (s.nearAwaitingEyeReady) {
-                EyeText(s.instruction, LocalEyeTypography.current.body, LocalEyeColors.current.textPrimary)
-                EyeButton("${s.visionEye.label}已准备好", EyeButtonRole.PRIMARY, vm::readyForNearEye)
+            if (s.nearAwaitingEyeReady || !s.presbyopiaCoverReady) {
+                EyeText(s.presbyopiaCoverHint ?: "按提示准备，等待相机确认",
+                    LocalEyeTypography.current.subtitle, LocalEyeColors.current.textPrimary)
             } else {
                 if (!s.trialVisible) EyeText("停稳后视标会自动出现", LocalEyeTypography.current.subtitle, LocalEyeColors.current.textSecondary)
                 OptotypeAnswerPad(s.direction, size, s.trialVisible) { vm.answer(it) }
@@ -321,9 +321,10 @@ internal fun PushUpContent(s: ScreeningState, vm: ScreeningTestViewModel) {
     TestStageCard(title = "${s.visionEye.label} · 第 ${(done + 1).coerceAtMost(PresbyopiaProtocol.PUSH_REPEATS)}/${PresbyopiaProtocol.PUSH_REPEATS} 次") {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
             if (s.pushStage == PushStage.READY) {
-                EyeText("${pushEyeCue(s.visionEye)}；先把手机移到 45 cm 以外，再点开始", typography.body, colors.textPrimary)
+                EyeText(s.presbyopiaCoverHint ?: "${pushEyeCue(s.visionEye)}；先把手机移到 45 cm 以外，再点开始",
+                    typography.body, colors.textPrimary)
                 EyeButton("开始第 ${done + 1} 次", EyeButtonRole.PRIMARY, vm::startPushTrial,
-                    enabled = s.distanceCm >= PresbyopiaProtocol.PUSH_START_MIN_CM)
+                    enabled = s.presbyopiaCoverReady && s.distanceCm >= PresbyopiaProtocol.PUSH_START_MIN_CM)
             } else {
                 EyeText("缓慢移近，每秒一两厘米", typography.body, colors.textPrimary)
                 if (s.trialVisible) OptotypeSurface(0, size)

@@ -164,6 +164,23 @@ class HomeVisualTest {
         assertTrue(sent.isEmpty())
     }
 
+    @Test fun newInquiryReturnsToSuggestionsWithoutSendingOrClearingHistory() {
+        val sent = mutableListOf<String>()
+        var cleared = false
+        val state = com.zkyjss.eyeproject.core.data.chat.ChatState(
+            com.zkyjss.eyeproject.core.data.chat.ChatAccess.READY,
+            messages = listOf(com.zkyjss.eyeproject.core.sync.ChatEntry("assistant", "本轮问询已完成", 1)),
+        )
+        compose.setContent { EyeProjectTheme {
+            EyeChatContent(state, {}, {}, { text, _, _ -> sent += text }, { cleared = true }) {}
+        } }
+        compose.onNodeWithText("开始新的问询").performScrollTo().performClick()
+        compose.onNodeWithText("可以这样问爱科").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("本轮问询已完成").assertExists()
+        assertTrue(sent.isEmpty())
+        assertTrue(!cleared)
+    }
+
     @Test @Config(qualifiers = "zh-rCN-w390dp-h2600dp-mdpi")
     fun fullHomePage() {
         compose.mainClock.autoAdvance = false

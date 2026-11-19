@@ -262,7 +262,8 @@ class DryEyeEngine(platform: ScreeningPlatform, private val scope: CoroutineScop
         resolutionLimited = false
         val start = platform.nowMs()
         formalStartMs = start; formalFrameTimes.clear(); earTrace.clear()
-        val totalMs = (naturalSeconds + DryEyeProtocol.OPEN_SECONDS) * 1000L
+        val naturalMs = naturalSeconds * 1000L
+        val totalMs = naturalMs + DryEyeProtocol.OPEN_SECONDS * 1000L
         val trials = mutableListOf<DryEyeTrial>()
         val blinks = mutableListOf<Float>()
         val distances = mutableListOf<DryEyeDistanceSample>()
@@ -286,25 +287,44 @@ class DryEyeEngine(platform: ScreeningPlatform, private val scope: CoroutineScop
         // 正式计时：去掉暂停时长，暂停前后的试次与眨眼时刻接得上
         val activeSec: (Long) -> Float = { t -> (t - start - pausedTotal) / 1000f }
         coroutineScope {
-            var loop = launch { trialLoop(DryEyeStage.NATURAL, activeSec, trials, naturalSeconds) }
+            var openStarted = false
+            var loop = launch { trialLoop(DryEyeStage.NATURAL, activeSec, trials) }
             while (isActive) {
                 val now = platform.nowMs()
                 if (pausedAt > 0L) {
                     // 暂停中：不计时、不出题、暂停期间的眨眼不计入
-                    while (blinkEvents.poll() != null) Unit
+                    blinkEvents.clear()
                     if (takeResume()) {
                         pauses += activeSec(pausedAt) to (now - pausedAt) / 1000f
                         pausedTotal += now - pausedAt; pausedAt = 0L
-                        loop = launch { trialLoop(DryEyeStage.NATURAL, activeSec, trials, naturalSeconds) }
+                        val stage = if (openStarted) DryEyeStage.OPEN else DryEyeStage.NATURAL
+                        loop = launch { trialLoop(stage, activeSec, trials) }
                     }
                     helpSession.delay(100); continue
                 }
                 val elapsed = now - start - pausedTotal
-                if (elapsed >= totalMs) { completed = true; break }
                 while (true) {
                     val t = blinkEvents.poll() ?: break
-                    if (t >= start) blinks += activeSec(t)
+                    if (t >= start && t <= now && (openStarted || activeSec(t) < naturalSeconds))
+                        blinks += activeSec(t)
                 }
+                if (!openStarted && elapsed >= naturalMs) {
+                    loop.cancelAndJoin()
+                    pendingAnswer?.cancel()
+                    pendingPresentation = null
+                    _uiState.update { it.copy(phase = DryEyePhase.OpenCue, trialVisible = false,
+                        instruction = "现在开始尽量保持睁眼", progressFraction = 0f) }
+                    helpSession.delay(DryEyeProtocol.OPEN_CUE_MS)
+                    blinkEvents.clear()
+                    blinkDetector.interrupt()
+                    pausedTotal = platform.nowMs() - start - naturalMs
+                    openStarted = true
+                    _uiState.update { it.copy(phase = DryEyePhase.Open, remainingSeconds = DryEyeProtocol.OPEN_SECONDS,
+                        instruction = "尽量保持睁眼，继续看 E 选方向") }
+                    loop = launch { trialLoop(DryEyeStage.OPEN, activeSec, trials) }
+                    continue
+                }
+                if (elapsed >= totalMs) { completed = true; break }
                 val reason = anomalyPersisted()
                 if (reason != null) {
                     pausedAt = now; loop.cancel(); pause(reason)
@@ -325,9 +345,7 @@ class DryEyeEngine(platform: ScreeningPlatform, private val scope: CoroutineScop
                 val openBlinks = blinks.filter { it >= naturalSeconds }.map { it - naturalSeconds }
                 _uiState.update {
                     it.copy(
-                        // 原文要求两阶段之间不休息：只切换提示，不停顿、不需确认
                         phase = if (inNatural) DryEyePhase.Natural else DryEyePhase.Open,
-                        instruction = if (inNatural) "看 E 选方向，同时像平时一样自然眨眼" else "现在尽量保持睁眼，继续看 E 选方向",
                         remainingSeconds = (((phaseSeconds * 1000L - phaseElapsed) + 999) / 1000L).toInt(),
                         progressFraction = (phaseElapsed.toFloat() / (phaseSeconds * 1000L)).coerceIn(0f, 1f),
                         phase1Blinks = naturalBlinks, phase1BlinkCount = naturalBlinks.size,
@@ -375,7 +393,7 @@ class DryEyeEngine(platform: ScreeningPlatform, private val scope: CoroutineScop
     }
 
     /** 视标循环：每题最多显示 2 秒，作答或超时后间隔 300 ms 出下一题。 */
-    private suspend fun trialLoop(stage: DryEyeStage, activeSec: (Long) -> Float, out: MutableList<DryEyeTrial>, naturalSeconds: Int = 0) {
+    private suspend fun trialLoop(stage: DryEyeStage, activeSec: (Long) -> Float, out: MutableList<DryEyeTrial>) {
         while (true) {
             val distance = lastDistanceCm.takeIf { it > 0f } ?: DryEyeProtocol.TARGET_DISTANCE_CM
             val maxIndex = maxDisplayableIndex(distance)
@@ -401,12 +419,7 @@ class DryEyeEngine(platform: ScreeningPlatform, private val scope: CoroutineScop
             pendingPresentation = null
             val rt = if (answer != null) platform.nowMs() - onset else null
             val onsetSec = activeSec(onset)
-            val trialStage = when {
-                stage == DryEyeStage.PRACTICE -> DryEyeStage.PRACTICE
-                onsetSec < naturalSeconds -> DryEyeStage.NATURAL
-                else -> DryEyeStage.OPEN
-            }
-            val trial = DryEyeTrial(trialStage, onsetSec, level, direction, answer?.first, rt, distance, spec.sizePx, answer?.second == true,
+            val trial = DryEyeTrial(stage, onsetSec, level, direction, answer?.first, rt, distance, spec.sizePx, answer?.second == true,
                 presentDelayMs = presentedAt?.let { (it - requestedAt).coerceAtLeast(0L) })
             out += trial
             staircase.record(trial.correct, maxIndex)
@@ -499,7 +512,9 @@ class DryEyeEngine(platform: ScreeningPlatform, private val scope: CoroutineScop
         val eyesDetected = face != null && face.leftEye != null && face.rightEye != null
         var distanceCm = 0f
         val frameMs = frame.analysisElapsedRealtimeMs ?: lastFrameMs
-        if (formalStartMs > 0L && frameMs >= formalStartMs && formalFrameTimes.size < MAX_TRACE_FRAMES) formalFrameTimes += frameMs
+        val collecting = formalStartMs > 0L && frameMs >= formalStartMs &&
+            !_uiState.value.paused && _uiState.value.phase != DryEyePhase.OpenCue
+        if (collecting && formalFrameTimes.size < MAX_TRACE_FRAMES) formalFrameTimes += frameMs
         if (eyesDetected) {
             blinkDetector.update(BlinkDetector.averageEar(face.leftEye, face.rightEye), frameMs)
             val diameters = listOfNotNull(face.leftEye?.irisDiameterPx, face.rightEye?.irisDiameterPx)
@@ -520,7 +535,7 @@ class DryEyeEngine(platform: ScreeningPlatform, private val scope: CoroutineScop
         if (distanceCm > 0f) distanceTracker.add(now0, distanceCm)
         distanceCm = if (eyesDetected) distanceTracker.estimate(now0)?.distanceCm ?: distanceCm else 0f
         lastDistanceCm = distanceCm
-        if (formalStartMs > 0L && frameMs >= formalStartMs && earTrace.size < MAX_TRACE_FRAMES) {
+        if (collecting && earTrace.size < MAX_TRACE_FRAMES) {
             earTrace += floatArrayOf((frameMs - formalStartMs) / 1000f,
                 face?.leftEye?.let { BlinkDetector.ear(it.earPoints) } ?: Float.NaN,
                 face?.rightEye?.let { BlinkDetector.ear(it.earPoints) } ?: Float.NaN, distanceCm)
@@ -563,6 +578,7 @@ class DryEyeEngine(platform: ScreeningPlatform, private val scope: CoroutineScop
                     snapshot.subject?.let { put("subject", it.toRecordObject()) }
                     put("profileSkipped", snapshot.profileSkipped)
                     put("naturalSeconds", session.naturalSeconds)
+                    put("openCueMs", DryEyeProtocol.OPEN_CUE_MS)
                     put("afterRest", session.afterRest)
                     put("completed", session.completed)
                     put("baselineDecimal", session.baselineLevel.toDouble())

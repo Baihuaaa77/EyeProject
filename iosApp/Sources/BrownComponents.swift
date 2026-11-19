@@ -3,9 +3,9 @@ import UIKit
 
 /// 用户参考稿的暖棕材质，所有新页面复用同一套令牌。
 enum BrownStyle {
-    static let loadLow = Color(rgb: 0x01FE00)
-    static let loadMedium = Color(rgb: 0xFF8A00)
-    static let loadHigh = Color(rgb: 0xFF0000)
+    static let loadLow = Color(rgb: 0xB6C6B3)
+    static let loadMedium = Color(rgb: 0xE9AD78)
+    static let loadHigh = Color(rgb: 0xE79D99)
     static func loadColor(_ score: Int) -> Color {
         if score < 30 { return loadLow }
         if score < 60 { return loadMedium }

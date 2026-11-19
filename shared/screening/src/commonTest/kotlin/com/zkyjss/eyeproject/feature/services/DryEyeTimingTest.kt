@@ -121,4 +121,40 @@ class DryEyeTimingTest {
         assertTrue(engine.uiState.value.trialVisible, "继续后接着出题")
         engine.close()
     }
+    @Test fun openPhaseStartsAfterTheVisualCue() = runTest {
+        val platform = Platform { 1_000 + testScheduler.currentTime }
+        val engine = DryEyeEngine(platform, backgroundScope)
+        engine.skipProfile()
+        engine.startMonitoring()
+        backgroundScope.launch {
+            while (true) { platform.onFrame?.invoke(frame(platform.nowMs())); delay(33) }
+        }
+        advanceTimeBy(1_500)
+        engine.startTest()
+        engine.confirmPracticeGuide()
+        advanceTimeBy(DryEyeProtocol.PRACTICE_SECONDS * 1_000L)
+        runCurrent()
+        assertEquals(DryEyePhase.FormalGuide, engine.uiState.value.phase)
+        engine.confirmFormalGuide()
+        advanceTimeBy(3_000 + DryEyeProtocol.NATURAL_SECONDS * 1_000L)
+        runCurrent()
+        assertEquals(DryEyePhase.OpenCue, engine.uiState.value.phase)
+        assertFalse(engine.uiState.value.trialVisible)
+        advanceTimeBy(DryEyeProtocol.OPEN_CUE_MS - 1)
+        runCurrent()
+        assertEquals(DryEyePhase.OpenCue, engine.uiState.value.phase)
+        advanceTimeBy(1)
+        runCurrent()
+        assertEquals(DryEyePhase.Open, engine.uiState.value.phase)
+        assertEquals(20, engine.uiState.value.remainingSeconds)
+        assertTrue(engine.uiState.value.trialVisible)
+        advanceTimeBy(19_900)
+        runCurrent()
+        assertEquals(1, engine.uiState.value.remainingSeconds)
+        advanceTimeBy(100)
+        runCurrent()
+        assertEquals(DryEyePhase.Result, engine.uiState.value.phase)
+        engine.close()
+    }
+
 }
