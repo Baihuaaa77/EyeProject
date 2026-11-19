@@ -28,13 +28,9 @@
 }
 .ff-stage[data-scene="rest"] .ff-flight {
   --insect-size: clamp(30px, 21cqmin, 74px);
-  --inset: calc(var(--insect-size) / 2 + 3px);
-  --orbit-x: min(40cqw, 50cqw - var(--inset));
-  --orbit-y: min(38cqh, 50cqh - var(--inset));
   top: 0;
   left: 0;
   width: var(--insect-size);
-  will-change: transform;
 }
 .rest-heading {
   display: flex;

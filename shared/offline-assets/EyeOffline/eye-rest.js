@@ -20,39 +20,38 @@ window.EyeRest = (() => {
   function smoothstep(t) {
     return t * t * (3 - 2 * t);
   }
-  function translate(x, y) {
-    return 'translate(calc(50cqw + var(--orbit-x) * '+x.toFixed(6)+
-      '), calc(50cqh + var(--orbit-y) * '+y.toFixed(6)+')) translate(-50%, -50%)';
-  }
   function position(ms) {
     if (ms < takeoff) {
       const t = ms / takeoff;
-      return translate(t * (t - 2), .68 * (1 - smoothstep(t)) + angularSpeed * takeoff * t * t * (1 - t));
+      return [t * (t - 2), .68 * (1 - smoothstep(t)) + angularSpeed * takeoff * t * t * (1 - t)];
     }
     if (ms < turnStart) {
       const angle = angularSpeed * (ms - takeoff);
-      return translate(-Math.cos(angle), -Math.sin(angle));
+      return [-Math.cos(angle), -Math.sin(angle)];
     }
     if (ms < returnLapStart) {
       const angle = Math.PI * (ms - turnStart) / turn;
-      return translate(-1 + turnRadius * (1 - Math.cos(angle)), -turnRadius * Math.sin(angle));
+      return [-1 + turnRadius * (1 - Math.cos(angle)), -turnRadius * Math.sin(angle)];
     }
     if (ms < landingStart) {
       const t = (ms - returnLapStart) / lap;
       const angle = 2 * Math.PI * t;
       // Rejoin the full-width orbit gradually after leaving the inside of the turn.
       const inset = 2 * turnRadius * (1 - smoothstep(Math.min(1, 2 * t)));
-      return translate(-Math.cos(angle) + inset, Math.sin(angle));
+      return [-Math.cos(angle) + inset, Math.sin(angle)];
     }
     // Leave the final lap tangentially and settle above the stream at the bottom of the clearing.
     const landingTime = duration - landingStart;
     const t = (ms - landingStart) / landingTime;
     const blend = smoothstep(t);
-    return translate(1.25 * blend - 1, .8 * blend + angularSpeed * landingTime * t * (1 - t) ** 2);
+    return [1.25 * blend - 1, .8 * blend + angularSpeed * landingTime * t * (1 - t) ** 2];
   }
   function draw() {
-    const transform = position(elapsed);
-    for (const view of views.values()) view.fly.style.transform = transform;
+    const [x, y] = position(elapsed);
+    for (const {fly} of views.values()) {
+      fly.style.left = (50 + 38 * x) + '%';
+      fly.style.top = (50 + 34 * y) + '%';
+    }
   }
   function refresh(force = false) {
     const seconds = Math.ceil((duration - elapsed) / 1000);

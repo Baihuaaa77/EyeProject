@@ -21,8 +21,8 @@
 }
 *, *::before, *::after { box-sizing: border-box; }
 [hidden] { display: none !important; }
-body { margin: 0; min-height: 100dvh; }
-#session { min-height: 100dvh; padding: 12px 16px 16px; }
+body { margin: 0; min-height: 100vh; min-height: 100dvh; }
+#session { min-height: 100vh; min-height: 100dvh; padding: 12px 16px 16px; }
 button, textarea, input { font: inherit; color: inherit; }
 button { cursor: pointer; }
 :focus-visible { outline: 2px solid var(--brand-orange); outline-offset: 2px; }
@@ -31,7 +31,37 @@ button { cursor: pointer; }
 
 #session[data-view="sprout"]:has(> .sg-root:is([data-sg-page="1"], [data-sg-page="2"])),
 #session:has(> .ff-page, > .pg-page, > .rest-session) {
+  height: 100vh;
   height: 100dvh;
   overflow-y: auto;
   position: relative;
+}
+
+/* 安卓旧版系统 WebView 的随包游戏仍需保留有尺寸的互动场地。 */
+@supports not (aspect-ratio: 1) {
+  .sg-portrait, .pg-desk[data-post-desk="prepare"] { height: clamp(150px, 21vh, 195px); }
+  .sg-flower-scene, .pg-desk[data-post-desk="result"] { height: 170px; }
+  .sg-root[data-sg-page="1"], .sg-root[data-sg-page="2"] { display: flex; flex-direction: column; }
+  .sg-root .sg-target { width: 116px; height: 136px; }
+  .sg-bubble { bottom: 76px; font-size: 18px; }
+  .ff-stage[data-scene="prepare"] { --ff-sprite-size: 69px; }
+  .ff-stage[data-scene="result"] { --ff-sprite-size: 63px; }
+  .ff-stage[data-scene="practice"], .ff-stage[data-scene="test"],
+  .ff-stage[data-scene="cover"], .ff-stage[data-scene="far"] { min-height: 230px; }
+  .ff-flight { height: 69px; }
+  .ff-stage[data-scene="rest"] .ff-flight { width: 60px; height: 60px; }
+  .rest-field { min-height: 60vh; margin-block: 12px; }
+  .pg-desk[data-post-desk="practice"], .pg-desk[data-post-desk="test"] { min-height: 270px; }
+  .pg-envelope { height: 110px; }
+  .pg-page .pg-box { height: 65px; }
+  .pg-box b { font-size: 26px; }
+  .pg-stamp { height: 26px; }
+  .cg-page .cg-choice, .cg-page .cg-primary, .cg-page .cg-secondary {
+    min-height: 47px;
+    border-radius: 14px;
+    padding: 8px;
+  }
+  .assistant-portrait { --portrait-size: 108px; height: 153px; }
+  .assistant-portrait-mini { --portrait-size: 34px; height: 34px; }
+  .bk-page .bk-options { padding: 12px; }
 }
