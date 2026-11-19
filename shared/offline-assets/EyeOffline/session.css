@@ -30,7 +30,7 @@ button { cursor: pointer; }
 
 
 #session[data-view="sprout"]:has(> .sg-root:is([data-sg-page="1"], [data-sg-page="2"])),
-#session:has(> .ff-page, > .pg-page, > .rest-session) {
+#session:has(> .ff-page, > .pg-page) {
   height: 100vh;
   height: 100dvh;
   overflow-y: auto;
@@ -49,8 +49,6 @@ button { cursor: pointer; }
   .ff-stage[data-scene="practice"], .ff-stage[data-scene="test"],
   .ff-stage[data-scene="cover"], .ff-stage[data-scene="far"] { min-height: 230px; }
   .ff-flight { height: 69px; }
-  .ff-stage[data-scene="rest"] .ff-flight { width: 60px; height: 60px; }
-  .rest-field { min-height: 60vh; margin-block: 12px; }
   .pg-desk[data-post-desk="practice"], .pg-desk[data-post-desk="test"] { min-height: 270px; }
   .pg-envelope { height: 110px; }
   .pg-page .pg-box { height: 65px; }

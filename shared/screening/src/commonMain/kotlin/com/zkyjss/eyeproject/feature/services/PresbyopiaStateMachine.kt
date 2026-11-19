@@ -55,9 +55,24 @@ internal class PresbyopiaStateMachine(private val host: ScreeningEngine) {
         _state.update {
             it.copy(trialVisible = false, pushStage = PushStage.READY, pushSpeedCmPerSec = null,
                 invalidTrialCount = it.invalidTrialCount + 1,
+                nearRetryRequired = it.step == ScreeningStep.NEAR_VISION,
                 direction = if (it.step == ScreeningStep.NEAR_VISION) Random.nextInt(4) else it.direction,
                 warning = "遮盖中断，本次不计，请重新遮好再测")
         }
+    }
+
+    fun retryNearQuestion() = with(host) {
+        val s = _state.value
+        if (s.step != ScreeningStep.NEAR_VISION || !s.nearRetryRequired || !coverIsCurrent(s, platform.nowMs())) return@with
+        _state.update { it.copy(nearRetryRequired = false, warning = null) }
+    }
+
+    fun advanceAfterDisplayLimit() = with(host) {
+        val s = _state.value
+        if (!s.resolutionAdvancePending || s.step !in setOf(ScreeningStep.NEAR_VISION, ScreeningStep.DISTANCE_CURVE)) return@with
+        _state.update { it.copy(resolutionAdvancePending = false) }
+        if (s.step == ScreeningStep.NEAR_VISION) advanceNearEye()
+        else finishCurveDistance(limitedNow = true)
     }
 
     fun startNearVision() {
@@ -90,7 +105,8 @@ internal class PresbyopiaStateMachine(private val host: ScreeningEngine) {
         with(host) {
             if (helpSession.paused || _state.value.guidePending) return
             val s = _state.value
-            if (s.trialVisible || s.nearAwaitingEyeReady || !coverIsCurrent(s, platform.nowMs())) return
+            if (s.trialVisible || s.nearAwaitingEyeReady || s.nearRetryRequired || s.resolutionAdvancePending ||
+                !coverIsCurrent(s, platform.nowMs())) return
             val target = trialTargetCm(s) ?: return
             val tolerance = nearDistanceToleranceCm
             if (!distanceStable(target, tolerance)) {
@@ -110,8 +126,8 @@ internal class PresbyopiaStateMachine(private val host: ScreeningEngine) {
                         _state.update { it.copy(visionLevel = nearLevels[index - 1], nearDescending = true,
                             nearStopReason = "本机无法呈现更小视标，改测较大视标", warning = null) }
                     } else {
-                        _state.update { it.copy(nearStopReason = "${s.visionEye.label}达到本机可呈现的最小视标", warning = null) }
-                        advanceNearEye()
+                        _state.update { it.copy(resolutionAdvancePending = true,
+                            nearStopReason = "${s.visionEye.label}已测到本机能显示的最小视标，当前轮结束", warning = null) }
                     }
                 } else if (s.step == ScreeningStep.DISTANCE_CURVE) {
                     // 与近视力一致：起始档在这个距离画不出来时先改测较大视标，而不是整个距离记为空
@@ -121,7 +137,8 @@ internal class PresbyopiaStateMachine(private val host: ScreeningEngine) {
                     curveResolutionLimited = true
                     if (!passedLower && index > 0) _state.update { it.copy(visionLevel = nearLevels[index - 1],
                         nearDescending = true, trialIndex = 0, nearStopReason = "本机无法呈现更小视标，改测较大视标", warning = null) }
-                    else finishCurveDistance(limitedNow = true)
+                    else _state.update { it.copy(resolutionAdvancePending = true,
+                        nearStopReason = "已测到本机在此距离能显示的最小视标，当前轮结束", warning = null) }
                 } else _state.update { it.copy(warning = "当前距离下视标笔画像素不足，不能可靠测量") }
                 return
             }
@@ -311,6 +328,17 @@ internal class PresbyopiaStateMachine(private val host: ScreeningEngine) {
             platform.feedback(ScreeningFeedbackCue.ANSWER)
             finishPushTrial(NearPoint(distance, speed, s.pushStartCm, eye = s.visionEye))
         }
+    }
+
+    fun markPushStillClear() = with(host) {
+        val s = _state.value
+        if (s.step != ScreeningStep.PUSH_UP || s.pushStage != PushStage.APPROACH) return@with
+        val now = platform.nowMs()
+        if (!coverIsCurrent(s, now)) { invalidateUnsupervisedTrial(); return@with }
+        val distance = distanceTracker.estimate(now)?.distanceCm ?: return@with
+        if (distance !in 1f..PresbyopiaProtocol.PUSH_MIN_CM) return@with
+        platform.feedback(ScreeningFeedbackCue.ANSWER)
+        finishPushTrial(NearPoint(PresbyopiaProtocol.PUSH_MIN_CM, recentApproachSpeed(now), s.pushStartCm, censored = true))
     }
 
     fun recentApproachSpeed(now: Long): Float? = with(host) { distanceTracker.velocityCmPerSec(now)?.let { -it }

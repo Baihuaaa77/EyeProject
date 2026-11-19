@@ -149,13 +149,14 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, onEditSubje
     val faceVisible = s.faceDetected || (s.step in setOf(ScreeningStep.NEAR_VISION, ScreeningStep.COVER) && s.distanceCm > 0f)
     val distance = distanceTarget?.let { (target, tolerance) ->
         distanceStatus(s.distanceCm, faceVisible, target, tolerance, moving = s.distanceMoveToCm != null) }
-    val voiceActive = !s.guidePending && s.step in setOf(
+    var voiceAnswersForThisTest by rememberSaveable { mutableStateOf(false) }
+    val voiceActive = voiceAnswersForThisTest && !s.guidePending && s.step in setOf(
         ScreeningStep.NEAR_VISION, ScreeningStep.FLIPPER, ScreeningStep.DISTANCE_CURVE, ScreeningStep.PUSH_UP)
     val voiceAnswer = rememberVoiceAnswer(voiceActive && !settingsOpen && !helpOpen, voice, settings.answersEnabled) { command ->
         val st = viewModel.state.value
         when {
             st.step == ScreeningStep.PUSH_UP -> when (command) {
-                VoiceCommand.Blur, VoiceCommand.Unsure -> viewModel.markPushBlur()
+                VoiceCommand.Blur -> viewModel.markPushBlur()
                 VoiceCommand.Ready -> viewModel.startPushTrial()
                 else -> Unit
             }
@@ -255,6 +256,11 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, onEditSubje
         distance?.let { DistanceEdgeGlow(it.zone) }
     }
     if (settingsOpen) TestSettingsPage(settings, voiceAnswer, { settingsOpen = false }, speechAvailable = voice.available) {
+        if (kind == ScreeningKind.PRESBYOPIA) {
+            com.zkyjss.eyeproject.core.ui.component.EyeSwitchRow("本次使用语音作答",
+                voiceAnswersForThisTest && settings.answersEnabled, { voiceAnswersForThisTest = it },
+                subtitle = "默认点按作答", enabled = settings.answersEnabled)
+        }
         EyeDisclosure("测量详情") {
             EyeText(s.trackingStatus, typography.bodySecondary, colors.textSecondary)
             EyeText("图像 ${s.cameraSourceWidth}×${s.cameraSourceHeight} · 分析 %.1f 帧/秒".format(s.analysisFps),typography.bodySecondary,colors.textSecondary)
@@ -298,16 +304,25 @@ private fun EnvironmentContent(kind: ScreeningKind, s: ScreeningState, vm: Scree
 @Composable
 internal fun VisionContent(s: ScreeningState, vm: ScreeningTestViewModel) {
     val size = with(LocalDensity.current) { s.trialOptotypePx.toDp() }
-    TestStageCard(title = "${s.visionEye.label} · ${s.trialIndex + 1} / 4") {
+    TestStageCard(title = "第 ${s.visionEye.ordinal + 1}/3 轮 · ${s.visionEye.label}") {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-            if (s.nearAwaitingEyeReady || !s.presbyopiaCoverReady) {
+            if (s.resolutionAdvancePending) {
+                EyeText(s.nearStopReason.orEmpty(), LocalEyeTypography.current.body, LocalEyeColors.current.textPrimary)
+                EyeButton("继续下一轮", EyeButtonRole.PRIMARY, vm::advanceAfterDisplayLimit)
+            } else if (s.nearAwaitingEyeReady || !s.presbyopiaCoverReady) {
                 EyeText(s.presbyopiaCoverHint ?: "按提示准备，等待相机确认",
                     LocalEyeTypography.current.subtitle, LocalEyeColors.current.textPrimary)
+            } else if (s.nearRetryRequired) {
+                EyeButton("重做本题", EyeButtonRole.PRIMARY, vm::retryNearQuestion)
             } else {
+                EyeText("本字号第 ${(s.trialIndex + 1).coerceAtMost(4)}/4 题",
+                    LocalEyeTypography.current.bodySecondary, LocalEyeColors.current.textSecondary)
                 if (!s.trialVisible) EyeText("停稳后视标会自动出现", LocalEyeTypography.current.subtitle, LocalEyeColors.current.textSecondary)
                 OptotypeAnswerPad(s.direction, size, s.trialVisible) { vm.answer(it) }
             }
-            s.nearStopReason?.let { EyeText(it, LocalEyeTypography.current.bodySecondary, LocalEyeColors.current.textSecondary) }
+            if (!s.resolutionAdvancePending) s.nearStopReason?.let {
+                EyeText(it, LocalEyeTypography.current.bodySecondary, LocalEyeColors.current.textSecondary)
+            }
         }
     }
 }
@@ -318,8 +333,10 @@ internal fun PushUpContent(s: ScreeningState, vm: ScreeningTestViewModel) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
     val done = s.nearPoints.count { it.eye == s.visionEye }
-    TestStageCard(title = "${s.visionEye.label} · 第 ${(done + 1).coerceAtMost(PresbyopiaProtocol.PUSH_REPEATS)}/${PresbyopiaProtocol.PUSH_REPEATS} 次") {
+    TestStageCard(title = "第 ${s.visionEye.ordinal + 1}/2 轮 · ${s.visionEye.label}") {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+            EyeText("本眼第 ${(done + 1).coerceAtMost(PresbyopiaProtocol.PUSH_REPEATS)}/${PresbyopiaProtocol.PUSH_REPEATS} 次",
+                typography.bodySecondary, colors.textSecondary)
             if (s.pushStage == PushStage.READY) {
                 EyeText(s.presbyopiaCoverHint ?: "${pushEyeCue(s.visionEye)}；先把手机移到 45 cm 以外，再点开始",
                     typography.body, colors.textPrimary)
@@ -329,6 +346,9 @@ internal fun PushUpContent(s: ScreeningState, vm: ScreeningTestViewModel) {
                 EyeText("缓慢移近，每秒一两厘米", typography.body, colors.textPrimary)
                 if (s.trialVisible) OptotypeSurface(0, size)
                 EyeButton("开始持续模糊", EyeButtonRole.PRIMARY, vm::markPushBlur, Modifier.fillMaxWidth())
+                if (s.distanceCm in 1f..PresbyopiaProtocol.PUSH_MIN_CM) {
+                    EyeButton("仍看得清", EyeButtonRole.SECONDARY, vm::markPushStillClear, Modifier.fillMaxWidth())
+                }
             }
 
         }
@@ -343,10 +363,16 @@ internal fun pushEyeCue(eye: VisionEye) = if (eye == VisionEye.LEFT) "遮住右�
 private fun CurveContent(s: ScreeningState, vm: ScreeningTestViewModel) {
     val size = with(LocalDensity.current) { s.trialOptotypePx.toDp() }
     val target = PresbyopiaProtocol.CURVE_DISTANCES.getOrElse(s.curveIndex) { 40f }
-    TestStageCard(title = "${target.toInt()} cm · ${s.curveIndex + 1}/${PresbyopiaProtocol.CURVE_DISTANCES.size}") {
+    TestStageCard(title = "第 ${s.curveIndex + 1}/${PresbyopiaProtocol.CURVE_DISTANCES.size} 轮 · ${target.toInt()} cm") {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-            if (!s.trialVisible) EyeText("移到 ${target.toInt()} cm 并停稳", LocalEyeTypography.current.body, LocalEyeColors.current.textPrimary)
-            OptotypeAnswerPad(s.direction, size, s.trialVisible) { vm.answer(it) }
+            if (s.resolutionAdvancePending) {
+                EyeButton("继续", EyeButtonRole.PRIMARY, vm::advanceAfterDisplayLimit)
+            } else {
+                EyeText("本字号第 ${s.trialIndex + 1}/${PresbyopiaProtocol.CURVE_TRIALS_PER_LEVEL} 题",
+                    LocalEyeTypography.current.bodySecondary, LocalEyeColors.current.textSecondary)
+                if (!s.trialVisible) EyeText("移到 ${target.toInt()} cm 并停稳", LocalEyeTypography.current.body, LocalEyeColors.current.textPrimary)
+                OptotypeAnswerPad(s.direction, size, s.trialVisible) { vm.answer(it) }
+            }
             s.nearStopReason?.let { EyeText(it, LocalEyeTypography.current.bodySecondary, LocalEyeColors.current.textSecondary) }
         }
     }

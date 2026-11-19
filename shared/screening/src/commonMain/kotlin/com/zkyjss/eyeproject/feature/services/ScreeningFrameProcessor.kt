@@ -292,9 +292,7 @@ internal class ScreeningFrameProcessor(private val host: ScreeningEngine) {
                 val traceSec = (time - pushTraceStartMs) / 1000f
                 if (smoothedDistance > 0f && (pushTrace.isEmpty() || traceSec - pushTrace.last().first >= 0.1f) && pushTrace.size < 1_200)
                     pushTrace += traceSec to smoothedDistance
-                if (smoothedDistance in 1f..PresbyopiaProtocol.PUSH_MIN_CM) {
-                    finishPushTrial(NearPoint(smoothedDistance, recentApproachSpeed(time), st.pushStartCm, censored = true))
-                }
+
             }
         }
     }

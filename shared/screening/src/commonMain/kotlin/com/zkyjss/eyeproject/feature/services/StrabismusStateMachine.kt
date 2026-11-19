@@ -53,7 +53,7 @@ internal class StrabismusStateMachine(private val host: ScreeningEngine) {
             resetGazeWindow()
             coverIndex = 0
             coverHoldJob?.cancel(); coverMonitorJob?.cancel()
-            coverDetector.resetCandidate()
+            coverDetector.clear()
             coverStageStartMs = platform.nowMs()
             stepStartMs = platform.nowMs()
             _state.update { it.copy(step = ScreeningStep.COVER, guidePending = true, coverMarks = emptyList(), coverHolding = false,
@@ -77,6 +77,7 @@ internal class StrabismusStateMachine(private val host: ScreeningEngine) {
             coverStageStartMs = platform.nowMs()
             actionWaitStartMs = coverStageStartMs
             if (_state.value.step != ScreeningStep.COVER) return@launch
+            coverDetector.resetCandidate()
             _state.update { it.copy(reflectionPreparing = false, instruction = "下一步：${coverSequence[coverIndex].label}") }
             while (isActive && _state.value.step == ScreeningStep.COVER) {
                 helpSession.delay(250L)
@@ -87,9 +88,15 @@ internal class StrabismusStateMachine(private val host: ScreeningEngine) {
                         if (!coverDetector.hasBaseline) "请先移开遮盖、睁开双眼约 1 秒，再按提示遮眼。"
                         else "请露出另一只眼；已做好动作也可以确认继续。") }
                 }
-                // 每个动作最多等候 15 秒；未识别时跳过该动作并记录缺测，保证能到达结果。
-                if (!s.guidePending && !s.coverHolding && platform.nowMs() - actionWaitStartMs >= 15_000L)
+                // 单个动作的等待上限也约束「识别后反复回退」，避免一直卡在保持倒计时。
+                if (!s.guidePending && !s.reflectionPreparing && coverIndex < coverSequence.size &&
+                    platform.nowMs() - actionWaitStartMs >= 15_000L) {
+                    if (s.coverHolding) {
+                        coverHoldJob?.cancel()
+                        retryHeldAction("保持中断", platform.nowMs())
+                    }
                     acceptCover(platform.nowMs(), platform.nowMs(), "TIMEOUT")
+                }
             }
         }
     }
@@ -130,7 +137,8 @@ internal class StrabismusStateMachine(private val host: ScreeningEngine) {
         with(host) {
             var current = _state.value
             val learn = step != ScreeningStep.COVER || coverIndex == 0 || coverSequence.getOrNull(coverIndex)?.covered == null
-            val observation = coverDetector.observe(time, face, quality, learn) ?: return
+            val observation = coverDetector.observe(time, face, quality, learn,
+                tolerateSingleFlicker = step == ScreeningStep.COVER && current.coverHolding) ?: return
             if (step != ScreeningStep.COVER || current.step != step || current.guidePending || current.reflectionPreparing) return
             if (current.coverHolding) {
                 val held = current.coverMarks.lastOrNull() ?: return
@@ -170,9 +178,15 @@ internal class StrabismusStateMachine(private val host: ScreeningEngine) {
             // 进度条从动作证据首帧起算，确认延迟不会额外拖慢流程；用户看到的是剩余保持进度。
             coverStageStartMs = eventTime
             lastHeldEvidenceMs = confirmedAt
-            _state.update { it.copy(coverMarks = marks, coverHolding = action.holdMs > 0,
+            _state.update { it.copy(coverMarks = marks, coverHolding = action.holdMs > 0 && source == "CAMERA",
                 coverRetryAvailable = false, instruction = "保持：${action.label}", warning = null) }
             coverHoldJob?.cancel()
+            if (source != "CAMERA" && coverIndex < coverSequence.size) {
+                coverDetector.resetCandidate()
+                completeHold(eventTime)
+                _state.update { it.copy(warning = "上一步未取得相机证据，已记为缺测") }
+                return@with
+            }
             coverHoldJob = scope.launch {
                 if (coverIndex >= coverSequence.size) {
                     helpSession.delay(StrabismusProtocol.REFIX_SEARCH_MS + 100L)
@@ -180,6 +194,9 @@ internal class StrabismusStateMachine(private val host: ScreeningEngine) {
                 } else {
                     helpSession.delay((action.holdMs - (platform.nowMs() - eventTime)).coerceAtLeast(0L))
                     val deadline = coverStageStartMs + action.holdMs
+                    // 截止点恰遇单帧反常时等一帧验证，保持中途真正松手仍从首帧判定。
+                    val conflictUntil = deadline + CoverDetector.MAX_FRAME_GAP_MS
+                    while (coverDetector.awaitingConflictingFrame && platform.nowMs() < conflictUntil) helpSession.delay(50)
                     if (_state.value.step == ScreeningStep.COVER && _state.value.coverMarks.size == marks.size && _state.value.coverHolding) {
                         if (coverDetector.matchesCover(action.covered, platform.nowMs())) completeHold(deadline)
                         else retryHeldAction("保持证据暂时中断，请重新${action.label}", platform.nowMs())

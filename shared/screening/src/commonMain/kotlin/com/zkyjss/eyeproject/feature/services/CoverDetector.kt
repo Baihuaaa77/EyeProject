@@ -18,19 +18,22 @@ internal class CoverDetector {
     private var lastTime = Long.MIN_VALUE
     private var lastEvidenceTime = Long.MIN_VALUE
     private var confirmed = false
+    private var conflictingSince: Long? = null
     private val visibleSince = mutableMapOf<VisionEye, Long>()
 
-    fun resetCandidate() { candidate = null; count = 0; confirmed = false; visibleSince.clear(); lastTime = Long.MIN_VALUE; lastEvidenceTime = Long.MIN_VALUE }
+    fun resetCandidate() { candidate = null; count = 0; confirmed = false; visibleSince.clear(); lastTime = Long.MIN_VALUE; lastEvidenceTime = Long.MIN_VALUE; conflictingSince = null }
     val hasBaseline: Boolean get() = leftBaseline != null && rightBaseline != null
     val hasObservation: Boolean get() = candidate != null
     val coveredEye: VisionEye? get() = when (candidate) { 1 -> VisionEye.LEFT; 2 -> VisionEye.RIGHT; else -> null }
     fun matchesCover(covered: VisionEye?, timeMs: Long): Boolean =
-        confirmed && lastEvidenceTime != Long.MIN_VALUE && timeMs - lastEvidenceTime in 0L..MAX_FRAME_GAP_MS && candidate == when (covered) {
+        confirmed && conflictingSince == null && lastEvidenceTime != Long.MIN_VALUE && timeMs - lastEvidenceTime in 0L..MAX_FRAME_GAP_MS && candidate == when (covered) {
             VisionEye.LEFT -> 1; VisionEye.RIGHT -> 2; else -> 0
         }
     fun clear() { resetCandidate(); leftBaseline = null; rightBaseline = null }
 
-    fun observe(timeMs: Long, face: FaceMetrics?, quality: Boolean, learn: Boolean): Observation? {
+    val awaitingConflictingFrame: Boolean get() = conflictingSince != null
+
+    fun observe(timeMs: Long, face: FaceMetrics?, quality: Boolean, learn: Boolean, tolerateSingleFlicker: Boolean = false): Observation? {
         if (timeMs <= lastTime) return null
         if (lastEvidenceTime != Long.MIN_VALUE && timeMs - lastEvidenceTime > MAX_FRAME_GAP_MS) resetCandidate()
         lastTime = timeMs
@@ -70,7 +73,18 @@ internal class CoverDetector {
             else -> null
         }
         if (raw == null) { visibleSince.clear(); return null }
-        if (raw != candidate) { candidate = raw; since = timeMs; count = 0; confirmed = false }
+        if (raw != candidate) {
+            val previousConflict = conflictingSince
+            if (tolerateSingleFlicker && confirmed && previousConflict == null) {
+                conflictingSince = timeMs
+                return null
+            }
+            candidate = raw
+            since = previousConflict ?: timeMs
+            count = if (previousConflict == null) 0 else 1
+            confirmed = false
+        }
+        conflictingSince = null
         count++
         lastEvidenceTime = timeMs
         // 被手遮住后关键点可能塌缩或消失，不再要求被遮眼仍被预测为睁眼。

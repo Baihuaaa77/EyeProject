@@ -158,6 +158,10 @@ class CoverDetectorTest {
         engine.answer(0)
         assertTrue(engine.state.value.answers.isEmpty())
         feedFor(session, leftHidden, 2_000)
+        assertFalse(engine.state.value.trialVisible)
+        assertEquals(0, engine.state.value.trialIndex)
+        engine.retryNearQuestion()
+        feedFor(session, leftHidden, 200)
         assertTrue(engine.state.value.trialVisible)
         assertNotEquals(shown, engine.state.value.trialId)
         engine.close()
@@ -210,6 +214,29 @@ class CoverDetectorTest {
         assertTrue(lost.engine.state.value.coverMarks.isEmpty())
         assertEquals(ScreeningStep.COVER, lost.engine.state.value.step)
         lost.engine.close()
+    }
+
+
+    @Test fun singleVisibilityFlickerAtTheHoldDeadlineDoesNotRestartTheAction() = runTest {
+        val session = readyCoverSession()
+        feedFor(session, face(right = 0f), 1_900L)
+        feedFor(session, face(), 100L)
+        feedFor(session, face(right = 0f), 300L)
+        assertEquals(1, session.engine.state.value.coverMarks.size)
+        assertEquals("CAMERA", session.engine.state.value.coverMarks.single().source)
+        assertFalse(session.engine.state.value.coverHolding)
+        session.engine.close()
+    }
+
+    @Test fun coverTimeoutRecordsMissingAndAdvancesWithoutCameraEvidence() = runTest {
+        val session = readyCoverSession()
+        feedFor(session, face(right = 0f), 600L)
+        advanceTimeBy(15_000L)
+        runCurrent()
+        assertEquals("TIMEOUT", session.engine.state.value.coverMarks.single().source)
+        assertFalse(session.engine.state.value.coverHolding)
+        assertTrue(session.engine.state.value.instruction.contains("移开遮盖"))
+        session.engine.close()
     }
 
     @Test fun earlyReleaseIsRejectedEvenWhenItsConfirmationArrivesAfterHoldDeadline() = runTest {

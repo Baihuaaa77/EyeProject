@@ -251,6 +251,9 @@ class ScreeningEngine(platform: ScreeningPlatform, internal val scope: Coroutine
 
     /** 受试者确认「开始持续模糊」。 */
     fun markPushBlur() = presbyopia.markPushBlur()
+    fun markPushStillClear() = presbyopia.markPushStillClear()
+    fun retryNearQuestion() = presbyopia.retryNearQuestion()
+    fun advanceAfterDisplayLimit() = presbyopia.advanceAfterDisplayLimit()
 
     /** 最近 1 秒的靠近速度（cm/秒，靠近为正）。 */
     internal fun recentApproachSpeed(now: Long): Float? = presbyopia.recentApproachSpeed(now)

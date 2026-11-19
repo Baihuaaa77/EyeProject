@@ -176,6 +176,9 @@ struct EyeTestView: View {
                     Button("已做好动作，继续") { runtime.act("cover") }.buttonStyle(EyeButtonStyle())
                     Button("重新识别本段") { runtime.act("retryCover") }.buttonStyle(EyeButtonStyle(role: .secondary))
                 }
+                if phase == "COVER", !runtime.bool("coverHolding"), !runtime.string("warning").isEmpty {
+                    Text(runtime.string("warning")).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.reflectionTarget)
+                }
                 TestDistanceBanner(runtime: runtime)
                 HStack {
                     Button("退出") { confirmingExit = true }
@@ -334,19 +337,34 @@ struct EyeTestView: View {
                     Spacer(); Text("\(Int(runtime.number("secondsLeft"))) 秒").monospacedDigit()
                 }
             } else if phase == "NEAR_VISION" {
-                Text(["RIGHT": "右眼", "LEFT": "左眼", "BOTH": "双眼"][runtime.string("eye")] ?? "")
-            } else if phase == "FLIPPER" || phase == "DISTANCE_CURVE" {
+                let eye = ["RIGHT": "右眼", "LEFT": "左眼", "BOTH": "双眼"][runtime.string("eye")] ?? ""
+                Text("第 \(Int(runtime.number("visionRound")))/3 轮 · \(eye)").font(EyeStyle.subtitle)
+                if runtime.bool("presbyopiaCoverReady"), !runtime.bool("resolutionAdvancePending") {
+                    StageCaption(text: "本字号第 \(min(4, Int(runtime.number("visionQuestion"))))/4 题")
+                }
+            } else if phase == "DISTANCE_CURVE" {
+                Text("第 \(Int(runtime.number("visionRound")))/3 轮 · \(Int(runtime.number("targetDistanceCm"))) cm").font(EyeStyle.subtitle)
+                if !runtime.bool("resolutionAdvancePending") {
+                    StageCaption(text: "本字号第 \(Int(runtime.number("visionQuestion")))/3 题")
+                }
+            } else if phase == "FLIPPER" {
                 HStack {
                     Text((runtime.bool("flipperCheck") ? "先确认看得清 · " : "") + "\(Int(runtime.number("targetDistanceCm"))) cm")
                     Spacer()
                     if phase == "FLIPPER" && !runtime.bool("flipperCheck") { Text("\(Int(runtime.number("secondsLeft"))) 秒").monospacedDigit() }
                 }
             } else if phase == "PUSH_UP" {
-                Text("\(runtime.string("pushEye")) · 第 \(min(Int(runtime.number("pushDone")) + 1, 3))/3 次")
+                Text("第 \(Int(runtime.number("visionRound")))/2 轮 · \(runtime.string("pushEye"))").font(EyeStyle.subtitle)
+                StageCaption(text: "本眼第 \(min(Int(runtime.number("pushDone")) + 1, 3))/3 次")
             }
-            if phase == "NEAR_VISION" && (runtime.bool("nearAwaitingEyeReady") || !runtime.bool("presbyopiaCoverReady")) {
+            if runtime.bool("resolutionAdvancePending") {
+                Text(runtime.string("resolutionLimitMessage"))
+                Button("继续") { runtime.act("advanceAfterDisplayLimit") }.buttonStyle(EyeButtonStyle())
+            } else if phase == "NEAR_VISION" && (runtime.bool("nearAwaitingEyeReady") || !runtime.bool("presbyopiaCoverReady")) {
                 let hint = runtime.string("presbyopiaCoverHint")
                 Text(hint.isEmpty ? "请按提示遮眼，等待相机确认" : hint).font(EyeStyle.subtitle)
+            } else if phase == "NEAR_VISION" && runtime.bool("nearRetryRequired") {
+                Button("重做本题") { runtime.act("retryNearQuestion") }.buttonStyle(EyeButtonStyle())
             } else if phase == "PUSH_UP" && runtime.string("pushStage") == "READY" {
                 let hint = runtime.string("presbyopiaCoverHint")
                 Text(hint.isEmpty ? (runtime.string("pushEye") == "左眼" ? "遮住右眼，用左眼看" : "遮住左眼，用右眼看") + "；先移到 45 cm 以外" : hint)
@@ -359,6 +377,9 @@ struct EyeTestView: View {
                     TumblingEView(runtime: runtime).stageHeight(max(180, ringDiameter(CGFloat(runtime.number("optotypePx")) / UIScreen.main.scale) + 24))
                         .background(EyeStyle.optotypeSurround, in: RoundedRectangle(cornerRadius: EyeStyle.radiusLarge, style: .continuous))
                     Button("开始持续模糊了") { runtime.act("blur") }.buttonStyle(EyeButtonStyle())
+                    if runtime.bool("pushStillClearAvailable") {
+                        Button("仍看得清") { runtime.act("pushStillClear") }.buttonStyle(EyeButtonStyle(role: .secondary))
+                    }
                 } else {
                     OptotypeAnswerPad(runtime: runtime)
                 }

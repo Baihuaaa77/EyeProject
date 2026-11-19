@@ -136,6 +136,8 @@ data class ScreeningState(
     val nearAwaitingEyeReady: Boolean = false,
     val presbyopiaCoverReady: Boolean = false,
     val presbyopiaCoverHint: String? = null,
+    val nearRetryRequired: Boolean = false,
+    val resolutionAdvancePending: Boolean = false,
     val nearDescending: Boolean = false,
     val nearStopReason: String? = null,
     val nearResolutionLimitedEyes: Set<VisionEye> = emptySet(),

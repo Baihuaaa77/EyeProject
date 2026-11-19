@@ -72,6 +72,9 @@ internal fun StrabismusDarkSession(s: ScreeningState, vm: ScreeningTestViewModel
                 EyeButton("已做好动作，继续", EyeButtonRole.PRIMARY, vm::markCover, Modifier.fillMaxWidth())
                 EyeButton("重新识别本段", EyeButtonRole.SECONDARY, vm::retryCoverDetection, Modifier.fillMaxWidth())
             }
+            if (s.step == ScreeningStep.COVER && !s.coverHolding && !s.warning.isNullOrBlank()) {
+                BaseEyeText(s.warning.orEmpty(), style = typography.bodySecondary, color = colors.white)
+            }
             distance()
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 EyeButton("退出", EyeButtonRole.SECONDARY, { asking = true })

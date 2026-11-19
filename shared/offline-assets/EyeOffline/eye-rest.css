@@ -1,13 +1,5 @@
-.v-subbody:has(> .rest-session) {
-  display: flex;
-  flex-direction: column;
-  padding: 4px 18px max(20px, env(safe-area-inset-bottom));
-}
 .rest-session {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  gap: 15px;
+  display: block;
   width: 100%;
   color: var(--ui-text);
 }
@@ -17,20 +9,19 @@
   font-size: var(--game-instruction-size, 17px);
   line-height: 1.5;
 }
-.rest-field { position: relative; flex: 1 0 215px; }
+/* 普通文档流提供独立场景高度，兼容系统 WebView 对容器查询和动态视口单位的差异。 */
+.rest-field { margin: 15px 0; }
 .rest-field .ff-stage[data-scene="rest"] {
-  position: absolute;
-  top: 0; right: 0; bottom: 0; left: 0;
-  height: 100%;
-  min-height: 0;
+  display: block;
+  height: 360px;
+  height: clamp(200px, 56vh, 500px);
+  min-height: 200px;
   aspect-ratio: auto;
-  container-type: size;
+  container-type: normal;
 }
 .ff-stage[data-scene="rest"] .ff-flight {
-  --insect-size: clamp(30px, 21cqmin, 74px);
-  top: 0;
-  left: 0;
-  width: var(--insect-size);
+  width: 60px;
+  height: 60px;
 }
 .rest-heading {
   display: flex;
@@ -62,11 +53,3 @@
 .rest-controls [data-rest-end] { background: var(--brand-control); border-color: var(--brand-edge); color: var(--ui-text); }
 .rest-controls [hidden] { display: none; }
 .rest-controls button:focus-visible { outline: 2px solid #dadada; outline-offset: 2px; }
-#exercise:not([hidden]) { display: flex; padding: 0 14px 10px; min-height: 100%; }
-#exercise .rest-session { gap: 4px; }
-#exercise .rest-instruction { font-size: 11px; line-height: 1.3; text-align: center; }
-#exercise .rest-field { flex-basis: 75px; }
-#exercise .ff-stage { border-radius: 16px; }
-#exercise .rest-time { font-size: 10px; }
-#exercise .rest-controls { gap: 5px; }
-#exercise .rest-controls button { min-height: 33px; padding: 4px; border-radius: 18px; font-size: 13px; }

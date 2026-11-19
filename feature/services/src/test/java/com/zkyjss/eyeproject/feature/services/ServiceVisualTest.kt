@@ -258,7 +258,8 @@ class ServiceVisualTest {
         compose.setContent {
             EyeProjectTheme(darkTheme = true) {
                 Column(Modifier.fillMaxSize().background(LocalEyeColors.current.appBackground).padding(20.dp)) {
-                    VisionContent(ScreeningState(step = ScreeningStep.NEAR_VISION, trialVisible = true, trialOptotypePx = 48f), vm)
+                    VisionContent(ScreeningState(step = ScreeningStep.NEAR_VISION, presbyopiaCoverReady = true,
+                        trialVisible = true, trialOptotypePx = 48f), vm)
                 }
             }
         }
