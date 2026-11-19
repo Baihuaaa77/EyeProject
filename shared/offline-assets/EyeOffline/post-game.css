@@ -59,7 +59,7 @@
 .pg-backdrop {
   background: #88cdbe url("game-post.webp") center 15% / cover no-repeat;
   position: absolute;
-  inset: 0;
+  top: 0; right: 0; bottom: 0; left: 0;
   z-index: -1;
   pointer-events: none;
 }
@@ -71,12 +71,12 @@
 }
 .pg-tray {
   position: absolute;
-  inset: 5% 3% 28%;
+  top: 5%; right: 3%; bottom: 28%; left: 3%;
   display: grid;
   place-items: center;
   pointer-events: none;
 }
-[data-post-desk="prepare"] .pg-tray { inset: 14% 1% 0; }
+[data-post-desk="prepare"] .pg-tray { top: 14%; right: 1%; bottom: 0; left: 1%; }
 .pg-envelope {
   position: relative;
   width: 58%;

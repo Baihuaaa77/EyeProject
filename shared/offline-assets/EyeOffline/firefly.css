@@ -74,7 +74,7 @@
 .ff-stage::after {
   content: "";
   position: absolute;
-  inset: 0;
+  top: 0; right: 0; bottom: 0; left: 0;
   z-index: 2;
   pointer-events: none;
   border: 1px solid #e1e1e132;
@@ -85,7 +85,7 @@
 /* Reserve vertical clearance for the entire moving target at the calibration extremes. */
 .ff-clearing {
   position: absolute;
-  inset: calc(var(--ff-sprite-size) / 2 + 4px) 0;
+  top: calc(var(--ff-sprite-size) / 2 + 4px); right: 0; bottom: calc(var(--ff-sprite-size) / 2 + 4px); left: 0;
   pointer-events: none;
 }
 .ff-stage[data-scene="result"] { min-height: 126px; aspect-ratio: 2.55; }
@@ -104,10 +104,10 @@
 .ff-clearing .ff-flight { width: var(--ff-sprite-size); }
 .ff-stage[data-scene="prepare"] .ff-flight { left: 37%; top: 22%; }
 .ff-stage[data-scene="result"] .ff-flight { left: 49%; top: 25%; }
-.ff-insect { position: absolute; inset: 0; display: block; width: 100%; height: 100%; overflow: visible; }
+.ff-insect { position: absolute; top: 0; right: 0; bottom: 0; left: 0; display: block; width: 100%; height: 100%; overflow: visible; }
 .ff-tail-glow {
   position: absolute;
-  inset: 0;
+  top: 0; right: 0; bottom: 0; left: 0;
   border-radius: 50%;
   background: radial-gradient(circle, #ffe3a98c 2%, #f8cd7452 15%, #ffd6851c 37%, transparent 67%);
 }
@@ -245,7 +245,7 @@
 .ff-progress-fill { display: block; height: 100%; width: 0; border-radius: inherit; background: var(--brand-orange); }
 .ff-pause-panel {
   position: absolute;
-  inset: 0;
+  top: 0; right: 0; bottom: 0; left: 0;
   z-index: 4;
   display: grid;
   align-content: center;
