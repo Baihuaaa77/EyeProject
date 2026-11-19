@@ -51,11 +51,8 @@ struct BrownHomePage: View {
                         VStack { reading { liveRequests += 1 }; LoadEyeArtwork(level: report.level).frame(height: 112) }
                     }
                     LoadRail(score: report.score, tone: tone)
-                    HStack {
-                        Text("较轻").foregroundStyle(BrownStyle.loadLow)
-                        Spacer()
-                        Text("较大").foregroundStyle(BrownStyle.loadHigh)
-                    }.font(EyeStyle.caption)
+                    HStack { Text("较轻"); Spacer(); Text("较大") }
+                        .font(EyeStyle.caption).foregroundStyle(EyeStyle.text)
                 }
                 HStack(spacing: EyeSpacing.itemGap) {
                     Button("AI问诊") { navigate(.chat) }.buttonStyle(EyeButtonStyle())
@@ -125,7 +122,9 @@ struct BrownHomePage: View {
     }
     private func reading(_ rescan: @escaping () -> Void) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(grade).font(report.score == nil ? EyeStyle.title : EyeStyle.display).foregroundStyle(tone).fixedSize(horizontal: true, vertical: false)
+            Text(grade).font(report.score == nil ? EyeStyle.title : EyeStyle.display)
+                .foregroundStyle(report.score.map(BrownStyle.loadTextColor) ?? EyeStyle.secondary)
+                .fixedSize(horizontal: true, vertical: false)
             Button(action: rescan) { Label(report.score == nil ? "检测" : "复测", systemImage: "arrow.clockwise").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary).padding(.vertical, 8) }.buttonStyle(.plain)
         }
     }

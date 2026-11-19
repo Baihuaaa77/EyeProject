@@ -98,7 +98,7 @@ internal fun BrownHomeOverview(
                         EyeText(
                             grade,
                             style = if (report?.score == null) t.title else t.display,
-                            color = signalColor,
+                            color = report?.score?.let(EyeBrown::loadTextColor) ?: c.textSecondary,
                         )
                         Row(
                             Modifier.clickable(role = Role.Button, onClick = startDetection)
@@ -131,8 +131,8 @@ internal fun BrownHomeOverview(
             }
             EyeLoadRail(report?.score, tone = signalColor)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                EyeText("较轻", style = t.caption, color = EyeBrown.loadLow)
-                EyeText("较大", style = t.caption, color = EyeBrown.loadHigh)
+                EyeText("较轻", style = t.caption, color = c.textPrimary)
+                EyeText("较大", style = t.caption, color = c.textPrimary)
             }
             Box(Modifier.fillMaxWidth().padding(top = 4.dp).height(1.dp).background(c.borderSubtle))
             Row(Modifier.fillMaxWidth().padding(top = 2.dp).height(IntrinsicSize.Min)) {

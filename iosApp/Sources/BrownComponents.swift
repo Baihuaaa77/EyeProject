@@ -11,6 +11,11 @@ enum BrownStyle {
         if score < 60 { return loadMedium }
         return loadHigh
     }
+    static func loadTextColor(_ score: Int) -> Color {
+        if score < 30 { return Color(rgb: 0x01FE00) }
+        if score < 60 { return Color(rgb: 0xFF8A00) }
+        return Color(rgb: 0xFF0000)
+    }
     static let sage = Color(rgb: 0xB6C6B3)
     static let terracotta = Color(rgb: 0xED9A78)
     static let rail = Color(rgb: 0x52524A)

@@ -48,7 +48,8 @@ internal fun V16HomeWeek(history: List<TrendDay>, onFeeling: () -> Unit, onTrend
         EyeSegmentedRow(listOf(SegmentedOption(1, "上周"), SegmentedOption(0, "本周")), week, { week = it })
         val minutes = reading?.screenMinutes
         val amount = minutes?.let { "${it / 60}小时${it % 60}分" } ?: "—"
-        EyeText(amount, style = type.metricValue, color = tone(reading))
+        val amountColor = reading?.score?.takeIf { minutes != null }?.let(EyeBrown::loadTextColor) ?: colors.textSecondary
+        EyeText(amount, style = type.metricValue, color = amountColor)
         if (minutes == null) EyeText("该日暂无用屏记录", style = type.bodySecondary, color = colors.textSecondary)
         Row(Modifier.fillMaxWidth()) {
             ScreenTimeAxis(peak, 100.dp)

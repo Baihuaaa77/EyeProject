@@ -18,6 +18,11 @@ object EyeBrown {
         score < 60 -> loadMedium
         else -> loadHigh
     }
+    fun loadTextColor(score: Int): Color = when {
+        score < 30 -> Color(0xFF01FE00)
+        score < 60 -> Color(0xFFFF8A00)
+        else -> Color(0xFFFF0000)
+    }
     val warm = Color(0xFFEFB285)
     val peach = Color(0xFFF6A267)
     val sage = Color(0xFFB6C6B3)

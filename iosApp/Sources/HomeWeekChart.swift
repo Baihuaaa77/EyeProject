@@ -22,7 +22,9 @@ struct HomeWeekChart: View {
                 week = $0
                 chosen = nil
             }
-            EyeStyle.reading(reading?.screenMinutes.map { "\($0 / 60)小时\($0 % 60)分" } ?? "—", color: tone(reading))
+            let minutes = reading?.screenMinutes
+            let amountColor = minutes.flatMap { _ in reading?.score }.map(BrownStyle.loadTextColor) ?? EyeStyle.secondary
+            EyeStyle.reading(minutes.map { "\($0 / 60)小时\($0 % 60)分" } ?? "—", color: amountColor)
             if reading?.screenMinutes == nil {
                 Text("该日暂无用屏记录").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
             }

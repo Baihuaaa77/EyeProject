@@ -25,7 +25,7 @@ struct DailyRecordsView: View {
                 WarmCard {
                     Text("用眼负荷").font(EyeStyle.subtitle)
                     Text(day.score.map { "\($0) / 100" } ?? "暂无记录").font(EyeStyle.display)
-                        .foregroundStyle(day.score.map(BrownStyle.loadColor) ?? EyeStyle.secondary)
+                        .foregroundStyle(day.score == nil ? EyeStyle.secondary : EyeStyle.text)
                     if day.score != nil, let tip = day.tip {
                         Text(tip).font(EyeStyle.body).foregroundStyle(EyeStyle.secondary)
                     }

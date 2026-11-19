@@ -9,7 +9,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
-import com.zkyjss.eyeproject.core.designsystem.theme.EyeBrown
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
 import com.zkyjss.eyeproject.core.eyecare.DailyEyeRecord
@@ -58,7 +57,7 @@ internal fun V16DailyRecords(
                 EyeText("用眼负荷", style = type.subtitle, color = colors.textPrimary)
                 val score = day.score
                 EyeText(score?.let { "$it / 100" } ?: "暂无记录", style = type.metricValue,
-                    color = score?.let(EyeBrown::loadColor) ?: colors.textSecondary)
+                    color = if (score == null) colors.textSecondary else colors.textPrimary)
                 day.tip?.takeIf { score != null }?.let {
                     EyeText(it, style = type.body, color = colors.textSecondary)
                 }
