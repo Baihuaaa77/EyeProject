@@ -12,7 +12,7 @@ struct CareReport {
     struct Consult: Identifiable { let id: Int; let title: String; let detail: String; let department: String; let urgent: Bool }
     struct Stage: Identifiable { let id: String; let label: String; let done: Bool; let summary: String }
     struct Day: Identifiable {
-        let id: String; let label: String; let blinksPerMinute: Double?; let score: Int?; var screenMinutes: Int? = nil; var longestSessionMinutes: Int? = nil
+        let id: String; let label: String; let blinksPerMinute: Double?; let score: Int?; var screenMinutes: Int? = nil; var longestSessionMinutes: Int? = nil; var nightMinutes: Int? = nil
     }
 
     var level = "UNKNOWN"
@@ -66,7 +66,7 @@ struct CareReport {
         let trend = o["trend"] as? [String: Any] ?? [:]
         days = list("days", trend).map { d in Day(id: d["day"] as? String ?? UUID().uuidString, label: d["label"] as? String ?? "",
             blinksPerMinute: (d["blinksPerMinute"] as? NSNumber)?.doubleValue, score: d["score"] as? Int, screenMinutes: d["screenMinutes"] as? Int) }
-        historyDays = list("historyDays",trend).map { d in Day(id: d["day"] as? String ?? "",label: d["label"] as? String ?? "",blinksPerMinute: (d["blinksPerMinute"] as? NSNumber)?.doubleValue,score: d["score"] as? Int,screenMinutes: d["screenMinutes"] as? Int,longestSessionMinutes: d["longestSessionMinutes"] as? Int) }
+        historyDays = list("historyDays",trend).map { d in Day(id: d["day"] as? String ?? "",label: d["label"] as? String ?? "",blinksPerMinute: (d["blinksPerMinute"] as? NSNumber)?.doubleValue,score: d["score"] as? Int,screenMinutes: d["screenMinutes"] as? Int,longestSessionMinutes: d["longestSessionMinutes"] as? Int, nightMinutes: d["nightMinutes"] as? Int) }
         summary = trend["summary"] as? [String] ?? []
         checkInDays = trend["checkInDays"] as? Int ?? 0
         symptomDays = trend["symptomDays"] as? Int ?? 0

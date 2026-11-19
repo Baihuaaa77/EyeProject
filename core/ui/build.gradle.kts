@@ -10,6 +10,7 @@ android {
 // 护眼操、休息的提示音与测试提示音同出一处（shared/feedback/res/raw，iOS 打包同一目录）
 androidComponents {
     onVariants(selector().all()) { variant ->
+        variant.sources.assets?.addStaticSourceDirectory("../../shared/offline-assets")
         variant.sources.res?.addStaticSourceDirectory("../../shared/feedback/res")
     }
 }

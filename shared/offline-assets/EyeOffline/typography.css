@@ -1,0 +1,205 @@
+/* Share the embedded variable sans across devices, with system fallbacks for user input. */
+#phone, #screen {
+  --ui-face: EyeSans, -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+  --regular: 400;
+  --medium-weight: 500;
+  --semibold: 600;
+  font-family: var(--ui-face);
+  letter-spacing: 0;
+}
+#phone {
+  --page-size: 32px;
+  --hero-size: 42px;
+  --value-size: 26px;
+  --dialog-size: 21px;
+  --section-size: 18px;
+  --body-size: 15px;
+  --game-instruction-size: 17px;
+  --label-size: 13px;
+  --caption-size: 12px;
+  --panel-inset: 18px;
+  font-size: var(--body-size);
+}
+#phone .phone-head h1 {
+  font-size: var(--page-size);
+  font-weight: var(--semibold);
+  letter-spacing: 0;
+  line-height: 1.23;
+}
+#phone :is(.today-head h2, .home-checkins h2, .p-section-title, .diary-heading h3,
+           .v-subnav h2, .consult-advice h3, .consult-questions h3, .metric-history h3) {
+  font-size: var(--section-size);
+  font-weight: var(--semibold);
+  letter-spacing: 0;
+  line-height: 1.4;
+}
+#phone :is(.sheet-top h2, .sheet-body .big-lead, #profile-name) {
+  font-size: var(--dialog-size);
+  font-weight: var(--semibold);
+  letter-spacing: 0;
+  line-height: 1.35;
+}
+#phone :is(.sheet-body, .consult-advice p, .answer-copy, .question-sent) {
+  font-size: var(--body-size);
+  line-height: 1.6;
+  font-weight: var(--regular);
+}
+#phone :is(.sheet-action, .sheet-alt, .sheet-list button, .option-grid button, .test-tile strong,
+           .menu-list button, .ask-topic, .mood-card, .consult-advice button, .routine-name, .answer-author strong,
+           .reading-label, .hero-consult, .v-checkin-actions button) {
+  font-size: var(--body-size);
+  font-weight: var(--medium-weight);
+  line-height: 1.45;
+  letter-spacing: 0;
+}
+#phone :is(.field input, .field textarea) { font-size: 16px; line-height: 1.5; }
+#phone :is(.phone-tabs button, .phone-date, .card-link, .v-section-head button, .diary-date .v-date,
+           .field, .key-metrics dt, .week-row-text > span,
+           .sheet-line small, .menu-list small, .mood-save-state, .soft-chart header > span) {
+  font-size: var(--label-size);
+  font-weight: var(--medium-weight);
+  line-height: 1.45;
+  letter-spacing: 0;
+}
+#phone :is(.deck-position, .load-ends, .report-periods, .reading-foot,
+           .diary-week button span, .diary-about, .answer-author small) {
+  font-size: var(--caption-size);
+  line-height: 1.4;
+  letter-spacing: 0;
+}
+#phone .aike-intro h3 {
+  font-size: clamp(1.625rem, 7.4cqw, 2rem);
+  font-weight: var(--semibold);
+  line-height: 1.25;
+  text-wrap: balance;
+}
+#phone .aike-role {
+  font-size: 1rem;
+  line-height: 1.5;
+}
+#phone :is(.key-metrics dd, .week-row-text strong, .reading-slide > strong,
+           .v-detail-value h3, .soft-chart-value, .v-timer-ring strong, .diary-week b) {
+  font-weight: var(--semibold);
+  font-variant-numeric: lining-nums tabular-nums;
+  letter-spacing: -.025em;
+  line-height: 1.2;
+}
+#phone :is(.reading-slide > strong, .v-detail-value h3) { font-size: var(--hero-size); }
+#phone .key-metrics dd { font-size: var(--value-size); margin-top: 4px; }
+#phone .week-row-text strong { font-size: 22px; }
+#phone :is(.key-metrics small, .week-row-text small, .reading-slide small, .soft-chart-value small) {
+  font-size: var(--label-size);
+  font-weight: var(--regular);
+  letter-spacing: 0;
+}
+#phone .v-detail-value h3 small { font-size: 17px; font-weight: var(--regular); letter-spacing: 0; }
+
+/* Align headings to one inset, including the check-in card's action row. */
+#phone :is(.today-card, .home-trend-card, .home-checkins) { padding-inline: var(--panel-inset); }
+#phone .home-checkins .v-section-head { min-height: 44px; gap: 8px; }
+#phone .v-section-head button { min-height: 44px; white-space: nowrap; }
+#phone .v-checkin-actions { gap: 6px; margin-top: 8px; }
+#phone .v-checkin-actions button { min-height: 46px; padding: 7px 3px; white-space: normal; }
+#phone .key-metrics { column-gap: 16px; align-items: start; }
+#phone .key-metrics > div + div { border-inline-start: 0; padding-inline-start: 0; }
+.hero-actions { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; margin-top: 16px; }
+#phone #phone-today-title {
+  color: var(--ui-text);
+  font-size: clamp(23px, 6.4cqw, 28px);
+  line-height: 1.22;
+  font-weight: 650;
+}
+#screen .load-heading .eyebrow {
+  color: var(--ui-text);
+  font-size: clamp(13px, 7.6cqw, 18px);
+  font-weight: 630;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+#phone .today-card {
+  border-color: var(--eye-color,var(--load-color));
+  background: var(--brand-surface);
+}
+#phone .today-card .card-link, #screen .watch-all-data { color: var(--ui-text); }
+#phone .hero-consult {
+  width: 100%;
+  min-height: 44px;
+  align-self: stretch;
+  padding: 8px 6px;
+  border: 1px solid var(--brand-edge);
+  border-radius: 15px;
+  background: var(--brand-control);
+  color: var(--ui-text);
+  font-weight: 600;
+}
+#phone .hero-consult:is(:hover,:focus-visible) { border-color: var(--brand-orange); }
+#phone .hero-consult:active { background: var(--action-fill); color: var(--brand-ink); filter: none; }
+#phone .home-trend-card .today-head { min-height: 32px; }
+#phone .home-checkins { padding-block: 13px 16px; }
+#phone .week-row { grid-template-columns: minmax(0,1.32fr) minmax(0,1fr) 10px; }
+
+/* Metric drill-downs use the page surface. The selected date appears once. */
+#phone-subpage[data-view="metric"] .v-subnav h2 { font-size: clamp(20px,5.8cqw,25px); }
+#phone .v-detail-value { padding: 10px 0 13px; }
+#phone .v-detail-value p { margin-top: 7px; font-size: var(--label-size); line-height: 1.5; }
+.metric-history { --curve: #c0c0c0; margin: 2px 0 0; padding-top: 17px; border-top: 1px solid #ffffff16; }
+.metric-history.soft-chart-continuous, .metric-history.soft-chart-light { --curve: #d0d0d0; }
+.metric-history.soft-chart-blink { --curve: #c0c0c0; }
+.metric-history.soft-chart-rest, .metric-history.soft-chart-brightness { --curve: #c6c6c6; }
+.metric-history.soft-chart-night { --curve: #bfbfbf; }
+.metric-history.soft-chart-distance { --curve: #bebebe; }
+.history-chart {
+  display: grid;
+  grid-template-columns: max-content minmax(0,1fr);
+  column-gap: 8px;
+  margin-top: 19px;
+}
+.history-axis { display: flex; flex-direction: column; align-items: flex-end; justify-content: space-between; padding: 2px 0; }
+.history-axis span { color: var(--ui-text); font-size: var(--caption-size); font-variant-numeric: tabular-nums; line-height: 1; }
+.history-plot { position: relative; height: clamp(136px,43cqw,185px); color: var(--ui-text); }
+.history-plot svg { width: 100%; height: 100%; }
+.history-guides { stroke: #ffffff19; stroke-width: 1; }
+.history-line { stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; }
+.history-cursor { stroke: currentColor; opacity: .4; stroke-dasharray: 2 4; }
+.history-point { position: absolute; width: 8px; height: 8px; border-radius: 50%; background: var(--curve); box-shadow: 0 0 0 4px color-mix(in srgb,var(--curve) 16%,transparent); transform: translate(-50%,-50%); }
+.history-days.soft-days { position: static; grid-column: 2; }
+.history-days.soft-days button { height: 44px; align-items: center; }
+.history-days.soft-days button span { min-width: 0; padding: 0 4px; font-size: var(--caption-size); color: var(--ui-text); white-space: nowrap; }
+.history-days.soft-days button[aria-pressed=true] span { color: var(--ui-text); background: color-mix(in srgb,currentColor 12%,transparent); }
+@media (max-width: 340px) {
+  #phone { --panel-inset: 13px; }
+}
+@container (max-width: 330px) {
+  #phone .week-row { gap: 5px; padding-inline: 11px; }
+  #phone .week-row small { margin-inline: 1px; font-size: 12px; }
+  #phone .v-checkin-actions button { padding-inline: 2px; font-size: 14px; }
+  .history-chart { column-gap: 3px; }
+}
+@container (max-width: 260px) {
+  #phone .key-metrics { grid-template-columns: 1fr; gap: 10px; }
+  #phone .v-checkin-actions { grid-template-columns: 1fr; }
+  #phone .week-row { grid-template-columns: minmax(0,1fr) 9px; }
+  #phone .week-row-text { grid-column: 1; }
+  #phone .week-chevron { grid-column: 2; grid-row: 1; }
+  #phone .week-spark { grid-column: 1/-1; height: 32px; }
+  .history-days.soft-days button span { padding: 0; }
+}
+
+#screen :is(.face-head h2,.detail-kicker,.tool-copy strong) { font-weight: var(--semibold); letter-spacing: 0; }
+#screen :is(.face-head h2,.detail-head h2) { font-size: 14px; line-height: 1.25; }
+#screen #trend-title { font-size: clamp(20px,12.8cqw,28px); }
+#screen :is(.clock,.week-range,.metrics dt,.day-options button) { font-size: 11px; letter-spacing: 0; }
+#screen :is(.tool-copy strong,.week-days-link,.play-button,.reminder-toggle) { font-size: 13px; line-height: 1.3; }
+#screen :is(.clock,#level-text,#interval-value,#exercise-time,.metrics dd) { font-variant-numeric: tabular-nums; }
+.phone-display .today-heading { flex-wrap: wrap; column-gap: 8px; }
+.data-source { font-size: 12px; line-height: 1.3; font-weight: 500; color: var(--ui-text); white-space: nowrap; }
+.diary-week button:disabled, .history-days button:disabled, .wrist-reading-week button:disabled, #day-options button:disabled { opacity: .46; cursor: default; }
+.wrist-reading-value>small { color: var(--ui-text); font-size: 11px; }
+.test-record-status { display:flex; align-items:center; flex-wrap:wrap; gap:5px 12px; margin:10px 0 13px; font-size:14px; line-height:1.45; color:var(--ui-text); }
+.test-record-status[data-record-state="saved"] { color:var(--ui-text); }
+.test-record-status button { width:auto; margin:0; }
+
+/* Duration numbers and their units carry the load for the day being viewed. */
+:is(#phone,#screen) .use-duration, :is(#phone,#screen) .use-duration small { color: var(--usage-color,var(--load-color)); }
+:is(#phone-subpage[data-view="all-data"],#phone-subpage[data-view="metric"],#screen #metrics,#screen #watch-reading) .use-duration,
+:is(#phone-subpage[data-view="all-data"],#phone-subpage[data-view="metric"],#screen #metrics,#screen #watch-reading) .use-duration small { color: var(--ui-text); }

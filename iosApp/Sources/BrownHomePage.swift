@@ -20,28 +20,17 @@ struct BrownHomePage: View {
     @State private var feeling = false
     @State private var careTimer: String?
     @State private var allData = false
+    @State private var booking = false
     @State private var exercise = false
     @State private var liveRequests = 0
     private var report: CareReport { store.report }
     private var grade: String { switch report.level { case "LOW": "较轻"; case "MEDIUM": "中等"; case "HIGH": "较大"; default: "暂无读数" } }
-    private var tone: Color { switch report.level { case "LOW": EyeStyle.success; case "HIGH": EyeStyle.danger; case "MEDIUM": EyeStyle.primary; default: EyeStyle.secondary } }
+    private var tone: Color { report.score.map(BrownStyle.loadColor) ?? EyeStyle.secondary }
     private var greeting: String {
         switch Calendar.current.component(.hour, from: Date()) { case 5...10: "早上好"; case 11...13: "中午好"; case 14...17: "下午好"; default: "晚上好" }
     }
     private var today: String {
         let f = DateFormatter(); f.locale = Locale(identifier: "zh_CN"); f.dateFormat = "M月d日 EEEE"; return f.string(from: Date())
-    }
-    private var availableSignals: [CareReport.Signal] {
-        report.signals.filter { !["light", "screen", "longest", "night"].contains($0.id) }
-    }
-    private var weekScores: [Int?] {
-        var calendar = Calendar(identifier: .iso8601); calendar.timeZone = .current
-        guard let monday = calendar.dateInterval(of: .weekOfYear, for: Date())?.start else { return Array(repeating: nil, count: 7) }
-        let formatter = DateFormatter(); formatter.dateFormat = "yyyy-MM-dd"
-        return (0..<7).map { offset in
-            guard let date = calendar.date(byAdding: .day, value: offset, to: monday) else { return nil }
-            return report.days.first { $0.id == formatter.string(from: date) }?.score
-        }
     }
     var body: some View {
         ScrollViewReader { proxy in
@@ -52,7 +41,7 @@ struct BrownHomePage: View {
                         Text("今日用眼负荷").font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text)
                         HelpButton(title: "今日用眼负荷", text: "根据已有实时检测、打卡与自测数据进行评估，不替代医学诊断。")
                         Spacer(minLength: 0)
-                        Button { allData = true } label: { Text("全部数据  ›").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.primary).frame(minHeight: 44) }.buttonStyle(.plain)
+                        Button { allData = true } label: { Text("用眼全记录  ›").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.primary).frame(minHeight: 44) }.buttonStyle(.plain)
                     }
                     ViewThatFits(in: .horizontal) {
                         HStack(spacing: 0) {
@@ -61,21 +50,15 @@ struct BrownHomePage: View {
                         }
                         VStack { reading { liveRequests += 1 }; LoadEyeArtwork(level: report.level).frame(height: 112) }
                     }
-                    LoadRail(score: report.score)
+                    LoadRail(score: report.score, tone: tone)
                     HStack { Text("较轻"); Spacer(); Text("较大") }.font(EyeStyle.caption).foregroundStyle(EyeStyle.secondary)
                 }
-                quick("AI 问诊", BrownStyle.consult) { navigate(.chat) }
-                WarmCard(fill: BrownStyle.trend, spacing: 2) {
-                    HStack {
-                        Text("本周用眼趋势").font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text)
-                        Spacer()
-                        Button { feeling = true } label: { Text("记录感受  ›").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.primary).frame(minHeight: 44) }.buttonStyle(.plain)
-                    }
-                    Button { navigate(.trend) } label: { TrendRibbon(values: weekScores) }.buttonStyle(.plain)
-                    Button("查看本周趋势") { navigate(.trend) }.font(EyeStyle.bodySecondary)
-                    HStack { ForEach(["周初", "周中", "周末"], id: \.self) { text in Text(text).font(EyeStyle.caption).foregroundStyle(EyeStyle.secondary).frame(maxWidth: .infinity) } }
+                HStack(spacing: EyeSpacing.itemGap) {
+                    Button("AI问诊") { navigate(.chat) }.buttonStyle(EyeButtonStyle())
+                    Button("智能挂号") { booking = true }.buttonStyle(EyeButtonStyle())
                 }
                 companionCheckIns
+                HomeWeekChart(history: report.historyDays, onFeeling: { feeling = true }, onTrend: { navigate(.trend) })
                 WarmCard(padding: 14) {
                     LiveEyeSection(startRequests: liveRequests)
                     Rectangle().fill(EyeStyle.borderSubtle).frame(height: 1)
@@ -96,10 +79,11 @@ struct BrownHomePage: View {
         }
         .onAppear { store.refresh() }
         .onChange(of: reminder.enabled) { _ in store.refresh() }
+        .fullScreenCover(isPresented: $booking) { OfflineSessionCover(session: .booking) }
         .fullScreenCover(isPresented: $exercise) { EyeExerciseView() }
         .fullScreenCover(isPresented: $allData) {
             NavigationStack {
-                SubPage(title: "全部数据") { ForEach(availableSignals) { item in ListRow(title: item.label, value: item.value) } }
+                DailyRecordsView(report: report)
                     .toolbar { ToolbarItem(placement: .navigationBarLeading) { Button("关闭") { allData = false } } }
             }
         }
@@ -123,12 +107,13 @@ struct BrownHomePage: View {
     private var companionCheckIns: some View {
                 WarmCard {
                     HStack {
-                        Text("陪伴小打卡").font(EyeStyle.subtitle)
+                        Text("加油小贴贴").font(EyeStyle.subtitle)
                         Spacer()
                         Text("今日 \(report.completedCare.count) 项").font(EyeStyle.caption).foregroundStyle(EyeStyle.secondary)
                     }
                     ForEach(["闭眼休息","远眺20秒","热敷眼睛"],id: \.self) { key in
-                        ListRow(title: key,value: report.completedCare.contains(key) ? "已完成" : "开始") { careTimer = key }
+                        Button(report.completedCare.contains(key) ? "\(key) · 已完成" : key) { careTimer = key }
+                            .buttonStyle(EyeButtonStyle(role: .secondary))
                     }
                 }
     }
@@ -137,13 +122,5 @@ struct BrownHomePage: View {
             Text(grade).font(report.score == nil ? EyeStyle.title : EyeStyle.display).foregroundStyle(tone).fixedSize(horizontal: true, vertical: false)
             Button(action: rescan) { Label(report.score == nil ? "检测" : "复测", systemImage: "arrow.clockwise").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary).padding(.vertical, 8) }.buttonStyle(.plain)
         }
-    }
-    private func quick(_ title: String, _ fill: LinearGradient, _ action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            WarmCard(fill: fill, padding: 14) {
-                HStack { Spacer(); Text("↗").font(EyeStyle.caption).foregroundStyle(EyeStyle.secondary) }
-                Text(title).font(EyeStyle.navigationTitle).foregroundStyle(EyeStyle.text).padding(.top, 6)
-            }
-        }.buttonStyle(PressScale(scale: 0.98))
     }
 }

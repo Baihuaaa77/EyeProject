@@ -1,5 +1,7 @@
 # core:ui
 
+> 2026-11-19：双端离线会话使用 `shared/offline-assets/EyeOffline` 中的 V16 交互和素材。安卓和 iOS 仅提供随包资源与返回事件。相机、正式测量、账号和记录由原生页面处理。
+
 > 2026-11-12 棕色界面：棕色版本：EyeWarmCard / EyeLoadArtwork / EyeLoadRail / EyeTrendRibbon / EyeWeekUsageCard 提供纯展示原语。导航改为横向图标与文字的杏桃胶囊，列表改为整组表面，开关使用清晰浅色滑块。所有数据和导航仍由调用方提供。 以下历史章节中的旧配色和布局描述由根目录 DESIGN.md 取代。
 
 

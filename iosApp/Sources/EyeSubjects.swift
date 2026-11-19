@@ -296,6 +296,7 @@ struct SubjectPickerView: View {
     @State private var editing: SubjectProfileItem?
     @State private var chosenId: String?
     @State private var skipped = false
+    @State private var practice: OfflineSession?
 
     var body: some View {
         VStack(alignment: .leading, spacing: EyeStyle.spacing) {
@@ -317,7 +318,7 @@ struct SubjectPickerView: View {
                     .buttonStyle(EyeButtonStyle(role: .secondary))
             }
             Button("添加家庭成员") { editing = SubjectStore.newMember() }.buttonStyle(EyeButtonStyle(role: .secondary))
-            Button { skipped = true } label: { Text("暂不选择成员") }
+            Button { skipped = true } label: { Text("访客测试") }
                 .buttonStyle(EyeCardButtonStyle(selected: skipped))
             if skipped {
                 Button("继续") { runtime.act("skipProfile") }.buttonStyle(EyeButtonStyle())
@@ -328,7 +329,11 @@ struct SubjectPickerView: View {
                     Button("继续") { runtime.act("continueProfile") }.buttonStyle(EyeButtonStyle())
                 }
             }
-        }.fullScreenCover(item: $editing) { item in
+            if let session = OfflineSession(test: runtime.kind) {
+                Button("无相机试玩") { practice = session }.buttonStyle(EyeButtonStyle(role: .secondary))
+            }
+        }.fullScreenCover(item: $practice) { OfflineSessionCover(session: $0) }
+        .fullScreenCover(item: $editing) { item in
             NavigationStack { SubjectEditView(item: item, modal: true) }.tint(EyeStyle.primary)
         }
         .onChange(of: store.subjects.map(\.updatedAt)) { _ in

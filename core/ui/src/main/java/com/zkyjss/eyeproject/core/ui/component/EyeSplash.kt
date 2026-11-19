@@ -60,8 +60,6 @@ fun EyeSplash(onFinished: () -> Unit, modifier: Modifier = Modifier) {
             }, size = 88.dp)
             Spacer(Modifier.height(20.dp))
             EyeText("眼健康助手", style = typography.title, color = colors.textPrimary)
-            Spacer(Modifier.height(6.dp))
-            EyeText("你的主动眼健康助手", style = typography.bodySecondary, color = colors.textSecondary)
             Spacer(Modifier.height(32.dp))
             Canvas(Modifier.width(120.dp).height(3.dp)) {
                 val radius = CornerRadius(size.height / 2)

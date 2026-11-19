@@ -8,7 +8,7 @@ settings:
   base:
     SWIFT_VERSION: "5.0"
     MARKETING_VERSION: "0.2.0"
-    CURRENT_PROJECT_VERSION: "11"
+    CURRENT_PROJECT_VERSION: "12"
     FRAMEWORK_SEARCH_PATHS: "$(inherited) $(SRCROOT)/../shared/screening/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)"
     OTHER_LDFLAGS: "$(inherited) -framework EyeScreening -lc++"
 targets:
@@ -17,6 +17,9 @@ targets:
     platform: iOS
     sources:
       - Sources
+      - path: ../shared/offline-assets/EyeOffline
+        type: folder
+        buildPhase: resources
       - path: ../core/camera/src/main/assets/face_landmarker.task
         buildPhase: resources
       - path: ../core/designsystem/src/main/res/font/eye_noto_regular.ttf

@@ -40,6 +40,7 @@ internal fun BrownHomeOverview(
     var exercise by rememberSaveable { mutableStateOf(false) }
     var feeling by rememberSaveable { mutableStateOf(false) }
     var careTimer by rememberSaveable { mutableStateOf<String?>(null) }
+    var booking by rememberSaveable { mutableStateOf(false) }
     var allData by rememberSaveable { mutableStateOf(false) }
     var liveRequests by rememberSaveable { mutableIntStateOf(0) }
     val live = remember { BringIntoViewRequester() }
@@ -55,13 +56,7 @@ internal fun BrownHomeOverview(
             "HIGH" -> "较大"
             else -> "暂无读数"
         }
-    val signalColor =
-        when (report?.level) {
-            "LOW" -> c.success
-            "HIGH" -> c.danger
-            "MEDIUM" -> c.primary
-            else -> c.textSecondary
-        }
+    val signalColor = report?.score?.let(EyeBrown::loadColor) ?: c.textSecondary
     val date = remember {
         LocalDate.now().format(DateTimeFormatter.ofPattern("M月d日 EEEE", Locale.CHINA))
     }
@@ -93,7 +88,7 @@ internal fun BrownHomeOverview(
                 EyeText("今日用眼负荷", style = t.subtitle, color = c.textPrimary)
                 EyeHelpButton("今日用眼负荷", "根据当前已有的用屏、休息、环境与自测数据进行评估，不替代医学诊断。", Modifier.size(28.dp))
                 Spacer(Modifier.weight(1f))
-                WarmLink("全部数据") { allData = true }
+                WarmLink("用眼全记录") { allData = true }
             }
             BoxWithConstraints {
                 val stacked = maxWidth / LocalDensity.current.fontScale < 250.dp
@@ -133,7 +128,7 @@ internal fun BrownHomeOverview(
                         EyeLoadArtwork(report?.level, Modifier.weight(.64f).height(112.dp))
                     }
             }
-            EyeLoadRail(report?.score)
+            EyeLoadRail(report?.score, tone = signalColor)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 EyeText("较轻", style = t.caption, color = c.textSecondary)
                 EyeText("较大", style = t.caption, color = c.textSecondary)
@@ -164,31 +159,21 @@ internal fun BrownHomeOverview(
                 }
             }
         }
-        WarmQuick("AI 问诊", EyeBrown.consult, Modifier.fillMaxWidth(), navigation.onOpenChat)
-        EyeWarmCard(fill = EyeBrown.trend, spacing = 2.dp) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                EyeText("本周用眼趋势", Modifier.weight(1f), style = t.subtitle, color = c.textPrimary)
-                WarmLink("记录感受") { feeling = true }
-            }
-            val monday = LocalDate.now().with(java.time.DayOfWeek.MONDAY)
-            val days = report?.trend?.days.orEmpty().associateBy { it.day }
-            Box(Modifier.clickable(role = Role.Button,onClick = navigation.onOpenTrend)) { EyeTrendRibbon((0..6).map { days[monday.plusDays(it.toLong()).toString()]?.score }) }
-            WarmLink("查看本周趋势",navigation.onOpenTrend)
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
-                listOf("周初", "周中", "周末").forEach {
-                    EyeText(it, style = t.caption, color = c.textSecondary)
-                }
-            }
+        Row(horizontalArrangement = Arrangement.spacedBy(EyeSpacing.md)) {
+            EyeButton("AI问诊", EyeButtonRole.PRIMARY, navigation.onOpenChat, Modifier.weight(1f))
+            EyeButton("智能挂号", EyeButtonRole.PRIMARY, { booking = true }, Modifier.weight(1f))
         }
         EyeWarmCard {
             Row(Modifier.fillMaxWidth(),verticalAlignment = Alignment.CenterVertically) {
-                EyeText("陪伴小打卡",Modifier.weight(1f),style = t.subtitle,color = c.textPrimary)
-                EyeText("今日 ${report?.completedCare?.size ?: 0} 项",style = t.caption,color = c.textSecondary)
+                EyeText("加油小贴贴", Modifier.weight(1f), style = t.subtitle, color = c.textPrimary)
+                EyeText("今日 ${report?.completedCare?.size ?: 0} 项", style = t.caption, color = c.textSecondary)
             }
             listOf("闭眼休息","远眺20秒","热敷眼睛").forEach { name ->
-                EyeListRow(name,{ careTimer = name },value = if (name in report?.completedCare.orEmpty()) "已完成" else "开始")
+                val label = if (name in report?.completedCare.orEmpty()) "$name · 已完成" else name
+                EyeButton(label, EyeButtonRole.SECONDARY, { careTimer = name }, Modifier.fillMaxWidth())
             }
         }
+        V16HomeWeek(report?.trend?.historyDays.orEmpty(), { feeling = true }, navigation.onOpenTrend)
         EyeWarmCard(Modifier.bringIntoViewRequester(live), padding = 14.dp) {
             liveEye(liveRequests)
             Box(Modifier.fillMaxWidth().height(1.dp).background(c.borderSubtle))
@@ -228,6 +213,7 @@ internal fun BrownHomeOverview(
         }
         Spacer(Modifier.height(24.dp))
     }
+    if (booking) EyeOfflineSessionPage(EyeOfflineSession.BOOKING, { booking = false })
     if (exercise) EyeExercisePage({ exercise = false })
     if (feeling)
         FeelingDialog(
@@ -248,16 +234,9 @@ internal fun BrownHomeOverview(
     }
     if (allData)
         EyeFullScreenPage({ allData = false }) {
-            EyeSubPage("全部数据", { allData = false }) {
-                report?.signals.orEmpty().forEach { signal ->
-                    EyeListRow(signal.label, null, value = signal.value)
-                }
-                if (
-                    state.usageAccess ==
-                        com.zkyjss.eyeproject.core.eyecare.EyeCareEngine.ACCESS_DENIED
-                )
-                    EyeButton("开启用屏统计", EyeButtonRole.PRIMARY, actions.openUsageAccess)
-            }
+            V16DailyRecords(report, { allData = false }, actions.openUsageAccess.takeIf {
+                state.usageAccess == com.zkyjss.eyeproject.core.eyecare.EyeCareEngine.ACCESS_DENIED
+            })
         }
 }
 
@@ -271,27 +250,4 @@ private fun WarmLink(text: String, action: () -> Unit) {
         style = LocalEyeTypography.current.bodySecondary,
         color = LocalEyeColors.current.primary,
     )
-}
-
-@Composable
-private fun WarmQuick(
-    title: String,
-    fill: androidx.compose.ui.graphics.Brush,
-    modifier: Modifier,
-    action: () -> Unit,
-) {
-    val c = LocalEyeColors.current
-    val t = LocalEyeTypography.current
-    EyeWarmCard(modifier.clickable(role = Role.Button, onClick = action), fill, padding = 14.dp) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Spacer(Modifier.weight(1f))
-            EyeText("↗", style = t.caption, color = c.textSecondary)
-        }
-        EyeText(
-            title,
-            Modifier.padding(top = 6.dp),
-            style = t.navigationTitle,
-            color = c.textPrimary,
-        )
-    }
 }

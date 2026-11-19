@@ -34,7 +34,6 @@ import com.zkyjss.eyeproject.feature.home.navigation.navigateToEyeChat
 import com.zkyjss.eyeproject.feature.home.navigation.homeScreen
 import com.zkyjss.eyeproject.feature.home.navigation.navigateToEyeAdvice
 import com.zkyjss.eyeproject.feature.home.navigation.navigateToEyeBrightness
-import com.zkyjss.eyeproject.feature.home.navigation.navigateToEyeExercise
 import com.zkyjss.eyeproject.feature.home.navigation.navigateToEyeTrend
 import com.zkyjss.eyeproject.feature.home.navigation.navigateToHome
 import com.zkyjss.eyeproject.feature.mine.MineNavigation
@@ -119,7 +118,6 @@ fun EyeProjectNavHost(
             ))
             eyeCareScreens(onBack = back, onOpenTest = openTest, onOpenAccount = openAccount)
             servicesScreen(
-                onOpenExercise = { navController.navigateToEyeExercise() },
                 onDryEyeClick = { navController.navigateToDryEye() },
                 onPresbyopiaClick = { navController.navigateToPresbyopia() },
                 onStrabismusClick = { navController.navigateToStrabismus() },

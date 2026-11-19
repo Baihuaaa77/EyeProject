@@ -1,120 +1,57 @@
-"""生成双端应用图标：爱尔眼科数字人「爱科 Eyecho」头像（取代 generate_app_icon.py 的小瞳图标）。
-
-输入：scripts/assets/eyecho_icon_source.png（真人数字人照片 docs/素材/Aike.png 抠绿幕后裁出的头到胸口，
-见 generate_eyecho_portrait.py；下沿在胸前「EYE」标志之上）。
-采用上浅下深的暖陶棕渐变，爱科采用紧凑的头肩构图并保留白大褂原色。
-输出：
-  - 安卓自适应图标前景位图 mipmap-*/ic_launcher_foreground.png（108dp 画布，头部位于平台遮罩安全区内）；
-    背景 drawable/ic_launcher_background.xml 读取暖棕令牌；
-    旧版回退位图 mipmap-*/ic_launcher(_round).webp（minSdk 26 实际用不到，保持一致）。
-  - iOS 1024 px 不透明图标（同一构图）。
-  - 应用内展示用的同款 512 px 图标（安卓 drawable-nodpi/eyecho_app_icon.png、iOS EyechoAppIcon）。
-用法：
-  python scripts/generate_eyecho_icon.py              写入工程
-  python scripts/generate_eyecho_icon.py --preview 目录  只输出预览（圆形 / 圆角方形遮罩），不改动工程文件
-"""
+"""从用户提供的方形爱科插图生成双端桌面和开屏图标。"""
 from pathlib import Path
-import sys
-from xml.etree import ElementTree
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageOps
 
 ROOT = Path(__file__).resolve().parents[1]
 RES = ROOT / 'app/src/main/res'
-IOS_ICON = ROOT / 'iosApp/Sources/Assets.xcassets/AppIcon.appiconset/AppIcon.png'
-# 应用内「关于」处展示的同款图标（安卓 EyeAppIcon / iOS AppIconView），512 px
-IN_APP_ANDROID = ROOT / 'core/designsystem/src/main/res/drawable-nodpi/eyecho_app_icon.png'
-IN_APP_IOS = ROOT / 'iosApp/Sources/Assets.xcassets/EyechoAppIcon.imageset/eyecho_app_icon.png'
+ASSETS = ROOT / 'iosApp/Sources/Assets.xcassets'
 SOURCE = ROOT / 'scripts/assets/eyecho_icon_source.png'
-PALETTE = ElementTree.parse(ROOT / 'core/designsystem/src/main/res/values/colors.xml').getroot()
-
-
-def color(name: str) -> tuple[int, int, int, int]:
-    value = PALETTE.findtext(f"color[@name='{name}']")
-    if value is None:
-        raise ValueError(f"缺少图标颜色令牌 {name}")
-    alpha, red, green, blue = bytes.fromhex(value.removeprefix('#'))
-    return red, green, blue, alpha
-
-
-BACKGROUND_TOP = color('eye_icon_terracotta_top')
-BACKGROUND_BOTTOM = color('eye_icon_terracotta_bottom')
 DENSITIES = {'mdpi': 1, 'hdpi': 1.5, 'xhdpi': 2, 'xxhdpi': 3, 'xxxhdpi': 4}
-IOS_SIZE = 1024
-PORTRAIT_WIDTH = 1.04
-PORTRAIT_BOTTOM = 1.025
 
 
-def gradient(size: int, inset: int = 0) -> Image.Image:
-    """安卓自适应底图从可见区顶部到下沿渐变，外围延续端点颜色。"""
-    span = max(1, size - 2 * inset - 1)
-    strip = Image.new('RGBA', (1, size))
-    for y in range(size):
-        t = min(1.0, max(0.0, (y - inset) / span))
-        strip.putpixel((0, y), tuple(round(start + (end - start) * t)
-                          for start, end in zip(BACKGROUND_TOP, BACKGROUND_BOTTOM)))
-    return strip.resize((size, size), Image.Resampling.NEAREST)
-
-
-def portrait(canvas: Image.Image, src: Image.Image, width: float, bottom: float) -> None:
-    w = round(width)
-    head = src.resize((w, round(w * src.height / src.width)), Image.LANCZOS)
-    canvas.alpha_composite(head, ((canvas.width - w) // 2, round(bottom) - head.height))
-
-
-def foreground(px: int, src: Image.Image) -> Image.Image:
-    k = px / 108
-    canvas = Image.new('RGBA', (px, px), (0, 0, 0, 0))
-    # 肩部延伸过系统遮罩下沿，头顶留在自适应图标安全区。
-    portrait(canvas, src, 72 * PORTRAIT_WIDTH * k, (18 + 72 * PORTRAIT_BOTTOM) * k)
-    return canvas
-
-
-def flattened(px: int, src: Image.Image) -> Image.Image:
-    """背景 + 前景叠好，再裁掉自适应图标被遮住的外圈（旧版回退位图用）。"""
-    size = px * 108 // 72
-    m = (size - px) // 2
-    big = gradient(size, inset=m)
-    big.alpha_composite(foreground(size, src))
-    return big.crop((m, m, m + px, m + px))
-
-
-def ios(src: Image.Image) -> Image.Image:
-    canvas = gradient(IOS_SIZE)
-    portrait(canvas, src, IOS_SIZE * PORTRAIT_WIDTH, IOS_SIZE * PORTRAIT_BOTTOM)
-    return canvas.convert('RGB')
-
-
-def masked(img: Image.Image, radius: float) -> Image.Image:
-    mask = Image.new('L', img.size, 0)
-    ImageDraw.Draw(mask).rounded_rectangle((0, 0, img.width - 1, img.height - 1), radius=radius * img.width, fill=255)
-    out = Image.new('RGBA', img.size, (255, 255, 255, 0))
-    out.paste(img.convert('RGBA'), (0, 0), mask)
-    return out
+def round_icon(image: Image.Image) -> Image.Image:
+    mask = Image.new('L', (512, 512))
+    ImageDraw.Draw(mask).ellipse((0, 0, 511, 511), fill=255)
+    result = image.copy()
+    result.putalpha(mask.resize(image.size, Image.Resampling.LANCZOS))
+    return result
 
 
 def main() -> None:
-    src = Image.open(SOURCE).convert('RGBA')
-    if len(sys.argv) > 2 and sys.argv[1] == '--preview':
-        out = Path(sys.argv[2]); out.mkdir(parents=True, exist_ok=True)
-        icon = flattened(432, src)
-        sheet = Image.new('RGBA', (432 * 3 + 80, 432), (40, 44, 52, 255))
-        sheet.alpha_composite(masked(icon, 0.5), (0, 0))
-        sheet.alpha_composite(masked(icon, 0.22), (432 + 40, 0))
-        sheet.alpha_composite(masked(ios(src).resize((432, 432), Image.LANCZOS), 0.2237), (864 + 80, 0))
-        sheet.save(out / 'icon_preview.png')
-        return
-    for name, k in DENSITIES.items():
-        d = RES / f'mipmap-{name}'
-        foreground(round(108 * k), src).save(d / 'ic_launcher_foreground.png', optimize=True)
-        legacy = flattened(round(48 * k), src)
-        legacy.save(d / 'ic_launcher.webp', lossless=True)
-        masked(legacy, 0.5).save(d / 'ic_launcher_round.webp', lossless=True)
-    ios(src).save(IOS_ICON, optimize=True)
-    in_app = ios(src).resize((512, 512), Image.LANCZOS)
-    in_app.save(IN_APP_ANDROID, optimize=True)
-    IN_APP_IOS.parent.mkdir(parents=True, exist_ok=True)
-    in_app.save(IN_APP_IOS, optimize=True)
+    source = Image.open(SOURCE).convert('RGB')
+    if source.width != source.height:
+        raise ValueError('爱科图标原图须为正方形')
+
+    # 以边缘像素填充安卓自适应图标的系统遮罩余量。
+    inset = source.width // 4
+    expanded = ImageOps.expand(source, border=inset)
+    width, height = source.size
+    for box, at in [
+        ((0, 0, width, 1), (inset, 0)),
+        ((0, height - 1, width, height), (inset, height + inset)),
+        ((0, 0, 1, height), (0, inset)),
+        ((width - 1, 0, width, height), (width + inset, inset)),
+    ]:
+        edge = source.crop(box)
+        expanded.paste(edge.resize((max(inset, edge.width), max(inset, edge.height))), at)
+    for x, px in [(0, 0), (width + inset, width - 1)]:
+        for y, py in [(0, 0), (height + inset, height - 1)]:
+            expanded.paste(source.getpixel((px, py)), (x, y, x + inset, y + inset))
+
+    for density, scale in DENSITIES.items():
+        folder = RES / f'mipmap-{density}'
+        size = round(108 * scale)
+        expanded.resize((size, size), Image.Resampling.LANCZOS).save(folder / 'ic_launcher_foreground.png', optimize=True)
+        size = round(48 * scale)
+        legacy = source.resize((size, size), Image.Resampling.LANCZOS)
+        legacy.save(folder / 'ic_launcher.webp', lossless=True)
+        round_icon(legacy).save(folder / 'ic_launcher_round.webp', lossless=True)
+
+    source.resize((1024, 1024), Image.Resampling.LANCZOS).save(ASSETS / 'AppIcon.appiconset/AppIcon.png', optimize=True)
+    in_app = source.resize((512, 512), Image.Resampling.LANCZOS)
+    in_app.save(ASSETS / 'EyechoAppIcon.imageset/eyecho_app_icon.png', optimize=True)
+    in_app.save(ROOT / 'core/designsystem/src/main/res/drawable-nodpi/eyecho_app_icon.png', optimize=True)
 
 
 if __name__ == '__main__':

@@ -1,0 +1,37 @@
+@font-face {
+  font-family: EyeSans;
+  src: url('fonts/eye-ui.woff2') format('woff2');
+  font-weight: 100 900;
+  font-display: swap;
+}
+:root {
+  color-scheme: dark;
+  --brand-base: #241912;
+  --brand-surface: #35261c;
+  --brand-control: #493428;
+  --brand-edge: #ac7654;
+  --brand-ink: #241912;
+  --brand-orange: #ff8a00;
+  --ui-text: #fff;
+  --accent: var(--brand-orange);
+  --line: var(--brand-edge);
+  --action-fill: var(--brand-orange);
+  background: var(--brand-base);
+  color: var(--ui-text);
+}
+*, *::before, *::after { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; min-height: 100dvh; }
+#session { min-height: 100dvh; padding: 12px 16px 16px; }
+button, textarea, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--brand-orange); outline-offset: 2px; }
+.test-record-status { margin-block: 12px; }
+
+
+#session[data-view="sprout"]:has(> .sg-root:is([data-sg-page="1"], [data-sg-page="2"])),
+#session:has(> .ff-page, > .pg-page, > .rest-session) {
+  height: 100dvh;
+  overflow-y: auto;
+  position: relative;
+}

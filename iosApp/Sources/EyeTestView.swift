@@ -172,12 +172,16 @@ struct EyeTestView: View {
             }.padding(16).background(GeometryReader { geometry in Color.clear.preference(key: DarkControlsHeight.self,value: geometry.size.height) })
         }.onPreferenceChange(DarkControlsHeight.self) { darkControlsHeight = $0 }
     }
+    @State private var practice: OfflineSession?
     private var pageContent: some View {
         VStack(spacing: EyeStyle.spacing) {
             if !displayReady {
                 ScreenCalibrationView { value in
                     pixelsPerMm = value; UserDefaults.standard.set(value, forKey: "eye.pixelsPerMm")
                     runtime.prepare(pixelsPerMm: value)
+                }
+                if let session = OfflineSession(test: runtime.kind) {
+                    Button("无相机试玩") { practice = session }.buttonStyle(EyeButtonStyle(role: .secondary))
                 }
             } else {
                 // 注视类任务的提示位放在舞台下方：舞台紧贴顶部，提示出现与否不挪动目标
@@ -191,7 +195,8 @@ struct EyeTestView: View {
                 else { testContent }
                 if isGazeTask { TestNoticeSlot(text: noticeText) }
             }
-        }.animation(.easeInOut(duration: 0.28), value: isOpticTask ? "" : noticeText)
+        }.fullScreenCover(item: $practice) { OfflineSessionCover(session: $0) }
+        .animation(.easeInOut(duration: 0.28), value: isOpticTask ? "" : noticeText)
     }
     private var noticeText: String { runtime.error ?? runtime.cameraNote ?? warningText }
     /// 视标类任务：提示浮层显示，不占布局

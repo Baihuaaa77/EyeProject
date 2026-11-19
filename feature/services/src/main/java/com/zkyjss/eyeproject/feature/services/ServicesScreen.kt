@@ -102,10 +102,10 @@ fun ServicesScreen(
     onColorVisionClick: () -> Unit = {},
     week: List<Int?> = List(7) { null },
     todayIndex: Int = java.time.LocalDate.now().dayOfWeek.value - 1,
-    onOpenExercise: () -> Unit = {},
 ) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
+    var restOpen by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
 
     Column(
         modifier = modifier
@@ -141,9 +141,9 @@ fun ServicesScreen(
             }
         }
         EyeText("日常护眼", Modifier.padding(top = 8.dp), style = typography.subtitle, color = colors.textPrimary)
-        EyeWarmCard(Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onOpenExercise), fill = com.zkyjss.eyeproject.core.designsystem.theme.EyeBrown.tile(0)) {
+        EyeWarmCard(Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = { restOpen = true }), fill = com.zkyjss.eyeproject.core.designsystem.theme.EyeBrown.tile(0)) {
             EyeGlyphIcon(EyeGlyph.EYE, Modifier.align(Alignment.CenterHorizontally).padding(top = 12.dp).size(32.dp), colors.primary)
-            EyeText("护眼操", Modifier.align(Alignment.CenterHorizontally).padding(vertical = 12.dp), style = typography.navigationTitle, color = colors.textPrimary)
+            EyeText("转转眼睛", Modifier.align(Alignment.CenterHorizontally).padding(vertical = 12.dp), style = typography.navigationTitle, color = colors.textPrimary)
         }
         EyeText(
             "自测结果仅供参考，不能替代医院检查。",
@@ -153,6 +153,7 @@ fun ServicesScreen(
             modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 24.dp)
         )
     }
+    if (restOpen) EyeOfflineSessionPage(EyeOfflineSession.REST, { restOpen = false })
 }
 
 /** 四项自测等权展示，标题与箭头一起提供可操作线索。 */

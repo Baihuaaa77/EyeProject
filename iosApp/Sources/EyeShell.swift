@@ -179,6 +179,7 @@ private struct ServicesPage: View {
     let open: (String) -> Void
     let navigate: (AppRoute) -> Void
     @ObservedObject private var store = EyeCareStore.shared
+    @State private var restOpen = false
     var body: some View {
         PageScroll {
             PageHeader(title: "服务", openAccount: { navigate(.account) }, openSettings: { navigate(.settings) })
@@ -191,15 +192,15 @@ private struct ServicesPage: View {
                 ServiceRow(title: "色觉自测", glyph: .color, tone: .accent, divider: false) { open("COLOR_VISION") }
             }
             Text("日常护眼").font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text).padding(.top, 8)
-            Button { navigate(.exercise) } label: {
+            Button { restOpen = true } label: {
                 WarmCard(fill: BrownStyle.tile(0)) {
                     EyeGlyphView(glyph: .eye, color: EyeStyle.primary).frame(width: 32, height: 32).frame(maxWidth: .infinity).padding(.top, 12)
-                    Text("护眼操").font(EyeStyle.navigationTitle).foregroundStyle(EyeStyle.text).frame(maxWidth: .infinity).padding(.vertical, 12)
+                    Text("转转眼睛").font(EyeStyle.navigationTitle).foregroundStyle(EyeStyle.text).frame(maxWidth: .infinity).padding(.vertical, 12)
                 }
             }.buttonStyle(.plain).frame(maxWidth: .infinity)
             Text("自测结果仅供参考，不能替代医院检查。").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.tertiary)
                 .frame(maxWidth: .infinity).multilineTextAlignment(.center).padding(.top, 4)
-        }
+        }.fullScreenCover(isPresented: $restOpen) { OfflineSessionCover(session: .rest) }
     }
     private var serviceWeek: [Int?] {
         var calendar = Calendar(identifier: .iso8601)

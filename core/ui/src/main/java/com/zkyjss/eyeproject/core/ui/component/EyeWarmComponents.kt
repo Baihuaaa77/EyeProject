@@ -64,7 +64,7 @@ fun EyeLoadArtwork(level: String?, modifier: Modifier = Modifier) {
 
 /** 连续负荷分值的三段条；无分值时不显示标记。 */
 @Composable
-fun EyeLoadRail(score: Int?, modifier: Modifier = Modifier) {
+fun EyeLoadRail(score: Int?, modifier: Modifier = Modifier, tone: Color = LocalEyeColors.current.primary) {
     val c = LocalEyeColors.current
     Canvas(
         modifier.fillMaxWidth().height(16.dp).semantics {
@@ -75,7 +75,7 @@ fun EyeLoadRail(score: Int?, modifier: Modifier = Modifier) {
         drawLine(EyeBrown.rail, Offset(0f, y), Offset(size.width, y), 5.dp.toPx(), StrokeCap.Round)
         score?.let {
             val x = size.width * it.coerceIn(0, 100) / 100f
-            drawLine(c.primary, Offset(0f, y), Offset(x, y), 5.dp.toPx(), StrokeCap.Round)
+            drawLine(tone, Offset(0f, y), Offset(x, y), 5.dp.toPx(), StrokeCap.Round)
         }
         for (i in 1..2) drawLine(
             c.heroEnd,
@@ -86,7 +86,7 @@ fun EyeLoadRail(score: Int?, modifier: Modifier = Modifier) {
         score?.let {
             val x = size.width * it.coerceIn(0, 100) / 100f
             drawCircle(c.heroEnd, 8.dp.toPx(), Offset(x, y))
-            drawCircle(c.primary, 6.dp.toPx(), Offset(x, y))
+            drawCircle(tone, 6.dp.toPx(), Offset(x, y))
             drawCircle(EyeBrown.marker, 4.dp.toPx(), Offset(x, y))
         }
     }

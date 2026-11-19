@@ -3,6 +3,14 @@ import UIKit
 
 /// 用户参考稿的暖棕材质，所有新页面复用同一套令牌。
 enum BrownStyle {
+    static let loadLow = Color(rgb: 0x01FE00)
+    static let loadMedium = Color(rgb: 0xFF8A00)
+    static let loadHigh = Color(rgb: 0xFF0000)
+    static func loadColor(_ score: Int) -> Color {
+        if score < 30 { return loadLow }
+        if score < 60 { return loadMedium }
+        return loadHigh
+    }
     static let sage = Color(rgb: 0xB6C6B3)
     static let terracotta = Color(rgb: 0xED9A78)
     static let rail = Color(rgb: 0x52524A)
@@ -55,6 +63,7 @@ struct LoadEyeArtwork: View {
 
 struct LoadRail: View {
     let score: Int?
+    var tone = EyeStyle.primary
     var body: some View {
         Canvas { context, size in
             let y = size.height / 2
@@ -63,7 +72,7 @@ struct LoadRail: View {
             if let score {
                 let x = size.width * CGFloat(min(100, max(0, score))) / 100
                 var fill = Path(); fill.move(to: CGPoint(x: 0, y: y)); fill.addLine(to: CGPoint(x: x, y: y))
-                context.stroke(fill, with: .color(EyeStyle.primary), style: StrokeStyle(lineWidth: 5, lineCap: .round))
+                context.stroke(fill, with: .color(tone), style: StrokeStyle(lineWidth: 5, lineCap: .round))
             }
             for i in 1...2 {
                 let x = size.width * CGFloat(i) / 3
@@ -72,7 +81,7 @@ struct LoadRail: View {
             if let score {
                 let x = size.width * CGFloat(min(100, max(0, score))) / 100
                 context.fill(Path(ellipseIn: CGRect(x: x - 7, y: y - 7, width: 14, height: 14)), with: .color(EyeStyle.heroEnd))
-                context.fill(Path(ellipseIn: CGRect(x: x - 5.5, y: y - 5.5, width: 11, height: 11)), with: .color(EyeStyle.primary))
+                context.fill(Path(ellipseIn: CGRect(x: x - 5.5, y: y - 5.5, width: 11, height: 11)), with: .color(tone))
                 context.fill(Path(ellipseIn: CGRect(x: x - 4, y: y - 4, width: 8, height: 8)), with: .color(BrownStyle.marker))
             }
         }.frame(height: 16).accessibilityLabel(score.map { "用眼负荷 \($0)，满分 100" } ?? "暂无用眼负荷数据")

@@ -72,14 +72,13 @@ fun NavGraphBuilder.servicesScreen(
     onOpenSettings: () -> Unit = {},
     onOpenAccount: () -> Unit = {},
     onColorVisionClick: () -> Unit = {},
-    onOpenExercise: () -> Unit = {},
 ) {
     composable<ServicesRoute> {
         val model: ServicesViewModel = hiltViewModel()
         val state by model.uiState.collectAsStateWithLifecycle()
         LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { model.refresh() }
         ServicesScreen(
-            week = state.week, todayIndex = state.todayIndex, onOpenExercise = onOpenExercise,
+            week = state.week, todayIndex = state.todayIndex,
             onDryEyeClick = onDryEyeClick,
             onPresbyopiaClick = onPresbyopiaClick,
             onStrabismusClick = onStrabismusClick,

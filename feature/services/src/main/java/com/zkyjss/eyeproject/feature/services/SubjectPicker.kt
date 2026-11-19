@@ -31,6 +31,8 @@ import com.zkyjss.eyeproject.core.ui.component.EyeButtonRole
 import com.zkyjss.eyeproject.core.ui.component.EyeChoiceList
 import com.zkyjss.eyeproject.core.ui.component.EyeOptionRow
 import com.zkyjss.eyeproject.core.ui.component.EyeText
+import com.zkyjss.eyeproject.core.ui.component.EyeOfflineSession
+import com.zkyjss.eyeproject.core.ui.component.EyeOfflineSessionPage
 
 /**
  * 测试开始页「这次测谁？」：长期资料在「我的 → 家庭成员」维护，测试时自动带入；
@@ -48,6 +50,14 @@ internal fun SubjectPicker(
     onContinue: () -> Unit = {},
     questions: @Composable () -> Unit = {},
 ) {
+    var practiceOpen by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+    val practice = when (kind) {
+        "DRY_EYE" -> EyeOfflineSession.GARDEN
+        "STRABISMUS" -> EyeOfflineSession.FIREFLY
+        "COLOR_VISION" -> EyeOfflineSession.COLOR
+        "PRESBYOPIA" -> EyeOfflineSession.POST
+        else -> null
+    }
     var skipped by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
@@ -75,7 +85,7 @@ internal fun SubjectPicker(
             EyeButton(if ("出生年份" in missing) "补充出生年份" else "编辑资料", EyeButtonRole.SECONDARY, { onEdit(s.id) })
         }
         EyeButton("添加家庭成员", EyeButtonRole.SECONDARY, { onEdit(null) }, Modifier.fillMaxWidth())
-        EyeOptionRow("暂不选择成员", hint = null, selected = skipped, multiple = false) { skipped = true }
+        EyeOptionRow("访客测试", hint = null, selected = skipped, multiple = false) { skipped = true }
         if (skipped) EyeButton("继续", EyeButtonRole.PRIMARY, onSkip, Modifier.fillMaxWidth())
         else if (selectedId != null) {
             val profile = subjects.firstOrNull { it.id == selectedId }
@@ -84,7 +94,11 @@ internal fun SubjectPicker(
                 else questions()
             }
         }
+        if (practice != null) {
+            EyeButton("无相机试玩", EyeButtonRole.SECONDARY, { practiceOpen = true }, Modifier.fillMaxWidth())
+        }
     }
+    if (practiceOpen && practice != null) EyeOfflineSessionPage(practice, { practiceOpen = false })
 }
 
 /**
