@@ -35,6 +35,7 @@ struct CareReport {
     var tips: [Tip] = []
     var consults: [Consult] = []
     var days: [Day] = []
+    var historyDays: [Day] = []
     var dailyRecords: [DailyRecord] = []
     var summary: [String] = []
     var checkInDays = 0
@@ -72,8 +73,17 @@ struct CareReport {
         consults = list("consults", o).enumerated().map { i, c in Consult(id: i, title: c["title"] as? String ?? "", detail: c["detail"] as? String ?? "",
             department: c["department"] as? String ?? "", urgent: c["urgent"] as? Bool ?? false) }
         let trend = o["trend"] as? [String: Any] ?? [:]
-        days = list("days", trend).map { d in Day(id: d["day"] as? String ?? UUID().uuidString, label: d["label"] as? String ?? "",
-            blinksPerMinute: (d["blinksPerMinute"] as? NSNumber)?.doubleValue, score: d["score"] as? Int, screenMinutes: d["screenMinutes"] as? Int) }
+        func trendDays(_ key: String) -> [Day] {
+            list(key, trend).compactMap { day in
+                guard let id = day["day"] as? String else { return nil }
+                return Day(id: id, label: day["label"] as? String ?? "",
+                    blinksPerMinute: (day["blinksPerMinute"] as? NSNumber)?.doubleValue,
+                    score: day["score"] as? Int, screenMinutes: day["screenMinutes"] as? Int,
+                    longestSessionMinutes: day["longestSessionMinutes"] as? Int, nightMinutes: day["nightMinutes"] as? Int)
+            }
+        }
+        days = trendDays("days")
+        historyDays = trendDays("historyDays")
         dailyRecords = list("dailyRecords", o).compactMap { day in
             guard let id = day["day"] as? String, let label = day["dateLabel"] as? String else { return nil }
             let metrics = list("metrics", day).compactMap { metric -> DailyMetric? in
