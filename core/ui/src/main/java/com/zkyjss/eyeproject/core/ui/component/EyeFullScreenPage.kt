@@ -26,7 +26,11 @@ import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
  * 用于测试进行中打开的「系统设置」「本次测试数据」等不能离开当前页面的场景；其余二级页走导航。
  */
 @Composable
-fun EyeFullScreenPage(onDismiss: () -> Unit, content: @Composable () -> Unit) {
+fun EyeFullScreenPage(
+    onDismiss: () -> Unit,
+    animateContent: Boolean = true,
+    content: @Composable () -> Unit,
+) {
     val colors = LocalEyeColors.current
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         val view = LocalView.current
@@ -40,8 +44,12 @@ fun EyeFullScreenPage(onDismiss: () -> Unit, content: @Composable () -> Unit) {
                 }
             }
         }
-        val visible = remember { MutableTransitionState(false).apply { targetState = true } }
-        AnimatedVisibility(visible, enter = slideInHorizontally(tween(EyeMotion.MEDIUM, easing = EyeMotion.Standard)) { it / 3 } + fadeIn(tween(EyeMotion.SHORT))) {
+        if (animateContent) {
+            val visible = remember { MutableTransitionState(false).apply { targetState = true } }
+            AnimatedVisibility(visible, enter = slideInHorizontally(tween(EyeMotion.MEDIUM, easing = EyeMotion.Standard)) { it / 3 } + fadeIn(tween(EyeMotion.SHORT))) {
+                Box(Modifier.fillMaxSize().background(colors.appBackground)) { content() }
+            }
+        } else {
             Box(Modifier.fillMaxSize().background(colors.appBackground)) { content() }
         }
     }

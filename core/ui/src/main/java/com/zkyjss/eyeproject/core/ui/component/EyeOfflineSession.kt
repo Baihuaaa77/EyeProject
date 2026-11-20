@@ -1,5 +1,6 @@
 package com.zkyjss.eyeproject.core.ui.component
 
+import android.view.View
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -36,13 +37,16 @@ fun EyeOfflineSessionPage(
 ) {
     val background = LocalEyeColors.current.appBackground
     val close by rememberUpdatedState(onClose)
-    EyeFullScreenPage(onClose) {
+    // 让 WebView 从挂载起就使用稳定的全屏布局，避免入场过渡改变原生视图的绘制边界。
+    EyeFullScreenPage(onClose, animateContent = false) {
         Column(Modifier.fillMaxSize().background(background).navigationBarsPadding()) {
             TopBackBar(title = session.title, noText = true, containerColor = background, onBackClick = onClose)
             AndroidView(
                 modifier = Modifier.weight(1f).fillMaxWidth(),
                 factory = { context ->
                     WebView(context).apply {
+                        // 离线网页单独使用软件绘制，规避部分设备的硬件合成裁切。
+                        setLayerType(View.LAYER_TYPE_SOFTWARE, null)
                         setBackgroundColor(background.toArgb())
                         settings.javaScriptEnabled = true
                         settings.allowFileAccess = false

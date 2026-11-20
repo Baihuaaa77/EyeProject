@@ -12,7 +12,7 @@ android {
 
     defaultConfig {
         applicationId = "com.zkyjss.eyeproject"
-        versionCode = 5
+        versionCode = 6
         versionName = "1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // 正式包保持 ARM64；Debug 额外构建 x86_64 供模拟器直接运行。
