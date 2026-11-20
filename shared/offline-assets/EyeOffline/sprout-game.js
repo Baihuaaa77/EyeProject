@@ -199,6 +199,8 @@ window.createSproutGame=function(body,onDone,save,onRestart){
     if(garden.done)return;
     for(const item of garden.items){
       const el=itemNodes.get(item.id)||makeItem(item);
+      const needed=item.tool===garden.need;
+      if(el.classList.contains('sg-needed')!==needed)el.classList.toggle('sg-needed',needed);
       if(drag?.el!==el)position(el,item.x*fieldWidth/100,item.y*fieldHeight/100);
     }
   }
@@ -383,34 +385,55 @@ window.createSproutGame=function(body,onDone,save,onRestart){
     }
   });
   body.addEventListener('pointerdown',event=>{
-    const el=event.target.closest('.sg-item');
+    let el=event.target.closest('.sg-item');
     if(!el||!ui||!garden||garden.done||paused||drag||event.button!==0)return;
+    const containsPointer=node=>{
+      const box=node.getBoundingClientRect();
+      return event.clientX>=box.left&&event.clientX<=box.right&&event.clientY>=box.top&&event.clientY<=box.bottom;
+    };
+    // 素材重叠时，扩大的触摸区不能盖住手指真正点到的另一枚素材。
+    if(!containsPointer(el)){
+      el=[...itemNodes.values()].find(node=>node.style.visibility!=='hidden'&&containsPointer(node))||el;
+    }
     releaseInteraction();ignoreClick=null;
     if(!garden.hold(el.dataset.id))return;
-    const box=el.getBoundingClientRect(),field=ui.field.getBoundingClientRect();
+    const box=el.getBoundingClientRect();
     drag={el,pointer:event.pointerId,x:event.clientX,y:event.clientY,
-      originX:(box.left+box.width/2-field.left)*fieldWidth/field.width,
-      originY:(box.top+box.height/2-field.top)*fieldHeight/field.height,
-      scaleX:fieldWidth/field.width,scaleY:fieldHeight/field.height,moved:false};
+      offsetX:box.left+box.width/2-event.clientX,offsetY:box.top+box.height/2-event.clientY,moved:false};
     el.classList.add('sg-held');el.setPointerCapture(event.pointerId);ui.field.classList.add('holding');
   });
+  function moveDraggedItem(event){
+    if(Math.hypot(event.clientX-drag.x,event.clientY-drag.y)>4)drag.moved=true;
+    if(!drag.moved)return;
+    const field=ui.field.getBoundingClientRect();
+    const x=(event.clientX+drag.offsetX-field.left)*fieldWidth/field.width;
+    const y=(event.clientY+drag.offsetY-field.top)*fieldHeight/field.height;
+    position(drag.el,x,y);
+  }
   body.addEventListener('pointermove',event=>{
     if(!drag||event.pointerId!==drag.pointer)return;
-    const dx=event.clientX-drag.x,dy=event.clientY-drag.y;
-    if(Math.hypot(dx,dy)>4)drag.moved=true;
-    if(drag.moved){position(drag.el,drag.originX+dx*drag.scaleX,drag.originY+dy*drag.scaleY);event.preventDefault()}
+    moveDraggedItem(event);
+    if(drag.moved)event.preventDefault();
   });
   body.addEventListener('pointerup',event=>{
     if(!drag||event.pointerId!==drag.pointer)return;
-    const {el,moved}=drag,box=ui.target.getBoundingClientRect();
-    const inside=event.clientX>=box.left-8&&event.clientX<=box.right+8&&event.clientY>=box.top-8&&event.clientY<=box.bottom+8;
-    if(moved){
-      ignoreClick=el;setTimeout(()=>{if(ignoreClick===el)ignoreClick=null},0);
-      if(inside)deliver(el);else notifyGarden('把素材拖到小芽或花盆上，再松手。');
+    moveDraggedItem(event);
+    if(drag.moved){
+      const {el}=drag,box=ui.target.getBoundingClientRect(),item=el.getBoundingClientRect();
+      const overlapX=Math.max(0,Math.min(box.right,item.right)-Math.max(box.left,item.left));
+      const overlapY=Math.max(0,Math.min(box.bottom,item.bottom)-Math.max(box.top,item.top));
+      const pointerInside=event.clientX>=box.left-8&&event.clientX<=box.right+8&&event.clientY>=box.top-8&&event.clientY<=box.bottom+8;
+      // 手指可能抓在素材边缘，松手时以素材本身与花盆的重叠为准。
+      ignoreClick=el;setTimeout(()=>{if(ignoreClick===el)ignoreClick=null},350);
+      if(pointerInside||overlapX*overlapY>=item.width*item.height*.25)deliver(el);
+      else notifyGarden('把素材拖到小芽或花盆上，再松手。');
     }
     releaseInteraction();if(ui)paintGarden();
   });
   body.addEventListener('pointercancel',e=>{if(drag?.pointer===e.pointerId)releaseInteraction()});
+  body.addEventListener('lostpointercapture',e=>{
+    if(drag?.pointer===e.pointerId&&drag.el===e.target)releaseInteraction();
+  });
   document.addEventListener('visibilitychange',()=>{
     if(document.hidden){
       observation.interrupt();if(page===2)pause();

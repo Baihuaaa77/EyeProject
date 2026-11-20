@@ -63,15 +63,18 @@ button.sg-quiet{border:1px solid var(--brand-edge);background:var(--brand-contro
 .sg-bubble svg{display:block;flex:0 0 26px;width:26px;height:26px}
 .sg-bubble{width:max-content;white-space:nowrap}
 .sg-sky,.sg-coins{position:absolute;top: 0; right: 0; bottom: 0; left: 0;overflow:visible;pointer-events:none}
-.sg-sky{z-index:3}.sg-coins{z-index:4}
+.sg-sky{z-index:4}.sg-coins{z-index:3}
 .sg-playfield.holding .sg-sky{z-index:5}
 .sg-root .sg-item,.sg-root .sg-coin{position:absolute;display:grid;place-items:center;transform:translate(-50%,-50%);pointer-events:auto;-webkit-tap-highlight-color:transparent;box-sizing:border-box;margin:0;min-width:0;line-height:1}
 .sg-root .sg-item{width:var(--tile,54px);height:var(--tile,54px);padding:6px;cursor:grab;touch-action:none;border-radius:38% 44% 39% 42%;border:1px solid #dbe5ca80;background:radial-gradient(ellipse at 28% 14%,#d2e4b746,transparent 65%),linear-gradient(150deg,#76927aeb,#385947ef);box-shadow:0 4px 8px #203b3047,inset 0 1px #ecf7d852}
+/* 给移动素材留出触摸余量，减少帧间位移造成的落空。 */
+.sg-root .sg-item::before{content:"";position:absolute;top:-14px;right:-14px;bottom:-14px;left:-14px;border-radius:inherit}
 .sg-root .sg-item[data-tool="1"]{background:radial-gradient(ellipse at 30% 12%,#c8f6f540,transparent 66%),linear-gradient(150deg,#668e86eb,#335b59ef)}
 .sg-root .sg-item[data-tool="2"]{background:radial-gradient(ellipse at 30% 14%,#ffe2ac3e,transparent 66%),linear-gradient(150deg,#869078eb,#536448ef)}
 .sg-root .sg-item[data-tool="3"]{background:radial-gradient(ellipse at 28% 15%,#f7d3b345,transparent 66%),linear-gradient(150deg,#8f8d73eb,#526251ef)}
 .sg-item svg,.sg-coin svg{display:block;width:100%;height:100%;pointer-events:none}
 .sg-root .sg-item:active,.sg-root .sg-item.sg-held{cursor:grabbing;z-index:8;border-color:#f2f2f2;box-shadow:0 5px 12px #2222226b,inset 0 1px #f3f3f375}
+.sg-root .sg-item.sg-needed:not(.sg-held):not(:active){z-index:2;border-color:var(--brand-edge)}
 .sg-root .sg-item[aria-pressed=true]{outline:2px solid #e7e7e7;outline-offset:2px}
 .sg-root .sg-coin{width:48px;height:48px;min-height:44px;padding:0;cursor:pointer;touch-action:manipulation;background:transparent;border:0;border-radius:50%;animation:sg-coin-arc .75s cubic-bezier(.23,.75,.38,1) backwards}
 .sg-coin svg{filter:drop-shadow(0 3px 3px #28282862)}
