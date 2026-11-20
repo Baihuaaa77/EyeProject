@@ -33,8 +33,6 @@ button { cursor: pointer; }
 @supports not (aspect-ratio: 1) {
   .sg-portrait, .pg-desk[data-post-desk="prepare"] { height: clamp(150px, 21vh, 195px); }
   .sg-flower-scene, .pg-desk[data-post-desk="result"] { height: 170px; }
-  .sg-root .sg-target { width: 116px; height: 136px; }
-  .sg-bubble { bottom: 76px; font-size: 18px; }
   .ff-stage[data-scene="prepare"] { --ff-sprite-size: 69px; }
   .ff-stage[data-scene="result"] { --ff-sprite-size: 63px; }
   .ff-stage[data-scene="practice"], .ff-stage[data-scene="test"],

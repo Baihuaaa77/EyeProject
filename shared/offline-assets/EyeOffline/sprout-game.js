@@ -44,7 +44,7 @@ window.createSproutGame=function(body,onDone,save,onRestart){
   let runTime=0;
   let garden=null,observation=createSproutObservation(),summary=null,ui=null;
   let lastTick=0,animation=0,paused=false,drag=null,selected=null,ignoreClick=null,noteUntil=0,bloomElapsed=null;
-  let resizeObserver=null,fieldWidth=0,fieldHeight=0;
+  let resizeObserver=null,fieldWidth=0,fieldHeight=0,itemRadius=0;
   const itemNodes=new Map(),coinNodes=new Map();
   function growthLevel(percent){
     if(percent>=100)return 4;
@@ -136,8 +136,21 @@ window.createSproutGame=function(body,onDone,save,onRestart){
   }
   function sizeField(){
     if(!ui)return;
+    // 旧 WebView 切换场景后可能仍用初始视口匹配 CSS，改用实际可见尺寸，短屏保留自然滚动。
+    const viewportHeight=window.innerHeight;
+    const viewportWidth=window.innerWidth;
+    const padding=getComputedStyle(body);
+    const scene=ui.field.parentElement;
+    body.firstElementChild.style.minHeight=Math.max(0,viewportHeight-parseFloat(padding.paddingTop)-parseFloat(padding.paddingBottom))+'px';
+    // 竖屏至少保留海湾背景的原始比例。
+    scene.style.minHeight=viewportHeight>viewportWidth
+      ?Math.ceil(scene.clientWidth*1402/1122)+'px':'';
     fieldWidth=ui.field.clientWidth;fieldHeight=ui.field.clientHeight;
+    itemRadius=Number.parseFloat(getComputedStyle(ui.field).getPropertyValue('--tile'))/2;
+    ui.field.style.setProperty('--plant-width',Math.min(fieldWidth*.85,fieldHeight*.45)+'px');
+    updateItems();
   }
+  window.addEventListener('resize',sizeField);
   function textIfChanged(el,text){if(el&&el.textContent!==text)el.textContent=text}
   function showGardenNote(message){
     textIfChanged(ui.note,message);
@@ -180,7 +193,12 @@ window.createSproutGame=function(body,onDone,save,onRestart){
     return el;
   }
   function position(el,x,y){
-    el.style.transform='translate3d('+x.toFixed(2)+'px,'+y.toFixed(2)+'px,0) translate(-50%,-50%)';
+    // 进入画面前先藏起素材，防止旧 WebView 把浮动图层绘制到圆角场景之外。
+    const visible=drag?.el===el||y>=itemRadius;
+    const safeX=Math.max(itemRadius,Math.min(x,fieldWidth-itemRadius));
+    const safeY=Math.max(itemRadius,Math.min(y,fieldHeight-itemRadius));
+    el.style.visibility=visible?'':'hidden';
+    el.style.transform='translate('+safeX.toFixed(2)+'px,'+safeY.toFixed(2)+'px) translate(-50%,-50%)';
   }
   function updateItems(){
     for(const [id,el] of itemNodes){
