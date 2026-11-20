@@ -81,7 +81,14 @@ window.LilyArt = (() => {
   const potFace = 'M81 141.3h4c11 3.7 39 3.7 51 0h3v49H81Z';
   const illustration = '<image href="crown-bloom.webp" x="43" y="2" width="142" height="187"/>';
 
-  function potted(stage) {
+  function potted(stage, pulse = false) {
+    // 安卓在 SVG 内缩放枝叶，盆沿和阴影留在固定坐标，避免整张画布参与合成。
+    const foliage = content => pulse
+      ? `<g transform="translate(110 141.4)"><g>
+          <animateTransform data-sg-feed attributeName="transform" type="scale" values="1 .97;.98 1.05;1 1"
+            keyTimes="0;.4;1" calcMode="spline" keySplines="0 0 .58 1;0 0 .58 1" begin="indefinite" dur=".52s"/>
+          <g transform="translate(-110 -141.4)">${content}</g></g></g>`
+      : content;
     const shadow = '<ellipse cx="110" cy="188" rx="30" ry="3" fill="#203c29" opacity=".2"/>';
     if (stage === 4) return shadow + `<g class="sg-crown-bloom">${illustration}</g>`;
     const id = 'lily-' + ++serial;
@@ -98,6 +105,11 @@ window.LilyArt = (() => {
         [410,139],[430,165],[470,172],[419,211],[461,231],[428,263],[379,266],[362,273],[339,292]];
       const closedBells = stage === 2 ? bellTips.map(([x,y]) =>
         `<path transform="translate(${x} ${y})" d="M0-3Q-6 1-4 9 1 11 4 5 5-1 0-3Z" fill="#b2c759" stroke="#778d35" stroke-width="1"/>`).join('') : '';
+      const top = `<g transform="translate(110 144) scale(1 ${scale}) translate(-110 -144)" clip-path="url(#${id}-top)">
+          <g transform="translate(43 2) scale(${142/490} ${187/645})">
+            <path d="M77 101Q120 160 128 221" fill="none" stroke="#7f993b" stroke-width="2"/>
+            ${buds}${closedBells}</g><g mask="url(#${id}-plant)">${illustration}</g>
+        </g>`;
       return `${shadow}<defs>
         <mask id="${id}-plant" maskUnits="userSpaceOnUse" x="0" y="0" width="220" height="194">
           <rect width="220" height="194" fill="white"/>
@@ -108,11 +120,7 @@ window.LilyArt = (() => {
         <clipPath id="${id}-top"><rect x="42" y="0" width="144" height="144.7"/></clipPath>
         <clipPath id="${id}-rim"><path d="${potFace}"/></clipPath>
         </defs>
-        <g transform="translate(110 144) scale(1 ${scale}) translate(-110 -144)" clip-path="url(#${id}-top)">
-          <g transform="translate(43 2) scale(${142/490} ${187/645})">
-            <path d="M77 101Q120 160 128 221" fill="none" stroke="#7f993b" stroke-width="2"/>
-            ${buds}${closedBells}</g><g mask="url(#${id}-plant)">${illustration}</g>
-        </g><g clip-path="url(#${id}-rim)">${illustration}</g>`;
+        ${foliage(top)}<g clip-path="url(#${id}-rim)">${illustration}</g>`;
     }
     const defs = `<defs>
       <linearGradient id="${id}-leaf" x1="0" y1="0" x2=".85" y2="1"><stop stop-color="#cae15b"/><stop offset=".45" stop-color="#90af30"/><stop offset="1" stop-color="#3e681c"/></linearGradient>
@@ -121,7 +129,7 @@ window.LilyArt = (() => {
     </defs>`;
     const soil = `<ellipse cx="110.4" cy="141.4" rx="25.2" ry="3.9" fill="#f5e7c9" stroke="#c9ac80" stroke-width=".65"/>
       <ellipse cx="110.4" cy="141.45" rx="22.4" ry="2.7" fill="#705437"/>`;
-    return defs + shadow + soil + (stage === 0 ? newShoot() : youngStems(id)) +
+    return defs + shadow + soil + foliage(stage === 0 ? newShoot() : youngStems(id)) +
       `<g clip-path="url(#${id}-rim)">${illustration}</g>`;
   }
 

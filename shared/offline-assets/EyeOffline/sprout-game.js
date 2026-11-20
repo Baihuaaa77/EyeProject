@@ -60,7 +60,7 @@ window.createSproutGame=function(body,onDone,save,onRestart){
   function scene(content,kind=''){
     return '<div class="sg-scene '+kind+'"><div class="sg-land" aria-hidden="true"></div>'+content+'</div>';
   }
-  const sprout=(level,bug=false)=>'<span class="sg-plant">'+art.plant(level,bug)+'</span>';
+  const sprout=(level,bug=false,pulse=false)=>'<span class="sg-plant">'+art.plant(level,bug,pulse)+'</span>';
   function photoScene(){
     return scene('<div class="sg-preview-label"><i></i>准备观察</div><video class="sg-preview" muted playsinline autoplay hidden></video><div class="sg-photo-plant">'+sprout(0)+'</div><div class="sg-corners"><i></i><i></i><i></i><i></i></div>','sg-portrait');
   }
@@ -129,7 +129,7 @@ window.createSproutGame=function(body,onDone,save,onRestart){
     if(page!==1&&page!==2)return;
     ui={field:$('.sg-playfield'),sky:$('.sg-sky'),coins:$('.sg-coins'),target:$('.sg-target'),bubble:$('.sg-bubble'),note:$('.sg-game-note'),defaultNote:$('.sg-default-note'),
       growth:$('[data-sg-growth]'),label:$('[data-sg-growth-label]'),bar:$('.sg-grow-stat progress'),collected:$('[data-sg-coins]'),
-      signal:$('#sg-signal'),level:-1,bug:false};
+      signal:$('#sg-signal'),level:-1,bug:false,deliveries:0};
     sizeField();
     if('ResizeObserver'in window){resizeObserver=new ResizeObserver(sizeField);resizeObserver.observe(ui.field)}
     paintGarden();
@@ -156,15 +156,19 @@ window.createSproutGame=function(body,onDone,save,onRestart){
     if(!ui)return;
     const practice=page===1,learned=practice&&garden.done,bloomed=!practice&&garden.done,need=garden.need;
     const level=learned?1:growthLevel(garden.growth),bug=need===3&&!garden.done;
+    const android=body.dataset.platform==='android';
+    const pulse=android&&!reduceMotion.matches&&!garden.done&&garden.deliveries>ui.deliveries;
+    ui.deliveries=garden.deliveries;
     if(ui.level!==level||ui.bug!==bug){
-      ui.field.dataset.stage=String(level);ui.target.innerHTML=sprout(level,bug);
+      ui.field.dataset.stage=String(level);ui.target.innerHTML=sprout(level,bug,android);
       ui.target.setAttribute('aria-label',stages[level]+'，盆栽');ui.level=level;ui.bug=bug;
     }
+    if(pulse)ui.target.querySelector('[data-sg-feed]')?.beginElement?.();
     const bubbleKey=learned?'done':bloomed?'bloom':need===null?'rest':String(need);
     if(ui.bubble.dataset.need!==bubbleKey){
       ui.bubble.dataset.need=bubbleKey;ui.bubble.innerHTML=learned?'✓ <span>喝到水了！</span>':bloomed?'<span>我开花啦！</span>':need===null?'✓ <span>'+tools[garden.lastFedTool].thanks+'</span>':art.item(need)+'<span>'+tools[need].ask+'</span>';
     }
-    ui.target.classList.toggle('sg-boost',garden.justFed&&!garden.done);
+    ui.target.classList.toggle('sg-boost',!android&&garden.justFed&&!garden.done);
     updateItems();
     updateCoins();
     if(learned||garden.elapsed>=noteUntil)showGardenNote('');

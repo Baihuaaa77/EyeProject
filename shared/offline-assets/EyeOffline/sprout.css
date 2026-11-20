@@ -36,6 +36,8 @@ button.sg-quiet{border:1px solid var(--brand-edge);background:var(--brand-contro
 .sg-root[data-bloom="true"] .sg-grow-stat [data-sg-growth-label]{color:var(--ui-text)}
 .sg-root[data-bloom="true"] .sg-target .sg-crown-bloom{transform-box:fill-box;transform-origin:50% 100%;animation:sg-open-petals .72s cubic-bezier(.16,.7,.28,1) both}
 @keyframes sg-open-petals{from{opacity:.45;transform:scale(.94)}to{opacity:1;transform:scale(1)}}
+#session[data-platform="android"] .sg-root[data-bloom="true"] .sg-target .sg-crown-bloom{animation-name:sg-bloom-fade}
+@keyframes sg-bloom-fade{from{opacity:.45}to{opacity:1}}
 .sg-grow-stat{min-width:0}
 .sg-grow-stat>div,.sg-coin-stat{display:flex;align-items:center}
 .sg-grow-stat>div{justify-content:space-between;gap:8px;margin-bottom:6px;font-size:13px;line-height:1.35;color:var(--ui-text)}

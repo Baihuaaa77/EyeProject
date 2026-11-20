@@ -1,6 +1,7 @@
 // 单次会话只接收页面标识及语音偏好，不接收成员标识或测量记录。
 const host = document.querySelector('#session');
 const params = new URLSearchParams(location.hash.slice(1));
+if (params.get('platform') === 'android') host.dataset.platform = 'android';
 const close = () => { location.href = 'eye-session://close'; };
 const save = () => false;
 const demo = {mode: 'demo'};

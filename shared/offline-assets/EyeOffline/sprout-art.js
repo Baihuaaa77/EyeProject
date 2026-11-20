@@ -19,11 +19,11 @@ window.sproutArt=(()=>{
       '<path d="M29 43q3-13 10-19" fill="none" stroke="#a1692b" stroke-width="2.6" stroke-linecap="round"/></g>'+
       '<path d="M15 15q4-5 9-7" fill="none" stroke="#fff4cc" stroke-width="2.1" stroke-linecap="round"/>');
   }
-  function plant(level,bug=false){
+  function plant(level,bug=false,pulse=false){
     const stage=Math.max(0,Math.min(4,Math.floor(level)||0));
     const insect=[[110,126],[119,100],[132,108],[132,108],[145,88]][stage];
     const pest=bug ? '<g transform="translate('+insect[0]+' '+insect[1]+')" fill="#e7c38a"><ellipse rx="4.6" ry="3.1"/><circle cx="4" cy="-1" r="2"/></g>' : '';
-    return svg('31 0 164 194',window.LilyArt.potted(stage)+pest);
+    return svg('31 0 164 194',window.LilyArt.potted(stage,pulse)+pest);
   }
   return {item,plant,coin};
 })();

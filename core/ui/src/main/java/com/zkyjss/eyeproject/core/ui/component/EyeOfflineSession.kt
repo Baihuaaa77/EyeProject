@@ -58,7 +58,7 @@ fun EyeOfflineSessionPage(
                                 return true
                             }
                         }
-                        loadUrl("$SESSION_ENTRY#page=${session.page}&voice=${if (voice) 1 else 0}")
+                        loadUrl("$SESSION_ENTRY#page=${session.page}&voice=${if (voice) 1 else 0}&platform=android")
                     }
                 },
                 onRelease = { it.stopLoading(); it.destroy() },
