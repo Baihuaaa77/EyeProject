@@ -1,14 +1,14 @@
 .sprout-entry{display:block;width:100%;margin:14px 0 8px}
-#phone-subpage[data-view=sprout] .v-subbody{position:relative;padding:8px 19px 26px;overscroll-behavior:contain}
+#session[data-view=sprout]{position:relative;padding:8px 19px 26px;overscroll-behavior:contain}
 .sg-root{--sg-ink:var(--ui-text);--sg-soft:var(--ui-text);color:var(--sg-ink);text-align:left}
 .sg-root *, .sg-pause *{box-sizing:border-box}
 .sg-root [hidden]{display:none!important}
 .sg-root button,.sg-pause button{font:inherit;color:inherit;cursor:pointer}
 .sg-root button:focus-visible,.sg-pause button:focus-visible,.sprout-entry:focus-visible{outline:2px solid #c7c7c7;outline-offset:3px}
-#phone-subpage[data-view=sprout] .v-subbody:has(>.sg-root:is([data-sg-page="1"],[data-sg-page="2"])){padding-block:4px max(9px,env(safe-area-inset-bottom))}
-.sg-root:is([data-sg-page="1"],[data-sg-page="2"]){height:100%;display:flex;flex-direction:column}
-.sg-root:is([data-sg-page="1"],[data-sg-page="2"])>:not(.sg-field-wrap){flex-shrink:0}
-.sg-root:is([data-sg-page="1"],[data-sg-page="2"]) .sg-heading{margin:0 0 13px}
+#session[data-view=sprout] .sg-root[data-sg-page="1"],#session[data-view=sprout] .sg-root[data-sg-page="2"]{padding-block:4px max(9px,env(safe-area-inset-bottom))}
+.sg-root[data-sg-page="1"],.sg-root[data-sg-page="2"]{display:flex;flex-direction:column}
+.sg-root[data-sg-page="1"]>:not(.sg-field-wrap),.sg-root[data-sg-page="2"]>:not(.sg-field-wrap){flex-shrink:0}
+.sg-root[data-sg-page="1"] .sg-heading,.sg-root[data-sg-page="2"] .sg-heading{margin:0 0 13px}
 .sg-heading{margin:0 0 17px}.sg-heading h3,.sg-pause h3{font-size:clamp(26px,6vw,32px);line-height:1.2;letter-spacing:-.045em;font-weight:700;margin:0}
 .sg-heading h3:focus{outline:none}
 .sg-title-row{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
@@ -89,7 +89,7 @@ button.sg-quiet{border:1px solid var(--brand-edge);background:var(--brand-contro
 .sg-delivery{position:absolute;z-index:5;left:var(--plant-x,50%);bottom:43%;transform:translateX(-50%);font-size:13px;font-weight:650;color:var(--ui-text);text-shadow:0 1px 3px #373737;pointer-events:none}
 .sg-root[inert] .sg-coin,.sg-root[inert] .sg-plant{animation-play-state:paused}
 .sg-game-note:not(:empty){color:var(--ui-text)}
-.sg-game-note:empty,.sg-default-note:has(+.sg-game-note:not(:empty)){display:none}
+.sg-game-note:empty{display:none}
 .sg-root[data-sg-page="1"] .sg-actions{margin:9px 0 0}
 .sg-bottom,.sg-valid{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .sg-bottom{justify-content:flex-end;margin:0 2px}
@@ -104,7 +104,7 @@ button.sg-quiet{border:1px solid var(--brand-edge);background:var(--brand-contro
 .sg-numbers div{display:block}.sg-numbers span{display:block;font-size:13px;color:var(--ui-text)}.sg-numbers b{font-size:32px;line-height:1.4;font-weight:600;font-variant-numeric:tabular-nums}.sg-numbers small{font-size:12px;color:var(--ui-text);margin-left:5px}
 .sg-valid{border-top:1px solid #dadada24;padding-top:10px;font-size:13px;color:var(--ui-text)}.sg-valid strong{font-size:14px;color:var(--ui-text)}
 .sg-pause{position:absolute;top: 0; right: 0; bottom: 0; left: 0;z-index:9;display:grid;place-items:center;padding:22px;background:#141414dc;backdrop-filter:blur(12px);color:var(--ui-text)}.sg-pause>div{width:100%;max-width:340px;padding:22px;border:1px solid var(--brand-edge);border-radius:24px;background:var(--brand-surface)}.sg-pause h3{font-size:23px}.sg-pause p{color:var(--ui-text);margin:8px 0 18px}.sg-pause button+button{margin-top:8px}
-@media(max-width:350px){#phone-subpage[data-view=sprout] .v-subbody{padding-inline:12px}.sg-field-wrap{--tile:49px}.sg-bubble{font-size:18px;padding:6px 12px 6px 8px}}
-@media(max-height:700px){.sg-field-wrap{flex-basis:245px;min-height:245px}.sg-root:is([data-sg-page="1"],[data-sg-page="2"]) .sg-heading{margin-bottom:9px}}
+@media(max-width:350px){#session[data-view=sprout]{padding-inline:12px}.sg-field-wrap{--tile:49px}.sg-bubble{font-size:18px;padding:6px 12px 6px 8px}}
+@media(max-height:700px){.sg-field-wrap{flex-basis:245px;min-height:245px}.sg-root[data-sg-page="1"] .sg-heading,.sg-root[data-sg-page="2"] .sg-heading{margin-bottom:9px}}
 @media(max-height:600px){.sg-field-wrap{flex-basis:205px;min-height:205px}}
 @media(prefers-reduced-motion:reduce){.sg-root *,.sg-root *:before,.sg-root *:after{animation:none!important;transition:none!important}.sg-root .sg-coin.sg-collected{opacity:0}}

@@ -29,19 +29,10 @@ button { cursor: pointer; }
 .test-record-status { margin-block: 12px; }
 
 
-#session[data-view="sprout"]:has(> .sg-root:is([data-sg-page="1"], [data-sg-page="2"])),
-#session:has(> .ff-page, > .pg-page) {
-  height: 100vh;
-  height: 100dvh;
-  overflow-y: auto;
-  position: relative;
-}
-
 /* 安卓旧版系统 WebView 的随包游戏仍需保留有尺寸的互动场地。 */
 @supports not (aspect-ratio: 1) {
   .sg-portrait, .pg-desk[data-post-desk="prepare"] { height: clamp(150px, 21vh, 195px); }
   .sg-flower-scene, .pg-desk[data-post-desk="result"] { height: 170px; }
-  .sg-root[data-sg-page="1"], .sg-root[data-sg-page="2"] { display: flex; flex-direction: column; }
   .sg-root .sg-target { width: 116px; height: 136px; }
   .sg-bubble { bottom: 76px; font-size: 18px; }
   .ff-stage[data-scene="prepare"] { --ff-sprite-size: 69px; }

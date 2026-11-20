@@ -127,7 +127,7 @@ window.createSproutGame=function(body,onDone,save,onRestart){
     if(focus){body.scrollTop=0;$('.sg-heading h3')?.focus({preventScroll:true})}
     if(page===0){updatePrep();return}
     if(page!==1&&page!==2)return;
-    ui={field:$('.sg-playfield'),sky:$('.sg-sky'),coins:$('.sg-coins'),target:$('.sg-target'),bubble:$('.sg-bubble'),note:$('.sg-game-note'),
+    ui={field:$('.sg-playfield'),sky:$('.sg-sky'),coins:$('.sg-coins'),target:$('.sg-target'),bubble:$('.sg-bubble'),note:$('.sg-game-note'),defaultNote:$('.sg-default-note'),
       growth:$('[data-sg-growth]'),label:$('[data-sg-growth-label]'),bar:$('.sg-grow-stat progress'),collected:$('[data-sg-coins]'),
       signal:$('#sg-signal'),level:-1,bug:false};
     sizeField();
@@ -139,9 +139,13 @@ window.createSproutGame=function(body,onDone,save,onRestart){
     fieldWidth=ui.field.clientWidth;fieldHeight=ui.field.clientHeight;
   }
   function textIfChanged(el,text){if(el&&el.textContent!==text)el.textContent=text}
+  function showGardenNote(message){
+    textIfChanged(ui.note,message);
+    if(ui.defaultNote.hidden!==Boolean(message))ui.defaultNote.hidden=Boolean(message);
+  }
   function notifyGarden(message,ms=2200){
     if(!ui)return;
-    noteUntil=garden.elapsed+ms;textIfChanged(ui.note,message);
+    noteUntil=garden.elapsed+ms;showGardenNote(message);
   }
   function paintGarden(){
     if(!ui)return;
@@ -158,7 +162,7 @@ window.createSproutGame=function(body,onDone,save,onRestart){
     ui.target.classList.toggle('sg-boost',garden.justFed&&!garden.done);
     updateItems();
     updateCoins();
-    if(learned||garden.elapsed>=noteUntil)textIfChanged(ui.note,'');
+    if(learned||garden.elapsed>=noteUntil)showGardenNote('');
     if(practice){$('[data-sg=formal]').disabled=!learned;return}
     const percent=Math.floor(garden.growth);
     textIfChanged(ui.growth,percent+'%');if(ui.bar.value!==percent)ui.bar.value=percent;

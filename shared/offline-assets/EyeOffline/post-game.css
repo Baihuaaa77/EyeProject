@@ -1,4 +1,4 @@
-.v-subbody:has(> .pg-page) {
+#session[data-view="post"] {
   padding: 5px 19px max(22px, env(safe-area-inset-bottom));
   overscroll-behavior: contain;
 }
@@ -17,8 +17,7 @@
 .pg-page button { font: inherit; -webkit-tap-highlight-color: transparent; cursor: pointer; }
 .pg-page button:disabled { cursor: default; }
 .pg-page button:focus-visible { outline: 2px solid #d2d2d2; outline-offset: 3px; }
-.pg-page:is([data-pg-page="practice"], [data-pg-page="test"]) {
-  min-height: 100%;
+.pg-page[data-pg-page="practice"], .pg-page[data-pg-page="test"] {
   display: flex;
   flex-direction: column;
 }
@@ -51,7 +50,7 @@
   border: 1px solid #a0ad8d50;
   box-shadow: 0 9px 24px #0003;
 }
-.pg-desk:is([data-post-desk="practice"], [data-post-desk="test"]) {
+.pg-desk[data-post-desk="practice"], .pg-desk[data-post-desk="test"] {
   flex: 1 0 250px;
 }
 .pg-desk[data-post-desk="prepare"] { height: clamp(150px, 21dvh, 195px); }
@@ -232,5 +231,5 @@
   .pg-postcard { width: 83%; }
 }
 @media (max-height: 700px) {
-  .pg-desk:is([data-post-desk="practice"], [data-post-desk="test"]) { flex-basis: 207px; }
+  .pg-desk[data-post-desk="practice"], .pg-desk[data-post-desk="test"] { flex-basis: 207px; }
 }

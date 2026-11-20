@@ -1,4 +1,4 @@
-.v-subbody:has(> .ff-page) {
+#session[data-view="firefly"] {
   padding: 5px 19px max(22px, env(safe-area-inset-bottom));
   overscroll-behavior: contain;
 }
@@ -35,7 +35,7 @@
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
-.ff-heading :is(.ff-signal, .ff-cue) {
+.ff-heading .ff-signal, .ff-heading .ff-cue {
   margin-top: 5px;
   color: var(--ui-text);
   font-size: var(--game-instruction-size, 17px);
@@ -111,7 +111,8 @@
   border-radius: 50%;
   background: radial-gradient(circle, #ffe3a98c 2%, #f8cd7452 15%, #ffd6851c 37%, transparent 67%);
 }
-.ff-stage:is([data-scene="practice"],[data-scene="test"],[data-scene="cover"],[data-scene="far"]) {
+.ff-stage[data-scene="practice"], .ff-stage[data-scene="test"],
+.ff-stage[data-scene="cover"], .ff-stage[data-scene="far"] {
   min-height: 230px;
   aspect-ratio: auto;
 }
@@ -130,13 +131,15 @@
   border-radius: 12px;
   background: #383838;
 }
-.ff-page:has(.ff-stage:is([data-scene="practice"],[data-scene="test"],[data-scene="cover"],[data-scene="far"])) {
+.ff-page[data-ff-page="practice"], .ff-page[data-ff-page="test"],
+.ff-page[data-ff-page="cover"], .ff-page[data-ff-page="far"] {
   display: flex;
   flex-direction: column;
-  min-height: 100%;
 }
-.ff-page > .ff-stage:is([data-scene="practice"],[data-scene="test"],[data-scene="cover"],[data-scene="far"]) { flex: 1 0 250px; }
-.ff-page > .ff-hero:has(.ff-stage:is([data-scene="practice"],[data-scene="test"],[data-scene="cover"],[data-scene="far"])) {
+.ff-page > .ff-stage[data-scene="practice"], .ff-page > .ff-stage[data-scene="test"],
+.ff-page > .ff-stage[data-scene="cover"], .ff-page > .ff-stage[data-scene="far"] { flex: 1 0 250px; }
+.ff-page[data-ff-page="practice"] > .ff-hero, .ff-page[data-ff-page="test"] > .ff-hero,
+.ff-page[data-ff-page="cover"] > .ff-hero, .ff-page[data-ff-page="far"] > .ff-hero {
   display: flex;
   flex: 1 0 250px;
 }
@@ -152,7 +155,7 @@
   line-height: 1.5;
 }
 .ff-foot [data-ff-recovery] { margin-inline-end: auto; }
-.ff-page :is(button.ff-primary, button.ff-secondary) {
+.ff-page button.ff-primary, .ff-page button.ff-secondary {
   display: block;
   width: 100%;
   min-height: 46px;
@@ -267,8 +270,10 @@
 @media (max-height: 700px) {
   .ff-stage[data-scene="prepare"] { min-height: 124px; aspect-ratio: 2.55; }
   .ff-page .ff-heading { margin-bottom: 10px; }
-  .ff-page > .ff-stage:is([data-scene="practice"],[data-scene="test"],[data-scene="cover"],[data-scene="far"]),
-  .ff-page > .ff-hero:has(.ff-stage:is([data-scene="practice"],[data-scene="test"],[data-scene="cover"],[data-scene="far"])) { min-height: 202px; flex-basis: 207px; }
+  .ff-page > .ff-stage[data-scene="practice"], .ff-page > .ff-stage[data-scene="test"],
+  .ff-page > .ff-stage[data-scene="cover"], .ff-page > .ff-stage[data-scene="far"],
+  .ff-page[data-ff-page="practice"] > .ff-hero, .ff-page[data-ff-page="test"] > .ff-hero,
+  .ff-page[data-ff-page="cover"] > .ff-hero, .ff-page[data-ff-page="far"] > .ff-hero { min-height: 202px; flex-basis: 207px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .ff-page .ff-tail-glow { transition: none; animation: none; }
