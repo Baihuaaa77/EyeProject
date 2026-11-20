@@ -124,7 +124,7 @@ window.createSproutGame=function(body,onDone,save,onRestart){
     releaseInteraction();
     resizeObserver?.disconnect();resizeObserver=null;ui=null;itemNodes.clear();coinNodes.clear();
     body.innerHTML='<section class="sg-root" data-sg-page="'+page+'">'+[prep,()=>playable(true),()=>playable(false),result][page]()+'</section>';
-    if(focus){body.scrollTop=0;$('.sg-heading h3')?.focus({preventScroll:true})}
+    if(focus){body.scrollTop=0;if(body.id==='session')window.scrollTo(0,0);$('.sg-heading h3')?.focus({preventScroll:true})}
     if(page===0){updatePrep();return}
     if(page!==1&&page!==2)return;
     ui={field:$('.sg-playfield'),sky:$('.sg-sky'),coins:$('.sg-coins'),target:$('.sg-target'),bubble:$('.sg-bubble'),note:$('.sg-game-note'),defaultNote:$('.sg-default-note'),
@@ -136,15 +136,7 @@ window.createSproutGame=function(body,onDone,save,onRestart){
   }
   function sizeField(){
     if(!ui)return;
-    // 旧 WebView 切换场景后可能仍用初始视口匹配 CSS，改用实际可见尺寸，短屏保留自然滚动。
-    const viewportHeight=window.innerHeight;
-    const viewportWidth=window.innerWidth;
-    const padding=getComputedStyle(body);
-    const scene=ui.field.parentElement;
-    body.firstElementChild.style.minHeight=Math.max(0,viewportHeight-parseFloat(padding.paddingTop)-parseFloat(padding.paddingBottom))+'px';
-    // 竖屏至少保留海湾背景的原始比例。
-    scene.style.minHeight=viewportHeight>viewportWidth
-      ?Math.ceil(scene.clientWidth*1402/1122)+'px':'';
+    window.fitOfflinePlayScene?.(body);
     fieldWidth=ui.field.clientWidth;fieldHeight=ui.field.clientHeight;
     itemRadius=Number.parseFloat(getComputedStyle(ui.field).getPropertyValue('--tile'))/2;
     ui.field.style.setProperty('--plant-width',Math.min(fieldWidth*.85,fieldHeight*.45)+'px');

@@ -114,6 +114,7 @@ window.createFireflyGame = function(body, onDone, save, preferences, onRestart) 
     const markup=page==='prepare'?prepMarkup():page==='practice'?practiceMarkup():
       page==='test'?testMarkup():page==='result'?reportMarkup():extraMarkup();
     body.innerHTML='<section class="ff-page" data-ff-page="'+page+'">'+markup+'</section>';
+    window.fitOfflinePlayScene?.(body,focus);
     ui={flight:$('.ff-flight'),stage:$('.ff-stage'),clearing:$('.ff-clearing'),sig:$('[data-ff-signal]'),instruction:$('[data-ff-instruction]'),
       bar:$('.ff-progress'),fill:$('.ff-progress-fill'),recovery:$('[data-ff-recovery]')};
     if(focus){body.scrollTop=0;$('.ff-heading h3')?.focus({preventScroll:true})}

@@ -28,6 +28,7 @@ window.createPostGame = function createPostGame(body, onDone, save, onRestart) {
   function show(name, html, focus = true) {
     page = name;
     body.innerHTML = '<section class="pg-page" data-pg-page="' + name + '">' + html + '</section>';
+    window.fitOfflinePlayScene?.(body, focus);
     if (focus) {
       body.scrollTop = 0;
       find('.pg-heading h3').focus({preventScroll: true});
