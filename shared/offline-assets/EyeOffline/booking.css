@@ -214,7 +214,11 @@
   .bk-page :is(.bk-listen,.bk-send,.bk-voice,.bk-option)::before { background-color: ButtonText; forced-color-adjust: none; }
 }
 .bk-page .bk-status, .bk-page .bk-caption { margin: .6rem 0; color: var(--bk-muted); font-size: .82rem; line-height: 1.52; }
-.bk-page :is(.bk-primary, .bk-secondary, .bk-urgent, .bk-text) {
+/* 保留对旧系统 WebView 的主按钮与表单样式。 */
+.bk-page .bk-primary,
+.bk-page .bk-secondary,
+.bk-page .bk-urgent,
+.bk-page .bk-text {
   display: block;
   width: 100%;
   min-height: 46px;
@@ -315,7 +319,7 @@
 .bk-question-actions .bk-primary:disabled, .bk-page button:disabled { opacity: .48; cursor: default; }
 .bk-fields { margin: .72rem 0; text-align: start; }
 .bk-fields label { display: grid; gap: .28rem; color: var(--bk-copy); font-size: .9rem; }
-.bk-fields :is(input,select) {
+.bk-fields input, .bk-fields select {
   width: 100%;
   min-width: 0;
   min-height: 46px;

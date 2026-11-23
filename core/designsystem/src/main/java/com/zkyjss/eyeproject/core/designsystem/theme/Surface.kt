@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.unit.dp
@@ -16,7 +17,8 @@ fun Modifier.eyeSoftSurface(
     fill: Brush = SolidColor(colors.panelBackground),
     pressed: Boolean = false,
     compact: Boolean = false,
+    borderColor: Color = colors.cardBorder,
 ): Modifier =
     clip(shape)
         .background(if (pressed) SolidColor(colors.surfaceVariant) else fill)
-        .border(1.dp, colors.cardBorder, shape)
+        .border(1.dp, borderColor, shape)

@@ -13,7 +13,7 @@ struct EyeGlassModifier: ViewModifier {
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
         content.background(fill ?? AnyShapeStyle(pressed ? EyeStyle.surfaceVariant : EyeStyle.panel), in: shape)
-            .overlay { shape.stroke(EyeStyle.glassEdgeTop, lineWidth: 1).allowsHitTesting(false) }
+            .overlay { shape.strokeBorder(edgeTop, lineWidth: 1).allowsHitTesting(false) }
             .clipShape(shape)
     }
 

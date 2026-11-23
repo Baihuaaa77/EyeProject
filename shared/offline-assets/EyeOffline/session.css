@@ -6,13 +6,14 @@
 }
 :root {
   color-scheme: dark;
-  --brand-base: #241912;
-  --brand-surface: #35261c;
-  --brand-control: #493428;
-  --brand-edge: #ac7654;
-  --brand-ink: #241912;
+  --brand-base: #1c1713;
+  --brand-surface: #39291d;
+  --brand-control: #432d1c;
+  --brand-edge: #bf9470;
+  --brand-ink: #2b2119;
   --brand-orange: #ff8a00;
-  --ui-text: #fff;
+  --ui-text: #f3f0e9;
+  --brand-muted: #bdb7ac;
   --accent: var(--brand-orange);
   --line: var(--brand-edge);
   --action-fill: var(--brand-orange);

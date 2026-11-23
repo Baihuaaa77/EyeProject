@@ -142,7 +142,7 @@ fun ServicesScreen(
             }
         }
         EyeText("日常护眼", Modifier.padding(top = 8.dp), style = typography.subtitle, color = colors.textPrimary)
-        EyeWarmCard(Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = { restOpen = true }), fill = com.zkyjss.eyeproject.core.designsystem.theme.EyeBrown.tile(0)) {
+        EyeWarmCard(Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = { restOpen = true })) {
             EyeGlyphIcon(EyeGlyph.EYE, Modifier.align(Alignment.CenterHorizontally).padding(top = 12.dp).size(32.dp), colors.primary)
             EyeText("转转眼睛", Modifier.align(Alignment.CenterHorizontally).padding(vertical = 12.dp), style = typography.navigationTitle, color = colors.textPrimary)
         }
@@ -160,8 +160,7 @@ private fun ServiceTile(title: String, kind: ServiceKind, modifier: Modifier, on
     val haptics = rememberEyeHaptics()
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
-    val index = kind.ordinal
-    Column(modifier.eyeSoftSurface(colors, EyeShapes.card, com.zkyjss.eyeproject.core.designsystem.theme.EyeBrown.tile(index), pressed = pressed)
+    Column(modifier.eyeSoftSurface(colors, EyeShapes.card, com.zkyjss.eyeproject.core.designsystem.theme.EyeBrown.surface, pressed = pressed)
         .clickable(interactionSource = interaction, indication = null, role = Role.Button) { haptics.tap(); onClick() }
         .heightIn(min = 112.dp).padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterVertically),
         horizontalAlignment = Alignment.CenterHorizontally) {

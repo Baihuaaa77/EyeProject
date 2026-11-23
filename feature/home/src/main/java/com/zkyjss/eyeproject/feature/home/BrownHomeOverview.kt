@@ -64,7 +64,7 @@ internal fun BrownHomeOverview(
     Column(
         modifier
             .fillMaxSize()
-            .background(EyeBrown.homeBackground)
+            .background(c.appBackground)
             .verticalScroll(rememberScrollState())
             .padding(top = getTopStatusBarPadding())
             .padding(horizontal = EyeSpacing.gutter),
@@ -75,9 +75,8 @@ internal fun BrownHomeOverview(
             navigation.onOpenSettings,
             onOpenAccount = navigation.onOpenAccount,
             subtitle = date,
-            warm = true,
         )
-        EyeWarmCard(fill = EyeBrown.homeSurface, padding = 16.dp, spacing = 4.dp, edge = signalColor) {
+        EyeWarmCard(padding = 16.dp, spacing = 4.dp, edge = signalColor) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 EyeText("用眼负荷", Modifier.weight(1f), style = t.title, color = c.textPrimary)
                 WarmLink("用眼全记录") { allData = !allData }
@@ -111,7 +110,7 @@ internal fun BrownHomeOverview(
         if (allData) V16DailyRecords(report?.dailyRecords.orEmpty(), { allData = false }, actions.openUsageAccess.takeIf {
             state.usageAccess == com.zkyjss.eyeproject.core.eyecare.EyeCareEngine.ACCESS_DENIED
         })
-        EyeWarmCard(fill = EyeBrown.homeSurface, edge = EyeBrown.homeEdge, padding = 14.dp, spacing = 4.dp) {
+        EyeWarmCard(padding = 14.dp, spacing = 4.dp) {
             val habits = listOf("闭眼休息", "远眺20秒", "热敷眼睛")
             val completed = report?.completedCare.orEmpty()
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -207,8 +206,8 @@ private fun WarmLink(text: String, action: () -> Unit) {
 private fun HomeCardButton(text: String, onClick: () -> Unit, modifier: Modifier) {
     val colors = LocalEyeColors.current
     val shape = EyeShapes.medium
-    Box(modifier.heightIn(min = 46.dp).clip(shape).background(EyeBrown.homeAction)
-        .border(1.dp, EyeBrown.homeEdge, shape).clickable(role = Role.Button, onClick = onClick)
+    Box(modifier.heightIn(min = 46.dp).clip(shape).background(colors.surfaceVariant)
+        .border(1.dp, colors.cardBorder, shape).clickable(role = Role.Button, onClick = onClick)
         .padding(horizontal = 4.dp, vertical = 8.dp), contentAlignment = Alignment.Center) {
         EyeText(text, style = LocalEyeTypography.current.navigationTitle, color = colors.textPrimary,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center)

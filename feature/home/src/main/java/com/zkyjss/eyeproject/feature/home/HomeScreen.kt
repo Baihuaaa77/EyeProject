@@ -33,7 +33,6 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.zkyjss.eyeproject.core.designsystem.theme.EyeBrown
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeColors
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeMotion
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeShapes
@@ -234,7 +233,7 @@ internal fun FeelingPicker(initial: List<String>, onSave: (List<String>) -> Unit
     }
 }
 
-/** 选择框里的一格：等高圆角块，选中时浅主色底 + 主色描边 + 主色字。 */
+/** 选择框里的一格：等高圆角块，选中时用亮橙底和深棕字。 */
 @Composable
 private fun FeelingOption(
     label: String,
@@ -243,15 +242,16 @@ private fun FeelingOption(
     onClick: () -> Unit,
 ) {
     val colors = LocalEyeColors.current
+    val foreground = if (selected) colors.onPrimary else colors.textPrimary
     val haptics = rememberEyeHaptics()
     Box(
         modifier
             .heightIn(min = 52.dp)
             .clip(EyeShapes.medium)
-            .background(when (label) { NO_DISCOMFORT -> EyeBrown.feelingComfort; "眼睛干涩" -> EyeBrown.feelingDry; "眼睛酸胀" -> EyeBrown.feelingSore; else -> EyeBrown.feelingTired })
+            .background(if (selected) colors.primary else colors.surfaceVariant)
             .border(
                 1.5.dp,
-                if (selected) colors.primary else colors.surfaceVariant,
+                if (selected) colors.primary else colors.cardBorder,
                 EyeShapes.medium,
             )
             .toggleable(selected, role = Role.Checkbox) {
@@ -262,11 +262,11 @@ private fun FeelingOption(
         contentAlignment = Alignment.Center,
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        EyeGlyphIcon(EyeGlyph.EYE,Modifier.size(24.dp),colors.ink)
+        EyeGlyphIcon(EyeGlyph.EYE,Modifier.size(24.dp),foreground)
         EyeText(
             when (label) { NO_DISCOMFORT -> "舒适"; "眼睛干涩" -> "干涩"; "眼睛酸胀" -> "酸胀"; else -> "疲劳" },
             style = LocalEyeTypography.current.body,
-            color = colors.ink,
+            color = foreground,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
             textAlign = TextAlign.Center,
         )

@@ -104,9 +104,9 @@ private struct EyeBottomBar: View {
                         NavIconView(icon: tab.icon, selected: false).frame(width: 24, height: 24).scaleEffect(active ? 1.06 : 1)
                         Text(tab.label).font(EyeStyle.body)
                     }
-                    .foregroundStyle(active ? EyeStyle.onPrimary : (selected == .home ? EyeStyle.text : EyeStyle.secondary))
+                    .foregroundStyle(active ? EyeStyle.onPrimary : EyeStyle.text)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background { if active { Capsule().fill(selected == .home ? AnyShapeStyle(BrownStyle.homeAccent) : AnyShapeStyle(EyeStyle.buttonGradient)) } }
+                    .background { if active { Capsule().fill(EyeStyle.primary) } }
                     .contentShape(Capsule())
                 }.buttonStyle(.plain)
                     .accessibilityLabel(tab.label)
@@ -115,28 +115,20 @@ private struct EyeBottomBar: View {
             }
         }
         .padding(6).frame(height: 60)
-        .background {
-            if selected == .home {
-                Capsule().fill(BrownStyle.homeBackground).overlay { Capsule().strokeBorder(BrownStyle.homeEdge) }
-            } else {
-                Capsule().fill(.clear).eyeLiquidGlass(cornerRadius: EyeStyle.liquidDockRadius)
-            }
-        }
+        .background(EyeStyle.tabBarFill, in: Capsule())
+        .overlay { Capsule().strokeBorder(EyeStyle.tabBarEdge).allowsHitTesting(false) }
         .padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 12)
     }
 }
 
 /// 顶层页骨架：顶部彩色渐变光背景、左右 20 内边距、竖向滚动。
 struct PageScroll<Content: View>: View {
-    var backgroundColor: Color? = nil
     @ViewBuilder let content: Content
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: EyeSpacing.cardGap) { content }
                 .padding(.horizontal, EyeSpacing.gutter).padding(.bottom, EyeSpacing.xl)
-        }.background {
-            if let backgroundColor { backgroundColor.ignoresSafeArea() } else { EyeBackdrop() }
-        }
+        }.background(EyeBackdrop())
     }
 }
 
@@ -206,7 +198,7 @@ private struct ServicesPage: View {
             }
             Text("日常护眼").font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text).padding(.top, 8)
             Button { restOpen = true } label: {
-                WarmCard(fill: BrownStyle.tile(0)) {
+                WarmCard {
                     EyeGlyphView(glyph: .eye, color: EyeStyle.primary).frame(width: 32, height: 32).frame(maxWidth: .infinity).padding(.top, 12)
                     Text("转转眼睛").font(EyeStyle.navigationTitle).foregroundStyle(EyeStyle.text).frame(maxWidth: .infinity).padding(.vertical, 12)
                 }
@@ -304,7 +296,7 @@ private struct ServiceRow: View {
                     .frame(width: 32, height: 32)
                 Text(title).font(EyeStyle.navigationTitle).foregroundStyle(EyeStyle.text)
             }.frame(maxWidth: .infinity, minHeight: 148)
-                .eyeGlass(fill: AnyShapeStyle(BrownStyle.tile(glyph == .alignment ? 1 : glyph == .presbyopia ? 2 : glyph == .color ? 3 : 0)))
+                .eyeGlass(fill: AnyShapeStyle(BrownStyle.surface))
         }.buttonStyle(PressScale(scale: 0.98))
     }
 }

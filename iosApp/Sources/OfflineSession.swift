@@ -38,6 +38,8 @@ struct OfflineSessionCover: View {
             OfflineSessionWebView(session: session, prefillDryEye: prefillDryEye, close: { dismiss() })
                 .navigationTitle(session.title)
                 .navigationBarTitleDisplayMode(.inline)
+                .toolbarBackground(EyeStyle.background, for: .navigationBar)
+                .toolbarBackground(.visible, for: .navigationBar)
                 .toolbar {
                     ToolbarItem(placement: .navigationBarLeading) {
                         Button("返回") { dismiss() }

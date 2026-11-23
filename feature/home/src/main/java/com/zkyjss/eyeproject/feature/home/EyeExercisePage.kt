@@ -1,7 +1,6 @@
 package com.zkyjss.eyeproject.feature.home
 
 import com.zkyjss.eyeproject.core.ui.component.EyeWarmCard
-import com.zkyjss.eyeproject.core.designsystem.theme.EyeBrown
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import android.Manifest
@@ -216,7 +215,7 @@ internal fun EyeExercisePage(onClose: () -> Unit, viewModel: EyeExerciseViewMode
                         Canvas(Modifier.size(104.dp)) {
                             drawFixationTarget(DarkEyeColors, center, size.minDimension * 0.68f)
                         }
-                        EyeWarmCard(fill = EyeBrown.homeSurface, edge = EyeBrown.homeEdge, spacing = 14.dp) {
+                        EyeWarmCard(spacing = 14.dp) {
                             EyeText("跟着光点转转眼", style = typography.title, color = colors.white)
                             EyeText("头保持不动，只转眼睛。", style = typography.body, color = colors.white)
                             EyeButton("开始护眼操", EyeButtonRole.PRIMARY, {

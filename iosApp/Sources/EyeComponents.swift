@@ -45,17 +45,11 @@ private struct CompactPopover: ViewModifier {
 
 /// 系统设置齿轮（36pt 浅填充圆钮，与测试页顶栏同一图标），与安卓 EyeSettingsGear 一致。
 struct SettingsGear: View {
-    var warm = false
     let action: () -> Void
     var body: some View {
         Button { EyeHaptics.tap(); action() } label: {
-            Group {
-                if warm {
-                    EyeGlyphView(glyph: .gear, color: EyeStyle.text).frame(width: 20, height: 20)
-                } else {
-                    Image(systemName: "gearshape.fill").font(.system(size: 18)).foregroundStyle(EyeStyle.primary)
-                }
-            }.frame(width: 48, height: 48).modifier(HeaderButtonSurface(warm: warm)).contentShape(Rectangle())
+            EyeGlyphView(glyph: .gear, color: EyeStyle.text).frame(width: 20, height: 20)
+                .frame(width: 48, height: 48).modifier(HeaderButtonSurface()).contentShape(Rectangle())
         }.buttonStyle(.plain).accessibilityLabel("系统设置")
     }
 }
@@ -77,27 +71,21 @@ struct ThemeToggleButton: View {
 /// 顶栏账户按钮：登录前后均显示高对比人像线稿；点开完整账户页，与安卓一致。
 struct AccountButton: View {
     @ObservedObject private var cloud = CloudModel.shared
-    var warm = false
     let action: () -> Void
     var body: some View {
         let email = cloud.bool("signedIn") ? cloud.string("email") : ""
         Button { EyeHaptics.tap(); action() } label: {
             // 登录前后都保留人像线稿，避免深色首字母在暗色表面上不可见。
-            EyeGlyphView(glyph: .person, color: warm ? EyeStyle.text : EyeStyle.secondary).frame(width: 20, height: 20)
-                .frame(width: 48, height: 48).modifier(HeaderButtonSurface(warm: warm)).contentShape(Rectangle())
+            EyeGlyphView(glyph: .person, color: EyeStyle.text).frame(width: 20, height: 20)
+                .frame(width: 48, height: 48).modifier(HeaderButtonSurface()).contentShape(Rectangle())
         }.buttonStyle(.plain).accessibilityLabel(email.isEmpty ? "账户（未登录）" : "账户（已登录）")
     }
 }
 
 private struct HeaderButtonSurface: ViewModifier {
-    let warm: Bool
     func body(content: Content) -> some View {
-        if warm {
-            content.background(BrownStyle.homeAction, in: Circle())
-                .overlay { Circle().strokeBorder(BrownStyle.homeEdge).allowsHitTesting(false) }
-        } else {
-            content.eyeGlass(cornerRadius: 24)
-        }
+        content.background(EyeStyle.surfaceVariant, in: Circle())
+            .overlay { Circle().strokeBorder(EyeStyle.glassEdgeTop).allowsHitTesting(false) }
     }
 }
 
@@ -107,16 +95,15 @@ struct PageHeader: View {
     var subtitle: String? = nil
     var openAccount: (() -> Void)? = nil
     var openSettings: (() -> Void)? = nil
-    var warm = false
     var body: some View {
         HStack(alignment: .center, spacing: 10) {
             VStack(alignment: .leading, spacing: 4) {
-                if let subtitle { Text(subtitle).font(EyeStyle.caption).foregroundStyle(warm ? EyeStyle.text : EyeStyle.secondary) }
+                if let subtitle { Text(subtitle).font(EyeStyle.caption).foregroundStyle(EyeStyle.text) }
                 Text(title).font(EyeStyle.headline).foregroundStyle(EyeStyle.heading).lineLimit(1).minimumScaleFactor(0.7)
             }.frame(maxWidth: .infinity, alignment: .leading)
             HStack(spacing: EyeSpacing.xs) {
-                if let openAccount { AccountButton(warm: warm, action: openAccount) }
-                if let openSettings { SettingsGear(warm: warm, action: openSettings) }
+                if let openAccount { AccountButton(action: openAccount) }
+                if let openSettings { SettingsGear(action: openSettings) }
             }
         }.padding(.top, 20).padding(.bottom, 12)
     }
@@ -487,14 +474,13 @@ struct Bullet: View {
 struct SegmentedPicker: View {
     let options: [(Int, String)]
     let selected: Int
-    var warm = false
     let onSelect: (Int) -> Void
     var body: some View {
         GeometryReader { geometry in
             let width = (geometry.size.width - 6) / CGFloat(max(options.count, 1))
             let index = CGFloat(options.firstIndex(where: { $0.0 == selected }) ?? 0)
             ZStack(alignment: .leading) {
-                RoundedRectangle(cornerRadius: EyeStyle.radiusSmall, style: .continuous).fill(warm ? AnyShapeStyle(BrownStyle.homeAccent) : AnyShapeStyle(EyeStyle.buttonGradient)).frame(width: width).offset(x: width * index)
+                RoundedRectangle(cornerRadius: EyeStyle.radiusSmall, style: .continuous).fill(EyeStyle.primary).frame(width: width).offset(x: width * index)
                     .animation(.spring(response: 0.35, dampingFraction: 0.8), value: selected)
                 HStack(spacing: 0) {
                     ForEach(Array(options.enumerated()), id: \.offset) { _, option in
@@ -506,9 +492,9 @@ struct SegmentedPicker: View {
                     }
                 }
             }.padding(3)
-        }.frame(height: 46).background(warm ? BrownStyle.homeAction : EyeStyle.surfaceVariant, in: RoundedRectangle(cornerRadius: EyeStyle.radiusMedium, style: .continuous))
+        }.frame(height: 46).background(EyeStyle.surfaceVariant, in: RoundedRectangle(cornerRadius: EyeStyle.radiusMedium, style: .continuous))
             .overlay {
-                if warm { RoundedRectangle(cornerRadius: EyeStyle.radiusMedium).strokeBorder(BrownStyle.homeEdge).allowsHitTesting(false) }
+                RoundedRectangle(cornerRadius: EyeStyle.radiusMedium).strokeBorder(EyeStyle.glassEdgeTop).allowsHitTesting(false)
             }
     }
 }

@@ -4,7 +4,7 @@ import UIKit
 /// 用户参考稿的暖棕材质，所有新页面复用同一套令牌。
 enum BrownStyle {
     static let loadLow = Color(rgb: 0x01FE00)
-    static let loadMedium = Color(rgb: 0xFF8A00)
+    static let loadMedium = Color(rgb: 0xFF7900)
     static let loadHigh = Color(rgb: 0xFF0000)
     static func loadColor(_ score: Int) -> Color {
         if score < 30 { return loadLow }
@@ -14,27 +14,9 @@ enum BrownStyle {
     static let sage = Color(rgb: 0xB6C6B3)
     static let terracotta = Color(rgb: 0xED9A78)
     static let rail = Color(rgb: 0x373737)
-    static let homeBackground = Color(rgb: 0x1C1713)
-    static let homeAccent = Color(rgb: 0xFF8A00)
-    static let homeEdge = Color(rgb: 0xBF9470)
-    static let homeAction = Color(rgb: 0x432D1C)
-    static let homeSurface = LinearGradient(colors: [Color(rgb: 0x402C1C), Color(rgb: 0x2D2118)], startPoint: .top, endPoint: .bottom)
     static let marker = Color(rgb: 0xFFE8CF)
-    static let hero = LinearGradient(colors: [Color(rgb: 0x2D251D), Color(rgb: 0x211B16), Color(rgb: 0x191A16)], startPoint: .topLeading, endPoint: .bottomTrailing)
-    static let trend = LinearGradient(colors: [Color(rgb: 0x232923), Color(rgb: 0x181A17)], startPoint: .top, endPoint: .bottom)
-    static let consult = LinearGradient(colors: [Color(rgb: 0x503624), Color(rgb: 0x30261E)], startPoint: .topLeading, endPoint: .bottomTrailing)
-    static let feeling = LinearGradient(colors: [Color(rgb: 0x443027), Color(rgb: 0x2B2420)], startPoint: .topLeading, endPoint: .bottomTrailing)
-    static let profile = LinearGradient(colors: [Color(rgb: 0x3E3022), Color(rgb: 0x22221D)], startPoint: .topLeading, endPoint: .bottomTrailing)
-    static let surface = LinearGradient(colors: [Color(rgb: 0x242420), Color(rgb: 0x1B1C19)], startPoint: .topLeading, endPoint: .bottomTrailing)
+    static let surface = LinearGradient(colors: [EyeStyle.heroStart, EyeStyle.heroEnd], startPoint: .top, endPoint: .bottom)
     static let avatar = LinearGradient(colors: [Color(rgb: 0x6E4E36), Color(rgb: 0x3A2C22)], startPoint: .topLeading, endPoint: .bottomTrailing)
-    static func tile(_ index: Int) -> LinearGradient {
-        let values: [UInt32] = switch index {
-        case 1: [0x312721, 0x28221F]
-        case 3: [0x302A26, 0x262320]
-        default: [0x302920, 0x25241F]
-        }
-        return LinearGradient(colors: values.map { Color(rgb: $0) }, startPoint: .topLeading, endPoint: .bottomTrailing)
-    }
 }
 
 struct WarmCard<Content: View>: View {
@@ -45,10 +27,7 @@ struct WarmCard<Content: View>: View {
     @ViewBuilder let content: Content
     var body: some View {
         VStack(alignment: .leading, spacing: spacing) { content }.frame(maxWidth: .infinity, alignment: .leading)
-            .padding(padding).eyeGlass(cornerRadius: EyeStyle.radius, fill: AnyShapeStyle(fill))
-            .overlay {
-                if let edge { RoundedRectangle(cornerRadius: EyeStyle.radius).strokeBorder(edge).allowsHitTesting(false) }
-            }
+            .padding(padding).eyeGlass(cornerRadius: EyeStyle.radius, fill: AnyShapeStyle(fill), edgeTop: edge ?? EyeStyle.glassEdgeTop)
     }
 }
 
@@ -151,7 +130,7 @@ struct WeekUsageCard: View {
     private var selected: Int { selection ?? min(6, max(0, todayIndex)) }
     private func amount(_ i: Int) -> Int? { values.indices.contains(i) ? values[i] : nil }
     var body: some View {
-        WarmCard(fill: BrownStyle.hero) {
+        WarmCard {
             HStack {
                 Text("手机使用时长").font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text)
                 Spacer(); Text("本周").font(EyeStyle.caption).foregroundStyle(EyeStyle.secondary).padding(.horizontal, 10).padding(.vertical, 4).background(EyeStyle.surfaceVariant, in: Capsule())

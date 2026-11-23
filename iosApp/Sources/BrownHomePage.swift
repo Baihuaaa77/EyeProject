@@ -37,9 +37,9 @@ struct BrownHomePage: View {
 
     var body: some View {
         ScrollViewReader { proxy in
-            PageScroll(backgroundColor: BrownStyle.homeBackground) {
-                PageHeader(title: greeting, subtitle: today, openAccount: { navigate(.account) }, openSettings: { navigate(.settings) }, warm: true)
-                WarmCard(fill: BrownStyle.homeSurface, padding: 16, spacing: 4, edge: tone) {
+            PageScroll {
+                PageHeader(title: greeting, subtitle: today, openAccount: { navigate(.account) }, openSettings: { navigate(.settings) })
+                WarmCard(padding: 16, spacing: 4, edge: tone) {
                     HStack {
                         Text("用眼负荷").font(EyeStyle.title).foregroundStyle(EyeStyle.text)
                         Spacer(minLength: 0)
@@ -121,7 +121,7 @@ struct BrownHomePage: View {
             }
     }
     private var companionCheckIns: some View {
-        WarmCard(fill: BrownStyle.homeSurface, padding: 14, spacing: 4, edge: BrownStyle.homeEdge) {
+        WarmCard(padding: 14, spacing: 4) {
             let habits = ["闭眼休息", "远眺20秒", "热敷眼睛"]
             HStack {
                 Text("加油小贴贴").font(EyeStyle.subtitle)
@@ -162,8 +162,8 @@ struct BrownHomePage: View {
         Button(action: action) {
             Text(title).font(EyeStyle.navigationTitle).foregroundStyle(EyeStyle.text).fixedSize(horizontal: true, vertical: false)
                 .padding(.horizontal, 5).frame(maxWidth: .infinity, minHeight: 46)
-                .background(BrownStyle.homeAction, in: RoundedRectangle(cornerRadius: EyeStyle.radiusMedium))
-                .overlay { RoundedRectangle(cornerRadius: EyeStyle.radiusMedium).strokeBorder(BrownStyle.homeEdge) }
+                .background(EyeStyle.surfaceVariant, in: RoundedRectangle(cornerRadius: EyeStyle.radiusMedium))
+                .overlay { RoundedRectangle(cornerRadius: EyeStyle.radiusMedium).strokeBorder(EyeStyle.glassEdgeTop) }
         }.buttonStyle(.plain)
     }
 }

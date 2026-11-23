@@ -63,7 +63,7 @@ struct MinePage: View {
                 }.padding(.horizontal, 20).padding(.vertical, 14).contentShape(Rectangle())
             }.buttonStyle(RowPressStyle())
         }
-        .eyeGlass(cornerRadius: EyeStyle.radiusHero, fill: AnyShapeStyle(BrownStyle.profile))
+        .eyeGlass(cornerRadius: EyeStyle.radiusHero, fill: AnyShapeStyle(BrownStyle.surface))
     }
 
     private func stat(_ label: String, _ value: String, _ unit: String, _ action: @escaping () -> Void) -> some View {

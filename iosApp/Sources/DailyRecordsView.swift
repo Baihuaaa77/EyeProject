@@ -12,7 +12,7 @@ struct DailyRecordsView: View {
         let records = report.dailyRecords
         let index = records.firstIndex { $0.id == selectedDate } ?? records.indices.last
         let day = index.map { records[$0] }
-        WarmCard(fill: BrownStyle.homeSurface, padding: 14, edge: BrownStyle.homeEdge) {
+        WarmCard(padding: 14) {
             HStack {
                 Text(day?.dateLabel ?? "用眼全记录").font(EyeStyle.subtitle)
                 Spacer()
@@ -23,15 +23,13 @@ struct DailyRecordsView: View {
                     Button("前一天") { select(index - 1) }.buttonStyle(EyeButtonStyle(role: .secondary)).disabled(index == 0)
                     Button("后一天") { select(index + 1) }.buttonStyle(EyeButtonStyle(role: .secondary)).disabled(index >= records.count - 1)
                 }
-                let accents = [EyeStyle.feelingComfort, EyeStyle.feelingDry, EyeStyle.feelingSore, EyeStyle.feelingTired]
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: textSize.isAccessibilitySize ? 2 : 3), spacing: 6) {
                     ForEach(day.metrics.indices, id: \.self) { i in
                         let metric = day.metrics[i]
-                        let accent = accents[i % accents.count]
                         Button { selectedMetric = selectedMetric == i ? nil : i } label: {
-                            WarmCard(padding: 8, edge: accent.opacity(selectedMetric == i ? 0.9 : 0.35)) {
-                                Text(metric.title).font(EyeStyle.caption).foregroundStyle(EyeStyle.secondary)
-                                Text(metric.value ?? "—").font(EyeStyle.subtitle).foregroundStyle(metric.value == nil ? EyeStyle.secondary : accent)
+                            WarmCard(padding: 8, edge: selectedMetric == i ? EyeStyle.primary : nil) {
+                                Text(metric.title).font(EyeStyle.caption).foregroundStyle(EyeStyle.text)
+                                Text(metric.value ?? "—").font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text)
                             }.frame(minHeight: 44)
                         }.buttonStyle(.plain)
                         .accessibilityAddTraits(selectedMetric == i ? .isSelected : [])

@@ -22,7 +22,7 @@ internal fun V16DailyRecords(records: List<DailyEyeRecord>, onClose: () -> Unit,
     var selected by rememberSaveable(day?.day) { mutableIntStateOf(-1) }
     val colors = LocalEyeColors.current
     val type = LocalEyeTypography.current
-    EyeWarmCard(fill = EyeBrown.homeSurface, edge = EyeBrown.homeEdge, padding = 14.dp) {
+    EyeWarmCard(padding = 14.dp) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             EyeText(day?.dateLabel ?: "用眼全记录", Modifier.weight(1f), style = type.subtitle, color = colors.textPrimary)
             EyeButton("收起", EyeButtonRole.SECONDARY, onClose)
@@ -36,19 +36,17 @@ internal fun V16DailyRecords(records: List<DailyEyeRecord>, onClose: () -> Unit,
                 EyeButton("后一天", EyeButtonRole.SECONDARY, { selectedDate = records[dateIndex + 1].day },
                     Modifier.weight(1f), dateIndex < records.lastIndex)
             }
-            val accents = listOf(EyeBrown.feelingComfort, EyeBrown.feelingDry, EyeBrown.feelingSore, EyeBrown.feelingTired)
             BoxWithConstraints {
                 val columns = if (maxWidth / LocalDensity.current.fontScale < 260.dp) 2 else 3
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     day.metrics.withIndex().chunked(columns).forEach { row ->
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             row.forEach { (index, metric) ->
-                                val accent = accents[index % accents.size]
                                 EyeWarmCard(Modifier.weight(1f).clickable(role = Role.Button) {
                                     selected = if (selected == index) -1 else index
-                                }, padding = 8.dp, edge = accent.copy(alpha = if (selected == index) 0.9f else 0.35f)) {
-                                    EyeText(metric.title, style = type.caption, color = colors.textSecondary)
-                                    EyeText(metric.value ?: "—", style = type.subtitle, color = if (metric.value != null) accent else colors.textSecondary)
+                                }, padding = 8.dp, edge = colors.primary.takeIf { selected == index }) {
+                                    EyeText(metric.title, style = type.caption, color = colors.textPrimary)
+                                    EyeText(metric.value ?: "—", style = type.subtitle, color = colors.textPrimary)
                                 }
                             }
                             repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }

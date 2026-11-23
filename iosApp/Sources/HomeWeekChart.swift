@@ -25,7 +25,7 @@ struct HomeWeekChart<FeelingForm: View>: View {
         let days = weekDays
         let selected = chosen ?? days.lastIndex { $0?.screenMinutes != nil }
         let reading = selected.flatMap { days[$0] }
-        WarmCard(fill: BrownStyle.homeSurface, padding: 14, spacing: 4, edge: BrownStyle.homeEdge) {
+        WarmCard(padding: 14, spacing: 4) {
             HStack {
                 Text("用眼爱记录").font(EyeStyle.subtitle)
                 Spacer(minLength: 0)
@@ -88,7 +88,7 @@ struct HomeWeekChart<FeelingForm: View>: View {
     }
 
     private var weekPicker: some View {
-        SegmentedPicker(options: [(1, "上周"), (0, "本周")], selected: week, warm: true) { pickedWeek = $0; chosen = nil }
+        SegmentedPicker(options: [(1, "上周"), (0, "本周")], selected: week) { pickedWeek = $0; chosen = nil }
     }
 
     private var localCalendar: Calendar {

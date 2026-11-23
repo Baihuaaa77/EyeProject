@@ -5,24 +5,43 @@ import re
 import sys
 import plistlib
 import wave
+import xml.etree.ElementTree as ET
 
 root = Path(__file__).resolve().parents[2]
 errors = []
 colors = (root / 'core/designsystem/src/main/java/com/zkyjss/eyeproject/core/designsystem/theme/Color.kt').read_text(encoding='utf-8')
 def palette_of(block):
     return dict(re.findall(r'(\w+)\s*=\s*Color\(0xFF([0-9A-Fa-f]{6})\)', block))
-light = palette_of(colors.split('val LightEyeColors = EyeColors(', 1)[1].split('val DarkEyeColors', 1)[0])
 dark = palette_of(colors.split('val DarkEyeColors = EyeColors(', 1)[1])
+if not re.search(r'^val LightEyeColors = DarkEyeColors$', colors, re.M):
+    errors.append('Android light compatibility API must reference the shared palette')
 swift = (root / 'iosApp/Sources/EyeStyle.swift').read_text(encoding='utf-8')
-# iOS 令牌为随深浅色切换的动态颜色 dyn(浅, 深)，两套都要与安卓 Light / Dark 一致
+# iOS 深浅模式的兼容入口都使用安卓同一套深咖啡令牌。
 mapping = {'background':'appBackground','panel':'panelBackground','text':'textPrimary','secondary':'textSecondary','tertiary':'textTertiary',
-    'surfaceVariant':'surfaceVariant','primary':'primary','primarySoft':'primarySoft','brandStart':'brandStart','brandEnd':'brandEnd',
+    'surfaceVariant':'surfaceVariant','borderSubtle':'borderSubtle','glassEdgeTop':'cardBorder',
+    'onPrimary':'onPrimary','heroStart':'heroStart','heroEnd':'heroEnd','primary':'primary','primarySoft':'primarySoft','brandStart':'brandStart','brandEnd':'brandEnd',
     'accent':'accent','warning':'warning','success':'success','danger':'danger','tooClose':'tooClose','tooFar':'tooFar',
     'buttonStart':'buttonStart','buttonEnd':'buttonEnd','flowStart':'flowStart','flowEnd':'flowEnd','onWarning':'onWarning','ice':'ice'}
 for key, value in mapping.items():
     match = re.search(rf'static let {key} = dyn\(0x([0-9A-Fa-f]{{6}}), 0x([0-9A-Fa-f]{{6}})', swift)
-    if match is None or match.group(1).upper() != light[value].upper() or match.group(2).upper() != dark[value].upper():
+    if match is None or any(part.upper() != dark[value].upper() for part in match.groups()):
         errors.append(f'iOS theme token drift: {key}')
+
+# 离线页面与启动窗口使用相同的品牌色。
+session_css = (root / 'shared/offline-assets/EyeOffline/session.css').read_text(encoding='utf-8')
+web_colors = {'brand-base': 'appBackground', 'brand-surface': 'panelBackground', 'brand-control': 'surfaceVariant',
+              'brand-edge': 'cardBorder', 'brand-orange': 'primary', 'brand-ink': 'onPrimary',
+              'ui-text': 'textPrimary', 'brand-muted': 'textSecondary'}
+for key, value in web_colors.items():
+    match = re.search(rf'--{key}: #([0-9A-Fa-f]{{6}});', session_css)
+    if not match or match[1].upper() != dark[value].upper():
+        errors.append(f'Offline theme token drift: {key}')
+window_colors = {node.attrib['name']: node.text for node in
+                 ET.parse(root / 'core/designsystem/src/main/res/values/colors.xml').getroot()}
+for key, value in {'eye_dark_background': 'appBackground', 'eye_warm_primary': 'primary',
+                   'eye_warm_brand_start': 'brandStart'}.items():
+    if window_colors.get(key, '').upper() != '#FF' + dark[value].upper():
+        errors.append(f'Android window token drift: {key}')
 
 # 棕色界面眼睛素材由两端打包同一份；空态资源同样必需。
 for tone in ('amber', 'sage', 'rose', 'empty'):

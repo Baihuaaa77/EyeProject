@@ -35,11 +35,11 @@ fun EyeWarmCard(
     edge: Color? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    val colors = LocalEyeColors.current
     Column(
         modifier
             .fillMaxWidth()
-            .eyeSoftSurface(LocalEyeColors.current, EyeShapes.card, fill)
-            .then(if (edge == null) Modifier else Modifier.border(1.dp, edge, EyeShapes.card))
+            .eyeSoftSurface(colors, EyeShapes.card, fill, borderColor = edge ?: colors.cardBorder)
             .padding(padding),
         verticalArrangement = Arrangement.spacedBy(spacing),
         content = content,
@@ -222,7 +222,7 @@ fun EyeWeekUsageCard(
     var selected by remember(todayIndex) { mutableIntStateOf(todayIndex.coerceIn(0, 6)) }
     val week = (0..6).map { values.getOrNull(it) }
     val amount = week[selected]
-    EyeWarmCard(fill = EyeBrown.hero) {
+    EyeWarmCard {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             EyeText("手机使用时长", Modifier.weight(1f), style = t.subtitle, color = c.textPrimary)
             EyeText(

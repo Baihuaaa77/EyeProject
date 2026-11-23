@@ -24,7 +24,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.zkyjss.eyeproject.core.designsystem.theme.EyeBrown
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeMotion
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeShapes
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
@@ -42,7 +41,6 @@ fun <T> EyeSegmentedRow(
     selected: T,
     onSelect: (T) -> Unit,
     modifier: Modifier = Modifier,
-    warm: Boolean = false,
 ) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
@@ -52,8 +50,8 @@ fun <T> EyeSegmentedRow(
             .fillMaxWidth()
             .height(46.dp)
             .clip(EyeShapes.medium)
-            .background(if (warm) EyeBrown.homeAction else colors.surfaceVariant)
-            .then(if (warm) Modifier.border(1.dp, EyeBrown.homeEdge, EyeShapes.medium) else Modifier)
+            .background(colors.surfaceVariant)
+            .border(1.dp, colors.cardBorder, EyeShapes.medium)
             .padding(3.dp)
     ) {
         val segmentWidth = maxWidth / options.size.coerceAtLeast(1)
@@ -68,7 +66,7 @@ fun <T> EyeSegmentedRow(
                 .width(segmentWidth)
                 .fillMaxHeight()
                 .clip(EyeShapes.small)
-                .then(if (warm) Modifier.background(EyeBrown.homeAccent) else Modifier.background(colors.buttonBrush))
+                .background(colors.primary)
         )
         Row(Modifier.fillMaxWidth().fillMaxHeight().selectableGroup()) {
             options.forEachIndexed { index, option ->

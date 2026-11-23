@@ -21,22 +21,22 @@ import com.zkyjss.eyeproject.core.designsystem.theme.*
 
 data class EyeNavigationItem(val label: String, val icon: Int, val selectedIcon: Int)
 
-/** 参考稿的杏桃色选中胶囊；路由仍由 app 持有。 */
+/** 亮橙色选中胶囊；路由仍由 app 持有。 */
 @Composable
 fun EyeNavigationDock(
     items: List<EyeNavigationItem>,
     selectedIndex: Int,
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier,
-    warm: Boolean = false,
 ) {
     if (items.isEmpty()) return
     val c = LocalEyeColors.current
     val reduced = rememberReducedMotion()
     BoxWithConstraints(
         modifier.fillMaxWidth().height(60.dp)
-            .then(if (warm) Modifier.clip(CircleShape).background(EyeBrown.homeBackground).border(1.dp, EyeBrown.homeEdge, CircleShape)
-                else Modifier.eyeSoftSurface(c, CircleShape))
+            .clip(CircleShape)
+            .background(c.tabBarFill)
+            .border(1.dp, c.tabBarEdge, CircleShape)
             .selectableGroup()
     ) {
         val width = (maxWidth - 12.dp) / items.size
@@ -53,12 +53,12 @@ fun EyeNavigationDock(
                     .width(width)
                     .fillMaxHeight()
                     .clip(CircleShape)
-                    .then(if (warm) Modifier.background(EyeBrown.homeAccent) else Modifier.background(c.buttonBrush))
+                    .background(c.primary)
             )
         Row(Modifier.fillMaxSize().padding(6.dp)) {
             items.forEachIndexed { index, item ->
                 val active = index == selectedIndex
-                val tint = if (active) c.onPrimary else if (warm) c.textPrimary else c.textSecondary
+                val tint = if (active) c.onPrimary else c.textPrimary
                 Row(
                     Modifier.weight(1f)
                         .fillMaxHeight()

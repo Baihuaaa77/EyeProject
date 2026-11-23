@@ -113,7 +113,7 @@ private fun ProfileCard(state: MineUiState.Ready?, navigation: MineNavigation) {
     val haptics = rememberEyeHaptics()
     val self = state?.self
     val complete = profileCompleteness(self)
-    Column(Modifier.fillMaxWidth().eyeGlass(colors, EyeShapes.hero, EyeBrown.profile)) {
+    Column(Modifier.fillMaxWidth().eyeGlass(colors, EyeShapes.hero, EyeBrown.surface)) {
         Row(
             Modifier.fillMaxWidth().clickable(role = Role.Button) { haptics.tap(); navigation.onEditSubject(self?.id) }
                 .padding(start = 18.dp, end = 16.dp, top = 18.dp, bottom = 14.dp),

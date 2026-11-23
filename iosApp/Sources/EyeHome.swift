@@ -212,16 +212,17 @@ struct FeelingSheet: View {
     }
     private func option(_ label: String) -> some View {
         let on = selected.contains(label)
+        let foreground = on ? EyeStyle.onPrimary : EyeStyle.text
         return Button { EyeHaptics.toggle(); toggle(label) } label: {
             VStack(spacing: 4) {
-                EyeGlyphView(glyph: .eye,color: EyeStyle.ink).frame(width: 24,height: 24)
+                EyeGlyphView(glyph: .eye,color: foreground).frame(width: 24,height: 24)
                 Text(label == noDiscomfort ? "舒适" : label == "眼睛干涩" ? "干涩" : label == "眼睛酸胀" ? "酸胀" : "疲劳")
                     .font(on ? EyeStyle.body.weight(.semibold) : EyeStyle.body)
-            }.foregroundStyle(EyeStyle.ink).multilineTextAlignment(.center)
+            }.foregroundStyle(foreground).multilineTextAlignment(.center)
                 .lineLimit(1).minimumScaleFactor(0.8)
                 .padding(.horizontal, 6).frame(maxWidth: .infinity, minHeight: 52)
-                .background(label == noDiscomfort ? EyeStyle.feelingComfort : label == "眼睛干涩" ? EyeStyle.feelingDry : label == "眼睛酸胀" ? EyeStyle.feelingSore : EyeStyle.feelingTired, in: RoundedRectangle(cornerRadius: EyeStyle.radiusMedium))
-                .overlay { RoundedRectangle(cornerRadius: EyeStyle.radiusMedium).stroke(on ? EyeStyle.primary : EyeStyle.background, lineWidth: 1.5) }
+                .background(on ? EyeStyle.primary : EyeStyle.surfaceVariant, in: RoundedRectangle(cornerRadius: EyeStyle.radiusMedium))
+                .overlay { RoundedRectangle(cornerRadius: EyeStyle.radiusMedium).strokeBorder(on ? EyeStyle.primary : EyeStyle.glassEdgeTop, lineWidth: 1.5).allowsHitTesting(false) }
                 .contentShape(RoundedRectangle(cornerRadius: EyeStyle.radiusMedium))
         }
         .buttonStyle(.plain)

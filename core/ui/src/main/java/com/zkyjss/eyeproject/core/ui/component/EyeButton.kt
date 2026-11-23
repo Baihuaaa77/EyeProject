@@ -56,7 +56,7 @@ fun EyeButton(
     val backgroundColor by animateColorAsState(
         targetValue = when (role) {
             EyeButtonRole.PRIMARY -> colors.buttonStart
-            EyeButtonRole.SECONDARY -> colors.panelBackground
+            EyeButtonRole.SECONDARY -> colors.surfaceVariant
             EyeButtonRole.DANGER -> colors.dangerSoft
         },
         animationSpec = tween(EyeMotion.MEDIUM),
@@ -83,9 +83,9 @@ fun EyeButton(
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
-                alpha = if (enabled) 1f else 0.5f
+                alpha = if (!enabled) 0.5f else if (pressed) 0.9f else 1f
             }
-            .eyeSoftSurface(colors, EyeShapes.medium, SolidColor(backgroundColor), pressed = pressed && enabled, compact = true)
+            .eyeSoftSurface(colors, EyeShapes.medium, SolidColor(backgroundColor), compact = true)
             .clickable(
                 enabled = enabled,
                 role = Role.Button,

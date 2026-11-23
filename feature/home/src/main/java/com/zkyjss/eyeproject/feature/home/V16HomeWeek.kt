@@ -45,7 +45,7 @@ internal fun V16HomeWeek(history: List<TrendDay>, onFeeling: () -> Unit, onTrend
     val peak = screenTimeAxisMaximum(days.mapNotNull { it?.screenMinutes }.maxOrNull() ?: 0)
     fun tone(day: TrendDay?) = day?.score?.let(EyeBrown::loadColor) ?: colors.textSecondary
 
-    EyeWarmCard(fill = EyeBrown.homeSurface, edge = EyeBrown.homeEdge, padding = 14.dp, spacing = 4.dp) {
+    EyeWarmCard(padding = 14.dp, spacing = 4.dp) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             EyeText("用眼爱记录", Modifier.weight(1f), style = type.subtitle, color = colors.textPrimary)
             EyeText("记录感受", Modifier.heightIn(min = 48.dp).wrapContentHeight()
@@ -55,7 +55,7 @@ internal fun V16HomeWeek(history: List<TrendDay>, onFeeling: () -> Unit, onTrend
         val range = "${dates.first().format(formatter)}–${dates.last().format(formatter)}"
         BoxWithConstraints {
             val picker: @Composable (Modifier) -> Unit = { modifier ->
-                EyeSegmentedRow(listOf(SegmentedOption(1, "上周"), SegmentedOption(0, "本周")), week, { week = it }, modifier, warm = true)
+                EyeSegmentedRow(listOf(SegmentedOption(1, "上周"), SegmentedOption(0, "本周")), week, { week = it }, modifier)
             }
             if (maxWidth / LocalDensity.current.fontScale < 245.dp) {
                 Column { EyeText(range, style = type.bodySecondary, color = colors.textSecondary); picker(Modifier) }
