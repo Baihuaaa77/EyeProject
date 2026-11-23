@@ -5,19 +5,20 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "0.1.1"
-    CURRENT_PROJECT_VERSION: "2"
+    MARKETING_VERSION: "0.2.0"
+    CURRENT_PROJECT_VERSION: "3"
     TARGETED_DEVICE_FAMILY: "1"
-    FRAMEWORK_SEARCH_PATHS: "$(inherited) $(SRCROOT)/../../../shared/screening/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)"
-    OTHER_LDFLAGS: "$(inherited) -framework EyeScreening -lc++"
-    ENABLE_USER_SCRIPT_SANDBOXING: NO
+    CLANG_CXX_LANGUAGE_STANDARD: c++17
+    HEADER_SEARCH_PATHS: "$(inherited) $(SRCROOT)/build/mnn-source/include"
+    LIBRARY_SEARCH_PATHS: "$(inherited) $(SRCROOT)/build/mnn-device"
+    OTHER_LDFLAGS: "$(inherited) -force_load $(SRCROOT)/build/mnn-device/libMNN.a -lc++"
+    SWIFT_OBJC_BRIDGING_HEADER: Sources/GazeMNN.h
 targets:
   GazeLab:
     type: application
     platform: iOS
     sources:
       - Sources
-      - ../../../iosApp/Sources/EyeCamera.swift
       - ../../../core/designsystem/ios/CornealLabStyle.swift
       - path: ../../../core/camera/src/main/assets/face_landmarker.task
         buildPhase: resources
@@ -27,22 +28,15 @@ targets:
         CFBundleDisplayName: 屏幕注视追踪
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
-        NSCameraUsageDescription: 在本机使用前置摄像头估计并显示屏幕上的注视点。
+        NSCameraUsageDescription: 在本机使用前置摄像头对比不同模型的屏幕注视点。
         UIUserInterfaceStyle: Dark
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
-          - UIInterfaceOrientationLandscapeLeft
-          - UIInterfaceOrientationLandscapeRight
         UILaunchScreen: {}
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.zkyjss.gazelab
         GENERATE_INFOPLIST_FILE: NO
-    preBuildScripts:
-      - name: 构建共用注视核心
-        script: |
-          set -eu
-          cd "$SRCROOT/../../.."
-          ./gradlew -p shared :screening:embedAndSignAppleFrameworkForXcode
-        basedOnDependencyAnalysis: false
     scheme: {}

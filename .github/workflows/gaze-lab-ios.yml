@@ -3,6 +3,9 @@ on:
   workflow_dispatch:
   push:
     branches: [codex/gaze-lab-ios]
+    paths:
+      - '.github/workflows/gaze-lab-ios.yml'
+      - 'experiments/GazeLab/ios/**'
 permissions:
   contents: read
 concurrency:
@@ -11,22 +14,39 @@ concurrency:
 jobs:
   unsigned-ipa:
     runs-on: macos-26
-    timeout-minutes: 45
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
       - uses: maxim-lobanov/setup-xcode@v1
         with: {xcode-version: "26.4"}
-      - uses: actions/setup-java@v4
-        with: {distribution: temurin, java-version: "17"}
-      - uses: gradle/actions/setup-gradle@v4
       - uses: ruby/setup-ruby@v1
         with: {ruby-version: "3.3", working-directory: iosApp, bundler-cache: true}
-      - name: 检查工程并运行共用算法回归
-        run: |
-          chmod +x gradlew
-          python3 scripts/ios/check_project.py
-          ./gradlew -p shared :domain:jvmTest
       - run: brew install xcodegen
+      - uses: actions/cache@v4
+        id: mnn
+        with:
+          path: |
+            experiments/GazeLab/ios/build/mnn-source/include
+            experiments/GazeLab/ios/build/mnn-device/libMNN.a
+          key: gaze-mnn-ios-3.4.1-xcode26.4-v1
+      - name: 编译 MNN 的 iPhone arm64 CPU 运行库
+        if: steps.mnn.outputs.cache-hit != 'true'
+        working-directory: experiments/GazeLab/ios
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch 3.4.1 https://github.com/alibaba/MNN.git build/mnn-source
+          cmake -S build/mnn-source -B build/mnn-device -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_SYSROOT=iphoneos -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=16.0 -DMNN_BUILD_SHARED_LIBS=OFF -DMNN_SEP_BUILD=OFF \
+            -DMNN_BUILD_TOOLS=OFF -DMNN_BUILD_CONVERTER=OFF -DMNN_BUILD_TEST=OFF -DMNN_METAL=OFF \
+            -DMNN_COREML=OFF -DMNN_OPENCL=OFF -DMNN_USE_THREAD_POOL=ON
+          cmake --build build/mnn-device --config Release --target MNN --parallel "$(sysctl -n hw.logicalcpu)"
+          test -s build/mnn-device/libMNN.a
+      - name: 运行注视标定与记录回归
+        working-directory: experiments/GazeLab/ios
+        run: |
+          swiftc Sources/GazeExperiment.swift Tests/GazeExperimentChecks.swift -o "$RUNNER_TEMP/gaze-experiment-checks"
+          "$RUNNER_TEMP/gaze-experiment-checks"
       - name: 生成独立工程
         working-directory: experiments/GazeLab/ios
         run: |
@@ -38,7 +58,8 @@ jobs:
           set -euo pipefail
           xcodebuild build -workspace GazeLab.xcworkspace -scheme GazeLab -configuration Release \
             -destination 'generic/platform=iOS' -derivedDataPath build/Device \
-            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" > build/xcodebuild.log 2>&1 \
+            || { tail -n 140 build/xcodebuild.log; exit 1; }
           app=build/Device/Build/Products/Release-iphoneos/GazeLab.app
           test "$(xcrun lipo -archs "$app/GazeLab")" = arm64
           test -s "$app/face_landmarker.task"
@@ -49,13 +70,13 @@ jobs:
           mkdir -p build/unsigned/Payload
           cp -R "$app" build/unsigned/Payload/
           cd build/unsigned
-          zip -qry GazeLab-v0.1.1-build2-unsigned.ipa Payload
-          shasum -a 256 GazeLab-v0.1.1-build2-unsigned.ipa > SHA256.txt
+          zip -qry GazeLab-v0.2.0-build3-shell-unsigned.ipa Payload
+          shasum -a 256 GazeLab-v0.2.0-build3-shell-unsigned.ipa > SHA256.txt
       - uses: actions/upload-artifact@v4
         with:
           name: gaze-lab-ios-unsigned-ipa
           path: |
-            experiments/GazeLab/ios/build/unsigned/GazeLab-v0.1.1-build2-unsigned.ipa
+            experiments/GazeLab/ios/build/unsigned/GazeLab-v0.2.0-build3-shell-unsigned.ipa
             experiments/GazeLab/ios/build/unsigned/SHA256.txt
           if-no-files-found: error
           retention-days: 14
