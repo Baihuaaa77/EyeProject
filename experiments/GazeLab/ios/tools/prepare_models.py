@@ -17,14 +17,17 @@ def sha256(path):
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
-def convert(source, output, format_name):
+def convert(source, output, format_name, *, compact=False):
     import _tools
 
     output.unlink(missing_ok=True)
-    _tools.mnnconvert([
+    args = [
         "mnnconvert", "-f", format_name, "--modelFile", str(source),
         "--MNNModel", str(output), "--bizCode", "GazeLab",
-    ])
+    ]
+    if compact:
+        args.append("--fp16")
+    _tools.mnnconvert(args)
     if not output.is_file() or output.stat().st_size < 100_000:
         raise RuntimeError(f"MNN 转换失败：{source}")
 
@@ -69,17 +72,21 @@ def torch_model(code, weights, target, kind):
         def forward(self, left, right, face, geometry):
             return self.model((left, right, face, geometry))
 
+    class AcrossChannels(torch.nn.Module):
+        def __init__(self, channels):
+            super().__init__()
+            self.channels = channels
+
+        def forward(self, tensor):
+            edge = torch.zeros_like(tensor[:, :2])
+            square = torch.cat((edge, tensor.square(), edge), dim=1)
+            window = sum(square[:, start:start + self.channels] for start in range(5))
+            return tensor / (1 + window * (0.0001 / 5)).pow(0.75)
+
     aff = kind == "affnet"
     model = load_class(code / "model" / f"{kind}.py", "AFFNetModel" if aff else "ITrackerModel")()
     state = torch.load(weights, map_location="cpu", weights_only=True)
     model.load_state_dict({name.removeprefix("module."): value for name, value in state.items()})
-    if not aff:
-        # 用标准 LRN 算子导出，保留 CrossMapLRN2d 的窗口和参数。
-        for feature_group in (model.eyeModel.features, model.faceModel.conv.features):
-            for index, layer in enumerate(feature_group):
-                if isinstance(layer, torch.nn.CrossMapLRN2d):
-                    feature_group[index] = torch.nn.LocalResponseNorm(5, alpha=0.0001, beta=0.75, k=1.0)
-
     net = Network(model.eval())
     size = 112 if aff else 224
     rng = np.random.default_rng(2441)
@@ -94,6 +101,11 @@ def torch_model(code, weights, target, kind):
     onnx_path = target.with_suffix(".onnx")
     with torch.no_grad():
         reference = net(*arguments).numpy().reshape(-1)
+        if not aff:
+            # 明写固定的五通道归一化窗口，避免 ONNX 引入 MNN Session 不支持的分支。
+            for group in (model.eyeModel.features, model.faceModel.conv.features):
+                group[3] = AcrossChannels(96)
+                group[7] = AcrossChannels(256)
         torch.onnx.export(net, arguments, str(onnx_path), input_names=inputs, output_names=["coordinates"],
                           opset_version=16, dynamo=False)
     convert(onnx_path, target, "ONNX")
@@ -150,7 +162,7 @@ def l2cs(source, target):
 
     folded = target.with_suffix(".folded.tflite")
     fold_tflite_weights(source, folded)
-    convert(folded, target, "TFLITE")
+    convert(folded, target, "TFLITE", compact=True)
     resolver = tf.lite.experimental.OpResolverType.BUILTIN_WITHOUT_DEFAULT_DELEGATES
     ref = tf.lite.Interpreter(model_path=str(source), experimental_op_resolver_type=resolver)
     ref.allocate_tensors()
