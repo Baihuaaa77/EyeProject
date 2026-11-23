@@ -54,7 +54,7 @@ struct SystemSettingsPage: View {
             if showGestureAnswers {
                 ListGroup(title: "作答方式") {
                     SwitchRow(title: "手势作答", isOn: $gestureAnswersEnabled,
-                        subtitle: "在脸旁伸出食指，指向 E 的开口，作答后放下手")
+                        subtitle: "食指指向 E 的开口，答完放下手")
                 }
             }
             if !inTest {
@@ -68,8 +68,7 @@ struct SystemSettingsPage: View {
                         AppIconView().frame(width: 56, height: 56)
                         VStack(alignment: .leading, spacing: 2) {
                             Text("眼健康助手").font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text)
-                            Text("你的主动眼健康助手").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
-                        }
+                            }
                         Spacer()
                     }.padding(16)
                     ListRow(title: "版本", value: version)
@@ -126,6 +125,6 @@ private struct LevelSlider: View {
                 Text("\(Int((value * 100).rounded()))%").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary).monospacedDigit()
             }
             Slider(value: $value, in: range).tint(EyeStyle.primary)
-        }.padding(.leading, 66).padding(.trailing, 16).padding(.vertical, 6)
+        }.padding(.vertical, 6)
     }
 }

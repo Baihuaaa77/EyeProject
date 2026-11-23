@@ -153,22 +153,21 @@ internal fun LiveEyeContent(
         }
         if (state.running) {
             EyeMetricRow(items = listOf(
-                { m -> EyeMetric("眨眼", "${s?.blinkCount ?: 0}", m, unit = "次") },
-                { m -> EyeMetric("近 1 分钟", "${s?.blinksLastMinute ?: 0}", m, unit = "次") },
+                { m -> EyeMetric("近 1 分钟眨眼", "${s?.blinksLastMinute ?: 0}", m, unit = "次") },
                 { m -> EyeMetric("距离", s?.distanceCm?.let { "%.0f".format(it) } ?: "—", m, unit = "厘米") },
             ))
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            EyeDisclosure("检测详情") {
                 EyeStateChip(s)
-                EyeText("EAR ${s?.ear?.let { "%.2f".format(it) } ?: "—"} · ${"%.0f".format(s?.fps ?: 0f)} 帧/秒",
+                EyeText("本次眨眼 ${s?.blinkCount ?: 0} 次 · ${"%.0f".format(s?.fps ?: 0f)} 帧/秒",
                     style = typography.bodySecondary, color = colors.textSecondary)
+                Row(Modifier.fillMaxWidth().heightIn(min = 44.dp)
+                    .toggleable(state.showLandmarks, role = Role.Switch) { on -> haptics.toggle(on); onShowLandmarksChange(on) },
+                    verticalAlignment = Alignment.CenterVertically) {
+                    EyeText(SHOW_LANDMARKS, Modifier.weight(1f), style = typography.body, color = colors.textSecondary)
+                    EyeSwitch(checked = state.showLandmarks, onCheckedChange = null)
+                }
+                EarTraceChart(s, Modifier.fillMaxWidth().height(116.dp))
             }
-            Row(Modifier.fillMaxWidth().heightIn(min = 40.dp)
-                .toggleable(state.showLandmarks, role = Role.Switch) { on -> haptics.toggle(on); onShowLandmarksChange(on) },
-                verticalAlignment = Alignment.CenterVertically) {
-                EyeText(SHOW_LANDMARKS, Modifier.weight(1f), style = typography.body, color = colors.textSecondary)
-                EyeSwitch(checked = state.showLandmarks, onCheckedChange = null)
-            }
-            EarTraceChart(s, Modifier.fillMaxWidth().height(116.dp))
         }
         EyeButton(if (state.running) "停止检测" else "开始检测", if (state.running) EyeButtonRole.SECONDARY else EyeButtonRole.PRIMARY,
             { haptics.toggle(!state.running); if (state.running) onPause() else onStart() }, Modifier.fillMaxWidth())
@@ -215,7 +214,7 @@ private fun Viewfinder(running: Boolean, modifier: Modifier, live: @Composable B
 
 internal const val SHOW_LANDMARKS = "显示眼部关键点"
 
-internal const val LIVE_HELP = "用前置摄像头实时检测双眼关键点：数眨眼次数、估计眼睛到屏幕的距离和头部姿态，结果计入「视觉行为」。" +
+internal const val LIVE_HELP = "用前摄估计眨眼与观看距离。画面只在本机处理。安卓退出首页后仍可检测，可从通知栏停止。" +
     "「显示眼部关键点」只决定预览上是否画出眼睑轮廓和虹膜圈，不影响检测。" +
     "开始后离开首页或退到后台也会继续检测，通知栏会一直显示；点「停止检测」、点通知里的「停止」或从最近任务划掉应用即停止，熄屏时自动暂停。" +
     "画面只在本机实时处理，不保存、不上传。"

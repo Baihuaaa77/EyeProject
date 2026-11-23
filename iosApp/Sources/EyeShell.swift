@@ -104,9 +104,9 @@ private struct EyeBottomBar: View {
                         NavIconView(icon: tab.icon, selected: false).frame(width: 24, height: 24).scaleEffect(active ? 1.06 : 1)
                         Text(tab.label).font(EyeStyle.body)
                     }
-                    .foregroundStyle(active ? EyeStyle.onPrimary : EyeStyle.secondary)
+                    .foregroundStyle(active ? EyeStyle.onPrimary : (selected == .home ? EyeStyle.text : EyeStyle.secondary))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background { if active { Capsule().fill(EyeStyle.buttonGradient) } }
+                    .background { if active { Capsule().fill(selected == .home ? AnyShapeStyle(BrownStyle.homeAccent) : AnyShapeStyle(EyeStyle.buttonGradient)) } }
                     .contentShape(Capsule())
                 }.buttonStyle(.plain)
                     .accessibilityLabel(tab.label)
@@ -115,19 +115,28 @@ private struct EyeBottomBar: View {
             }
         }
         .padding(6).frame(height: 60)
-        .eyeLiquidGlass(cornerRadius: EyeStyle.liquidDockRadius)
+        .background {
+            if selected == .home {
+                Capsule().fill(BrownStyle.homeBackground).overlay { Capsule().strokeBorder(BrownStyle.homeEdge) }
+            } else {
+                Capsule().fill(.clear).eyeLiquidGlass(cornerRadius: EyeStyle.liquidDockRadius)
+            }
+        }
         .padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 12)
     }
 }
 
 /// 顶层页骨架：顶部彩色渐变光背景、左右 20 内边距、竖向滚动。
 struct PageScroll<Content: View>: View {
+    var backgroundColor: Color? = nil
     @ViewBuilder let content: Content
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: EyeSpacing.cardGap) { content }
                 .padding(.horizontal, EyeSpacing.gutter).padding(.bottom, EyeSpacing.xl)
-        }.background(EyeBackdrop())
+        }.background {
+            if let backgroundColor { backgroundColor.ignoresSafeArea() } else { EyeBackdrop() }
+        }
     }
 }
 
@@ -183,6 +192,10 @@ private struct ServicesPage: View {
     var body: some View {
         PageScroll {
             PageHeader(title: "服务", openAccount: { navigate(.account) }, openSettings: { navigate(.settings) })
+            if serviceWeek.contains(where: { $0 != nil }) {
+                WeekUsageCard(values: serviceWeek, labels: ["一","二","三","四","五","六","日"],
+                    todayIndex: (Calendar.current.component(.weekday, from: Date()) + 5) % 7)
+            }
             Text("选择一项自测").font(EyeStyle.title).foregroundStyle(EyeStyle.text)
                 .padding(.top, EyeSpacing.sectionGap - EyeSpacing.cardGap).padding(.leading, 4)
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 16), GridItem(.flexible(), spacing: 16)], spacing: 16) {
@@ -198,8 +211,7 @@ private struct ServicesPage: View {
                     Text("转转眼睛").font(EyeStyle.navigationTitle).foregroundStyle(EyeStyle.text).frame(maxWidth: .infinity).padding(.vertical, 12)
                 }
             }.buttonStyle(.plain).frame(maxWidth: .infinity)
-            Text("自测结果仅供参考，不能替代医院检查。").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.tertiary)
-                .frame(maxWidth: .infinity).multilineTextAlignment(.center).padding(.top, 4)
+            WarmDisclosure(title: "自测方法") { DemoHeroCard() }
         }.fullScreenCover(isPresented: $restOpen) { OfflineSessionCover(session: .rest) }
     }
     private var serviceWeek: [Int?] {

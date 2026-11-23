@@ -1,89 +1,54 @@
 import SwiftUI
 
+/// 首页原位切换日期和展开记录，复用真实采集的数据。
 struct DailyRecordsView: View {
     let report: CareReport
     let onClose: () -> Void
     @State private var selectedDate: String?
-    @State private var selectedMetric = 0
-    @State private var detail: CareReport.DailyMetric?
-
-    private var dateIndex: Int? {
-        report.dailyRecords.firstIndex { $0.id == selectedDate } ?? report.dailyRecords.indices.last
-    }
+    @State private var selectedMetric: Int?
+    @Environment(\.dynamicTypeSize) private var textSize
 
     var body: some View {
-        SubPage(title: "用眼全记录") {
-            if let dateIndex {
-                let day = report.dailyRecords[dateIndex]
-                Text(day.dateLabel).font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text)
-                HStack(spacing: EyeSpacing.itemGap) {
-                    Button("前一天") { moveDate(from: dateIndex, by: -1) }
-                        .buttonStyle(EyeButtonStyle(role: .secondary)).disabled(dateIndex == 0)
-                    Button("后一天") { moveDate(from: dateIndex, by: 1) }
-                        .buttonStyle(EyeButtonStyle(role: .secondary)).disabled(dateIndex == report.dailyRecords.count - 1)
+        let records = report.dailyRecords
+        let index = records.firstIndex { $0.id == selectedDate } ?? records.indices.last
+        let day = index.map { records[$0] }
+        WarmCard(fill: BrownStyle.homeSurface, padding: 14, edge: BrownStyle.homeEdge) {
+            HStack {
+                Text(day?.dateLabel ?? "用眼全记录").font(EyeStyle.subtitle)
+                Spacer()
+                Button("收起", action: onClose).font(EyeStyle.bodySecondary).frame(minHeight: 44)
+            }
+            if let day, let index {
+                HStack(spacing: 8) {
+                    Button("前一天") { select(index - 1) }.buttonStyle(EyeButtonStyle(role: .secondary)).disabled(index == 0)
+                    Button("后一天") { select(index + 1) }.buttonStyle(EyeButtonStyle(role: .secondary)).disabled(index >= records.count - 1)
                 }
-                WarmCard {
-                    Text("用眼负荷").font(EyeStyle.subtitle)
-                    Text(day.score.map { "\($0) / 100" } ?? "暂无记录").font(EyeStyle.display)
-                        .foregroundStyle(day.score == nil ? EyeStyle.secondary : EyeStyle.text)
-                    if day.score != nil, let tip = day.tip {
-                        Text(tip).font(EyeStyle.body).foregroundStyle(EyeStyle.secondary)
+                let accents = [EyeStyle.feelingComfort, EyeStyle.feelingDry, EyeStyle.feelingSore, EyeStyle.feelingTired]
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: textSize.isAccessibilitySize ? 2 : 3), spacing: 6) {
+                    ForEach(day.metrics.indices, id: \.self) { i in
+                        let metric = day.metrics[i]
+                        let accent = accents[i % accents.count]
+                        Button { selectedMetric = selectedMetric == i ? nil : i } label: {
+                            WarmCard(padding: 8, edge: accent.opacity(selectedMetric == i ? 0.9 : 0.35)) {
+                                Text(metric.title).font(EyeStyle.caption).foregroundStyle(EyeStyle.secondary)
+                                Text(metric.value ?? "—").font(EyeStyle.subtitle).foregroundStyle(metric.value == nil ? EyeStyle.secondary : accent)
+                            }.frame(minHeight: 44)
+                        }.buttonStyle(.plain)
+                        .accessibilityAddTraits(selectedMetric == i ? .isSelected : [])
                     }
                 }
-                if !day.metrics.isEmpty { metricPager(day.metrics) }
+                if let note = selectedMetric.flatMap({ day.metrics.indices.contains($0) ? day.metrics[$0].note : nil }) ?? day.tip {
+                    Text(note).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
+                }
             } else {
-                WarmCard { Text("正在读取记录…").font(EyeStyle.body).foregroundStyle(EyeStyle.secondary) }
-            }
-        }
-        .toolbar {
-            ToolbarItem(placement: .navigationBarLeading) {
-                if detail == nil { Button("关闭", action: onClose) }
-            }
-        }
-        .navigationDestination(isPresented: Binding(
-            get: { detail != nil }, set: { if !$0 { detail = nil } }
-        )) {
-            if let detail, let dateIndex {
-                SubPage(title: detail.title) {
-                    WarmCard {
-                        Text(report.dailyRecords[dateIndex].dateLabel).font(EyeStyle.bodySecondary)
-                        Text(detail.value ?? "暂无记录").font(EyeStyle.display)
-                        Text(detail.note).font(EyeStyle.body).foregroundStyle(EyeStyle.secondary)
-                    }
-                }
+                Text("暂无用眼记录").font(EyeStyle.body).foregroundStyle(EyeStyle.secondary)
             }
         }
     }
 
-    private func moveDate(from index: Int, by step: Int) {
-        let next = index + step
-        if report.dailyRecords.indices.contains(next) { selectedDate = report.dailyRecords[next].id }
-    }
-
-    private func metricPager(_ metrics: [CareReport.DailyMetric]) -> some View {
-        let index = min(selectedMetric, metrics.count - 1)
-        let metric = metrics[index]
-        return VStack(alignment: .leading, spacing: EyeSpacing.itemGap) {
-            Button { detail = metric } label: {
-                WarmCard {
-                    Text(metric.title).font(EyeStyle.navigationTitle)
-                    Text(metric.value ?? "暂无记录").font(EyeStyle.display)
-                }
-                .foregroundStyle(EyeStyle.text)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .simultaneousGesture(DragGesture(minimumDistance: 30).onEnded { gesture in
-                guard abs(gesture.translation.width) > abs(gesture.translation.height) else { return }
-                selectedMetric = max(0, min(index + (gesture.translation.width < 0 ? 1 : -1), metrics.count - 1))
-            })
-            HStack(spacing: EyeSpacing.itemGap) {
-                Button("上一项") { selectedMetric = index - 1 }
-                    .buttonStyle(EyeButtonStyle(role: .secondary)).disabled(index == 0)
-                Button("下一项") { selectedMetric = index + 1 }
-                    .buttonStyle(EyeButtonStyle(role: .secondary)).disabled(index == metrics.count - 1)
-            }
-            Text("\(index + 1) / \(metrics.count)").font(EyeStyle.caption).foregroundStyle(EyeStyle.secondary)
-        }
+    private func select(_ index: Int) {
+        guard report.dailyRecords.indices.contains(index) else { return }
+        selectedDate = report.dailyRecords[index].id
+        selectedMetric = nil
     }
 }

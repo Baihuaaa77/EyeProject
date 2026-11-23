@@ -3,22 +3,22 @@ import UIKit
 
 /// 用户参考稿的暖棕材质，所有新页面复用同一套令牌。
 enum BrownStyle {
-    static let loadLow = Color(rgb: 0xBBD8BC)
-    static let loadMedium = Color(rgb: 0xE6BE93)
-    static let loadHigh = Color(rgb: 0xDBABA8)
+    static let loadLow = Color(rgb: 0x01FE00)
+    static let loadMedium = Color(rgb: 0xFF8A00)
+    static let loadHigh = Color(rgb: 0xFF0000)
     static func loadColor(_ score: Int) -> Color {
         if score < 30 { return loadLow }
         if score < 60 { return loadMedium }
         return loadHigh
     }
-    static func loadTextColor(_ score: Int) -> Color {
-        if score < 30 { return Color(rgb: 0x01FE00) }
-        if score < 60 { return Color(rgb: 0xFF8A00) }
-        return Color(rgb: 0xFF0000)
-    }
     static let sage = Color(rgb: 0xB6C6B3)
     static let terracotta = Color(rgb: 0xED9A78)
-    static let rail = Color(rgb: 0x52524A)
+    static let rail = Color(rgb: 0x373737)
+    static let homeBackground = Color(rgb: 0x1C1713)
+    static let homeAccent = Color(rgb: 0xFF8A00)
+    static let homeEdge = Color(rgb: 0xBF9470)
+    static let homeAction = Color(rgb: 0x432D1C)
+    static let homeSurface = LinearGradient(colors: [Color(rgb: 0x402C1C), Color(rgb: 0x2D2118)], startPoint: .top, endPoint: .bottom)
     static let marker = Color(rgb: 0xFFE8CF)
     static let hero = LinearGradient(colors: [Color(rgb: 0x2D251D), Color(rgb: 0x211B16), Color(rgb: 0x191A16)], startPoint: .topLeading, endPoint: .bottomTrailing)
     static let trend = LinearGradient(colors: [Color(rgb: 0x232923), Color(rgb: 0x181A17)], startPoint: .top, endPoint: .bottom)
@@ -41,15 +41,20 @@ struct WarmCard<Content: View>: View {
     var fill = BrownStyle.surface
     var padding: CGFloat = 18
     var spacing: CGFloat = 6
+    var edge: Color? = nil
     @ViewBuilder let content: Content
     var body: some View {
         VStack(alignment: .leading, spacing: spacing) { content }.frame(maxWidth: .infinity, alignment: .leading)
             .padding(padding).eyeGlass(cornerRadius: EyeStyle.radius, fill: AnyShapeStyle(fill))
+            .overlay {
+                if let edge { RoundedRectangle(cornerRadius: EyeStyle.radius).strokeBorder(edge).allowsHitTesting(false) }
+            }
     }
 }
 
 struct LoadEyeArtwork: View {
     let level: String
+    var tone: Color? = nil
     private static let images: [String: UIImage] = {
         var result: [String: UIImage] = [:]
         for tone in ["sage", "amber", "rose", "empty"] {
@@ -59,10 +64,13 @@ struct LoadEyeArtwork: View {
     }()
     private var image: UIImage? {
         let suffix: String = switch level { case "LOW": "sage"; case "MEDIUM": "amber"; case "HIGH": "rose"; default: "empty" }
-        return Self.images[suffix]
+        return Self.images[tone == nil ? suffix : "empty"]
     }
     var body: some View {
-        if let image { Image(uiImage: image).resizable().scaledToFit().accessibilityHidden(true) }
+        if let image {
+            Image(uiImage: image).resizable().scaledToFit()
+                .saturation(tone == nil ? 1 : 0).colorMultiply(tone ?? .white).accessibilityHidden(true)
+        }
     }
 }
 
@@ -86,8 +94,7 @@ struct LoadRail: View {
             if let score {
                 let x = size.width * CGFloat(min(100, max(0, score))) / 100
                 context.fill(Path(ellipseIn: CGRect(x: x - 7, y: y - 7, width: 14, height: 14)), with: .color(EyeStyle.heroEnd))
-                context.fill(Path(ellipseIn: CGRect(x: x - 5.5, y: y - 5.5, width: 11, height: 11)), with: .color(tone))
-                context.fill(Path(ellipseIn: CGRect(x: x - 4, y: y - 4, width: 8, height: 8)), with: .color(BrownStyle.marker))
+                context.fill(Path(ellipseIn: CGRect(x: x - 4, y: y - 4, width: 8, height: 8)), with: .color(tone))
             }
         }.frame(height: 16).accessibilityLabel(score.map { "用眼负荷 \($0)，满分 100" } ?? "暂无用眼负荷数据")
     }
@@ -153,22 +160,50 @@ struct WeekUsageCard: View {
                 EyeStyle.reading(amount(selected).map { "\($0 / 60)小时\(String(format: "%02d", $0 % 60))分" } ?? "—")
                 Text(labels.indices.contains(selected) ? labels[selected] : "").font(EyeStyle.caption).foregroundStyle(EyeStyle.secondary)
             }
-            HStack(spacing: 0) {
-                ForEach(0..<7) { i in
-                    Button { selection = i } label: {
-                        VStack(spacing: 6) {
-                            ZStack(alignment: .bottom) {
-                                Capsule().fill(BrownStyle.rail)
-                                if let value = amount(i), value > 0 {
-                                    Capsule().fill(i == selected ? EyeStyle.primary : EyeStyle.ice.opacity(0.72))
-                                        .frame(height: 64 * min(1, CGFloat(value) / CGFloat(max(60, values.compactMap { $0 }.max() ?? 60)) * 0.9))
-                                }
-                            }.frame(width: 22, height: 64)
-                                .overlay { if i == selected { Capsule().stroke(EyeStyle.primary, lineWidth: 1.5) } }
-                            Text(labels.indices.contains(i) ? labels[i] : "").font(EyeStyle.caption).foregroundStyle(i == selected ? EyeStyle.primary : EyeStyle.secondary)
-                        }.padding(.vertical, 6).frame(maxWidth: .infinity)
-                    }.buttonStyle(.plain).accessibilityLabel("\(labels.indices.contains(i) ? labels[i] : "")，\(amount(i).map { "\($0)分钟" } ?? "未记录")")
+            let recorded = values.compactMap { $0 }
+            let maxMinutes = max(60, recorded.max() ?? 0)
+            ZStack(alignment: .top) {
+                HStack(spacing: 0) {
+                    ForEach(0..<7) { i in
+                        Button { selection = i } label: {
+                            VStack(spacing: 6) {
+                                ZStack(alignment: .bottom) {
+                                    Capsule().fill(BrownStyle.rail)
+                                    if let value = amount(i), value > 0 {
+                                        Capsule().fill(i == selected ? EyeStyle.primary : EyeStyle.primary.opacity(0.45))
+                                            .frame(height: 64 * min(1, CGFloat(value) / CGFloat(max(60, values.compactMap { $0 }.max() ?? 60)) * 0.9))
+                                    }
+                                }.frame(width: 22, height: 64)
+                                    .overlay { if i == selected { Capsule().stroke(EyeStyle.primary, lineWidth: 1.5) } }
+                                Text(labels.indices.contains(i) ? labels[i] : "").font(EyeStyle.caption).foregroundStyle(i == selected ? EyeStyle.primary : EyeStyle.secondary)
+                            }.padding(.vertical, 6).frame(maxWidth: .infinity)
+                        }.buttonStyle(.plain).accessibilityLabel("\(labels.indices.contains(i) ? labels[i] : "")，\(amount(i).map { "\($0)分钟" } ?? "未记录")")
+                    }
                 }
+                Canvas { context, size in
+                    let points: [CGPoint?] = (0..<7).map { i in
+                        amount(i).map { value in
+                            CGPoint(x: size.width * (CGFloat(i) + 0.5) / 7,
+                                    y: min(size.height - 2, size.height * (1 - 0.9 * CGFloat(value) / CGFloat(maxMinutes))))
+                        }
+                    }
+                    for (a, b) in zip(points, points.dropFirst()) {
+                        if let a, let b {
+                            var line = Path()
+                            line.move(to: a)
+                            line.addLine(to: b)
+                            context.stroke(line, with: .color(EyeStyle.primary), style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                        }
+                    }
+                    for point in points.compactMap({ $0 }) {
+                        context.fill(Path(ellipseIn: CGRect(x: point.x - 3, y: point.y - 3, width: 6, height: 6)), with: .color(EyeStyle.primary))
+                    }
+                }.frame(height: 64).padding(.top, 6).allowsHitTesting(false).accessibilityHidden(true)
+            }
+            if !recorded.isEmpty {
+                let average = recorded.reduce(0, +) / recorded.count
+                Text("已记录 \(recorded.count) 天 · 日均 \(average / 60) 小时 \(average % 60) 分")
+                    .font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
             }
         }
     }

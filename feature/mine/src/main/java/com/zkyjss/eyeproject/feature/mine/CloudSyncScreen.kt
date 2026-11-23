@@ -85,7 +85,7 @@ internal fun CloudSyncContent(state: CloudSyncUiState, actions: CloudSyncActions
     EyeSubPage("云端同步", onBack) {
         when (state) {
             CloudSyncUiState.Loading -> Unit
-            is CloudSyncUiState.NotConfigured -> SignInPrompt("还没有连接服务器", "数据目前只保存在本机。在账户页填写服务器地址并登录后，即可开启云端同步。", onOpenAccount)
+            is CloudSyncUiState.NotConfigured -> SignInPrompt("云端同步暂不可用", "记录目前保存在本机。", onOpenAccount)
             is CloudSyncUiState.SignedOut -> SignInPrompt("登录后开启云端同步", "测试记录和家人资料可以在多台设备之间同步，本机记录始终保留。", onOpenAccount)
             is CloudSyncUiState.SignedIn -> SignedInSections(state, actions)
         }

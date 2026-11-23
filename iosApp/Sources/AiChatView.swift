@@ -80,7 +80,7 @@ struct AiChatPage: View {
             NavigationStack {
                 SubPage(title: "今日护眼参考") {
                     AiAdviceView()
-                    Text("结合已授权的用眼记录、感受与自测结果生成。医学参考仅用于健康教育；风险等级由自测规则决定，不能替代眼科检查。")
+                    Text("根据您的用眼情况与感受生成护眼参考，不能替代医生诊断。")
                         .font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
                 }.toolbar { ToolbarItem(placement: .confirmationAction) { Button("关闭") { referenceOpen = false } } }
             }
@@ -201,7 +201,7 @@ private struct OptionAnswerConfirmView: View {
         ZStack {
             EyeStyle.ink.opacity(0.55).ignoresSafeArea().onTapGesture(perform: cancel)
             VStack(alignment: .leading, spacing: 16) {
-                Text("确认这项回答？").font(EyeStyle.title).foregroundStyle(EyeStyle.text)
+                Text("发送回答？").font(EyeStyle.title).foregroundStyle(EyeStyle.text)
                 Text(choice).font(EyeStyle.chatBody).foregroundStyle(EyeStyle.text)
                 Button { dontAsk.toggle() } label: {
                     HStack(spacing: 10) {
@@ -239,7 +239,7 @@ private struct EyechoIntro: View {
                 .accessibilityLabel("爱科 Eyecho")
             VStack(alignment: .leading, spacing: 8) {
                 Text("你好，我是爱科").font(EyeStyle.title).foregroundStyle(EyeStyle.text)
-                Text("爱尔眼科 AI 助手，陪你聊聊眼睛的不适、用眼习惯和自测结果。")
+                Text("根据您的用眼情况与感受生成护眼参考，不能替代医生诊断。")
                     .font(EyeStyle.chatBody).foregroundStyle(EyeStyle.secondary).lineSpacing(6)
                     .fixedSize(horizontal: false, vertical: true)
             }.frame(maxWidth: .infinity, alignment: .leading)

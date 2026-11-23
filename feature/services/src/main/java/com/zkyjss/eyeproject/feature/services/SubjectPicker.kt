@@ -78,11 +78,13 @@ internal fun SubjectPicker(
             val missing = SubjectProfiles.missing(kind, s, nowMs)
             val name = s.nickname.ifBlank { SubjectProfiles.relationLabel(s.relation) }
             val detail = listOfNotNull(SubjectProfiles.relationLabel(s.relation), SubjectProfiles.age(s.fields, nowMs)?.let { "$it 岁" })
-                .joinToString(" · ") + if (missing.isEmpty()) "" else "\n需补充：${missing.joinToString("、")}"
+                .joinToString(" · ") + if (missing.isEmpty() || skipped || s.id != selectedId) "" else "\n需补充：${missing.joinToString("、")}"
             EyeOptionRow(name, detail, selected = !skipped && s.id == selectedId, multiple = false) {
                 skipped = false; onPick(s)
             }
-            EyeButton(if ("出生年份" in missing) "补充出生年份" else "编辑资料", EyeButtonRole.SECONDARY, { onEdit(s.id) })
+            if (!skipped && s.id == selectedId) {
+                EyeButton(if ("出生年份" in missing) "补充出生年份" else "编辑资料", EyeButtonRole.SECONDARY, { onEdit(s.id) })
+            }
         }
         EyeButton("添加家庭成员", EyeButtonRole.SECONDARY, { onEdit(null) }, Modifier.fillMaxWidth())
         EyeOptionRow("访客测试", hint = null, selected = skipped, multiple = false) { skipped = true }

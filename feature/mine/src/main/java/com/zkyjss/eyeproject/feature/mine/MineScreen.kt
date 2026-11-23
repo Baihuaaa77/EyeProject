@@ -91,8 +91,8 @@ internal fun MineContent(state: MineUiState, navigation: MineNavigation, modifie
         ProfileCard(ready, navigation)
         EyeListGroup(title = "健康档案") {
             EyeListRow("测试记录", navigation.onOpenRecords, glowBorder = false, value = ready?.recordCount?.let { if (it == 0) "暂无" else "$it 条" })
-            EyeListRow("家庭成员与资料", navigation.onOpenSubjects, glowBorder = false, value = ready?.memberCount?.let { "$it 人" })
-            EyeListRow("用眼趋势报告", navigation.onOpenTrend, glowBorder = false, divider = false)
+            EyeListRow("档案列表", navigation.onOpenSubjects, glowBorder = false, value = ready?.memberCount?.let { "$it 人" })
+            EyeListRow("用眼报告", navigation.onOpenTrend, glowBorder = false, divider = false)
         }
         EyeListGroup(title = "数据与隐私") {
             EyeListRow("云端同步", navigation.onOpenCloudSync, glowBorder = false, value = ready?.let { cloudSummary(it.cloudConfigured, it.email, it.healthDataSync) })
@@ -126,7 +126,7 @@ private fun ProfileCard(state: MineUiState.Ready?, navigation: MineNavigation) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 EyeText(self?.nickname?.ifBlank { null } ?: "我", style = typography.title, color = colors.textPrimary)
                 val age = self?.let { SubjectProfiles.age(it.fields, System.currentTimeMillis()) }
-                EyeText(listOfNotNull(age?.let { "$it 岁" }, if (complete >= 4) "档案已完善" else "档案完善 $complete/4").joinToString(" · "),
+                EyeText(listOfNotNull(age?.let { "$it 岁" }, "档案完善 ${complete * 25}%").joinToString(" · "),
                     style = typography.bodySecondary, color = colors.textSecondary)
                 Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                     repeat(4) { index -> Box(Modifier.width(16.dp).height(3.dp).clip(EyeShapes.chip).background(if(index < complete) colors.primary else EyeBrown.rail)) }

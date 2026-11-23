@@ -6,6 +6,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,6 +20,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -46,25 +49,41 @@ fun EyeChoiceList(
     onChange: (String) -> Unit,
     hints: Map<String, String> = emptyMap(),
     exclusive: Set<String> = emptySet(),
+    compact: Boolean = false,
 ) {
     val haptics = rememberEyeHaptics()
     val stored = "、$value、"
     val selectedOptions = options.filter { "、$it、" in stored }.sortedBy { stored.indexOf("、$it、") }
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        options.forEach { option ->
-            val selected = if (multiple) option in selectedOptions else value == option
-            EyeOptionRow(option, hints[option], selected, multiple) {
-                haptics.tap()
-                if (!multiple) onChange(if (selected) "" else option)
-                else {
-                    val updated = when {
-                        selected -> selectedOptions - option
-                        option in exclusive -> listOf(option)
-                        else -> selectedOptions.filterNot { it in exclusive } + option
+    val optionContent: @Composable (String) -> Unit = { option ->
+    val selected = if (multiple) option in selectedOptions else value == option
+    EyeOptionRow(option, hints[option], selected, multiple) {
+        haptics.tap()
+        if (!multiple) onChange(if (selected) "" else option)
+        else {
+            val updated = when {
+                selected -> selectedOptions - option
+                option in exclusive -> listOf(option)
+                else -> selectedOptions.filterNot { it in exclusive } + option
+            }
+            onChange(updated.joinToString("、"))
+        }
+    }
+    }
+    if (compact && hints.isEmpty() && options.all { it.length <= 6 }) {
+        BoxWithConstraints {
+            val columns = if (maxWidth >= 280.dp && LocalDensity.current.fontScale <= 1.25f) 2 else 1
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                options.chunked(columns).forEach { row ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        row.forEach { option -> Box(Modifier.weight(1f)) { optionContent(option) } }
+                        if (row.size < columns) Box(Modifier.weight(1f))
                     }
-                    onChange(updated.joinToString("、"))
                 }
             }
+        }
+    } else {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            options.forEach { optionContent(it) }
         }
     }
 }

@@ -4,29 +4,42 @@ struct HomeWeekChart: View {
     let history: [CareReport.Day]
     let onFeeling: () -> Void
     let onTrend: () -> Void
-    @State private var week = 1
+    @State private var pickedWeek: Int?
     @State private var chosen: Int?
+    @Environment(\.dynamicTypeSize) private var textSize
+    private var week: Int {
+        if let pickedWeek { return pickedWeek }
+        let thisWeek = monday(weeksBack: 0)
+        let previousWeek = monday(weeksBack: 1)
+        let startKey = dayKey(previousWeek)
+        let endKey = dayKey(thisWeek)
+        return history.contains {
+            $0.screenMinutes != nil && $0.id >= startKey && $0.id < endKey
+        } ? 1 : 0
+    }
     private let labels = ["一", "二", "三", "四", "五", "六", "日"]
 
     var body: some View {
         let days = weekDays
         let selected = chosen ?? days.lastIndex { $0?.screenMinutes != nil }
         let reading = selected.flatMap { days[$0] }
-        WarmCard(fill: BrownStyle.trend) {
+        WarmCard(fill: BrownStyle.homeSurface, padding: 14, spacing: 4, edge: BrownStyle.homeEdge) {
             HStack {
                 Text("用眼爱记录").font(EyeStyle.subtitle)
                 Spacer(minLength: 0)
-                PillButton(label: "记录感受", primary: false, action: onFeeling)
+                Button("记录感受", action: onFeeling).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.text).frame(minHeight: 44)
             }
-            SegmentedPicker(options: [(1, "上周"), (0, "本周")], selected: week) {
-                week = $0
-                chosen = nil
-            }
-            let minutes = reading?.screenMinutes
-            let amountColor = minutes.flatMap { _ in reading?.score }.map(BrownStyle.loadTextColor) ?? EyeStyle.secondary
-            EyeStyle.reading(minutes.map { "\($0 / 60)小时\($0 % 60)分" } ?? "—", color: amountColor)
-            if reading?.screenMinutes == nil {
-                Text("该日暂无用屏记录").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
+            let range = Text(weekTitle).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
+            if textSize.isAccessibilitySize { range; weekPicker }
+            else { HStack { range; Spacer(); weekPicker.frame(width: 108) } }
+            HStack {
+                Text((selected.map { "周\(labels[$0])" } ?? "") + "用屏").font(EyeStyle.bodySecondary)
+                if let score = reading?.score {
+                    Text(score < 30 ? "轻度" : (score < 60 ? "中度" : "重度"))
+                        .font(EyeStyle.bodySecondary).foregroundStyle(tone(reading))
+                }
+                Spacer(minLength: 6)
+                EyeStyle.reading(reading?.screenMinutes.map { "\($0 / 60)小时\($0 % 60)分" } ?? "—", color: tone(reading))
             }
             let peak = max(120, ((days.compactMap { $0?.screenMinutes }.max() ?? 0) + 119) / 120 * 120)
             HStack(spacing: 6) {
@@ -54,25 +67,62 @@ struct HomeWeekChart: View {
                     .accessibilityAddTraits(index == selected ? .isSelected : [])
                 }
             }
-            Button("查看用眼趋势", action: onTrend).buttonStyle(EyeButtonStyle(role: .secondary))
+            HStack {
+                let values = days.compactMap { $0?.screenMinutes }
+                let average = values.reduce(0, +) / max(1, values.count)
+                Text(values.isEmpty ? "暂无用屏记录" : "有记录的日子平均用屏 \(average / 60)小时\(average % 60)分")
+                    .font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
+                Spacer(minLength: 6)
+                Button("用眼报告 ›", action: onTrend).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.text).frame(minHeight: 44)
+            }
         }
     }
 
-    private var weekDays: [CareReport.Day?] {
+    private var weekPicker: some View {
+        SegmentedPicker(options: [(1, "上周"), (0, "本周")], selected: week, warm: true) { pickedWeek = $0; chosen = nil }
+    }
+
+    private var localCalendar: Calendar {
         var calendar = Calendar(identifier: .iso8601)
         calendar.timeZone = .current
+        return calendar
+    }
+
+    private var monday: Date { monday(weeksBack: week) }
+
+    private func monday(weeksBack: Int) -> Date {
         let today = Date()
-        let thisMonday = calendar.dateInterval(of: .weekOfYear, for: today)?.start ?? today
+        let calendar = localCalendar
+        let start = calendar.dateInterval(of: .weekOfYear, for: today)?.start ?? today
+        return calendar.date(byAdding: .day, value: -weeksBack * 7, to: start) ?? start
+    }
+
+    private var weekTitle: String {
         let formatter = DateFormatter()
-        formatter.calendar = calendar
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.calendar = localCalendar
+        formatter.dateFormat = "M月d日"
+        let end = localCalendar.date(byAdding: .day, value: 6, to: monday) ?? monday
+        return formatter.string(from: monday) + "–" + formatter.string(from: end)
+    }
+
+    private var weekDays: [CareReport.Day?] {
+        let calendar = localCalendar
+        let today = Date()
         return labels.indices.map { index in
-            guard let date = calendar.date(byAdding: .day, value: index - week * 7, to: thisMonday),
+            guard let date = calendar.date(byAdding: .day, value: index, to: monday),
                   date <= today else { return nil }
-            let key = formatter.string(from: date)
+            let key = dayKey(date)
             return history.first { $0.id == key }
         }
+    }
+
+    private func dayKey(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = localCalendar
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: date)
     }
 
     private func tone(_ day: CareReport.Day?) -> Color {

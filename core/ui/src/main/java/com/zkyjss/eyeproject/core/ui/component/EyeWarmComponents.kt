@@ -32,12 +32,14 @@ fun EyeWarmCard(
     fill: Brush = EyeBrown.surface,
     padding: androidx.compose.ui.unit.Dp = 18.dp,
     spacing: androidx.compose.ui.unit.Dp = 6.dp,
+    edge: Color? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Column(
         modifier
             .fillMaxWidth()
             .eyeSoftSurface(LocalEyeColors.current, EyeShapes.card, fill)
+            .then(if (edge == null) Modifier else Modifier.border(1.dp, edge, EyeShapes.card))
             .padding(padding),
         verticalArrangement = Arrangement.spacedBy(spacing),
         content = content,
@@ -46,10 +48,22 @@ fun EyeWarmCard(
 
 /** 眼睛只表达现有评估等级；未知数据有独立灰色素材。 */
 @Composable
-fun EyeLoadArtwork(level: String?, modifier: Modifier = Modifier) {
+fun EyeLoadArtwork(level: String?, modifier: Modifier = Modifier, tone: Color? = null) {
+    val filter = tone?.let { color ->
+        // 以原素材亮度生成同色发光轮廓，透明度和纹理完整保留。
+        val r = color.red
+        val g = color.green
+        val b = color.blue
+        ColorFilter.colorMatrix(ColorMatrix(floatArrayOf(
+            .21f*r, .72f*r, .07f*r, 0f, 0f,
+            .21f*g, .72f*g, .07f*g, 0f, 0f,
+            .21f*b, .72f*b, .07f*b, 0f, 0f,
+            0f, 0f, 0f, 1f, 0f,
+        )))
+    }
     Image(
         painterResource(
-            when (level) {
+            when (if (tone == null) level else null) {
                 "LOW" -> R.drawable.load_eye_sage
                 "MEDIUM" -> R.drawable.load_eye_amber
                 "HIGH" -> R.drawable.load_eye_rose
@@ -59,6 +73,7 @@ fun EyeLoadArtwork(level: String?, modifier: Modifier = Modifier) {
         null,
         modifier,
         contentScale = ContentScale.Fit,
+        colorFilter = filter,
     )
 }
 
@@ -86,8 +101,7 @@ fun EyeLoadRail(score: Int?, modifier: Modifier = Modifier, tone: Color = LocalE
         score?.let {
             val x = size.width * it.coerceIn(0, 100) / 100f
             drawCircle(c.heroEnd, 8.dp.toPx(), Offset(x, y))
-            drawCircle(tone, 6.dp.toPx(), Offset(x, y))
-            drawCircle(EyeBrown.marker, 4.dp.toPx(), Offset(x, y))
+            drawCircle(tone, 4.dp.toPx(), Offset(x, y))
         }
     }
 }
@@ -238,50 +252,68 @@ fun EyeWeekUsageCard(
                 color = c.textSecondary,
             )
         }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            val max = week.maxOfOrNull { it ?: 0 }?.coerceAtLeast(60) ?: 60
-            week.forEachIndexed { i, v ->
-                Column(
-                    Modifier.weight(1f)
-                        .clip(EyeShapes.small)
-                        .clickable(role = Role.Button) { selected = i }
-                        .semantics {
-                            contentDescription =
-                                "${labels.getOrNull(i).orEmpty()}，${v?.let { "${it}分钟" } ?: "未记录"}"
-                        }
-                        .padding(vertical = 6.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    Box(
-                        Modifier.width(22.dp)
-                            .height(64.dp)
-                            .clip(CircleShape)
-                            .background(EyeBrown.rail)
-                            .then(
-                                if (i == selected) Modifier.border(1.5.dp, c.primary, CircleShape)
-                                else Modifier
-                            ),
-                        contentAlignment = Alignment.BottomCenter,
+        val max = (week.filterNotNull().maxOrNull() ?: 0).coerceAtLeast(60)
+        Box {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                week.forEachIndexed { i, v ->
+                    Column(
+                        Modifier.weight(1f)
+                            .clip(EyeShapes.small)
+                            .clickable(role = Role.Button) { selected = i }
+                            .semantics {
+                                contentDescription =
+                                    "${labels.getOrNull(i).orEmpty()}，${v?.let { "${it}分钟" } ?: "未记录"}"
+                            }
+                            .padding(vertical = 6.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        if (v != null && v > 0)
-                            Box(
-                                Modifier.fillMaxWidth()
-                                    .fillMaxHeight((v.toFloat() / max * .9f).coerceIn(.02f, 1f))
-                                    .clip(CircleShape)
-                                    .background(
-                                        if (i == selected) c.primary
-                                        else EyeBrown.warm.copy(alpha = .72f)
-                                    )
-                            )
+                        Box(
+                            Modifier.width(22.dp)
+                                .height(64.dp)
+                                .clip(CircleShape)
+                                .background(EyeBrown.rail)
+                                .then(
+                                    if (i == selected) Modifier.border(1.5.dp, c.primary, CircleShape)
+                                    else Modifier
+                                ),
+                            contentAlignment = Alignment.BottomCenter,
+                        ) {
+                            if (v != null && v > 0)
+                                Box(
+                                    Modifier.fillMaxWidth()
+                                        .fillMaxHeight((v.toFloat() / max * .9f).coerceIn(.02f, 1f))
+                                        .clip(CircleShape)
+                                        .background(
+                                            if (i == selected) c.primary
+                                            else EyeBrown.warm.copy(alpha = .45f)
+                                        )
+                                )
+                        }
+                        EyeText(
+                            labels.getOrNull(i) ?: "",
+                            style = t.caption,
+                            color = if (i == selected) c.primary else c.textSecondary,
+                        )
                     }
-                    EyeText(
-                        labels.getOrNull(i) ?: "",
-                        style = t.caption,
-                        color = if (i == selected) c.primary else c.textSecondary,
-                    )
                 }
             }
+            val line = c.primary
+            Canvas(Modifier.fillMaxWidth().height(64.dp).offset(y = 6.dp)) {
+                val points = week.mapIndexed { i, v ->
+                    v?.let { Offset(size.width * (i + .5f) / week.size, (size.height * (1f - .9f * v / max)).coerceAtMost(size.height - 2.dp.toPx())) }
+                }
+                points.zipWithNext().forEach { (a, b) ->
+                    if (a != null && b != null) drawLine(line, a, b, strokeWidth = 2.dp.toPx(), cap = StrokeCap.Round)
+                }
+                points.filterNotNull().forEach { drawCircle(line, radius = 3.dp.toPx(), center = it) }
+            }
+        }
+        val recorded = week.filterNotNull()
+        if (recorded.isNotEmpty()) {
+            val average = recorded.average().toInt()
+            EyeText("已记录 ${recorded.size} 天 · 日均 ${average / 60} 小时 ${average % 60} 分",
+                style = t.bodySecondary, color = c.textSecondary)
         }
         if (week.all { it == null } && onMissing != null)
             EyeText(

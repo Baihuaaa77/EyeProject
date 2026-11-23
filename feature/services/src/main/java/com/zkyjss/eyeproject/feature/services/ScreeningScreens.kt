@@ -303,7 +303,8 @@ internal fun ProfileContent(kind: ScreeningKind, s: ScreeningState, vm: Screenin
 
 @Composable
 private fun EnvironmentContent(kind: ScreeningKind, s: ScreeningState, vm: ScreeningTestViewModel, onRetryCamera: () -> Unit) {
-    TestGuide(if (kind == ScreeningKind.STRABISMUS) GuideMotion.FIXATE else GuideMotion.POSTURE, "调整姿势", if (kind == ScreeningKind.PRESBYOPIA) "正对屏幕，约 40 厘米" else "正对屏幕，约 33 厘米")
+    TestGuide(if (kind == ScreeningKind.STRABISMUS) GuideMotion.FIXATE else GuideMotion.POSTURE,
+        "准备测试", "正对屏幕，露出双眼。")
     if (s.cameraFrames == 0 || !s.faceDetected || s.distanceCm <= 0f) {
         EyeButton("重试相机", EyeButtonRole.SECONDARY, onRetryCamera, Modifier.fillMaxWidth())
     }

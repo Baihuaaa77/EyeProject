@@ -161,6 +161,7 @@ private fun EyeProjectBottomBar(
             items = destinations.map { EyeNavigationItem(it.label, it.iconRes, it.selectedIconRes) },
             selectedIndex = destinations.indexOfFirst { currentDestination.isInHierarchy(it) },
             onSelect = { navController.navigateToTopLevelDestination(destinations[it]) },
+            warm = currentDestination.isInHierarchy(TopLevelDestination.HOME),
         )
     }
 }

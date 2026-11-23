@@ -258,13 +258,8 @@ struct EyeTestView: View {
     }
     @ViewBuilder private var testContent: some View {
         if phase == "Setup" || phase == "ENVIRONMENT" {
-            // 与安卓准备页一致：干眼先提示最佳矫正，再示范姿势
-            if runtime.kind == "DRY_EYE" {
-                Text("建议佩戴最佳矫正视力眼镜进行测试").font(EyeStyle.body).frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(14).background(EyeStyle.accentSoft, in: RoundedRectangle(cornerRadius: EyeStyle.radiusMedium))
-            }
-            TestGuideView(motion: runtime.kind == "STRABISMUS" ? .fixate : .posture, title: runtime.kind == "DRY_EYE" ? "调整姿势 · 约 40 cm" : "调整姿势",
-                cue: runtime.kind == "DRY_EYE" ? "正对屏幕，手机距离眼睛约 40 厘米，光线均匀"
+            TestGuideView(motion: runtime.kind == "STRABISMUS" ? .fixate : .posture, title: "准备测试",
+                cue: runtime.kind == "DRY_EYE" ? "戴平时看得清的眼镜，正对屏幕，距离约 40 cm。"
                     : runtime.kind == "STRABISMUS" ? "正对屏幕，约 33 厘米" : "正对屏幕，约 40 厘米")
             Button("开始测试") { runtime.act("begin") }.buttonStyle(EyeButtonStyle())
             Button("重试相机") { runtime.act("retryCamera") }.buttonStyle(EyeButtonStyle(role: .secondary))
@@ -755,14 +750,12 @@ struct ColorVisionContent: View {
 
     private var setup: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("开始前").font(EyeStyle.title).foregroundStyle(EyeStyle.text)
-            ForEach(Array(["关掉手机的护眼模式、夜间模式（会改变屏幕颜色）", "在明亮的室内，屏幕亮度已自动调到最高",
-                           "手机离眼睛约 40 cm，平时戴眼镜就戴着"].enumerated()), id: \.offset) { i, text in
-                Text("\(i + 1). \(text)").font(EyeStyle.body).foregroundStyle(EyeStyle.text)
-            }
-            Text("先看一张示例图，再看 8 张检测图，选出看到的数字；看不出就选「看不出」，不要猜。")
+            Text("准备测色觉").font(EyeStyle.title).foregroundStyle(EyeStyle.text)
+            Text("关掉护眼和夜间模式，在明亮处测试。").font(EyeStyle.body).foregroundStyle(EyeStyle.text)
+            Text("手机离眼睛约 40 cm，平时戴镜就戴着。").font(EyeStyle.body).foregroundStyle(EyeStyle.text)
+            Text("先练一张，再认 8 张图。看不出就选「看不出」。")
                 .font(EyeStyle.body).foregroundStyle(EyeStyle.secondary)
-            Button("准备好了") { EyeHaptics.tap(); runtime.act("colorStart") }.buttonStyle(EyeButtonStyle())
+            Button("先练一张") { EyeHaptics.tap(); runtime.act("colorStart") }.buttonStyle(EyeButtonStyle())
         }
         .padding(16).frame(maxWidth: .infinity, alignment: .leading)
         .eyeGlass()
@@ -773,7 +766,7 @@ struct ColorVisionContent: View {
         let options = runtime.state["options"] as? [String] ?? []
         let demo = runtime.bool("demo")
         return VStack(spacing: 16) {
-            Text(demo ? "示例图" : "第 \(Int(runtime.number("plateNumber"))) / \(Int(runtime.number("plateCount"))) 张")
+            Text(demo ? "试一试" : "第 \(Int(runtime.number("plateNumber"))) / \(Int(runtime.number("plateCount"))) 张")
                 .font(EyeStyle.subtitle).foregroundStyle(EyeStyle.readableText(EyeStyle.primary))
             ColorPlateCanvas(dots: runtime.colorPlateDots(plateId))
                 .aspectRatio(1, contentMode: .fit).frame(maxWidth: 360)
@@ -781,10 +774,13 @@ struct ColorVisionContent: View {
                 .onAppear { DispatchQueue.main.async { runtime.colorPlateShown() } }
             Text("图里是什么数字？").font(EyeStyle.title).foregroundStyle(EyeStyle.text)
             HStack(spacing: 10) {
-                ForEach(options, id: \.self) { option in
-                    Button(option) { EyeHaptics.tap(); runtime.colorAnswer(option) }
-                        .buttonStyle(EyeButtonStyle(role: option == "看不出" ? .secondary : .primary))
+                ForEach(options.filter { $0 != "看不出" }, id: \.self) { option in
+                    Button(option) { EyeHaptics.tap(); runtime.colorAnswer(option) }.buttonStyle(EyeButtonStyle())
                 }
+            }
+            if options.contains("看不出") {
+                Button("看不出") { EyeHaptics.tap(); runtime.colorAnswer("看不出") }
+                    .buttonStyle(EyeButtonStyle(role: .secondary))
             }
         }.frame(maxWidth: .infinity)
     }

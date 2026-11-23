@@ -9,17 +9,15 @@ struct WelcomeView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
-                AppIconView().frame(width: 88, height: 88).padding(.top, 48)
+                AppIconView().frame(width: 72, height: 72).padding(.top, 36)
                 VStack(spacing: 8) {
-                    Text("欢迎来到眼健康助手").font(EyeStyle.title).foregroundStyle(EyeStyle.text)
-                    Text("登录后，测试记录可以加密保存到云端，换手机也不丢；还能和爱科聊聊今天的用眼感受。")
+                    Text("眼健康助手").font(EyeStyle.title).foregroundStyle(EyeStyle.text)
+                    Text("登录后可同步记录、使用 AI 问诊。")
                         .font(EyeStyle.body).foregroundStyle(EyeStyle.secondary).multilineTextAlignment(.center)
                 }.padding(.horizontal, 8)
                 SignInForm()
-                Button("先跳过，随便看看") { EyeHaptics.tap(); done() }
+                Button("先体验") { EyeHaptics.tap(); done() }
                     .font(EyeStyle.button).foregroundStyle(EyeStyle.primary).frame(minHeight: 48)
-                Text("不登录也能做全部自测，记录只保存在这台手机上。以后可在首页右上角的人像里登录。")
-                    .font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary).multilineTextAlignment(.center)
             }
             .padding(.horizontal, 20).padding(.bottom, 28)
         }

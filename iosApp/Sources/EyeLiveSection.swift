@@ -15,7 +15,7 @@ struct LiveEyeSection: View {
     var startRequests = 0
 
     static let showLandmarks = "显示眼部关键点"
-    static let help = "用前置摄像头实时检测双眼关键点：数眨眼次数、估计眼睛到屏幕的距离和头部姿态，结果计入「视觉行为」。「显示眼部关键点」只决定预览上是否画出眼睑轮廓和虹膜圈，不影响检测。画面只在本机实时处理，不保存、不上传；点「停止检测」或离开首页即停止相机。"
+    static let help = "用前摄估计眨眼与观看距离。画面只在本机处理，离开首页会停止相机。"
 
     var body: some View {
         Group {
@@ -82,24 +82,24 @@ struct LiveEyeSection: View {
         let s = model.snapshot
         return VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 0) {
-                MetricView(label: "眨眼", value: "\(s?.blinkCount ?? 0)", unit: "次")
-                VDivider()
                 MetricView(label: "近 1 分钟", value: "\(s?.blinksLastMinute ?? 0)", unit: "次")
                 VDivider()
                 MetricView(label: "距离", value: s?.distanceCm.map { String(format: "%.0f", $0.floatValue) } ?? "—", unit: "厘米")
             }.fixedSize(horizontal: false, vertical: true)
-            HStack(spacing: 8) {
-                eyeState(s)
-                Text(String(format: "EAR %@ · %.0f 帧/秒", s?.ear.map { String(format: "%.2f", $0.floatValue) } ?? "—", s?.fps ?? 0))
-                    .font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary).monospacedDigit()
+            WarmDisclosure(title: "检测详情") {
+                HStack(spacing: 8) {
+                    eyeState(s)
+                    Text(String(format: "EAR %@ · %.0f 帧/秒", s?.ear.map { String(format: "%.2f", $0.floatValue) } ?? "—", s?.fps ?? 0))
+                        .font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary).monospacedDigit()
+                }
+                Toggle(isOn: Binding(get: { model.showLandmarks }, set: { on in
+                    EyeHaptics.toggle()
+                    model.showLandmarks = on
+                })) {
+                    Text(Self.showLandmarks).font(EyeStyle.body).foregroundStyle(EyeStyle.secondary)
+                }.tint(EyeStyle.primary).frame(minHeight: 40)
+                EarTraceChart(snapshot: s).frame(height: 116)
             }
-            Toggle(isOn: Binding(get: { model.showLandmarks }, set: { on in
-                EyeHaptics.toggle()
-                model.showLandmarks = on
-            })) {
-                Text(Self.showLandmarks).font(EyeStyle.body).foregroundStyle(EyeStyle.secondary)
-            }.tint(EyeStyle.primary).frame(minHeight: 40)
-            EarTraceChart(snapshot: s).frame(height: 116)
         }
     }
 

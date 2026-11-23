@@ -28,6 +28,10 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--brand-edge);
+  border-radius: 15px;
+  background: var(--brand-control);
 }
 .rest-time {
   flex: none;

@@ -151,12 +151,12 @@ private fun ColorSetup(onStart: () -> Unit) {
     val typography = LocalEyeTypography.current
     EyeSectionCard {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            EyeText("开始前", style = typography.title, color = colors.textPrimary)
-            listOf("关掉手机的护眼模式、夜间模式（会改变屏幕颜色）", "在明亮的室内，屏幕亮度已自动调到最高", "手机离眼睛约 40 cm，平时戴眼镜就戴着")
-                .forEachIndexed { i, text -> EyeText("${i + 1}. $text", style = typography.body, color = colors.textPrimary) }
-            EyeText("先看一张示例图，再看 8 张检测图，选出看到的数字；看不出就选「看不出」，不要猜。",
+            EyeText("准备测色觉", style = typography.title, color = colors.textPrimary)
+            EyeText("关掉护眼和夜间模式，在明亮处测试。", style = typography.body, color = colors.textPrimary)
+            EyeText("手机离眼睛约 40 cm，平时戴镜就戴着。", style = typography.body, color = colors.textPrimary)
+            EyeText("先练一张，再认 8 张图。看不出就选「看不出」。",
                 style = typography.body, color = colors.textSecondary)
-            EyeButton("准备好了", EyeButtonRole.PRIMARY, onStart, Modifier.fillMaxWidth())
+            EyeButton("先练一张", EyeButtonRole.PRIMARY, onStart, Modifier.fillMaxWidth())
         }
     }
 }
@@ -171,16 +171,17 @@ private fun PlateQuestion(plate: ColorPlate, demo: Boolean, answered: Int, total
         withFrameNanos { }; withFrameNanos { }
         onShown(android.os.SystemClock.elapsedRealtime())
     }
-    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        EyeText(if (demo) "示例图" else "第 ${answered + 1} / $total 张", style = typography.subtitle, color = colors.primary)
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        EyeText(if (demo) "先练一张" else "第 ${answered + 1} / $total 张", style = typography.subtitle, color = colors.primary)
         ColorPlateView(plate, Modifier.fillMaxWidth().widthIn(max = 360.dp).aspectRatio(1f))
         EyeText("图里是什么数字？", style = typography.title, color = colors.textPrimary, textAlign = TextAlign.Center)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            plate.options.forEach { option ->
-                EyeButton(option, if (option == ColorVisionProtocol.NOT_SEEN) EyeButtonRole.SECONDARY else EyeButtonRole.PRIMARY,
-                    { onAnswer(option) }, Modifier.weight(1f).heightIn(min = 56.dp))
+            plate.options.filter { it != ColorVisionProtocol.NOT_SEEN }.forEach { option ->
+                EyeButton(option, EyeButtonRole.PRIMARY, { onAnswer(option) }, Modifier.weight(1f))
             }
         }
+        if (ColorVisionProtocol.NOT_SEEN in plate.options) EyeButton("看不出", EyeButtonRole.SECONDARY,
+            { onAnswer(ColorVisionProtocol.NOT_SEEN) }, Modifier.fillMaxWidth())
     }
 }
 

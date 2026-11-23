@@ -111,19 +111,19 @@ class HomeVisualTest {
     private val today = "2026-10-23"
 
     /** 一周的虚构用眼数据：今天用屏 6 小时多、连续 75 分钟、眨眼偏少，已打卡眼睛干涩。 */
-    private fun demoState(checkIn: Boolean = true, reminder: Boolean = false): HomeUiState {
+    private fun demoState(checkIn: Boolean = true, reminder: Boolean = false, reportDate: String = today): HomeUiState {
         val usage = (0..13).map { back ->
-            val day = EyeCareDays.plusDays(today, -back)
+            val day = EyeCareDays.plusDays(reportDate, -back)
             UsageDay(day, screenMinutes = listOf(385, 300, 420, 260, 330, 280, 350, 240, 260, 300, 250, 270, 260, 240)[back],
                 unlocks = 60 + back, longestSessionMinutes = if (back == 0) 75 else 40, nightMinutes = if (back == 2) 80 else 15, breaks = 9)
         }
         var ledger = LedgerData()
-            .withSession(today, 1L, LiveEyeMonitor.Session(150_000, 22, 8.8f, 31f, 0.3f, 12f))
-            .withSession(EyeCareDays.plusDays(today, -2), 1L, LiveEyeMonitor.Session(90_000, 18, 12f, 36f, 0.1f, 9f))
-        for (back in 1..6) ledger = ledger.withSession(EyeCareDays.plusDays(today, -back), 1L,
+            .withSession(reportDate, 1L, LiveEyeMonitor.Session(150_000, 22, 8.8f, 31f, 0.3f, 12f))
+            .withSession(EyeCareDays.plusDays(reportDate, -2), 1L, LiveEyeMonitor.Session(90_000, 18, 12f, 36f, 0.1f, 9f))
+        for (back in 1..6) ledger = ledger.withSession(EyeCareDays.plusDays(reportDate, -back), 1L,
             LiveEyeMonitor.Session(150_000, 30, 12f, 36f, .1f, 5f))
-        if (checkIn) ledger = ledger.withCheckIn(today, listOf("眼睛干涩"), 2L)
-        val report = EyeCareEngine.report(ledger, EyeCareContext(today, 15, usage, EyeCareEngine.ACCESS_GRANTED, 180f, true, 0.72f,
+        if (checkIn) ledger = ledger.withCheckIn(reportDate, listOf("眼睛干涩"), 2L)
+        val report = EyeCareEngine.report(ledger, EyeCareContext(reportDate, 15, usage, EyeCareEngine.ACCESS_GRANTED, 180f, true, 0.72f,
             mapOf("出生年份" to "1990", "职业" to "办公室工作", "基础视力" to "一般", "既往眼病" to "没有"), 36,
             listOf(TestBrief("DRY_EYE", "MEDIUM", "干眼中风险", "2026-10-20")), reminder, 30))
         return HomeUiState(reminderEnabled = reminder, reminderIntervalMinutes = 30, reminderNextTimeText = "15:30", report = report,
@@ -137,10 +137,10 @@ class HomeVisualTest {
         compose.setContent { EyeProjectTheme {
             HomeContent(demoState(), HomeNavigation(onOpenChat = {chat=true},onOpenTrend={trend=true}), HomeActions(toggleReminder={reminder=true}))
         } }
-        compose.onNodeWithText("今日用眼负荷").assertIsDisplayed()
-        compose.onNodeWithText("用眼全记录  ›").assertIsDisplayed()
+        compose.onNodeWithText("用眼负荷").assertIsDisplayed()
+        compose.onNodeWithText("用眼全记录", substring = true).assertIsDisplayed()
         capture("01-首页-首屏")
-        compose.onNodeWithText("查看用眼趋势").performScrollTo().performClick()
+        compose.onNodeWithText("用眼报告 ›").performScrollTo().performClick()
         assertTrue(trend)
         compose.onNodeWithText("智能挂号").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("AI问诊").performScrollTo().performClick()
@@ -149,25 +149,25 @@ class HomeVisualTest {
         assertTrue(reminder)
     }
 
-    @Test fun dailyRecordsMoveOneDayAndKeepTheDateOnReturnFromDetails() {
+    @Test fun dailyRecordsMoveOneDayAndKeepTheDateWhenClosingDetails() {
         val state = demoState()
         compose.setContent { EyeProjectTheme {
             HomeContent(state, HomeNavigation(), HomeActions())
         } }
-        compose.onNodeWithText("用眼全记录  ›").performClick()
-        compose.onNodeWithText("10月23日 · 今天").assertIsDisplayed()
+        compose.onNodeWithText("用眼全记录", substring = true).performClick()
+        compose.onNodeWithText("10月23日 · 今天").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("后一天").assertIsNotEnabled()
-        compose.onNodeWithText("前一天").performClick()
-        compose.onNodeWithText("10月22日 · 周四").assertIsDisplayed()
+        compose.onNodeWithText("前一天").performScrollTo().performClick()
+        compose.onNodeWithText("10月22日 · 周四").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("累计用屏").performScrollTo().performClick()
-        compose.onNodeWithText("来自这一天的系统用屏统计。").assertIsDisplayed()
-        compose.onNodeWithContentDescription("返回").performClick()
-        compose.onNodeWithText("10月22日 · 周四").assertIsDisplayed()
-        compose.onNodeWithText("后一天").performClick()
-        compose.onNodeWithText("10月23日 · 今天").assertIsDisplayed()
+        compose.onNodeWithText("来自这一天的系统用屏统计。").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("累计用屏").performScrollTo().performClick()
+        compose.onNodeWithText("10月22日 · 周四").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("后一天").performScrollTo().performClick()
+        compose.onNodeWithText("10月23日 · 今天").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("后一天").assertIsNotEnabled()
-        repeat(13) { compose.onNodeWithText("前一天").performClick() }
-        compose.onNodeWithText("10月10日 · 周六").assertIsDisplayed()
+        repeat(13) { compose.onNodeWithText("前一天").performScrollTo().performClick() }
+        compose.onNodeWithText("10月10日 · 周六").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("前一天").assertIsNotEnabled()
     }
 
@@ -218,14 +218,14 @@ class HomeVisualTest {
             }
         }
         compose.onNodeWithText("暂无读数").assertExists()
-        compose.onNodeWithText("该日暂无用屏记录").assertExists()
+        compose.onNodeWithText("暂无用屏记录").assertExists()
         capture("03-首页-深色-还没有数据")
     }
 
     /** 深色模式展示真实页面与虚构报告，检查圆环、空槽和正文层次。 */
     @Test fun homeDarkWithData() {
         compose.setContent { EyeProjectTheme(darkTheme = true) { HomeContent(demoState(), HomeNavigation(), HomeActions()) } }
-        compose.onNodeWithText("今日用眼负荷").assertIsDisplayed()
+        compose.onNodeWithText("用眼负荷").assertIsDisplayed()
         compose.onNodeWithText("做 1 分钟护眼操").assertDoesNotExist()
         compose.onNodeWithContentDescription("账户").assertIsDisplayed()
         capture("01c-首页-深色-首屏")
@@ -253,7 +253,7 @@ class HomeVisualTest {
         dark = true
         capture("01f-首页-79-深色暖金")
         report = report.copy(score = 80, level = "HIGH", label = "偏累")
-        compose.onAllNodesWithText("较大").onFirst().assertIsDisplayed()
+        compose.onAllNodesWithText("重度").onFirst().assertIsDisplayed()
         capture("01g-首页-20-银色")
     }
 
@@ -270,7 +270,7 @@ class HomeVisualTest {
                 }
             }
         }
-        compose.onNodeWithText("今日用眼负荷").assertIsDisplayed()
+        compose.onNodeWithText("用眼负荷").assertIsDisplayed()
         compose.onNodeWithText("日常护眼").performScrollTo().performClick()
         compose.onNodeWithText("屏幕光").performScrollTo().assertIsDisplayed().performClick()
         assertTrue(openedBrightness)
@@ -288,7 +288,7 @@ class HomeVisualTest {
         compose.mainClock.autoAdvance = false
         compose.setContent { EyeProjectTheme { HomeContent(HomeUiState(report = report), HomeNavigation(), HomeActions()) } }
         compose.mainClock.advanceTimeBy(2_400)
-        compose.onAllNodesWithText("较大", useUnmergedTree = true).onFirst().assertExists()
+        compose.onAllNodesWithText("重度", useUnmergedTree = true).onFirst().assertExists()
         capture("01b-首页-负荷偏高", advance = false)
     }
 
@@ -342,6 +342,8 @@ class HomeVisualTest {
         capture("05a-首页-实时检测-未开始")
         compose.onNodeWithContentDescription("开始实时检测").performClick()
         compose.onNodeWithText("运行正常").assertExists()
+        compose.onNodeWithText("睁眼").assertDoesNotExist()
+        compose.onNodeWithText("检测详情").performClick()
         compose.onNodeWithText("睁眼").assertExists()
         compose.onNodeWithText("33 厘米", useUnmergedTree = true).assertExists()
         // 关键点叠加默认关闭，点一下才画出来；检测读数不受影响
@@ -427,7 +429,7 @@ class HomeVisualTest {
         } }
         compose.onNode(hasSetTextAction()).performTextInput("我还有一点补充")
         compose.onNodeWithText("几天前").performClick()
-        compose.onNodeWithText("确认这项回答？").assertExists()
+        compose.onNodeWithText("发送回答？").assertExists()
         assertTrue(sent.isEmpty())
         capture("13-AI逐步问询")
         val dialogBitmap = compose.runOnIdle {
@@ -445,7 +447,7 @@ class HomeVisualTest {
         state = state.copy(messages = state.messages + com.zkyjss.eyeproject.core.sync.ChatEntry("assistant", "继续了解", 2,
             question = com.zkyjss.eyeproject.core.sync.ChatQuestion("有没有疼痛？", listOf("没有", "有"))))
         compose.onNodeWithText("没有").performClick()
-        compose.onNodeWithText("确认这项回答？").assertDoesNotExist()
+        compose.onNodeWithText("发送回答？").assertDoesNotExist()
         assertEquals(listOf("几天前", "没有"), sent)
         compose.onNodeWithText("发送").performClick()
         assertEquals("我还有一点补充", sent.last())
@@ -493,7 +495,9 @@ class HomeVisualTest {
     @Test @Config(qualifiers = "zh-rCN-w390dp-h2600dp-mdpi")
     fun fullHomePageDark() {
         compose.mainClock.autoAdvance = false
-        compose.setContent { EyeProjectTheme(darkTheme = true) { HomeContent(demoState(), HomeNavigation(), HomeActions()) { LiveEyeContent(LiveEyeUiState(), null, {}, {}) {} } } }
+        val sample = demoState(reportDate = java.time.LocalDate.now().toString())
+        val lightLoad = sample.copy(report = sample.report?.copy(score = 21, level = "LOW", label = "轻松"))
+        compose.setContent { EyeProjectTheme(darkTheme = true) { HomeContent(lightLoad, HomeNavigation(), HomeActions()) { LiveEyeContent(LiveEyeUiState(), null, {}, {}) {} } } }
         compose.mainClock.advanceTimeBy(1_500)
         capture("02b-首页-整页-深色", advance = false)
     }

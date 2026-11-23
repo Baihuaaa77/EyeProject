@@ -426,7 +426,7 @@ class ServiceVisualTest {
     }
 
     /** 服务页（2026-11 改版）：示范主卡轮流演示三项自测，下面是「全部自测」分组列表；深浅两套主题。 */
-    @Test fun servicesHeroPlaysTestDemosAboveTheList() {
+    @Test fun servicesShowsRealUsageAndFoldsTestDemos() {
         var dark by mutableStateOf(false)
         compose.mainClock.autoAdvance = false
         compose.setContent { EyeProjectTheme(darkTheme = dark) { Box(Modifier.fillMaxSize().background(LocalEyeColors.current.appBackground)) {
@@ -438,7 +438,9 @@ class ServiceVisualTest {
                     ), 1, {}, Modifier.align(androidx.compose.ui.Alignment.BottomCenter).padding(16.dp))
                 } } }
         compose.mainClock.advanceTimeBy(1_500)
-        compose.onNodeWithText("手机使用时长").assertDoesNotExist()
+        compose.onNodeWithText("手机使用时长").assertExists()
+        compose.onNodeWithText("已记录 4 天 · 日均 2 小时 54 分").assertExists()
+        compose.onNodeWithText("自测方法").assertExists()
         compose.onNodeWithText("自测方法示范").assertDoesNotExist()
         compose.onNodeWithText("选择一项自测").assertExists()
         compose.onNodeWithText("推荐").assertDoesNotExist()

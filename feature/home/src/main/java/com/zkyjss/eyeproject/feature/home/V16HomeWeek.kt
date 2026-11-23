@@ -16,6 +16,8 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalDensity
+import java.time.format.DateTimeFormatter
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeBrown
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeTypography
@@ -29,7 +31,10 @@ internal fun V16HomeWeek(history: List<TrendDay>, onFeeling: () -> Unit, onTrend
     val colors = LocalEyeColors.current
     val type = LocalEyeTypography.current
     val today = LocalDate.now()
-    var week by rememberSaveable { mutableIntStateOf(1) }
+    val startOfWeek = today.with(DayOfWeek.MONDAY)
+    var week by rememberSaveable {
+        mutableIntStateOf(if (history.any { it.screenMinutes != null && it.day >= startOfWeek.minusWeeks(1).toString() && it.day < startOfWeek.toString() }) 1 else 0)
+    }
     val monday = today.with(DayOfWeek.MONDAY).minusWeeks(week.toLong())
     val dates = List(7) { monday.plusDays(it.toLong()) }
     val daysByDate = history.associateBy { it.day }
@@ -40,17 +45,45 @@ internal fun V16HomeWeek(history: List<TrendDay>, onFeeling: () -> Unit, onTrend
     val peak = screenTimeAxisMaximum(days.mapNotNull { it?.screenMinutes }.maxOrNull() ?: 0)
     fun tone(day: TrendDay?) = day?.score?.let(EyeBrown::loadColor) ?: colors.textSecondary
 
-    EyeWarmCard(fill = EyeBrown.trend) {
+    EyeWarmCard(fill = EyeBrown.homeSurface, edge = EyeBrown.homeEdge, padding = 14.dp, spacing = 4.dp) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             EyeText("用眼爱记录", Modifier.weight(1f), style = type.subtitle, color = colors.textPrimary)
-            EyeButton("记录感受", EyeButtonRole.SECONDARY, onFeeling)
+            EyeText("记录感受", Modifier.heightIn(min = 48.dp).wrapContentHeight()
+                .clickable(role = Role.Button, onClick = onFeeling), style = type.bodySecondary, color = colors.textPrimary)
         }
-        EyeSegmentedRow(listOf(SegmentedOption(1, "上周"), SegmentedOption(0, "本周")), week, { week = it })
+        val formatter = remember { DateTimeFormatter.ofPattern("M月d日") }
+        val range = "${dates.first().format(formatter)}–${dates.last().format(formatter)}"
+        BoxWithConstraints {
+            val picker: @Composable (Modifier) -> Unit = { modifier ->
+                EyeSegmentedRow(listOf(SegmentedOption(1, "上周"), SegmentedOption(0, "本周")), week, { week = it }, modifier, warm = true)
+            }
+            if (maxWidth / LocalDensity.current.fontScale < 245.dp) {
+                Column { EyeText(range, style = type.bodySecondary, color = colors.textSecondary); picker(Modifier) }
+            } else {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    EyeText(range, Modifier.weight(1f), style = type.bodySecondary, color = colors.textSecondary)
+                    picker(Modifier.width(108.dp))
+                }
+            }
+        }
         val minutes = reading?.screenMinutes
         val amount = minutes?.let { "${it / 60}小时${it % 60}分" } ?: "—"
-        val amountColor = reading?.score?.takeIf { minutes != null }?.let(EyeBrown::loadTextColor) ?: colors.textSecondary
-        EyeText(amount, style = type.metricValue, color = amountColor)
-        if (minutes == null) EyeText("该日暂无用屏记录", style = type.bodySecondary, color = colors.textSecondary)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            val labels = listOf("一", "二", "三", "四", "五", "六", "日")
+            val label = labels.getOrNull(selected)?.let { "周$it" }.orEmpty() + "用屏"
+            Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                EyeText(label, style = type.bodySecondary, color = colors.textPrimary)
+                reading?.score?.let { score ->
+                    val grade = when {
+                        score < 30 -> "轻度"
+                        score < 60 -> "中度"
+                        else -> "重度"
+                    }
+                    EyeText(grade, style = type.bodySecondary, color = tone(reading))
+                }
+            }
+            EyeText(eyeReading(amount, unitColor = tone(reading)), style = type.metricValue, color = tone(reading))
+        }
         Row(Modifier.fillMaxWidth()) {
             ScreenTimeAxis(peak, 100.dp)
             Canvas(Modifier.weight(1f).height(100.dp).pointerInput(Unit) {
@@ -108,6 +141,15 @@ internal fun V16HomeWeek(history: List<TrendDay>, onFeeling: () -> Unit, onTrend
                 ) { EyeText(weekday, style = type.caption, color = if (i == selected) tone(days[i]) else colors.textSecondary) }
             }
         }
-        EyeButton("查看用眼趋势", EyeButtonRole.SECONDARY, onTrend, Modifier.fillMaxWidth())
+        val measured = days.mapNotNull { it?.screenMinutes }
+        val line = if (measured.isEmpty()) "暂无用屏记录" else {
+            val average = measured.average().toInt()
+            "有记录的日子平均用屏 ${average / 60}小时${average % 60}分"
+        }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            EyeText(line, Modifier.weight(1f), style = type.bodySecondary, color = colors.textSecondary)
+            EyeText("用眼报告 ›", Modifier.heightIn(min = 48.dp).wrapContentHeight()
+                .clickable(role = Role.Button, onClick = onTrend), style = type.bodySecondary, color = colors.textPrimary)
+        }
     }
 }

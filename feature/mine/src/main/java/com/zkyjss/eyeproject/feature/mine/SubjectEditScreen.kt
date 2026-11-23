@@ -84,7 +84,7 @@ internal fun SubjectEditContent(
                     Spacer(Modifier.height(8.dp))
                     val relations = SubjectProfiles.RELATIONS.filter { it.first != "SELF" }
                     EyeChoiceList(relations.map { it.second }, SubjectProfiles.relationLabel(draft.relation), multiple = false,
-                        onChange = { label -> relations.firstOrNull { it.second == label }?.let { onRelation(it.first) } })
+                        onChange = { label -> relations.firstOrNull { it.second == label }?.let { onRelation(it.first) } }, compact = true)
                 }
             }
             SubjectProfiles.sections.take(1).forEach { section ->
@@ -137,7 +137,7 @@ private fun ProfileQuestion(question: Question, value: String, onChange: (String
                 })
         } else {
             EyeText(question.title + if (question.multiple) "（可多选）" else "", style = typography.subtitle, color = colors.textPrimary)
-            EyeChoiceList(options, value, question.multiple, onChange, question.hints, question.exclusive)
+            EyeChoiceList(options, value, question.multiple, onChange, question.hints, question.exclusive, compact = true)
         }
     }
 }

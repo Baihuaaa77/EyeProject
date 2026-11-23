@@ -142,7 +142,6 @@ enum CloudTexts {
         "未满 14 岁孩子的数据需监护人同意才上传；研究用途需单独同意。",
         "AI 功能需单独同意：只发送去标识的结果与概况，由第三方大模型生成文字，风险等级仍由测试规则决定。",
     ]
-    static let server = "默认是课题组的服务器，一般不用改。局域网试用时可填电脑上运行的服务地址，如 http://192.168.1.5:8080；清空即只在本机保存。更换地址会退出登录。"
     static let sync = "把测试记录与家庭成员资料加密保存到云端，换手机或多台设备时可以找回。关闭后不再上传，已上传的数据可在下方导出或注销账号删除。"
     static let guardian = "未满 14 岁孩子的测试记录，需要监护人同意后才会上传。"
     static let research = "可选。同意后，去掉姓名、账号等身份信息的数据可用于改进眼健康研究；不同意不影响任何功能。"
@@ -151,7 +150,7 @@ enum CloudTexts {
     static let chat = "和爱科聊天时，把你输入的文字、最近几轮对话，以及综合建议用到的去标识用眼概况发给第三方大模型（DeepSeek）回答；服务器不保存对话内容，记录只在这台手机上；不发送姓名、账号、照片或视频。"
 }
 
-/// 账户（右上角人像按钮进入的完整页面）：账号概况、登录 / 注册、退出登录、注销账号与服务器地址。
+/// 账户（右上角人像按钮进入的完整页面）：账号概况、登录 / 注册、退出登录与注销账号。
 /// 分项同意、立即同步与导出在「我的 → 云端同步」。与安卓 AccountScreen 同一排版与文案。
 struct AccountPage: View {
     @ObservedObject private var subjects = SubjectStore.shared
@@ -166,47 +165,14 @@ struct AccountPage: View {
         SubPage(title: "我的账户") {
             let selfProfile = subjects.subjects.first { $0.relation == "SELF" }
             ListRow(title: selfProfile?.displayName ?? "小林",subtitle: "我的资料",divider: false) { editProfile(selfProfile?.id) }
-            DisclosureGroup("登录与账号管理") {
-            header
-            if !cloud.bool("configured") {
-                ServerCard(cloud: cloud, emphasize: true)
-                if !message.isEmpty { note(message) }
-            } else if !cloud.bool("signedIn") {
-                SignInForm()
-                ServerCard(cloud: cloud, emphasize: false)
-            } else {
+            if cloud.bool("signedIn") {
                 signedIn
+            } else {
+                SignInForm()
             }
-            }.font(EyeStyle.body)
         }
         .onChange(of: cloud.int("outcomeId")) { _ in if cloud.bool("outcomeOk") { EyeHaptics.success() } else { EyeHaptics.failure() } }
         .onChange(of: confirmDelete) { if $0 { EyeHaptics.failure() } }
-    }
-
-    private var header: some View {
-        let signedIn = cloud.bool("signedIn")
-        let address = cloud.string("email")
-        let (label, color): (String, Color) = !cloud.bool("configured") ? ("未连接服务器", EyeStyle.secondary)
-            : !signedIn ? ("数据只在本机", EyeStyle.secondary)
-            : cloud.bool("healthDataSync") ? ("云端同步已开启", EyeStyle.success) : ("已登录 · 仅本机", EyeStyle.secondary)
-        return HStack(spacing: 16) {
-            ZStack {
-                Circle().fill(EyeStyle.panel)
-                if signedIn && !address.isEmpty {
-                    Text(String(address.prefix(1)).uppercased()).font(EyeStyle.title).foregroundStyle(EyeStyle.readableText(EyeStyle.primary))
-                } else {
-                    EyeGlyphView(glyph: .person).frame(width: 30, height: 30)
-                }
-            }.frame(width: 60, height: 60)
-            VStack(alignment: .leading, spacing: 6) {
-                Text(signedIn ? address : "未登录").font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text).lineLimit(1)
-                StatusChip(text: label, color: color)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(20).frame(maxWidth: .infinity, alignment: .leading)
-        .background(LinearGradient(colors: [EyeStyle.primarySoft, EyeStyle.panel], startPoint: .topLeading, endPoint: .bottomTrailing),
-                    in: RoundedRectangle(cornerRadius: EyeStyle.radius, style: .continuous))
     }
 
     private var signedIn: some View {
@@ -226,9 +192,6 @@ struct AccountPage: View {
                     if confirmDelete { confirmDelete = false; cloud.client.deleteCloudAccount() } else { confirmDelete = true }
                 }
             }
-            ListGroup(title: "服务器") {
-                ListRow(title: "服务器地址", glyph: .server, tone: .neutral, value: cloud.string("serverUrl"), divider: false)
-            }
         }
     }
 
@@ -240,35 +203,53 @@ struct AccountPage: View {
 /// 登录 / 注册表单：账户页与启动时的登录引导共用（与安卓 SignInForm 一致）。
 struct SignInForm: View {
     @ObservedObject private var cloud = CloudModel.shared
+    @State private var method = 0
     @State private var mode = 0
     @State private var email = ""
     @State private var password = ""
     @State private var agreed = false
+    private var captureMode: Bool {
+#if SCREENSHOT_CAPTURE
+        true
+#else
+        false
+#endif
+    }
     private var busy: Bool { cloud.bool("busy") }
     private var message: String { cloud.string("message") }
 
     var body: some View {
         Panel(padding: 20) {
-            SegmentedPicker(options: [(0, "登录"), (1, "注册")], selected: mode) { mode = $0 }
-            field("邮箱") {
-                TextField("name@example.com", text: $email).keyboardType(.emailAddress).textInputAutocapitalization(.never).autocorrectionDisabled()
-            }
-            field("密码") { SecureField(mode == 1 ? "至少 8 位，含字母和数字" : "", text: $password) }
-            if mode == 1 {
-                HStack(spacing: 0) {
-                    Text("同意隐私政策").font(EyeStyle.body).foregroundStyle(EyeStyle.text)
-                    HelpButton(title: "隐私政策要点", text: CloudTexts.dataHandling.joined(separator: "\n"))
-                    Spacer()
-                    Toggle("", isOn: Binding(get: { agreed }, set: { EyeHaptics.toggle(); agreed = $0 })).labelsHidden().tint(EyeStyle.primary)
-                }.frame(minHeight: 48)
-            }
-            if !message.isEmpty { note(message) }
-            if mode == 0 {
-                Button("登录") { EyeHaptics.tap(); cloud.client.signIn(email: email.trimmingCharacters(in: .whitespaces), password: password) }
-                    .buttonStyle(EyeButtonStyle()).disabled(busy || email.isEmpty || password.isEmpty)
+            Text("登录账户").font(EyeStyle.title).foregroundStyle(EyeStyle.text)
+            SegmentedPicker(options: [(0, "邮箱"), (1, "手机号"), (2, "微信")], selected: method) { method = $0 }
+            if method == 1 {
+                note("手机号一键登录待接入运营商认证。")
+            } else if method == 2 {
+                note("微信一键登录待接入微信开放平台。")
+            } else if cloud.bool("configured") || captureMode {
+                SegmentedPicker(options: [(0, "登录"), (1, "注册")], selected: mode) { mode = $0 }
+                field("邮箱") {
+                    TextField("name@example.com", text: $email).keyboardType(.emailAddress).textInputAutocapitalization(.never).autocorrectionDisabled()
+                }
+                field("密码") { SecureField(mode == 1 ? "至少 8 位，含字母和数字" : "", text: $password) }
+                if mode == 1 {
+                    HStack(spacing: 0) {
+                        Text("同意隐私政策").font(EyeStyle.body).foregroundStyle(EyeStyle.text)
+                        HelpButton(title: "隐私政策要点", text: CloudTexts.dataHandling.joined(separator: "\n"))
+                        Spacer()
+                        Toggle("", isOn: Binding(get: { agreed }, set: { EyeHaptics.toggle(); agreed = $0 })).labelsHidden().tint(EyeStyle.primary)
+                    }.frame(minHeight: 48)
+                }
+                if !message.isEmpty { note(message) }
+                if mode == 0 {
+                    Button("登录") { EyeHaptics.tap(); cloud.client.signIn(email: email.trimmingCharacters(in: .whitespaces), password: password) }
+                        .buttonStyle(EyeButtonStyle()).disabled(busy || email.isEmpty || password.isEmpty)
+                } else {
+                    Button("注册") { EyeHaptics.tap(); cloud.client.register(email: email.trimmingCharacters(in: .whitespaces), password: password) }
+                        .buttonStyle(EyeButtonStyle()).disabled(busy || !agreed || email.isEmpty || password.isEmpty)
+                }
             } else {
-                Button("注册") { EyeHaptics.tap(); cloud.client.register(email: email.trimmingCharacters(in: .whitespaces), password: password) }
-                    .buttonStyle(EyeButtonStyle()).disabled(busy || !agreed || email.isEmpty || password.isEmpty)
+                note("登录服务暂不可用，记录保存在本机。")
             }
         }
     }
@@ -285,32 +266,6 @@ struct SignInForm: View {
 
     private func note(_ text: String) -> some View {
         Text(text).font(EyeStyle.body).foregroundStyle(EyeStyle.secondary).padding(.horizontal, 4)
-    }
-}
-
-/// 服务器地址：未登录时可修改（更换会退出登录）。
-private struct ServerCard: View {
-    @ObservedObject var cloud: CloudModel
-    let emphasize: Bool
-    @State private var text = CloudModel.shared.string("serverUrl")
-    var body: some View {
-        let busy = cloud.bool("busy")
-        // 与当前生效地址相同时显示「已保存」，改动后才可点「保存」（与安卓一致）
-        let saved = text.trimmingCharacters(in: .whitespaces) == cloud.string("serverUrl")
-        Panel(padding: 20) {
-            HStack(spacing: 0) {
-                Text("服务器").font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text)
-                HelpButton(title: "服务器地址", text: CloudTexts.server)
-            }
-            if emphasize { Text("连接服务器后才能登录；不连接时数据只保存在本机。").font(EyeStyle.body).foregroundStyle(EyeStyle.secondary) }
-            TextField("http://192.168.1.5:8080", text: $text)
-                .keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
-                .font(EyeStyle.body).padding(.horizontal, 14).frame(minHeight: 48)
-                .background(EyeStyle.surfaceVariant, in: RoundedRectangle(cornerRadius: EyeStyle.radiusMedium))
-                .overlay { RoundedRectangle(cornerRadius: EyeStyle.radiusMedium).stroke(EyeStyle.borderSubtle, lineWidth: 1) }
-            Button(saved && !text.isEmpty ? "已保存" : "保存") { EyeHaptics.tap(); _ = cloud.client.setServer(url: text) }
-                .buttonStyle(EyeButtonStyle(role: emphasize ? .primary : .secondary)).disabled(busy || saved)
-        }
     }
 }
 
@@ -333,7 +288,7 @@ struct CloudSyncPage: View {
     var body: some View {
         SubPage(title: "云端同步") {
             if !cloud.bool("configured") {
-                prompt("还没有连接服务器", "数据目前只保存在本机。在账户页填写服务器地址并登录后，即可开启云端同步。")
+                prompt("云端同步暂不可用", "记录目前保存在本机。")
             } else if !cloud.bool("signedIn") {
                 prompt("登录后开启云端同步", "测试记录和家人资料可以在多台设备之间同步，本机记录始终保留。")
             } else {

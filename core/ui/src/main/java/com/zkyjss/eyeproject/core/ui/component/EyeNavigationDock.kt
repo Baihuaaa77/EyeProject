@@ -4,6 +4,7 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
@@ -27,12 +28,16 @@ fun EyeNavigationDock(
     selectedIndex: Int,
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    warm: Boolean = false,
 ) {
     if (items.isEmpty()) return
     val c = LocalEyeColors.current
     val reduced = rememberReducedMotion()
     BoxWithConstraints(
-        modifier.fillMaxWidth().height(60.dp).eyeSoftSurface(c, CircleShape).selectableGroup()
+        modifier.fillMaxWidth().height(60.dp)
+            .then(if (warm) Modifier.clip(CircleShape).background(EyeBrown.homeBackground).border(1.dp, EyeBrown.homeEdge, CircleShape)
+                else Modifier.eyeSoftSurface(c, CircleShape))
+            .selectableGroup()
     ) {
         val width = (maxWidth - 12.dp) / items.size
         val x by
@@ -48,12 +53,12 @@ fun EyeNavigationDock(
                     .width(width)
                     .fillMaxHeight()
                     .clip(CircleShape)
-                    .background(c.buttonBrush)
+                    .then(if (warm) Modifier.background(EyeBrown.homeAccent) else Modifier.background(c.buttonBrush))
             )
         Row(Modifier.fillMaxSize().padding(6.dp)) {
             items.forEachIndexed { index, item ->
                 val active = index == selectedIndex
-                val tint = if (active) c.onPrimary else c.textSecondary
+                val tint = if (active) c.onPrimary else if (warm) c.textPrimary else c.textSecondary
                 Row(
                     Modifier.weight(1f)
                         .fillMaxHeight()

@@ -176,30 +176,39 @@ struct FeelingSheet: View {
     @State private var selected: [String]
     @State private var note: String
     let saveNote: (([String],String) -> Void)?
-    init(initial: [String], save: @escaping ([String]) -> Void, dismiss: @escaping () -> Void, initialNote: String = "", saveNote: (([String],String) -> Void)? = nil) {
-        self.save = save; self.dismiss = dismiss
+    let inline: Bool
+    init(initial: [String], save: @escaping ([String]) -> Void, dismiss: @escaping () -> Void, initialNote: String = "", saveNote: (([String],String) -> Void)? = nil, inline: Bool = false) {
+        self.save = save; self.dismiss = dismiss; self.inline = inline
         _selected = State(initialValue: initial)
         _note = State(initialValue: initialNote); self.saveNote = saveNote
     }
     var body: some View {
-        ZStack {
-            EyeStyle.ink.opacity(0.55).ignoresSafeArea().contentShape(Rectangle()).onTapGesture { dismiss() }
-            VStack(alignment: .leading, spacing: 10) {
-                Text("今天眼睛感觉怎么样？").font(EyeStyle.title).foregroundStyle(EyeStyle.text).padding(.bottom, 6)
-                LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
-                    ForEach([noDiscomfort,"眼睛干涩","眼睛酸胀","眼睛疲劳"], id: \.self) { option($0) }
-                }
-                TextField("补充说明（可选）",text: $note,
-                          prompt: Text("补充说明（可选）").foregroundColor(EyeStyle.secondary),axis: .vertical)
-                    .lineLimit(2...4).eyeInputField()
-                Button("保存") { EyeHaptics.success(); if let saveNote { saveNote(selected,String(note.prefix(500))) } else { save(selected) } }.buttonStyle(EyeButtonStyle())
-                    .disabled(selected.isEmpty).padding(.top, 4)
-            }
-            .padding(24).frame(maxWidth: .infinity, alignment: .leading)
-            .background(EyeStyle.panel, in: RoundedRectangle(cornerRadius: EyeStyle.radius, style: .continuous))
-            .padding(24)
+        if inline { fields }
+        else {
+            ZStack {
+                EyeStyle.ink.opacity(0.55).ignoresSafeArea().contentShape(Rectangle()).onTapGesture { dismiss() }
+                fields.padding(24)
+            }.accessibilityAddTraits(.isModal)
         }
-        .accessibilityAddTraits(.isModal)
+    }
+    private var fields: some View {
+        WarmCard {
+            HStack {
+                Text("今日感受").font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text)
+                Spacer()
+                Button("取消", action: dismiss).font(EyeStyle.bodySecondary).frame(minHeight: 44)
+            }
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
+                ForEach([noDiscomfort,"眼睛干涩","眼睛酸胀","眼睛疲劳"], id: \.self) { option($0) }
+            }
+            TextField("补充记录（可选）", text: $note,
+                      prompt: Text("补充记录（可选）").foregroundColor(EyeStyle.secondary), axis: .vertical)
+                .lineLimit(2...4).eyeInputField()
+            Button("保存") {
+                EyeHaptics.success()
+                if let saveNote { saveNote(selected,String(note.prefix(500))) } else { save(selected) }
+            }.buttonStyle(EyeButtonStyle()).disabled(selected.isEmpty)
+        }
     }
     private func option(_ label: String) -> some View {
         let on = selected.contains(label)
@@ -403,7 +412,7 @@ func healthIndex(_ loadScore: Int) -> Int { min(max(100 - loadScore, 0), 100) }
 struct TrendPage: View {
     @ObservedObject private var store = EyeCareStore.shared
     var body: some View {
-        SubPage(title: "用眼趋势") { V16WeeklyTrendView(report: store.report) }.onAppear { store.refresh() }
+        SubPage(title: "用眼报告") { V16WeeklyTrendView(report: store.report) }.onAppear { store.refresh() }
     }
 
     /// 图表卡：类别标签（类别色）+ 右侧一项对比 / 等级，下面小字说明 + 大号读数（数字大、单位灰），再下面是图。
@@ -496,7 +505,7 @@ struct BrightnessPage: View {
                 }
                 Slider(value: Binding(get: { brightness }, set: { brightness = $0; UIScreen.main.brightness = CGFloat($0) }), in: 0.05...1)
                     .tint(EyeStyle.primary)
-                Text(factor.map { "\($0.title)：\($0.detail)" } ?? "请根据周围环境调整屏幕亮度。").font(EyeStyle.body)
+                Text(factor?.title ?? "亮度以眼睛感觉舒适为准。").font(EyeStyle.body)
                     .foregroundStyle(factor != nil ? EyeStyle.warning : EyeStyle.text)
             }
             Panel {
@@ -504,10 +513,8 @@ struct BrightnessPage: View {
                     Text("这样做更舒服").font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text)
                     HelpButton(title: "关于蓝光", text: blueLightHelp)
                 }
-                Bullet(text: "屏幕亮度和周围环境接近：暗处调低，户外调高。")
-                Bullet(text: "晚上打开夜间模式或护眼模式，让屏幕颜色偏暖。")
-                Bullet(text: "睡前一小时尽量少看屏幕。")
-                Bullet(text: "打开自动亮度，让手机跟着环境光调整。")
+                Bullet(text: "暗处调低，户外调高。")
+                Bullet(text: "可开启自动亮度，睡前少看屏幕。")
             }
         }
         .onAppear { brightness = Double(UIScreen.main.brightness) }
@@ -618,6 +625,7 @@ extension RestBreakView {
 struct EyeExerciseView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var coach = EyeExerciseCoach()
+    @State private var started = false
     @State private var state: EyeExerciseCoach.State?
     @State private var flipMove: EyeExerciseCoach.Move?
     @State private var flyMove: EyeExerciseCoach.Move?
@@ -636,7 +644,21 @@ struct EyeExerciseView: View {
                             EyeStyle.chipShape.fill(EyeStyle.flowGradient).frame(width: max(0, (geo.size.width - 100) * CGFloat(state?.progress ?? 0)))
                         }.frame(height: 6)
                     }
-                    if isStage(.done) {
+                    if !started {
+                        ScrollView {
+                            VStack(spacing: 16) {
+                                Canvas { ctx, size in
+                                    Cartoon.fixationTarget(ctx, center: CGPoint(x: size.width / 2, y: size.height / 2),
+                                                           size: min(size.width, size.height) * 0.68)
+                                }.frame(width: 104, height: 104).accessibilityHidden(true)
+                                WarmCard {
+                                    Text("跟着光点转转眼").font(EyeStyle.title).foregroundStyle(EyeStyle.text)
+                                    Text("头保持不动，只转眼睛。").font(EyeStyle.body).foregroundStyle(EyeStyle.text)
+                                    Button("开始护眼操", action: startExercise).buttonStyle(EyeButtonStyle())
+                                }
+                            }.padding(.vertical, 32).frame(minHeight: max(0, geo.size.height - 80))
+                        }
+                    } else if isStage(.done) {
                         ExerciseCompletionView(total: Int(state?.stepCount ?? 0), seen: Int(state?.detectedCount ?? 0), usedCamera: coach.usedCamera) { dismiss() }
                     } else {
                     // 上半区：动作提示；中间：注视点；下半区：倒计时与提示语。上下等高，注视点正好在屏幕中央
@@ -666,17 +688,19 @@ struct EyeExerciseView: View {
                 }
                 .padding(.horizontal, 20).padding(.vertical, 12)
             }
-            .onReceive(ticker) { _ in tick(size: geo.size) }
-        }
-        .onAppear {
-#if !SCREENSHOT_CAPTURE
-            let model = coach
-            EyeLiveModel.shared.startExercise { face, time in model.onFace(face: face, timeMs: time) }
-#endif
+            .onReceive(ticker) { _ in if started { tick(size: geo.size) } }
         }
         .onDisappear { EyeLiveModel.shared.stopExercise() }
         // 护眼操固定深色页：令牌按深色取值
         .environment(\.colorScheme, .dark)
+    }
+
+    private func startExercise() {
+        started = true
+#if !SCREENSHOT_CAPTURE
+        let model = coach
+        EyeLiveModel.shared.startExercise { face, time in model.onFace(face: face, timeMs: time) }
+#endif
     }
 
     private var now: Int64 { Int64(ProcessInfo.processInfo.systemUptime * 1000) }

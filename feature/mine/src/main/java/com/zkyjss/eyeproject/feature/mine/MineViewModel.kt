@@ -116,7 +116,6 @@ class AccountViewModel @Inject constructor(private val accounts: AccountReposito
     val busyState: StateFlow<Boolean> = busy.asStateFlow()
     val messageState: StateFlow<String?> = message.asStateFlow()
 
-    fun setServer(url: String) = run("已保存服务器地址") { accounts.setServerAddress(url) }
     fun signIn(email: String, password: String) = run("已登录") { accounts.signIn(email, password) }
     fun register(email: String, password: String) = run("注册成功") { accounts.register(email, password) }
     fun signOut() = run("已退出登录，本机记录仍保留") { accounts.signOut(); AccountResult.Success }

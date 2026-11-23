@@ -93,7 +93,13 @@ Box(Modifier.fillMaxSize().background(LocalEyeColors.current.appBackground)) {
             }
         }
         capture("13-账户-未登录")
-        compose.onNodeWithText("登录与账号管理").performClick()
+        compose.onNodeWithText("手机号").performClick()
+        compose.onNodeWithText("手机号一键登录待接入运营商认证。").assertExists()
+        compose.onNodeWithText("微信").performClick()
+        compose.onNodeWithText("微信一键登录待接入微信开放平台。").assertExists()
+        compose.onNodeWithText("邮箱").performClick()
+        compose.onNodeWithText("密码").assertExists()
+        compose.onNodeWithText("服务器地址").assertDoesNotExist()
         account = account.copy(email = "demo@example.com", healthDataSync = true)
         compose.waitForIdle()
         capture("14-账户-已登录")

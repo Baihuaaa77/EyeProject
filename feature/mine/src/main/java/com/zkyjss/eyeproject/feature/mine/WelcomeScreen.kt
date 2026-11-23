@@ -65,15 +65,13 @@ internal fun WelcomeContent(busy: Boolean, message: String?, actions: AccountAct
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Spacer(Modifier.height(24.dp))
-        EyeAppIcon(size = 88.dp)
-        EyeText("欢迎来到眼健康助手", style = typography.title, color = colors.textPrimary)
-        EyeText("登录后，测试记录可以加密保存到云端，换手机也不丢；还能和爱科聊聊今天的用眼感受。",
+        EyeAppIcon(size = 72.dp)
+        EyeText("眼健康助手", style = typography.title, color = colors.textPrimary)
+        EyeText("登录后可同步记录、使用 AI 问诊。",
             style = typography.body, color = colors.textSecondary, textAlign = TextAlign.Center)
         SignInForm(busy, message, actions)
-        EyeText("先跳过，随便看看", Modifier.heightIn(min = 48.dp).clickable(role = Role.Button, onClick = onSkip).padding(12.dp),
+        EyeText("先体验", Modifier.heightIn(min = 48.dp).clickable(role = Role.Button, onClick = onSkip).padding(12.dp),
             style = typography.body, color = colors.primary, fontWeight = FontWeight.SemiBold)
-        EyeText("不登录也能做全部自测，记录只保存在这台手机上。以后可在首页右上角的人像里登录。",
-            style = typography.bodySecondary, color = colors.textSecondary, textAlign = TextAlign.Center)
         Spacer(Modifier.height(8.dp))
     }
 }

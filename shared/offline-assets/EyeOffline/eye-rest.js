@@ -101,7 +101,7 @@ window.EyeRest = (() => {
   }
   function mount(host, close) {
     if (views.has(host)) return;
-    host.innerHTML = '<section class="rest-session"><div class="rest-heading"><p class="rest-instruction">目光跟着萤火虫转一转。</p>'+
+    host.innerHTML = '<section class="rest-session"><div class="rest-heading"><p class="rest-instruction">头保持不动，眼睛跟着萤火虫飞。</p>'+
       '<output class="rest-time" role="timer" aria-live="off"></output></div>'+
       '<div class="rest-field">'+window.FireflyArt.stage('rest')+'</div>'+
       '<div class="rest-controls"><button type="button" data-rest-toggle>开始</button><button type="button" data-rest-end hidden>结束</button></div></section>';

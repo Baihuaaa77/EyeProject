@@ -131,6 +131,6 @@ object PresbyopiaIntake {
         STATE_NONE -> GlassesCheck("摘下眼镜", "这次不戴眼镜测试。请现在摘下眼镜（含隐形眼镜），整组测试中不要再戴上。", "已摘下，继续")
         STATE_READING -> GlassesCheck("戴好老花镜", "这次戴现在用的老花镜测试。请现在戴好，整组测试中不要换眼镜。", "已戴好，继续")
         STATE_MULTIFOCAL -> GlassesCheck("戴好多焦点眼镜", "这次戴平时用的远近多焦点眼镜测试。请现在戴好，整组测试中不要换眼镜。", "已戴好，继续")
-        else -> GlassesCheck("保持现在的戴镜方式", "整组测试请保持现在的戴镜方式，中途不要换眼镜。", "好的，继续")
+        else -> GlassesCheck("眼镜先别换", "保持你现在的戴法，直到测完。", "继续")
     }
 }

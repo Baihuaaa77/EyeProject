@@ -118,6 +118,7 @@ fun ServicesScreen(
         verticalArrangement = Arrangement.spacedBy(EyeSpacing.cardGap)
     ) {
         EyePageHeader("服务", onOpenSettings, onOpenAccount = onOpenAccount)
+        if (week.any { it != null }) EyeWeekUsageCard(week, listOf("一", "二", "三", "四", "五", "六", "日"), todayIndex)
         EyeText("选择一项自测", Modifier.padding(top = EyeSpacing.sectionGap - EyeSpacing.cardGap, start = 4.dp),
             style = typography.title, color = colors.textPrimary)
         BoxWithConstraints(Modifier.fillMaxWidth()) {
@@ -145,13 +146,8 @@ fun ServicesScreen(
             EyeGlyphIcon(EyeGlyph.EYE, Modifier.align(Alignment.CenterHorizontally).padding(top = 12.dp).size(32.dp), colors.primary)
             EyeText("转转眼睛", Modifier.align(Alignment.CenterHorizontally).padding(vertical = 12.dp), style = typography.navigationTitle, color = colors.textPrimary)
         }
-        EyeText(
-            "自测结果仅供参考，不能替代医院检查。",
-            style = typography.bodySecondary,
-            color = colors.textTertiary,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 24.dp)
-        )
+        EyeDisclosure("自测方法") { DemoHero() }
+        Spacer(Modifier.height(24.dp))
     }
     if (restOpen) EyeOfflineSessionPage(EyeOfflineSession.REST, { restOpen = false })
 }
@@ -167,7 +163,7 @@ private fun ServiceTile(title: String, kind: ServiceKind, modifier: Modifier, on
     val index = kind.ordinal
     Column(modifier.eyeSoftSurface(colors, EyeShapes.card, com.zkyjss.eyeproject.core.designsystem.theme.EyeBrown.tile(index), pressed = pressed)
         .clickable(interactionSource = interaction, indication = null, role = Role.Button) { haptics.tap(); onClick() }
-        .heightIn(min = 148.dp).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
+        .heightIn(min = 112.dp).padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterVertically),
         horizontalAlignment = Alignment.CenterHorizontally) {
         ServiceGlyph(kind, when (kind) {
             ServiceKind.DRY_EYE -> colors.tileTeal

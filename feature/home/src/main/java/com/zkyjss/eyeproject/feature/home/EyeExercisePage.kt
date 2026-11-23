@@ -1,5 +1,9 @@
 package com.zkyjss.eyeproject.feature.home
 
+import com.zkyjss.eyeproject.core.ui.component.EyeWarmCard
+import com.zkyjss.eyeproject.core.designsystem.theme.EyeBrown
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.SystemClock
@@ -164,12 +168,10 @@ internal fun EyeExercisePage(onClose: () -> Unit, viewModel: EyeExerciseViewMode
     val fly = remember { Animatable(0f) }
     val spin = remember { Animatable(0f) }
     var flyMove by remember { mutableStateOf<EyeExerciseCoach.Move?>(null) }
+    var started by remember { mutableStateOf(false) }
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        started = true
         viewModel.start(owner, granted)
-    }
-    LaunchedEffect(Unit) {
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) viewModel.start(owner, true)
-        else permission.launch(Manifest.permission.CAMERA)
     }
     DisposableEffect(Unit) { onDispose { viewModel.stop() } }
     LaunchedEffect(viewModel) {
@@ -208,7 +210,24 @@ internal fun EyeExercisePage(onClose: () -> Unit, viewModel: EyeExerciseViewMode
                         Box(Modifier.fillMaxWidth(state.progress).height(6.dp).clip(CircleShape).background(DarkEyeColors.flowBrush))
                     }
                 }
-                if (state.stage == EyeExerciseCoach.Stage.DONE) {
+                if (!started) {
+                    Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).fillMaxWidth(),
+                        verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+                        Canvas(Modifier.size(104.dp)) {
+                            drawFixationTarget(DarkEyeColors, center, size.minDimension * 0.68f)
+                        }
+                        EyeWarmCard(fill = EyeBrown.homeSurface, edge = EyeBrown.homeEdge, spacing = 14.dp) {
+                            EyeText("跟着光点转转眼", style = typography.title, color = colors.white)
+                            EyeText("头保持不动，只转眼睛。", style = typography.body, color = colors.white)
+                            EyeButton("开始护眼操", EyeButtonRole.PRIMARY, {
+                                if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+                                    started = true
+                                    viewModel.start(owner, true)
+                                } else permission.launch(Manifest.permission.CAMERA)
+                            }, Modifier.fillMaxWidth())
+                        }
+                    }
+                } else if (state.stage == EyeExerciseCoach.Stage.DONE) {
                     val (total, seen) = viewModel.summary
                     ExerciseCompletion(total, seen, viewModel.usedCamera, onClose, Modifier.weight(1f))
                 } else {

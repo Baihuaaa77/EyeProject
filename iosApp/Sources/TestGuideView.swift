@@ -69,17 +69,16 @@ struct TestGuideView: View {
     private func content(_ scene: GuideScene, phase: Double) -> some View {
         let active = scene.beats.lastIndex(where: { phase >= $0.start }) ?? 0
         return VStack(spacing: 14) {
-            VStack(alignment: .trailing, spacing: 8) {
-                Text(title).font(EyeStyle.title).foregroundStyle(EyeStyle.text).frame(maxWidth: .infinity, alignment: .leading)
-
-            }
-            GuideStage(scene: scene, phase: phase).accessibilityLabel(cue)
-            VStack(spacing: 6) {
-                ForEach(Array(scene.beats.enumerated()), id: \.offset) { index, beat in
-                    GuideBeatRow(label: beat.label, active: reduceMotion || index == active, done: !reduceMotion && index < active)
+            Text(title).font(EyeStyle.title).foregroundStyle(EyeStyle.text).frame(maxWidth: .infinity, alignment: .leading)
+            GuideStage(scene: scene, phase: phase).accessibilityHidden(true)
+            Text(cue).font(EyeStyle.body).foregroundStyle(EyeStyle.text).multilineTextAlignment(.center)
+            DisclosureGroup("演示步骤") {
+                VStack(spacing: 6) {
+                    ForEach(Array(scene.beats.enumerated()), id: \.offset) { index, beat in
+                        GuideBeatRow(label: beat.label, active: reduceMotion || index == active, done: !reduceMotion && index < active)
+                    }
                 }
-            }
-            Text(cue).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary).multilineTextAlignment(.center)
+            }.font(EyeStyle.body).tint(EyeStyle.primary)
             if let onReady { Button(readyTitle, action: onReady).buttonStyle(EyeButtonStyle()) }
         }
     }

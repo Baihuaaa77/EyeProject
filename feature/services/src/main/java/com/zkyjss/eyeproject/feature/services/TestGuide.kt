@@ -40,17 +40,16 @@ internal fun TestGuide(motion: GuideMotion, title: String, cue: String, onReady:
 
     EyeSectionCard {
         Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                EyeText(title, style = type.title, color = colors.textPrimary)
-
-            }
+            EyeText(title, Modifier.fillMaxWidth(), style = type.title, color = colors.textPrimary)
             GuideStage(scene, phaseProvider, cue, Modifier.fillMaxWidth().height(EyeControlSizes.guideStageHeight))
-            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                scene.beats.forEachIndexed { index, beat ->
-                    BeatRow(beat.label, active = reduced || index == activeBeat, done = !reduced && index < activeBeat)
+            EyeText(cue, style = type.body, color = colors.textPrimary, textAlign = TextAlign.Center)
+            EyeDisclosure("演示步骤") {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    scene.beats.forEachIndexed { index, beat ->
+                        BeatRow(beat.label, active = !reduced && index == activeBeat, done = !reduced && index < activeBeat)
+                    }
                 }
             }
-            EyeText(cue, style = type.bodySecondary, color = colors.textSecondary, textAlign = TextAlign.Center)
             if (onReady != null) EyeButton("准备好了", EyeButtonRole.PRIMARY, onReady, Modifier.fillMaxWidth())
         }
     }

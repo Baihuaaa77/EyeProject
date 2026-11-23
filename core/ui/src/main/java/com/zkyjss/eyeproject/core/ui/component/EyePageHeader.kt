@@ -20,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import com.zkyjss.eyeproject.core.designsystem.theme.eyeSoftSurface
+import com.zkyjss.eyeproject.core.designsystem.theme.EyeBrown
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeShapes
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeSpacing
 import androidx.compose.ui.geometry.Offset
@@ -66,16 +67,16 @@ fun EyeThemeButton(modifier: Modifier = Modifier) {
 
 /** 「系统设置」齿轮（36dp 浅填充圆钮，与测试页顶栏同一图标）；与苹果端 SettingsGear 一致。 */
 @Composable
-fun EyeSettingsGear(onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun EyeSettingsGear(onClick: () -> Unit, modifier: Modifier = Modifier, warm: Boolean = false) {
     val colors = LocalEyeColors.current
     val haptics = rememberEyeHaptics()
     Box(
-        modifier.size(48.dp).eyeSoftSurface(colors, CircleShape, compact = true).clickable(role = Role.Button) { haptics.tap(); onClick() }
+        modifier.size(48.dp).headerButtonSurface(warm).clickable(role = Role.Button) { haptics.tap(); onClick() }
             .semantics { contentDescription = "系统设置" },
         contentAlignment = Alignment.Center,
     ) {
         Box(Modifier.size(36.dp), contentAlignment = Alignment.Center) {
-            EyeIcon(painterResource(R.drawable.ic_settings_gear), null, Modifier.size(20.dp), tint = colors.textSecondary)
+            EyeIcon(painterResource(R.drawable.ic_settings_gear), null, Modifier.size(20.dp), tint = if (warm) colors.textPrimary else colors.textSecondary)
         }
     }
 }
@@ -108,22 +109,28 @@ fun EyePageHeader(
     modifier: Modifier = Modifier,
     onOpenAccount: (() -> Unit)? = null,
     subtitle: String? = null,
+    warm: Boolean = false,
 ) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
     Row(modifier.fillMaxWidth().padding(top = EyeSpacing.lg, bottom = EyeSpacing.sm), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-            if (subtitle != null) EyeText(subtitle, Modifier.padding(bottom = EyeSpacing.xxs), style = typography.caption, color = colors.textSecondary)
+            if (subtitle != null) EyeText(subtitle, Modifier.padding(bottom = EyeSpacing.xxs), style = typography.caption, color = if (warm) colors.textPrimary else colors.textSecondary)
             EyeText(title, style = typography.headline, color = colors.textHeading)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(EyeSpacing.xs), verticalAlignment = Alignment.CenterVertically) {
             onOpenAccount?.let { open ->
-                Box(Modifier.size(48.dp).eyeSoftSurface(colors, CircleShape)
+                Box(Modifier.size(48.dp).headerButtonSurface(warm)
                     .clickable(role = Role.Button, onClick = open).semantics { contentDescription = "账户" }, contentAlignment = Alignment.Center) {
-                    EyeGlyphIcon(EyeGlyph.PERSON, Modifier.size(20.dp), colors.textSecondary)
+                    EyeGlyphIcon(EyeGlyph.PERSON, Modifier.size(20.dp), if (warm) colors.textPrimary else colors.textSecondary)
                 }
             }
-            EyeHeaderActions(onOpenSettings)
+            onOpenSettings?.let { EyeSettingsGear(it, warm = warm) }
         }
     }
 }
+
+@Composable
+private fun Modifier.headerButtonSurface(warm: Boolean): Modifier =
+    if (warm) clip(CircleShape).background(EyeBrown.homeAction).border(1.dp, EyeBrown.homeEdge, CircleShape)
+    else eyeSoftSurface(LocalEyeColors.current, CircleShape, compact = true)

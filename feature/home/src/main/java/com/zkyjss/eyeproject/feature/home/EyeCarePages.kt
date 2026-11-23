@@ -65,7 +65,7 @@ fun EyeTrendScreen(onBack: () -> Unit, viewModel: HomeViewModel = hiltViewModel(
 
 @Composable
 internal fun EyeTrendContent(report: EyeCareReport?, onBack: () -> Unit, openUsageSettings: (() -> Unit)? = null) {
-    EyeSubPage("用眼趋势", onBack) {
+    EyeSubPage("用眼报告", onBack) {
         openUsageSettings?.let { EyeButton("开启用屏统计", EyeButtonRole.SECONDARY, it) }
         V16WeeklyTrend(report)
     }
@@ -195,7 +195,7 @@ internal fun EyeBrightnessContent(state: HomeUiState, onBack: () -> Unit, onOpen
                 SignalCell(signals.firstOrNull { it.key == "brightness" }, Modifier.weight(1f))
                 SignalCell(signals.firstOrNull { it.key == "light" }, Modifier.weight(1f))
             }
-            EyeText(factor?.let { "${it.title}：${it.detail}" } ?: "请根据周围环境调整屏幕亮度。", style = typography.body,
+            EyeText(factor?.title ?: "亮度以眼睛感觉舒适为准。", style = typography.body,
                 color = if (factor != null) colors.warning else colors.textPrimary)
         }
         Column(Modifier.fillMaxWidth().eyeGlass(colors, EyeShapes.panel).padding(18.dp),
@@ -204,10 +204,8 @@ internal fun EyeBrightnessContent(state: HomeUiState, onBack: () -> Unit, onOpen
                 EyeText("这样做更舒服", style = typography.subtitle, color = colors.textPrimary)
                 EyeHelpButton("关于蓝光", BLUE_LIGHT_HELP)
             }
-            Bullet("屏幕亮度和周围环境接近：暗处调低，户外调高。")
-            Bullet("晚上打开夜间模式或护眼模式，让屏幕颜色偏暖。")
-            Bullet("睡前一小时尽量少看屏幕。")
-            Bullet("打开自动亮度，让手机跟着环境光调整。")
+            Bullet("暗处调低，户外调高。")
+            Bullet("可开启自动亮度，睡前少看屏幕。")
         }
     }
 }

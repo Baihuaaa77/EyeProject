@@ -28,7 +28,7 @@ struct V16WeeklyTrendView: View {
     }
     var body: some View {
         SegmentedPicker(options: [(0,"本周"),(1,"上周")],selected: week) { week = $0 }
-        Text("\(key(dates[0])) — \(key(dates[6]))").font(EyeStyle.subtitle)
+        Text("\(calendar.component(.month, from: dates[0]))月\(calendar.component(.day, from: dates[0]))日 – \(calendar.component(.month, from: dates[6]))月\(calendar.component(.day, from: dates[6]))日").font(EyeStyle.subtitle)
         weekdays
         WarmCard {
             Text("平均眨眼频率").font(EyeStyle.subtitle)
@@ -38,9 +38,9 @@ struct V16WeeklyTrendView: View {
             } else {
                 Text("\(Int((values.reduce(0, +) / Double(values.count)).rounded())) 次/分")
                     .font(EyeStyle.metricValue).monospacedDigit()
+                Text("周\(["一","二","三","四","五","六","日"][selected]) · \(blinkValues[selected].map { "\(Int($0.rounded())) 次/分" } ?? "无记录")")
+                    .font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary).monospacedDigit()
                 line(blinkValues).frame(height: 112).accessibilityHidden(true)
-                Text("\(key(dates[selected])) · \(blinkValues[selected].map { "\(Int($0.rounded())) 次/分" } ?? "无记录")")
-                    .font(EyeStyle.body).monospacedDigit()
             }
         }
     }

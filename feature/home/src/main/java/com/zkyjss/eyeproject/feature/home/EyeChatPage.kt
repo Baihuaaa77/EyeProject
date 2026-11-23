@@ -126,7 +126,7 @@ fun EyeChatScreen(
     if (referenceOpen) com.zkyjss.eyeproject.core.ui.component.EyeFullScreenPage({ referenceOpen = false }) {
         EyeSubPage("今日护眼参考",{ referenceOpen = false }) {
             card?.let { AiExplanationCard(it,onGenerate = { home.generateAdvice() },onAgree = { home.generateAdvice(agreeFirst = true) },text = AiCardText.ADVICE) }
-            EyeText("结合已授权的用眼记录、感受与自测结果生成。医学参考仅用于健康教育；风险等级由自测规则决定，不能替代眼科检查。",style = LocalEyeTypography.current.bodySecondary,color = LocalEyeColors.current.textSecondary)
+            EyeText("根据您的用眼情况与感受生成护眼参考，不能替代医生诊断。",style = LocalEyeTypography.current.bodySecondary,color = LocalEyeColors.current.textSecondary)
         }
     }
 }
@@ -274,7 +274,7 @@ private fun OptionAnswerDialog(choice: String, onConfirm: (Boolean) -> Unit, onC
     Dialog(onDismissRequest = onCancel) {
         Column(Modifier.fillMaxWidth().clip(EyeShapes.panel).background(colors.panelBackground).padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            EyeText("确认这项回答？", style = typography.title, color = colors.textPrimary)
+            EyeText("发送回答？", style = typography.title, color = colors.textPrimary)
             EyeText(choice, style = typography.chatBody, color = colors.textPrimary)
             EyeOptionRow("不再询问", null, dontAsk, multiple = true) { dontAsk = !dontAsk }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -309,7 +309,7 @@ private fun EyechoIntro() {
 }
 
 internal const val EYECHO_HELLO = "你好，我是爱科"
-internal const val EYECHO_INTRO = "爱尔眼科 AI 助手，陪你聊聊眼睛的不适、用眼习惯和自测结果。"
+internal const val EYECHO_INTRO = "根据您的用眼情况与感受生成护眼参考，不能替代医生诊断。"
 
 /** 底部：未登录提示去登录；否则输入框 + 发送。 */
 @Composable

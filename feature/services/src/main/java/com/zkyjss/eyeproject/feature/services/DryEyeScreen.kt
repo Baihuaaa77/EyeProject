@@ -268,14 +268,9 @@ internal fun SetupGate(
 ) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
-    NoticeCard("建议佩戴最佳矫正视力眼镜进行测试")
-    TestGuide(GuideMotion.POSTURE, "调整姿势 · 约 40 cm", "正对屏幕，手机距离眼睛约 40 厘米，光线均匀")
+    TestGuide(GuideMotion.POSTURE, "准备测试", "戴平时看得清的眼镜，正对屏幕。")
     DistanceBanner(distanceStatus(state.distanceCm, state.faceDetected, DryEyeProtocol.TARGET_DISTANCE_CM, DryEyeProtocol.DISTANCE_TOLERANCE_CM))
     EyeButton("开始测试", EyeButtonRole.PRIMARY, onStart, Modifier.fillMaxWidth(), state.gateReady)
-    EyeDisclosure("测量详情") {
-        EyeText("距离 ${formatDistanceCm(state.distanceCm)}（目标 40±5 cm）", style = typography.bodySecondary, color = colors.textSecondary)
-        EyeText("环境光 ${state.lux?.let { "%.0f lux".format(it) } ?: "无传感器读数"}", style = typography.bodySecondary, color = colors.textSecondary)
-    }
     state.error?.let { EyeText(it, style = typography.body, color = colors.danger) }
 }
 

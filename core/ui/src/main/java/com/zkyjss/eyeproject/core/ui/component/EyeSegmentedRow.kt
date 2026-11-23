@@ -4,6 +4,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
@@ -23,6 +24,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.zkyjss.eyeproject.core.designsystem.theme.EyeBrown
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeMotion
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeShapes
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
@@ -39,7 +41,8 @@ fun <T> EyeSegmentedRow(
     options: List<SegmentedOption<T>>,
     selected: T,
     onSelect: (T) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    warm: Boolean = false,
 ) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
@@ -49,7 +52,8 @@ fun <T> EyeSegmentedRow(
             .fillMaxWidth()
             .height(46.dp)
             .clip(EyeShapes.medium)
-            .background(colors.surfaceVariant)
+            .background(if (warm) EyeBrown.homeAction else colors.surfaceVariant)
+            .then(if (warm) Modifier.border(1.dp, EyeBrown.homeEdge, EyeShapes.medium) else Modifier)
             .padding(3.dp)
     ) {
         val segmentWidth = maxWidth / options.size.coerceAtLeast(1)
@@ -64,7 +68,7 @@ fun <T> EyeSegmentedRow(
                 .width(segmentWidth)
                 .fillMaxHeight()
                 .clip(EyeShapes.small)
-                .background(colors.buttonBrush)
+                .then(if (warm) Modifier.background(EyeBrown.homeAccent) else Modifier.background(colors.buttonBrush))
         )
         Row(Modifier.fillMaxWidth().fillMaxHeight().selectableGroup()) {
             options.forEachIndexed { index, option ->

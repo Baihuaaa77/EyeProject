@@ -124,7 +124,7 @@ internal fun TestSettingsContent(
     if (showGestureAnswers) {
         EyeListGroup(title = "作答方式") {
             EyeSwitchRow("手势作答", settings.gestureAnswersEnabled, settings::setGestureAnswers,
-                subtitle = "在脸旁伸出食指，指向 E 的开口，作答后放下手")
+                subtitle = "食指指向 E 的开口，答完放下手")
         }
     }
     editor?.let { title ->
@@ -166,7 +166,6 @@ internal fun AboutSection(version: String) {
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
                 EyeText("眼健康助手", style = typography.subtitle, color = colors.textPrimary)
-                EyeText("你的主动眼健康助手", style = typography.bodySecondary, color = colors.textSecondary)
             }
         }
         EyeListRow("版本", onClick = null, value = version.ifEmpty { "—" })
@@ -180,7 +179,7 @@ private fun LevelSlider(title: String, value: Float, range: ClosedFloatingPointR
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
     var current by remember(value) { mutableFloatStateOf(value) }
-    Column(Modifier.fillMaxWidth().padding(start = 66.dp, end = 16.dp, top = 6.dp, bottom = 2.dp)) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             EyeText(title, style = typography.body, color = colors.textPrimary)
             EyeText("${(current * 100).roundToInt()}%", style = typography.bodySecondary, color = colors.textSecondary)

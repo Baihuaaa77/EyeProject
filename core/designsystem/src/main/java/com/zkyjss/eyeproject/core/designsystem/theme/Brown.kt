@@ -10,24 +10,24 @@ object EyeBrown {
     val feelingDry = Color(0xFFEFCDA0)
     val feelingSore = Color(0xFFEBB4AC)
     val feelingTired = Color(0xFFC8B9DD)
-    val loadLow = Color(0xFFBBD8BC)
-    val loadMedium = Color(0xFFE6BE93)
-    val loadHigh = Color(0xFFDBABA8)
+    val loadLow = Color(0xFF01FE00)
+    val loadMedium = Color(0xFFFF8A00)
+    val loadHigh = Color(0xFFFF0000)
     fun loadColor(score: Int): Color = when {
         score < 30 -> loadLow
         score < 60 -> loadMedium
         else -> loadHigh
     }
-    fun loadTextColor(score: Int): Color = when {
-        score < 30 -> Color(0xFF01FE00)
-        score < 60 -> Color(0xFFFF8A00)
-        else -> Color(0xFFFF0000)
-    }
     val warm = Color(0xFFEFB285)
     val peach = Color(0xFFF6A267)
     val sage = Color(0xFFB6C6B3)
     val terracotta = Color(0xFFED9A78)
-    val rail = Color(0xFF52524A)
+    val rail = Color(0xFF373737)
+    val homeBackground = Color(0xFF1C1713)
+    val homeAccent = Color(0xFFFF8A00)
+    val homeEdge = Color(0xFFBF9470)
+    val homeAction = Color(0xFF432D1C)
+    val homeSurface = Brush.verticalGradient(listOf(Color(0xFF402C1C), Color(0xFF2D2118)))
     val pupil = Color(0xFF10110F)
     val marker = Color(0xFFFFE8CF)
     val header = Color(0xFF242520)

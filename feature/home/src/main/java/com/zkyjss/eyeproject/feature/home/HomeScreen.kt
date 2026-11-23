@@ -188,7 +188,7 @@ internal fun FeelingDialog(
 
 /** 选择框本体（弹窗内容，界面检查可单独渲染）。 */
 @Composable
-internal fun FeelingPicker(initial: List<String>, onSave: (List<String>) -> Unit, initialNote: String = "", onSaveNote: ((List<String>,String) -> Unit)? = null) {
+internal fun FeelingPicker(initial: List<String>, onSave: (List<String>) -> Unit, initialNote: String = "", onSaveNote: ((List<String>,String) -> Unit)? = null, onCancel: (() -> Unit)? = null) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
     val haptics = rememberEyeHaptics()
@@ -210,18 +210,16 @@ internal fun FeelingPicker(initial: List<String>, onSave: (List<String>) -> Unit
             .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        EyeText(
-            "今天眼睛感觉怎么样？",
-            Modifier.padding(bottom = 6.dp),
-            style = typography.title,
-            color = colors.textPrimary,
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            EyeText("今日感受", Modifier.weight(1f), style = typography.subtitle, color = colors.textPrimary)
+            onCancel?.let { EyeButton("取消", EyeButtonRole.SECONDARY, it) }
+        }
         listOf(NO_DISCOMFORT,"眼睛干涩","眼睛酸胀","眼睛疲劳").chunked(2).forEach { row ->
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 row.forEach { label -> FeelingOption(label,label in selected,Modifier.weight(1f)) { toggle(label) } }
             }
         }
-        EyeTextField(note,{ note = it.take(500) },label = "补充说明（可选）")
+        EyeTextField(note,{ note = it.take(500) },label = "补充记录（可选）")
         Spacer(Modifier.height(4.dp))
         EyeButton(
             "保存",

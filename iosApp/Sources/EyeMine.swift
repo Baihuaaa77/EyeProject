@@ -24,8 +24,8 @@ struct MinePage: View {
             profileCard
             ListGroup(title: "健康档案") {
                 ListRow(title: "测试记录", value: recordCount == 0 ? "暂无" : "\(recordCount) 条", glowBorder: false) { navigate(.records) }
-                ListRow(title: "家庭成员与资料", value: "\(store.subjects.count) 人", glowBorder: false) { navigate(.subjects) }
-                ListRow(title: "用眼趋势报告", divider: false, glowBorder: false) { navigate(.trend) }
+                ListRow(title: "档案列表", value: "\(store.subjects.count) 人", glowBorder: false) { navigate(.subjects) }
+                ListRow(title: "用眼报告", divider: false, glowBorder: false) { navigate(.trend) }
             }
             ListGroup(title: "数据与隐私") {
                 ListRow(title: "云端同步", value: cloudSummary, glowBorder: false) { navigate(.cloud) }
@@ -46,7 +46,7 @@ struct MinePage: View {
                         .frame(width: 56, height: 56).eyeGlass(cornerRadius: 17, fill: AnyShapeStyle(BrownStyle.avatar))
                     VStack(alignment: .leading, spacing: 4) {
                         Text(me?.displayName ?? "我").font(EyeStyle.title).foregroundStyle(EyeStyle.text)
-                        Text(([age.map { "\($0) 岁" }, complete >= 4 ? "档案已完善" : "档案完善 \(complete)/4"] as [String?]).compactMap { $0 }.joined(separator: " · "))
+                        Text(([age.map { "\($0) 岁" }, "档案完善 \(complete * 25)%"] as [String?]).compactMap { $0 }.joined(separator: " · "))
                             .font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
                         HStack(spacing: 3) { ForEach(0..<4) { i in Capsule().fill(i < complete ? EyeStyle.primary : BrownStyle.rail).frame(width: 16, height: 3) } }
                     }.frame(maxWidth: .infinity, alignment: .leading)

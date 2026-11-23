@@ -37,7 +37,7 @@ import com.zkyjss.eyeproject.feature.services.SubjectProfiles
 
 internal const val MEMBERS_HELP = "每位家人一份资料（年龄、戴镜、眼病史等）。测试开始时只需选「这次测谁」，资料自动带入，结果也归到这个人名下。"
 
-/** 「我的 → 家庭成员与资料」完整页面：每人一行（头像字 · 称呼 · 关系与年龄），点开编辑；末行添加成员。与苹果端同一排版。 */
+/** 「我的 → 档案列表」完整页面：每人一行（头像字 · 称呼 · 关系与年龄），点开编辑；末行添加成员。与苹果端同一排版。 */
 @Composable
 fun SubjectsScreen(onBack: () -> Unit, onEdit: (String?) -> Unit, viewModel: MineViewModel = hiltViewModel()) {
     val subjects by viewModel.subjects.collectAsStateWithLifecycle()
@@ -48,7 +48,7 @@ fun SubjectsScreen(onBack: () -> Unit, onEdit: (String?) -> Unit, viewModel: Min
 internal fun SubjectsContent(subjects: List<SubjectProfile>, onBack: () -> Unit, onEdit: (String?) -> Unit) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
-    EyeSubPage("家庭成员", onBack) {
+    EyeSubPage("档案列表", onBack) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 4.dp)) {
             EyeText("共 ${subjects.size} 人", style = typography.body, color = colors.textSecondary)
             EyeHelpButton("家庭成员", MEMBERS_HELP)

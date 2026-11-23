@@ -96,7 +96,7 @@ struct SubjectsPage: View {
     let edit: (String?) -> Void
     private static let help = "每位家人一份资料（年龄、戴镜、眼病史等）。测试开始时只需选「这次测谁」，资料自动带入，结果也归到这个人名下。"
     var body: some View {
-        SubPage(title: "家庭成员") {
+        SubPage(title: "档案列表") {
             HStack(spacing: 0) {
                 Text("共 \(store.subjects.count) 人").font(EyeStyle.body).foregroundStyle(EyeStyle.secondary)
                 HelpButton(title: "家庭成员", text: Self.help)
@@ -140,6 +140,7 @@ extension SubjectStore {
 /// 从「我的」推入时用系统返回；测试开始页缺资料时以全屏呈现（[modal]），左上角「取消」。
 struct SubjectEditView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var typeSize
     @State private var draft: SubjectProfileItem
     @State private var confirmDelete = false
     @State private var error: String?
@@ -167,8 +168,10 @@ struct SubjectEditView: View {
                         if draft.relation != "SELF" {
                             Text("与你的关系").font(EyeStyle.subtitle)
                             // 关系代码与共用 SubjectProfiles.RELATIONS 一致（「本人」不可选）
-                            ForEach(["CHILD", "PARENT", "SPOUSE", "OTHER"], id: \.self) { code in
-                                choiceRow(SubjectProfiles.shared.relationLabel(code: code), hint: nil, selected: draft.relation == code) { draft.relation = code }
+                            LazyVGrid(columns: choiceColumns(compact: true), spacing: 8) {
+                                ForEach(["CHILD", "PARENT", "SPOUSE", "OTHER"], id: \.self) { code in
+                                    choiceRow(SubjectProfiles.shared.relationLabel(code: code), hint: nil, selected: draft.relation == code) { draft.relation = code }
+                                }
                             }
                         }
                     }
@@ -208,6 +211,10 @@ struct SubjectEditView: View {
                 }
     }
 
+    private func choiceColumns(compact: Bool) -> [GridItem] {
+        Array(repeating: GridItem(.flexible(), spacing: 8), count: compact && typeSize <= .xLarge ? 2 : 1)
+    }
+
     private func save() {
         // 填了就必须有效；隐藏的追问（如取消手术后的手术类型）不保存
         let fieldsJson = (try? JSONSerialization.data(withJSONObject: draft.fields)).flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
@@ -230,17 +237,19 @@ struct SubjectEditView: View {
             Text((q["title"] as? String ?? key) + (q["multiple"] as? Bool == true ? "（可多选）" : "")).font(EyeStyle.subtitle)
             if let options = q["options"] as? [String] {
                 let hints = q["hints"] as? [String: String] ?? [:]
-                ForEach(options, id: \.self) { option in
-                    let selected = ("、" + value + "、").contains("、" + option + "、")
-                    choiceRow(option, hint: hints[option], selected: selected) {
-                        if q["multiple"] as? Bool == true {
-                            let exclusive = Set(q["exclusive"] as? [String] ?? [])
-                            var chosen = options.filter { ("、" + value + "、").contains("、" + $0 + "、") }
-                            if selected { chosen.removeAll { $0 == option } }
-                            else if exclusive.contains(option) { chosen = [option] }
-                            else { chosen.removeAll { exclusive.contains($0) }; chosen.append(option) }
-                            draft.fields[key] = chosen.joined(separator: "、")
-                        } else { draft.fields[key] = selected ? "" : option }
+                LazyVGrid(columns: choiceColumns(compact: hints.isEmpty && options.allSatisfy { $0.count <= 6 }), spacing: 8) {
+                    ForEach(options, id: \.self) { option in
+                        let selected = ("、" + value + "、").contains("、" + option + "、")
+                        choiceRow(option, hint: hints[option], selected: selected) {
+                            if q["multiple"] as? Bool == true {
+                                let exclusive = Set(q["exclusive"] as? [String] ?? [])
+                                var chosen = options.filter { ("、" + value + "、").contains("、" + $0 + "、") }
+                                if selected { chosen.removeAll { $0 == option } }
+                                else if exclusive.contains(option) { chosen = [option] }
+                                else { chosen.removeAll { exclusive.contains($0) }; chosen.append(option) }
+                                draft.fields[key] = chosen.joined(separator: "、")
+                            } else { draft.fields[key] = selected ? "" : option }
+                        }
                     }
                 }
             } else {
@@ -309,13 +318,15 @@ struct SubjectPickerView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(s.displayName).font(EyeStyle.body)
                         Text(subjectSummary(s)).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
-                        if !missing.isEmpty {
+                        if !skipped && chosenId == s.id && !missing.isEmpty {
                             Text("需补充：\(missing.joined(separator: "、"))").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.readableText(EyeStyle.warning))
                         }
                     }
                 }.buttonStyle(EyeCardButtonStyle(selected: !skipped && chosenId == s.id))
-                Button(missing.contains("出生年份") ? "补充出生年份" : "编辑资料") { editing = s }
-                    .buttonStyle(EyeButtonStyle(role: .secondary))
+                if !skipped && chosenId == s.id {
+                    Button(missing.contains("出生年份") ? "补充出生年份" : "编辑资料") { editing = s }
+                        .buttonStyle(EyeButtonStyle(role: .secondary))
+                }
             }
             Button("添加家庭成员") { editing = SubjectStore.newMember() }.buttonStyle(EyeButtonStyle(role: .secondary))
             Button { skipped = true } label: { Text("访客测试") }
