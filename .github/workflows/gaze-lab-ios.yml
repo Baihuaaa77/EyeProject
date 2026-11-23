@@ -28,7 +28,7 @@ jobs:
           path: |
             experiments/GazeLab/ios/build/mnn-source/include
             experiments/GazeLab/ios/build/mnn-device/libMNN.a
-          key: gaze-mnn-ios-3.4.1-xcode26.4-v1
+          key: gaze-mnn-ios-3.4.1-xcode26.4-v2
       - name: 编译 MNN 的 iPhone arm64 CPU 运行库
         if: steps.mnn.outputs.cache-hit != 'true'
         working-directory: experiments/GazeLab/ios
@@ -36,8 +36,9 @@ jobs:
           set -euo pipefail
           git clone --depth 1 --branch 3.4.1 https://github.com/alibaba/MNN.git build/mnn-source
           cmake -S build/mnn-source -B build/mnn-device -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_SYSROOT=iphoneos -DCMAKE_OSX_ARCHITECTURES=arm64 \
-            -DCMAKE_OSX_DEPLOYMENT_TARGET=16.0 -DMNN_BUILD_SHARED_LIBS=OFF -DMNN_SEP_BUILD=OFF \
+            -DCMAKE_TOOLCHAIN_FILE="$PWD/build/mnn-source/cmake/ios.toolchain.cmake" \
+            -DPLATFORM=OS64 -DARCHS=arm64 -DDEPLOYMENT_TARGET=16.0 -DENABLE_BITCODE=OFF \
+            -DMNN_BUILD_SHARED_LIBS=OFF -DMNN_SEP_BUILD=OFF \
             -DMNN_BUILD_TOOLS=OFF -DMNN_BUILD_CONVERTER=OFF -DMNN_BUILD_TEST=OFF -DMNN_METAL=OFF \
             -DMNN_COREML=OFF -DMNN_OPENCL=OFF -DMNN_USE_THREAD_POOL=ON
           cmake --build build/mnn-device --config Release --target MNN --parallel "$(sysctl -n hw.logicalcpu)"

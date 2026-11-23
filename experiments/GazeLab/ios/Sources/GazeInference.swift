@@ -110,9 +110,9 @@ final class GazeInference {
             case .mgaze:
                 if image.contains(face.left), image.contains(face.right) {
                     values = [
-                        image.crop(face.mgazeBounds, size: 224, planar: false),
-                        image.crop(face.left, size: 112, planar: false),
-                        image.crop(face.right, size: 112, planar: false, flip: true),
+                        image.crop(face.mgazeBounds, size: 224),
+                        image.crop(face.left, size: 112),
+                        image.crop(face.right, size: 112, flip: true),
                         image.ranges([face.mgazeBounds, face.left, face.right])
                     ]
                 } else { values = nil }
@@ -120,17 +120,17 @@ final class GazeInference {
                 if image.contains(face.left), image.contains(face.right) {
                     let size = method == .aff ? 112 : 224
                     let rightFlip = method == .aff
-                    let cached = face224 ?? image.crop(image.square(face.bounds, expand: 1), size: 224, planar: true)
+                    let cached = face224 ?? image.crop(image.square(face.bounds, expand: 1), size: 224)
                     face224 = cached
                     values = [
-                        image.crop(image.square(face.left, expand: 1.2), size: size, planar: true),
-                        image.crop(image.square(face.right, expand: 1.2), size: size, planar: true, flip: rightFlip),
+                        image.crop(image.square(face.left, expand: 1.2), size: size),
+                        image.crop(image.square(face.right, expand: 1.2), size: size, flip: rightFlip),
                         cached,
                         method == .aff ? image.corners([face.bounds, face.left, face.right]) : image.grid(face.bounds)
                     ]
                 } else { values = nil }
             case .l2cs:
-                values = [image.crop(face.bounds, size: 448, planar: true, rgbImageNet: true)]
+                values = [image.crop(face.bounds, size: 448, rgbImageNet: true)]
             }
 
             var prediction: GazePoint?
@@ -196,7 +196,7 @@ private struct GazeImage {
         return Self.data(values)
     }
 
-    func crop(_ area: CGRect, size: Int, planar: Bool, flip: Bool = false, rgbImageNet: Bool = false) -> Data {
+    func crop(_ area: CGRect, size: Int, flip: Bool = false, rgbImageNet: Bool = false) -> Data {
         let rect = area.integral.intersection(bounds)
         let mean: [Float] = rgbImageNet ? [0.485, 0.456, 0.406] : [0, 0, 0]
         let std: [Float] = rgbImageNet ? [0.229, 0.224, 0.225] : [1, 1, 1]
@@ -223,7 +223,7 @@ private struct GazeImage {
                     let lower = Float(pixels[bottom * stride + left * 4 + c]) * (1 - dx)
                               + Float(pixels[bottom * stride + right * 4 + c]) * dx
                     let value = (upper * (1 - dy) + lower * dy) / 255
-                    values[planar ? channel * count + index : index * 3 + channel] = (value - mean[channel]) / std[channel]
+                    values[channel * count + index] = (value - mean[channel]) / std[channel]
                 }
             }
         }
