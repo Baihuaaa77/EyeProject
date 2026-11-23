@@ -302,7 +302,7 @@ def package(args):
     with ZipFile(args.shell) as shell, ZipFile(temp, "w", ZIP_DEFLATED) as ipa:
         plist = plistlib.loads(shell.read(root + "/Info.plist"))
         if (plist["CFBundleIdentifier"] != "com.zkyjss.gazelab"
-                or plist["CFBundleShortVersionString"] != "0.2.1"
+                or plist["CFBundleShortVersionString"] not in {"0.2.1", "0.2.2"}
                 or plist["DTPlatformName"] != "iphoneos"
                 or root + "/embedded.mobileprovision" in shell.namelist()
                 or any(name.startswith(root + "/_CodeSignature/") for name in shell.namelist())):
