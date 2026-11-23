@@ -397,6 +397,7 @@ private struct GazeLabScreen: View {
         case .aff: LabStyle.landmark
         case .itracker: LabStyle.coded
         case .l2cs: LabStyle.baseline
+        case .webEyeTrack: LabStyle.webGaze
         }
     }
 
@@ -406,6 +407,7 @@ private struct GazeLabScreen: View {
         case .aff: "diamond.fill"
         case .itracker: "triangle.fill"
         case .l2cs: "square.fill"
+        case .webEyeTrack: "star.fill"
         }
     }
 }

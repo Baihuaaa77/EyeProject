@@ -102,13 +102,12 @@ final class GazeCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
         } else {
             focal = camera.map { Double(max(width, height)) / (2 * tan(Double($0.activeFormat.videoFieldOfView) * .pi / 360)) }
         }
-        let readings = engines.predict(buffer: buffer, face: face, cameraIssue: issue)
-        let angles: [Double]?
-        if let matrix = detection?.facialTransformationMatrixes.first {
-            let m = (0..<16).map { Double(matrix.data[$0]) }
-            angles = [atan2(-m[8], hypot(m[0], m[4])), atan2(m[9], m[10]), atan2(m[4], m[0])].map { $0 * 180 / .pi }
-        } else {
-            angles = nil
+        let poseMatrix = detection?.facialTransformationMatrixes.first.map { matrix in
+            (0..<16).map { Double(matrix.data[$0]) }
+        }
+        let readings = engines.predict(buffer: buffer, face: face, poseMatrix: poseMatrix, cameraIssue: issue)
+        let angles = poseMatrix.map { m in
+            [atan2(-m[8], hypot(m[0], m[4])), atan2(m[9], m[10]), atan2(m[4], m[0])].map { $0 * 180 / .pi }
         }
         onFrame?(GazeCameraFrame(time: now, width: width, height: height,
                                 faceBox: face?.boundsArray, headAnglesDegrees: angles?.allSatisfy(\.isFinite) == true ? angles : nil,

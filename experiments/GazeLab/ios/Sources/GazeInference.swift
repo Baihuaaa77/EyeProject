@@ -10,6 +10,7 @@ struct GazeFace {
     let right: CGRect
     let openEyes: Bool
     let eyeDistance: Double
+    let landmarksPx: [GazePoint]
     var boundsArray: [Double] { [bounds.minX, bounds.minY, bounds.maxX, bounds.maxY].map(Double.init) }
 
     init?(landmarks: [NormalizedLandmark], width: Int, height: Int) {
@@ -17,6 +18,8 @@ struct GazeFace {
         let w = CGFloat(width), h = CGFloat(height)
         let points = landmarks.prefix(468).map { CGPoint(x: CGFloat($0.x) * w, y: CGFloat($0.y) * h) }
         guard points.allSatisfy({ $0.x.isFinite && $0.y.isFinite }) else { return nil }
+        let all = landmarks.prefix(478).map { GazePoint(x: Double($0.x) * Double(width), y: Double($0.y) * Double(height)) }
+        landmarksPx = all.allSatisfy(\.finite) ? all : []
         let x = points.map(\.x), y = points.map(\.y)
         let image = CGRect(x: 0, y: 0, width: w, height: h)
         let raw = CGRect(x: x.min()!, y: y.min()!, width: x.max()! - x.min()!, height: y.max()! - y.min()!)
@@ -61,6 +64,7 @@ final class GazeInference {
     private(set) var identities: [GazeModelIdentity] = []
     private(set) var issues: [String] = []
     private var loaded: [Loaded] = []
+    private var webEyeTrack = WebEyeTrackPreprocessor()
 
     init() {
         guard let folder = Bundle.main.resourceURL?.appendingPathComponent("Models"),
@@ -72,7 +76,7 @@ final class GazeInference {
         for entry in manifest.models {
             let id = entry.identity
             let url = folder.appendingPathComponent(id.filename)
-            let inputCount = id.method == .l2cs ? 1 : 4
+            let inputCount = id.method.inputCount
             let outputCount = id.method == .l2cs ? 2 : 1
             guard entry.inputNames.count == inputCount, Set(entry.inputNames).count == inputCount,
                   entry.outputNames.count == outputCount,
@@ -87,7 +91,7 @@ final class GazeInference {
         }
     }
 
-    func predict(buffer: CVPixelBuffer, face: GazeFace?, cameraIssue: String?) -> [GazeReading] {
+    func predict(buffer: CVPixelBuffer, face: GazeFace?, poseMatrix: [Double]?, cameraIssue: String?) -> [GazeReading] {
         let lock = CVPixelBufferLockBaseAddress(buffer, .readOnly)
         defer { if lock == kCVReturnSuccess { CVPixelBufferUnlockBaseAddress(buffer, .readOnly) } }
         guard lock == kCVReturnSuccess, let pixels = CVPixelBufferGetBaseAddress(buffer),
@@ -106,6 +110,8 @@ final class GazeInference {
             let entry = loaded.entry
             let method = entry.identity.method
             let values: [Data]?
+            var geometry: WebEyeTrackGeometry?
+            var missingInput = "眼部裁剪超出画面"
             switch method {
             case .mgaze:
                 if image.contains(face.left), image.contains(face.right) {
@@ -131,6 +137,18 @@ final class GazeInference {
                 } else { values = nil }
             case .l2cs:
                 values = [image.crop(face.bounds, size: 448, rgbImageNet: true)]
+            case .webEyeTrack:
+                if let poseMatrix, let patch = WebEyeTrackPreprocessor.eyePatch(points: face.landmarksPx),
+                   let pixels = image.webEyeTrackPatch(patch),
+                   let head = webEyeTrack.geometry(points: face.landmarksPx, faceMatrix: poseMatrix,
+                                                  width: image.width, height: image.height) {
+                    geometry = head
+                    values = [pixels, GazeImage.data(head.headVector.map(Float.init)),
+                              GazeImage.data(head.faceOriginCm.map(Float.init))]
+                } else {
+                    values = nil
+                    missingInput = "WebEyeTrack 眼部透视裁剪或头姿不可用"
+                }
             }
 
             var prediction: GazePoint?
@@ -151,7 +169,8 @@ final class GazeInference {
             if prediction?.finite != true { prediction = nil }
             return GazeReading(method: method, raw: prediction,
                                latencyMs: (ProcessInfo.processInfo.systemUptime - start) * 1000,
-                               issue: prediction == nil ? (values == nil ? "眼部裁剪超出画面" : "模型推理失败") : nil)
+                               issue: prediction == nil ? (values == nil ? missingInput : "模型推理失败") : nil,
+                               webEyeTrack: geometry)
         }
     }
 
@@ -230,5 +249,25 @@ private struct GazeImage {
         return Self.data(values)
     }
 
-    private static func data(_ values: [Float]) -> Data { values.withUnsafeBytes { Data($0) } }
+    func webEyeTrackPatch(_ patch: WebEyeTrackPatch) -> Data? {
+        let patchWidth = WebEyeTrackPatch.width, patchHeight = WebEyeTrackPatch.height
+        let count = patchWidth * patchHeight
+        var result = [Float](repeating: 0, count: count * 3)
+        var valid = 0
+        for y in 0..<patchHeight {
+            for x in 0..<patchWidth {
+                guard let p = patch.source(x: x, y: y),
+                      p.x >= 0, p.x < Double(width), p.y >= 0, p.y < Double(height) else { continue }
+                let input = Int(p.y) * stride + Int(p.x) * 4
+                let output = (y * patchWidth + x) * 3
+                result[output] = Float(pixels[input + 2]) / 255
+                result[output + 1] = Float(pixels[input + 1]) / 255
+                result[output + 2] = Float(pixels[input]) / 255
+                valid += 1
+            }
+        }
+        return valid * 4 >= count * 3 ? Self.data(result) : nil
+    }
+
+    static func data(_ values: [Float]) -> Data { values.withUnsafeBytes { Data($0) } }
 }

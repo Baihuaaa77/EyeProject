@@ -5,9 +5,17 @@ enum GazeMethod: String, CaseIterable, Codable {
     case aff = "AFF-Net"
     case itracker = "iTracker"
     case l2cs = "L2CS-Net"
+    case webEyeTrack = "WebEyeTrack"
 
     var coordinates: String { self == .l2cs ? "yaw/pitch（度）" : "屏幕坐标（模型原始输出）" }
     var usesAngles: Bool { self == .l2cs }
+    var inputCount: Int {
+        switch self {
+        case .l2cs: 1
+        case .webEyeTrack: 3
+        default: 4
+        }
+    }
 }
 
 struct GazePoint: Codable, Equatable {
@@ -86,6 +94,7 @@ struct GazeReading: Codable {
     let raw: GazePoint?
     let latencyMs: Double
     let issue: String?
+    var webEyeTrack: WebEyeTrackGeometry? = nil
 }
 
 struct GazeCameraFrame: Codable {

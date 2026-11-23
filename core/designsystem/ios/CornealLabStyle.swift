@@ -11,6 +11,7 @@ enum LabStyle {
     static let coded = Color.green
     static let landmark = Color.cyan
     static let baseline = Color.yellow
+    static let webGaze = Color(red: 208/255, green: 164/255, blue: 255/255)
     static let stimulusBackground = UIColor.black
     static let stimulusForeground = UIColor.white
     static let title = Font.title2.weight(.semibold)

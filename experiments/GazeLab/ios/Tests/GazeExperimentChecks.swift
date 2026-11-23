@@ -28,6 +28,38 @@ struct GazeExperimentChecks {
         precondition(run.metrics[0].valid == 1 && run.metrics[0].pairedFrames == 0)
         precondition(run.metrics[0].medianErrorPx != nil && run.metrics[1].medianErrorPx == nil)
         precondition((try? JSONEncoder().encode(run)) != nil)
-        print("标定、成对验证指标和记录序列化通过")
+        checkWebEyeTrack()
+        print("标定、成对验证指标、记录序列化和 WebEyeTrack 几何通过")
+    }
+
+    static func checkWebEyeTrack() {
+        var points = Array(repeating: GazePoint(x: 320, y: 400), count: 478)
+        points[103] = GazePoint(x: 220, y: 220)
+        points[150] = GazePoint(x: 220, y: 580)
+        points[379] = GazePoint(x: 420, y: 580)
+        points[332] = GazePoint(x: 420, y: 220)
+        points[151] = GazePoint(x: 320, y: 310)
+        points[195] = GazePoint(x: 320, y: 400)
+        let patch = WebEyeTrackPreprocessor.eyePatch(points: points)!
+        let top = patch.source(x: 256, y: 0)!
+        let end = patch.source(x: 256, y: 127)!
+        precondition(abs(top.x - 320) < 0.01 && abs(top.y - 310) < 1 && abs(end.y - 400) < 4)
+        points[127] = GazePoint(x: 230, y: 390)
+        points[356] = GazePoint(x: 410, y: 390)
+        points[471] = GazePoint(x: 269, y: 358)
+        points[469] = GazePoint(x: 283, y: 358)
+        points[476] = GazePoint(x: 357, y: 358)
+        points[474] = GazePoint(x: 371, y: 358)
+        points[33] = GazePoint(x: 245, y: 358)
+        points[133] = GazePoint(x: 307, y: 358)
+        points[362] = GazePoint(x: 333, y: 358)
+        points[263] = GazePoint(x: 395, y: 358)
+        let identity: [Double] = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
+        var web = WebEyeTrackPreprocessor()
+        let head = web.geometry(points: points, faceMatrix: identity, width: 640, height: 800)!
+        precondition(head.headVector == [0, 0, -1])
+        precondition(abs(head.faceWidthCm - 1.2 * 180 / 14) < 1e-6)
+        precondition(abs(head.faceOriginCm[0]) < 1e-6 && head.faceOriginCm[1] < 0)
+        precondition(web.geometry(points: Array(points.prefix(468)), faceMatrix: identity, width: 640, height: 800) == nil)
     }
 }

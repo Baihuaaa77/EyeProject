@@ -208,6 +208,55 @@ def mgaze(source, target):
     return inputs, ["output_0"]
 
 
+def web_eye_track(template, topology, source, target):
+    """使用浏览器发布的权重，兼容同结构的上游 Keras 模板。"""
+    import tensorflow as tf
+
+    net = tf.keras.models.load_model(template, compile=False, safe_mode=True)
+    web = json.loads(topology.read_bytes())
+    graph = web["modelTopology"]["model_config"]["config"]
+    for field, slots in (("input_layers", net.inputs), ("output_layers", net.outputs)):
+        expected = [name for name, _, _ in graph[field]]
+        actual = [slot._keras_history.operation.name for slot in slots]
+        if actual != expected:
+            raise ValueError(f"WebEyeTrack 模型的输入或输出不匹配：{actual} / {expected}")
+    groups = web["weightsManifest"]
+    if len(groups) != 1 or len(groups[0]["paths"]) != 1:
+        raise ValueError("WebEyeTrack 浏览器发布的权重分片格式变化")
+    rows = groups[0]["weights"]
+    if len(rows) != len(net.weights):
+        raise ValueError("WebEyeTrack 浏览器权重数量和 Keras 模板不匹配")
+    content = source.read_bytes()
+    pos = 0
+    weights = []
+    for row, variable in zip(rows, net.weights):
+        name = row["name"].removesuffix(":0").replace("/depthwise_kernel", "/kernel")
+        if name != variable.path or tuple(row["shape"]) != tuple(variable.shape) or row["dtype"] != "float32":
+            raise ValueError(f"WebEyeTrack 张量不匹配：{name} / {variable.path}")
+        count = int(np.prod(row["shape"]))
+        weights.append(np.frombuffer(content, dtype="<f4", count=count, offset=pos).reshape(row["shape"]))
+        pos += count * 4
+    if pos != len(content):
+        raise ValueError("WebEyeTrack 浏览器分片长度不匹配")
+    net.set_weights(weights)
+    tflite = target.with_suffix(".tflite")
+    tflite.write_bytes(tf.lite.TFLiteConverter.from_keras_model(net).convert())
+    convert(tflite, target, "TFLITE")
+    runtime = tf.lite.Interpreter(model_path=str(tflite))
+    input_names = [next(item["name"] for item in runtime.get_input_details() if item["name"].split(":")[0].endswith("_" + name))
+                   for name in ("image", "head_vector", "face_origin_3d")]
+    output_names = [item["name"] for item in runtime.get_output_details()]
+    rng = np.random.default_rng(137)
+    for origin in ([0.0, 1.0, 32.0], [-3.0, 2.0, 48.0], [1.0, 3.0, 64.0]):
+        sample = [rng.random((1, 128, 512, 3), dtype=np.float32), np.array([[0.02, 0.1, -0.995]], dtype=np.float32),
+                  np.array([origin], dtype=np.float32)]
+        ref = np.asarray(net(sample, training=False)).reshape(-1)
+        dst = run_mnn(target, dict(zip(input_names, sample)))[output_names[0]]
+        np.testing.assert_allclose(dst, ref, atol=1e-4, rtol=1e-4)
+        print(f"WebEyeTrack：浏览器权重换用 MNN，最大坐标差 {np.max(np.abs(dst - ref)):.8f}")
+    return input_names, output_names
+
+
 def prepare(args):
     args.output.mkdir(parents=True, exist_ok=True)
     entries = []
@@ -218,6 +267,9 @@ def prepare(args):
         "iTracker": ("itracker", args.itracker, lambda path, model: torch_model(args.mobilepog, path, model, "itracker"),
                      "MobilePoG 66854a8，GazeCapture iTracker"),
         "L2CS-Net": ("l2cs", args.l2cs, l2cs, "EyeProject l2cs_net.tflite，FP16 常量转 FP32，输出顺序沿用 Android 模块"),
+        "WebEyeTrack": ("webeyetrack", args.webe_weights,
+                        lambda path, target: web_eye_track(args.webe_template, args.webe_topology, path, target),
+                        "RedForestAI/WebEyeTrack 75fbd2f，浏览器公开 BlazeGaze 权重，GazeLab 统一仿射标定"),
     }
     for method, (name, original, prepare_model, source) in methods.items():
         if method in args.skip:
@@ -250,7 +302,7 @@ def package(args):
     with ZipFile(args.shell) as shell, ZipFile(temp, "w", ZIP_DEFLATED) as ipa:
         plist = plistlib.loads(shell.read(root + "/Info.plist"))
         if (plist["CFBundleIdentifier"] != "com.zkyjss.gazelab"
-                or plist["CFBundleShortVersionString"] != "0.2.0"
+                or plist["CFBundleShortVersionString"] != "0.2.1"
                 or plist["DTPlatformName"] != "iphoneos"
                 or root + "/embedded.mobileprovision" in shell.namelist()
                 or any(name.startswith(root + "/_CodeSignature/") for name in shell.namelist())):
@@ -276,9 +328,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
     build = subparsers.add_parser("prepare")
-    for name in ("mobilepog", "mgaze", "affnet", "itracker", "l2cs", "output"):
+    for name in ("mobilepog", "mgaze", "affnet", "itracker", "l2cs", "webe-template", "webe-topology", "webe-weights", "output"):
         build.add_argument(f"--{name}", type=Path, required=name == "output")
-    build.add_argument("--skip", action="append", default=[], choices=["MGazeNet", "AFF-Net", "iTracker", "L2CS-Net"])
+    build.add_argument("--skip", action="append", default=[], choices=["MGazeNet", "AFF-Net", "iTracker", "L2CS-Net", "WebEyeTrack"])
     app = subparsers.add_parser("package")
     for name in ("shell", "models", "output"):
         app.add_argument(f"--{name}", type=Path, required=True)
