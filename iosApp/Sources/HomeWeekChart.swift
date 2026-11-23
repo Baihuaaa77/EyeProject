@@ -1,9 +1,11 @@
 import SwiftUI
 
-struct HomeWeekChart: View {
+struct HomeWeekChart<FeelingForm: View>: View {
     let history: [CareReport.Day]
+    let feelingExpanded: Bool
     let onFeeling: () -> Void
     let onTrend: () -> Void
+    @ViewBuilder let feelingForm: FeelingForm
     @State private var pickedWeek: Int?
     @State private var chosen: Int?
     @Environment(\.dynamicTypeSize) private var textSize
@@ -27,8 +29,15 @@ struct HomeWeekChart: View {
             HStack {
                 Text("用眼爱记录").font(EyeStyle.subtitle)
                 Spacer(minLength: 0)
-                Button("记录感受", action: onFeeling).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.text).frame(minHeight: 44)
+                Button(action: onFeeling) {
+                    Text("记录感受").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.text)
+                        .frame(minWidth: 44, minHeight: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityValue(feelingExpanded ? "已展开" : "已折叠")
             }
+            feelingForm
             let range = Text(weekTitle).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
             if textSize.isAccessibilitySize { range; weekPicker }
             else { HStack { range; Spacer(); weekPicker.frame(width: 108) } }

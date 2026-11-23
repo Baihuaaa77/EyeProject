@@ -3,7 +3,7 @@ import EyeScreening
 
 #if SCREENSHOT_CAPTURE
 extension BrownHomePage {
-    /// 截图专用入口：展示当前首页的真实打卡弹窗。
+    /// 截图专用入口：展示当前首页展开后的感受记录。
     init(captureFeeling: Bool) {
         navigate = { _ in }; openTest = { _ in }
         _feeling = State(initialValue: captureFeeling)
@@ -17,6 +17,7 @@ struct BrownHomePage: View {
     let openTest: (String) -> Void
     @ObservedObject private var store = EyeCareStore.shared
     @StateObject private var reminder = EyeReminder()
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var feeling = false
     @State private var careTimer: String?
     @State private var allData = false
@@ -32,38 +33,38 @@ struct BrownHomePage: View {
     private var today: String {
         let f = DateFormatter(); f.locale = Locale(identifier: "zh_CN"); f.dateFormat = "M月d日 EEEE"; return f.string(from: Date())
     }
+    private enum ScrollTarget: Hashable { case feeling }
+
     var body: some View {
-        PageScroll(backgroundColor: BrownStyle.homeBackground) {
-            PageHeader(title: greeting, subtitle: today, openAccount: { navigate(.account) }, openSettings: { navigate(.settings) }, warm: true)
-            WarmCard(fill: BrownStyle.homeSurface, padding: 16, spacing: 4, edge: tone) {
-                HStack {
-                    Text("用眼负荷").font(EyeStyle.title).foregroundStyle(EyeStyle.text)
-                    Spacer(minLength: 0)
-                    homeLink("用眼全记录") { allData.toggle() }
-                }
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 0) {
-                        reading.frame(minWidth: 104, alignment: .leading)
-                        LoadEyeArtwork(level: report.level, tone: tone).frame(maxWidth: .infinity).frame(height: 112)
+        ScrollViewReader { proxy in
+            PageScroll(backgroundColor: BrownStyle.homeBackground) {
+                PageHeader(title: greeting, subtitle: today, openAccount: { navigate(.account) }, openSettings: { navigate(.settings) }, warm: true)
+                WarmCard(fill: BrownStyle.homeSurface, padding: 16, spacing: 4, edge: tone) {
+                    HStack {
+                        Text("用眼负荷").font(EyeStyle.title).foregroundStyle(EyeStyle.text)
+                        Spacer(minLength: 0)
+                        homeLink("用眼全记录") { allData.toggle() }
                     }
-                    VStack(alignment: .leading) { reading; LoadEyeArtwork(level: report.level, tone: tone).frame(height: 94) }
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 0) {
+                            reading.frame(minWidth: 104, alignment: .leading)
+                            LoadEyeArtwork(level: report.level, tone: tone).frame(maxWidth: .infinity).frame(height: 112)
+                        }
+                        VStack(alignment: .leading) { reading; LoadEyeArtwork(level: report.level, tone: tone).frame(height: 94) }
+                    }
+                    LoadRail(score: report.score, tone: tone)
+                    HStack { Text("较轻"); Spacer(); Text("较重") }.font(EyeStyle.caption).foregroundStyle(EyeStyle.text)
+                    HStack(spacing: 8) {
+                        homeAction("AI问诊") { navigate(.chat) }
+                        homeAction("智能挂号") { booking = true }
+                    }.padding(.top, 8)
                 }
-                LoadRail(score: report.score, tone: tone)
-                HStack { Text("较轻"); Spacer(); Text("较重") }.font(EyeStyle.caption).foregroundStyle(EyeStyle.text)
-                HStack(spacing: 8) {
-                    homeAction("AI问诊") { navigate(.chat) }
-                    homeAction("智能挂号") { booking = true }
-                }.padding(.top, 8)
-            }
-            if allData { DailyRecordsView(report: report, onClose: { allData = false }) }
-            companionCheckIns
-            HomeWeekChart(history: report.historyDays, onFeeling: { feeling.toggle() }, onTrend: { navigate(.trend) })
-            if feeling {
-                FeelingSheet(initial: report.checkedInToday ? (report.todaySymptoms.isEmpty ? ["没有不适"] : report.todaySymptoms) : [],
-                    save: { picked in feeling = false; store.checkIn(picked.filter { $0 != "没有不适" }) },
-                    dismiss: { feeling = false }, initialNote: report.todayNote,
-                    saveNote: { picked,note in feeling = false; store.checkIn(picked.filter { $0 != "没有不适" },note: note) }, inline: true)
-            }
+                if allData { DailyRecordsView(report: report, onClose: { allData = false }) }
+                companionCheckIns
+                HomeWeekChart(history: report.historyDays, feelingExpanded: feeling,
+                              onFeeling: { feeling.toggle() }, onTrend: { navigate(.trend) }) {
+                    if feeling { feelingForm }
+                }.id(ScrollTarget.feeling)
                 WarmCard(padding: 14) {
                     LiveEyeSection()
                     Rectangle().fill(EyeStyle.borderSubtle).frame(height: 1)
@@ -80,6 +81,13 @@ struct BrownHomePage: View {
                     ListRow(title: "护眼操", glyph: .eye) { exercise = true }
                     ListRow(title: "屏幕光", glyph: .sun, divider: false) { navigate(.brightness) }
                 }
+            }
+            .onChange(of: feeling) { expanded in
+                guard expanded else { return }
+                withAnimation(reduceMotion ? nil : .easeInOut) {
+                    proxy.scrollTo(ScrollTarget.feeling, anchor: .top)
+                }
+            }
         }
         .onAppear { store.refresh() }
         .onChange(of: reminder.enabled) { _ in store.refresh() }
@@ -89,6 +97,22 @@ struct BrownHomePage: View {
             companionTimerPage
         }
     }
+    private var feelingForm: some View {
+        let noDiscomfort = "没有不适"
+        let initial = report.checkedInToday ? (report.todaySymptoms.isEmpty ? [noDiscomfort] : report.todaySymptoms) : []
+        return FeelingSheet(initial: initial,
+                            save: { saveFeeling($0, note: "") },
+                            dismiss: { feeling = false },
+                            initialNote: report.todayNote,
+                            saveNote: { saveFeeling($0, note: $1) },
+                            inline: true)
+    }
+
+    private func saveFeeling(_ selected: [String], note: String) {
+        store.checkIn(selected.filter { $0 != "没有不适" }, note: note)
+        feeling = false
+    }
+
     @ViewBuilder private var companionTimerPage: some View {
             if let key = careTimer {
                 RestBreakView(title: key,seconds: key == "闭眼休息" ? 30 : key == "热敷眼睛" ? 180 : 20,
