@@ -180,9 +180,8 @@ class HomeVisualTest {
         compose.onNodeWithText("最近几天").assertIsDisplayed().performClick()
         compose.onNodeWithText("长时间看屏幕后").assertIsDisplayed().performClick()
         compose.onNodeWithText("问诊总结").assertIsDisplayed()
-        compose.onNodeWithText("查看干眼门诊挂号预览").performClick()
-        compose.onNodeWithText("曾庆延 · 主任医师").assertIsDisplayed()
-        compose.onNodeWithText("当前为挂号演示，暂无可查询号源。").assertIsDisplayed()
+        compose.onNodeWithText("继续智能挂号").performClick()
+        compose.onNodeWithText("智能挂号").assertIsDisplayed()
         assertTrue(sent.isEmpty())
     }
 

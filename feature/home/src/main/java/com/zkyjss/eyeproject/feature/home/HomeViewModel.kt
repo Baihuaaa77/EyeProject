@@ -43,7 +43,7 @@ private data class EyeInputs(
     val ledger: LedgerData,
     val usage: SystemUsage,
     val env: EnvironmentReading?,
-    val self: SubjectProfile?,
+    val subjects: List<SubjectProfile>,
     val records: List<LocalRecordEntry>,
 )
 
@@ -75,14 +75,14 @@ class HomeViewModel @Inject constructor(
 
     val uiState: StateFlow<HomeUiState> = combine(
         combine(eyeCare.ledger, eyeCare.systemUsage, environment, subjects.subjects, records.localRecords) { ledger, usage, env, people, list ->
-            EyeInputs(ledger, usage, env, people.firstOrNull { it.relation == "SELF" }, list)
+            EyeInputs(ledger, usage, env, people, list)
         },
         reminder,
         clock,
     ) { inputs, part, now ->
         val offset = TimeZone.getDefault().getOffset(now) / 60_000
         val today = EyeCareDays.dayOf(now, offset)
-        val self = inputs.self
+        val self = inputs.subjects.firstOrNull { it.relation == "SELF" }
         val context = EyeCareContext(
             today = today, hour = EyeCareDays.hourOf(now, offset),
             systemUsage = inputs.usage.days, usageAccess = inputs.usage.access,
@@ -92,7 +92,8 @@ class HomeViewModel @Inject constructor(
         )
         val report = EyeCareEngine.report(inputs.ledger, context)
         HomeUiState(part.notice, part.enabled, part.interval, part.next, report, self?.id, inputs.usage.access,
-            EyeCareAdvice.request(inputs.ledger, context, report), inputs.env?.brightness, inputs.env?.lux)
+            EyeCareAdvice.request(inputs.ledger, context, report), inputs.env?.brightness, inputs.env?.lux,
+            bookingPatientNames = inputs.subjects.sortedBy { it.relation != "SELF" }.map { it.nickname })
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeUiState())
 
     init { refreshReminderState() }

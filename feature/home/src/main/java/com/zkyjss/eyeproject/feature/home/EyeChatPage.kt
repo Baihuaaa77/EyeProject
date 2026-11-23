@@ -68,6 +68,8 @@ import com.zkyjss.eyeproject.core.ui.component.EyeButton
 import com.zkyjss.eyeproject.core.ui.component.EyeButtonRole
 import com.zkyjss.eyeproject.core.ui.component.EyeGlyph
 import com.zkyjss.eyeproject.core.ui.component.EyeGlyphIcon
+import com.zkyjss.eyeproject.core.ui.component.EyeOfflineSession
+import com.zkyjss.eyeproject.core.ui.component.EyeOfflineSessionPage
 import com.zkyjss.eyeproject.core.ui.component.EyeOptionRow
 import com.zkyjss.eyeproject.core.ui.component.EyeSubPage
 import com.zkyjss.eyeproject.core.ui.component.EyeText
@@ -117,6 +119,7 @@ fun EyeChatScreen(
         onSend = { text, agree, quiet -> viewModel.send(text, homeState.adviceRequest, agree, quiet) },
         onConfirmOptionsChange = viewModel::setConfirmOptionAnswers,
         onClear = viewModel::clear,
+        bookingPatientNames = homeState.bookingPatientNames,
     ) {
         EyeButton("今日护眼参考",EyeButtonRole.SECONDARY,{ referenceOpen = true },Modifier.fillMaxWidth())
     }
@@ -138,6 +141,7 @@ internal fun EyeChatContent(
     onSend: (String, Boolean, Boolean) -> Unit,
     onClear: () -> Unit,
     onConfirmOptionsChange: (Boolean) -> Unit = {},
+    bookingPatientNames: List<String> = emptyList(),
     opening: @Composable () -> Unit,
 ) {
     val colors = LocalEyeColors.current
@@ -229,24 +233,8 @@ internal fun EyeChatContent(
         }
     }
     if (demoOpen) DryEyeInquiryDemo(onClose = { demoOpen = false }, onBooking = { bookingOpen = true })
-    if (bookingOpen) DryEyeBookingPage(onClose = { bookingOpen = false })
-}
-
-@Composable
-private fun DryEyeBookingPage(onClose: () -> Unit) {
-    val preview = DryEyeBookingPreview
-    val colors = LocalEyeColors.current
-    val typography = LocalEyeTypography.current
-    com.zkyjss.eyeproject.core.ui.component.EyeFullScreenPage(onClose) {
-        EyeSubPage(preview.title, onClose) {
-            Column(Modifier.fillMaxWidth().eyeGlass(colors, EyeShapes.card).padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                EyeText(preview.doctor, style = typography.title, color = colors.textPrimary)
-                EyeText(preview.clinic, style = typography.body, color = colors.textPrimary)
-                EyeText(preview.specialty, style = typography.bodySecondary, color = colors.textSecondary)
-            }
-            EyeText(preview.availability, style = typography.body, color = colors.textSecondary)
-        }
-    }
+    if (bookingOpen) EyeOfflineSessionPage(EyeOfflineSession.BOOKING, { bookingOpen = false },
+        bookingPatientNames = bookingPatientNames, prefillDryEye = true)
 }
 
 @Composable

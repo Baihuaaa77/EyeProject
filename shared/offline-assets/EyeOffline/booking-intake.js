@@ -1,43 +1,97 @@
-// The nine interview steps follow the registration assistant shown in the reference video.
+// 根据预问诊回答提供科室建议。患者自述与医生诊断分别处理。
 window.BookingIntake = (() => {
-  const questions = [
-    {id:'chief', label:'主诉', title:'请问您今天最主要的眼部不适是什么？', options:[
-      '视力下降或看不清','眼红、干涩或眼痒','眼痛或眼胀','飞蚊、闪光或黑影','近视、散光或配镜','复查或常规检查'
-    ]},
-    {id:'duration', label:'现病史 · 病程', title:'这些症状大约出现多久了？', options:[
-      '今天突然出现','1～3 天','1～4 周','1 个月以上','半年以上'
-    ]},
-    {id:'eye', label:'现病史 · 部位', title:'不适发生在哪只眼睛？', options:['左眼','右眼','双眼','不确定']},
-    {id:'danger', label:'现病史 · 危险信号', title:'目前是否有以下需要尽快处理的情况？', options:[
-      '突然看不见或视力骤降','剧烈眼痛并伴恶心呕吐','眼外伤或化学物入眼','以上情况都没有'
-    ]},
-    {id:'history', label:'既往史 · 眼病', title:'您以前有过哪些眼病或眼部手术？', options:[
-      '白内障或白内障手术','青光眼或眼压高','眼底病或视网膜病变','近视矫正或其他眼部手术','没有相关病史'
-    ]},
-    {id:'chronic', label:'既往史 · 全身疾病', title:'您是否患有以下慢性疾病？', options:[
-      '糖尿病','高血压或心血管疾病','免疫或甲状腺疾病','有多种慢性疾病','没有以上疾病'
-    ]},
-    {id:'allergy', label:'过敏史', title:'您是否有药物过敏史？', options:['有药物过敏','没有药物过敏','不清楚']},
-    {id:'family', label:'家族史', title:'直系亲属是否有青光眼或其他遗传性眼病？', options:[
-      '有青光眼家族史','有其他遗传性眼病','没有相关家族史','不清楚'
-    ]},
-    {id:'time', label:'挂号偏好', title:'您希望什么时间就诊？', options:['今天，越快越好','明天上午','明天下午','时间都可以']}
-  ];
-
-  const choice = (answers,id) => answers?.[id]?.choice || '';
-  const note = (answers,id) => (answers?.[id]?.note || '').trim();
-  const dangerChoices = questions.find(q => q.id === 'danger').options.slice(0,3);
-  const urgent = reason => ({department:'眼科急诊', priority:'建议立即就诊', urgent:true, reason});
-  const manual = () => ({department:'综合眼科', priority:'请人工导诊', urgent:false,
-    reason:'根据现有描述还不能确定合适的专科，请让分诊人员核对本次症状。'});
-  const ordinary = (department,reason) => ({department,priority:'门诊就诊',urgent:false,reason});
-
-  // Only explicit symptoms in the present illness affect urgent routing.
-  // Medications, past operations and relatives' symptoms belong in the interview summary.
-  function presentPhrases(answers) {
-    return ['chief','duration','eye','danger'].flatMap(id => note(answers,id)
-      .split(/[，,。；;！？!?\n]|但是|不过|但|然而|随后|而是|现在|目前|这次|今天|刚才|今早|这会儿/)
-      .map(s => s.trim()).filter(Boolean));
+  const question = (id,label,title,options) => ({id,label,title,options});
+  const chief = question('chief','主诉','您最想解决哪个眼部问题？',{
+    vision:'视力下降或看不清',surface:'眼红、干涩或眼痒',pain:'眼痛或眼胀',
+    floaters:'飞蚊、闪光或黑影',refraction:'近视、散光或配镜',review:'复查或常规检查'
+  });
+  const second = {
+    vision:question('vision','视力变化','视力变化主要是什么样的？',{
+      sudden:'突然下降或明显加重',gradual:'逐渐看不清',near:'近处更模糊',far:'远处更模糊',unknown:'说不清'
+    }),
+    surface:question('surface','伴随表现','除了眼红、干涩或眼痒，还有什么表现？',{
+      redPain:'眼红伴眼痛、怕光或视力变化',contactPain:'戴隐形眼镜后眼红、眼痛',
+      dry:'干涩、异物感',itch:'眼痒或流泪',discharge:'有分泌物',unknown:'说不清'
+    }),
+    pain:question('pain','疼痛表现','眼痛或眼胀时，有下面哪种情况？',{
+      severe:'剧烈眼痛，或伴头痛、恶心',visionLoss:'突然看不清或看不到',
+      injury:'眼外伤或化学品入眼',mild:'轻度疼痛或眼胀',unknown:'说不清'
+    }),
+    floaters:question('floaters','起病情况','飞蚊、闪光或黑影最近有变化吗？',{
+      curtain:'看到闪光、黑幕或视野被遮挡',new:'近期新出现或突然增多',stable:'已经有一段时间，近期没有变化',unknown:'说不清'
+    }),
+    refraction:question('refraction','验光需求','这次验光或配镜主要是为了什么？',{
+      child:'儿童或青少年近视检查',glasses:'成人验光或更换眼镜',contact:'隐形眼镜验配',
+      surgery:'了解近视矫正手术',unknown:'还不确定'
+    }),
+    review:question('review','复查项目','这次想复查哪一项？',{
+      cataract:'白内障或白内障术后',glaucoma:'青光眼或眼压偏高',retina:'眼底疾病',
+      refraction:'近视矫正术后',pediatric:'斜视或小儿眼病',general:'常规检查或其他'
+    }),
+    other:question('other','主要表现','您补充的情况最接近哪一类？',{
+      vision:'视力变化',surface:'眼红、眼干或眼痒',pain:'眼痛或眼胀',
+      floaters:'飞蚊、闪光或黑影',refraction:'验光配镜或复查',unknown:'说不清'
+    })
+  };
+  const third = {
+    visionHistory:question('visionHistory','相关情况','视力变化前后，还有哪些情况？',{
+      cataract:'医生说过有白内障',glaucoma:'医生说过有青光眼或眼压偏高',retina:'确诊过眼底疾病',
+      light:'眩光或夜间看不清',none:'没有上述情况',unknown:'说不清'
+    }),
+    nearFar:question('nearFar','用眼情况','看不清在什么情况下最明显？',{
+      correction:'戴原来的眼镜也看不清',reading:'阅读或看手机时明显',
+      distance:'看黑板、路标时明显',both:'远近都看不清',unknown:'说不清'
+    }),
+    dryContext:question('dryContext','出现时机','干涩或异物感通常什么时候更明显？',{
+      screen:'长时间用屏后',morning:'晨起时',contact:'佩戴隐形眼镜后',often:'经常出现',unknown:'说不清'
+    }),
+    surfaceContext:question('surfaceContext','伴随情况','最近还有下列哪种情况？',{
+      pain:'开始眼痛、怕光或视力变差',contact:'戴隐形眼镜后出现红痛',
+      both:'双眼都不适',one:'主要是一只眼',unknown:'说不清'
+    }),
+    painContext:question('painContext','起病情况','眼痛或眼胀发生在什么情况下？',{
+      worsening:'最近突然出现或明显加重',screen:'长时间用眼后更明显',
+      recurrent:'反复出现',glaucoma:'有青光眼或眼压偏高病史',unknown:'说不清'
+    }),
+    floatContext:question('floatContext','累及眼别','哪只眼能看到这些飞蚊或黑影？',{
+      left:'主要是左眼',right:'主要是右眼',both:'两眼都有',unknown:'分不清'
+    }),
+    refractionChild:question('refractionChild','验光情况','孩子这次检查的主要原因是什么？',{
+      first:'第一次看远看不清',progress:'近视度数近期有变化',regular:'定期复查近视',
+      strabismus:'有斜视、弱视或怀疑眼位不齐',unknown:'说不清'
+    }),
+    surgeryContext:question('surgeryContext','就诊目的','您目前想了解哪方面？',{
+      first:'首次咨询近视矫正手术',recheck:'做过术前检查，想进一步评估',
+      after:'近视矫正术后复查',unknown:'还不确定'
+    }),
+    refractionContext:question('refractionContext','验光情况','这次检查更接近哪种情况？',{
+      first:'第一次验光',replace:'原眼镜不合适',contact:'需要隐形眼镜验配',routine:'按期复查',unknown:'说不清'
+    }),
+    reviewContext:question('reviewContext','复查原因','这次复查前有新变化吗？',{
+      routine:'按医嘱定期复查',renew:'原有症状有变化',postOp:'术后新出现明显眼痛、红眼加重或视力下降',
+      latest:'拿到新的检查结果，想请医生看',unknown:'说不清'
+    }),
+    clarify:question('clarify','补充情况','这次主要是新出现的不适，还是计划复查？',{
+      sudden:'突然看不清、剧烈眼痛或眼外伤',recent:'近期有新不适',
+      follow:'按计划检查或复查',unknown:'暂时说不清'
+    })
+  };
+  const entry = (answers,id) => answers[id] || {choice:'',note:''};
+  const choice = (answers,id) => entry(answers,id).choice;
+  const line = (q,answers) => [Object.prototype.hasOwnProperty.call(q.options,choice(answers,q.id)) ? q.options[choice(answers,q.id)] : '',
+    entry(answers,q.id).note.trim()].filter(Boolean).join('，');
+  const symptoms = {
+    vision:/看不清|视物模糊|视力下降|视力变差|看东西模糊/,
+    surface:/眼干|干眼|干涩|眼红|眼痒|异物感/,
+    pain:/眼痛|眼胀|眼疼/,
+    floaters:/飞蚊|闪光|黑影|黑幕|眼前飘|漂浮物/,
+    refraction:/验光|配镜|眼镜|近视|散光/,
+    review:/复查|体检|常规检查/
+  };
+  // 按句识别当前自述。既往史和否定表达应保留在草稿中，但不作为确诊或阳性信号。
+  function phrases(note) {
+    return note.split(/[，,。；;！？!?\n]|但是|不过|但|然而|随后|而是|现在|目前|这次|今天|刚才|今早|这会儿/)
+      .map(s => s.trim()).filter(Boolean);
   }
   const denial = /没(?:有)?|并无|毫无|否认|不伴(?:有)?|不是|从未|未曾|未|无|已排除/g;
   const modifiersOnly = /^(?:发现|发生|出现|伴有|感觉(?:到)?|觉得|发生过|看见|看到|有过|过|任何|明显|新的|新出现|突然|忽然|那种|上述|这种|一点|一块|的|有|眼前|视野(?:中|里)?|眼睛|左眼|右眼|双眼|像|刚刚)*$/;
@@ -54,7 +108,6 @@ window.BookingIntake = (() => {
   const uncertain = /是否|是不是|会不会|不(?:太)?确定|拿不准|说不(?:清|准)|不清楚|不知道/;
   const past = /以前|既往|过去|从前|小时候|曾经|去年|前年|年前/;
   function stated(phrase,pattern) {
-    if (uncertain.test(phrase)) return false;
     for (const match of phrase.matchAll(new RegExp(pattern.source,'g'))) {
       const before = phrase.slice(0,match.index);
       if (past.test(before) && !/(?:无|没有|没|从未|未曾|否认).{0,6}(?:眼痛|头痛|外伤|眼病|病史|手术|受伤|眼疾)(?:史)?$/.test(before)) continue;
@@ -70,62 +123,99 @@ window.BookingIntake = (() => {
   const flashes = /闪光|飞蚊|黑影|漂浮物/;
   const recent = /突然|骤然|刚刚|刚出现|新出现|第一次|首次|猛增|增多|变多/;
 
-  // Urgency references: NHS Vision loss / Eye injuries and NEI Retinal Detachment.
+
+  function topic(answers) {
+    const selected = choice(answers,'chief');
+    if (Object.prototype.hasOwnProperty.call(chief.options,selected)) return selected;
+    const parts = phrases(entry(answers,'chief').note);
+    const hits = Object.entries(symptoms).filter(([,pattern]) => parts.some(part => !uncertain.test(part) && stated(part,pattern)));
+    return hits.length === 1 ? hits[0][0] : 'other';
+  }
+  function questions(answers) {
+    const first = topic(answers), follow = second[first], picked = choice(answers,follow.id);
+    let last = third.clarify;
+    switch (first) {
+      case 'vision': last = ['near','far'].includes(picked) ? third.nearFar : third.visionHistory; break;
+      case 'surface': last = picked === 'dry' ? third.dryContext : third.surfaceContext; break;
+      case 'pain': last = third.painContext; break;
+      case 'floaters': last = third.floatContext; break;
+      case 'refraction': last = picked === 'child' ? third.refractionChild : picked === 'surgery' ? third.surgeryContext : third.refractionContext; break;
+      case 'review': last = third.reviewContext; break;
+      case 'other':
+        last = ({vision:third.visionHistory,surface:third.surfaceContext,pain:third.painContext,
+          floaters:third.floatContext,refraction:third.reviewContext})[picked] || third.clarify;
+        break;
+    }
+    return [chief,follow,last];
+  }
+  function update(answers,q,answer) {
+    const updated = {...answers,[q.id]:answer};
+    const active = new Set(questions(updated).map(item => item.id));
+    return Object.fromEntries(Object.entries(updated).filter(([id]) => active.has(id)));
+  }
+
+  const urgent = reason => ({department:'眼科急诊',priority:'建议立即就诊',urgent:true,reason,checks:[]});
+  const manual = (prompt = false) => ({department:'综合眼科',priority:prompt?'请尽快人工导诊':'请人工导诊',urgent:false,
+    reason:prompt?'请尽快让分诊人员确认就诊时效。若症状突然出现、明显加重，或伴剧烈眼痛、视力下降，请立即前往急诊。'
+      :'请让分诊人员核对症状及变化，再决定合适的专科和就诊时间。',checks:[]});
+  const clinics = {
+    general:['综合眼科','先由综合眼科核对症状和病史。',['视力检查']],
+    surface:['角膜及眼表科','主要不适集中在眼表，可先咨询角膜及眼表科。',['裂隙灯检查']],
+    retina:['眼底病专科','可先由眼底病专科评估飞蚊、黑影或既往眼底问题。',['眼底检查']],
+    optometry:['视光科','可先咨询验光、配镜或屈光检查。',['视力检查','验光']],
+    refractive:['屈光手术科','可由医生评估矫正手术相关需求或安排原专科复查。',['视力检查','验光']],
+    pediatric:['斜视及小儿眼科','可向小儿眼科咨询眼位、弱视或儿童视力问题。',['视力检查']],
+    cataract:['白内障科','结合自述的白内障病史或复查目的，可联系原专科。',['视力检查','裂隙灯检查']],
+    glaucoma:['青光眼科','结合自述的青光眼或眼压病史，可联系原专科。',['眼压检查']]
+  };
+  function routine(key) {
+    const [department,reason,checks] = clinics[key];
+    return {department,reason,checks,priority:'门诊参考',urgent:false};
+  }
+  const urgentChoices = new Set(['sudden','redPain','contactPain','severe','visionLoss','injury','curtain','new','postOp']);
   function assess(answers = {}) {
-    const chief = choice(answers,'chief'), duration = choice(answers,'duration');
-    const danger = choice(answers,'danger'), history = choice(answers,'history');
-    const phrases = presentPhrases(answers);
-    if (dangerChoices.includes(danger)) {
-      return urgent('你选择了「'+danger+'」。请立即到最近的眼科急诊或综合医院急诊。');
+    const active = questions(answers);
+    const parts = active.flatMap(q => phrases(entry(answers,q.id).note));
+    if (active.some(q => urgentChoices.has(choice(answers,q.id))) ||
+        parts.some(p => [loss,injury,pain,shadow].some(pattern => stated(p,pattern)))) {
+      return urgent('你描述的情况需要尽快当面检查，请现在前往就近的眼科急诊或综合医院急诊。');
     }
-    if (phrases.some(p => [loss,injury,pain,shadow].some(pattern => stated(p,pattern)))) {
-      return urgent('你的描述中有需要立即面诊的表现，请现在到眼科急诊或综合医院急诊。');
+    const any = pattern => parts.some(p => !uncertain.test(p) && stated(p,pattern));
+    if ((any(flashes) && any(recent)) || (any(/眼红|红眼/) && any(/眼痛|眼疼|怕光|视力下降|看不清/))) {
+      return urgent('你描述的症状组合需要尽快检查，请现在前往就近的眼科急诊或综合医院急诊。');
     }
-    const newFlashes = phrases.some(p => stated(p,flashes) && stated(p,recent));
-    const shortCourse = duration === '今天突然出现' || duration === '1～3 天';
-    if (newFlashes || (shortCourse && (chief === '飞蚊、闪光或黑影' || phrases.some(p => stated(p,flashes))))) {
-      return urgent('近期新出现的飞蚊、闪光或黑影需要尽快检查眼底，请现在到眼科急诊评估。');
-    }
-    if (duration === '今天突然出现' && ['视力下降或看不清','眼痛或眼胀'].includes(chief)) {
-      return urgent('你描述的视力变化或眼部疼痛是今天突然出现的，请现在到眼科急诊评估。');
-    }
-    if (phrases.some(p => uncertain.test(p) && [loss,injury,pain,shadow,flashes].some(pattern => pattern.test(p)))) {
-      return manual();
-    }
-    if (note(answers,'danger') && !danger && !/^(?:以上情况都没有|都没有|没有|无)[。！! ]*$/.test(note(answers,'danger'))) {
-      return manual();
-    }
-    switch (chief) {
-      case '近视、散光或配镜':
-        return ordinary('眼视光门诊','你主要想了解屈光情况或配镜，眼视光门诊可以安排视力和验光检查。');
-      case '飞蚊、闪光或黑影':
-        return ordinary('眼底病门诊','你提到了飞蚊、闪光或黑影，眼底病门诊可以检查眼底。如果突然增多或出现遮挡，请立即就诊。');
-      case '眼红、干涩或眼痒':
-        return ordinary('眼表门诊','你提到了眼红、干涩或眼痒，可以先到眼表门诊检查。');
-      case '复查或常规检查': {
-        const followUp = {'白内障或白内障手术':'白内障门诊','青光眼或眼压高':'青光眼门诊','眼底病或视网膜病变':'眼底病门诊'}[history];
-        return followUp ? ordinary(followUp,'结合本次复查目的和既往眼病，建议联系原就诊专科。')
-          : ordinary('综合眼科','你希望复查或做常规眼部检查，可以先到综合眼科。术后复查可联系原手术门诊。');
-      }
-      case '视力下降或看不清':
-      case '眼痛或眼胀':
-        return ordinary('综合眼科','你提到的眼部不适可能有多种原因，建议先到综合眼科面诊。');
+    if (parts.some(p => uncertain.test(p) && [loss,injury,pain,shadow,flashes].some(pattern => pattern.test(p)))) return manual(true);
+    const [ ,follow,last] = active;
+    const selected = choice(answers,follow.id), detail = choice(answers,last.id);
+    switch (follow.id) {
+      case 'vision':
+        return routine(({cataract:'cataract',glaucoma:'glaucoma',retina:'retina'})[detail] ||
+          (['near','far'].includes(selected) ? 'optometry' : 'general'));
+      case 'surface':
+        return ['dry','itch','discharge'].includes(selected) ? routine('surface') : manual();
+      case 'pain':
+        return detail === 'glaucoma' && selected === 'mild' ? routine('glaucoma') : manual(true);
+      case 'floaters':
+        return selected === 'stable' ? routine('retina') : manual(true);
+      case 'refraction':
+        if (detail === 'strabismus') return routine('pediatric');
+        if (selected === 'surgery') return routine('refractive');
+        return ['child','glasses','contact'].includes(selected) ? routine('optometry') : manual();
+      case 'review':
+        return routine(({cataract:'cataract',glaucoma:'glaucoma',retina:'retina',
+          refraction:'refractive',pediatric:'pediatric'})[selected] || 'general');
       default: return manual();
     }
   }
 
-  function slots(answers, assessment = assess(answers)) {
-    if (assessment.urgent) return [{id:'urgent-now',name:'李医生',rank:'副主任医师',when:'今天 · 立即就诊',fee:30}];
-    const time = choice(answers,'time');
-    const options = {
-      today:{id:'today',name:'周医生',rank:'主治医师',when:'今天 · 当日门诊',fee:20},
-      morning:{id:'morning',name:'陈医生',rank:'副主任医师',when:'明天上午',fee:30},
-      afternoon:{id:'afternoon',name:'林医生',rank:'主治医师',when:'明天下午',fee:20}
-    };
-    if (time === '今天，越快越好') return [options.today];
-    if (time === '明天上午') return [options.morning];
-    if (time === '明天下午') return [options.afternoon];
-    return Object.values(options);
+  function draft(answers,patient) {
+    const [first,...rest] = questions(answers);
+    const rows = [['就诊人',patient.trim() || '未填写'], [first.label,line(first,answers) || '未填写']];
+    rest.filter(q => line(q,answers)).forEach(q => rows.push([q.label,line(q,answers)]));
+    const assessment = assess(answers);
+    rows.push(['导诊参考',assessment.department+'，'+assessment.priority]);
+    return rows;
   }
-  return {questions,assess,slots};
+
+  return {questions,update,assess,draft,line};
 })();

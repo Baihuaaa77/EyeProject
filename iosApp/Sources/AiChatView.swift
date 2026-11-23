@@ -86,7 +86,7 @@ struct AiChatPage: View {
             }
         }
         .fullScreenCover(isPresented: $demoOpen) { DryEyeInquiryDemo() }
-        .fullScreenCover(isPresented: $bookingOpen) { DryEyeBookingPage() }
+        .fullScreenCover(isPresented: $bookingOpen) { OfflineSessionCover(session: .booking, prefillDryEye: true) }
         .overlay {
             if let choice = pendingOption {
                 OptionAnswerConfirmView(choice: choice, confirm: { dontAsk in
@@ -381,26 +381,6 @@ private struct DryEyeInquiryDemo: View {
             }
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("关闭") { dismiss() } } }
         }
-        .fullScreenCover(isPresented: $bookingOpen) { DryEyeBookingPage() }
-    }
-}
-
-private struct DryEyeBookingPage: View {
-    @Environment(\.dismiss) private var dismiss
-    private let preview = DryEyeBookingPreview.shared
-
-    var body: some View {
-        NavigationStack {
-            SubPage(title: preview.title) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(preview.doctor).font(EyeStyle.title)
-                    Text(preview.clinic).font(EyeStyle.body)
-                    Text(preview.specialty).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
-                }
-                .padding(16).frame(maxWidth: .infinity, alignment: .leading).eyeGlass()
-                Text(preview.availability).font(EyeStyle.body).foregroundStyle(EyeStyle.secondary)
-            }
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("关闭") { dismiss() } } }
-        }
+        .fullScreenCover(isPresented: $bookingOpen) { OfflineSessionCover(session: .booking, prefillDryEye: true) }
     }
 }

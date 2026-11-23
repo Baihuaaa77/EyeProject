@@ -1,4 +1,4 @@
-// 单次会话只接收页面标识及语音偏好，不接收成员标识或测量记录。
+// 单次会话通过固定入口加载。挂号只额外接收本机显示名和预填的症状类别。
 const host = document.querySelector('#session');
 const params = new URLSearchParams(location.hash.slice(1));
 if (params.get('platform') === 'android') host.dataset.platform = 'android';
@@ -53,19 +53,15 @@ const pages = {
   post: () => openGame(createPostGame(host, close, save)),
   rest: () => { EyeRest.mount(host, close); return null; },
   booking: () => {
-    for (let i = 1; i <= 9; i++) {
-      const audio = document.createElement('audio');
-      audio.dataset.bookingPrompt = i;
-      audio.preload = 'none';
-      audio.src = 'booking-audio/' + String(i).padStart(2, '0') + '.wav';
-      document.body.append(audio);
-    }
     const game = createBooking(host, {
       escape: value => String(value ?? '').replace(/[&<>"']/g, char =>
         ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[char])),
-      done: close,
-      preferences: {voiceAssist: params.get('voice') === '1', sound: true, speechVolume: 65}
+      action: name => { location.href = 'eye-session://'+name; },
+      preferences: {voiceAssist: params.get('voice') === '1'},
+      provider: window.BookingProvider,
+      prefillDryEye: params.get('chief') === 'surface'
     });
+    window.bookingPage = game;
     game.mount();
     return game;
   }

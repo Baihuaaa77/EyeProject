@@ -20,6 +20,7 @@ data class HomeUiState(
     val adviceRequest: AdviceRequest? = null,
     val screenBrightness: Float? = null,
     val ambientLux: Float? = null,
+    val bookingPatientNames: List<String> = emptyList(),
 )
 
 sealed interface HomePermissionEvent {

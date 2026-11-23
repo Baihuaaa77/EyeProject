@@ -133,14 +133,9 @@ object Chats {
 }
 
 
-/** 干眼问诊后的就医演示。地区、医生与门诊为预设示例。 */
+/** 干眼问诊演示与进入智能挂号的判定。 */
 object DryEyeBookingPreview {
-    val title = "挂号预览"
-    val doctor = "曾庆延 · 主任医师"
-    val clinic = "湖北 · 武汉爱尔眼科医院汉口医院"
-    val specialty = "角膜及眼表 · 干眼诊疗"
-    val availability = "当前为挂号演示，暂无可查询号源。"
-    val action = "查看干眼门诊挂号预览"
+    val action = "继续智能挂号"
     val demoTitle = "干眼问诊演示"
     val demoIntro = "示例情景：在湖北武汉，最近眼睛常有干涩。"
     val durationQuestion = "干涩持续多久了？"

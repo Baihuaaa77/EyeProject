@@ -218,7 +218,8 @@ internal fun BrownHomeOverview(
         }
         Spacer(Modifier.height(24.dp))
     }
-    if (booking) EyeOfflineSessionPage(EyeOfflineSession.BOOKING, { booking = false })
+    if (booking) EyeOfflineSessionPage(EyeOfflineSession.BOOKING, { booking = false },
+        bookingPatientNames = state.bookingPatientNames)
     if (exercise) EyeExercisePage({ exercise = false })
     if (feeling)
         FeelingDialog(
