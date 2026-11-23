@@ -361,7 +361,7 @@ struct SwitchRow: View {
                     }
                     if let subtitle { Text(subtitle).font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary) }
                 }.frame(maxWidth: .infinity, alignment: .leading)
-                Toggle("", isOn: Binding(get: { isOn }, set: { EyeHaptics.toggle(); isOn = $0 }))
+                Toggle(title, isOn: Binding(get: { isOn }, set: { EyeHaptics.toggle(); isOn = $0 }))
                     .labelsHidden().tint(EyeStyle.primary).disabled(!enabled)
             }
             .padding(.horizontal, 16).padding(.vertical, 6).frame(minHeight: 56)

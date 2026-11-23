@@ -110,7 +110,8 @@ struct EyeTestView: View {
             .fullScreenCover(isPresented: $settingsOpen) {
                 NavigationStack {
                     SystemSettingsPage(voice: runtime.voice, feedback: runtime.feedback, inTest: true,
-                        testVoiceAnswers: runtime.kind == "PRESBYOPIA" ? $runtime.voiceAnswersForThisTest : nil)
+                        testVoiceAnswers: runtime.kind == "PRESBYOPIA" ? $runtime.voiceAnswersForThisTest : nil,
+                        showGestureAnswers: ["DRY_EYE", "PRESBYOPIA"].contains(runtime.kind))
                 }.tint(EyeStyle.primary)
             }
             .sheet(isPresented: $diagnosticsOpen) { StrabismusDiagnosticLibrary() }
@@ -120,6 +121,7 @@ struct EyeTestView: View {
                 }
             }
             .onChange(of: settingsOpen) { runtime.setSettingsPresented($0) }
+            .onChange(of: confirmingExit) { runtime.setExitConfirmationPresented($0) }
             .onAppear {
 #if SCREENSHOT_CAPTURE
                 guard !captureOnly else { return }

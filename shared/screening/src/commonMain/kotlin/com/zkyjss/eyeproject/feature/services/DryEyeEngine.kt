@@ -36,7 +36,10 @@ class DryEyeEngine(platform: ScreeningPlatform, private val scope: CoroutineScop
     private var testJob: Job? = null
     private var cameraAttached = false
     private var watchdog: Job? = null
-    private var pendingAnswer: CompletableDeferred<Pair<Int, Boolean>>? = null
+    private data class TrialAnswer(val direction: Int, val byVoice: Boolean, val byGesture: Boolean)
+    private var pendingAnswer: CompletableDeferred<TrialAnswer>? = null
+    private val gestureGate = GestureAnswerGate()
+    private var gesturePresentedAt: Long? = null
     private val voiceGuard = VoiceRepeatGuard()
     private var nextTrialId = 0
     private var staircase = DryEyeStaircase()
@@ -160,14 +163,30 @@ class DryEyeEngine(platform: ScreeningPlatform, private val scope: CoroutineScop
 
     /** 界面完成 [trialId] 题的首帧绘制后回报（安卓两次 withFrameNanos、苹果两次 CADisplayLink）；旧题号与重复回报忽略。 */
     fun markTrialPresented(trialId: Int, timestampMs: Long) {
-        pendingPresentation?.takeIf { it.first == trialId }?.second?.complete(helpSession.presentationTime(timestampMs))
+        val pending = pendingPresentation?.takeIf { it.first == trialId }?.second ?: return
+        if (pending.isActive && _uiState.value.trialVisible) {
+            gesturePresentedAt = timestampMs
+            pending.complete(helpSession.presentationTime(timestampMs))
+        }
     }
 
     /** 回答当前视标；只接受每题第一次作答。[direction] 为 -1 表示「看不清」（记为错误）。 */
-    fun answer(direction: Int, byVoice: Boolean = false) {
+    fun answer(direction: Int, byVoice: Boolean = false) = submitAnswer(direction, byVoice, byGesture = false)
+
+    fun resetGestureAnswers() = gestureGate.reset()
+
+    fun gestureSample(direction: Int, capturedAt: Long, now: Long) {
+        val s = _uiState.value
+        if (helpSession.paused || s.paused) return
+        val presentedAt = gesturePresentedAt.takeIf { s.trialVisible && pendingAnswer?.isActive == true }
+        val answer = gestureGate.offer(direction, capturedAt, now, s.trialId, presentedAt) ?: return
+        submitAnswer(answer, byVoice = false, byGesture = true)
+    }
+
+    private fun submitAnswer(direction: Int, byVoice: Boolean, byGesture: Boolean) {
         if (helpSession.paused) return
         if (byVoice && !voiceGuard.accept(platform.nowMs())) return
-        if (pendingAnswer?.takeIf { it.isActive }?.complete(direction to byVoice) == true)
+        if (pendingAnswer?.takeIf { it.isActive }?.complete(TrialAnswer(direction, byVoice, byGesture)) == true)
             platform.feedback(ScreeningFeedbackCue.ANSWER)
     }
 
@@ -401,7 +420,8 @@ class DryEyeEngine(platform: ScreeningPlatform, private val scope: CoroutineScop
             val level = staircase.level
             val spec = OptotypeGeometry.calculate(platform.display, level, distance)
             val direction = Random.nextInt(4)
-            val deferred = CompletableDeferred<Pair<Int, Boolean>>()
+            val deferred = CompletableDeferred<TrialAnswer>()
+            gesturePresentedAt = null
             pendingAnswer = deferred
             val id = ++nextTrialId
             val presented = CompletableDeferred<Long>()
@@ -419,8 +439,8 @@ class DryEyeEngine(platform: ScreeningPlatform, private val scope: CoroutineScop
             pendingPresentation = null
             val rt = if (answer != null) platform.nowMs() - onset else null
             val onsetSec = activeSec(onset)
-            val trial = DryEyeTrial(stage, onsetSec, level, direction, answer?.first, rt, distance, spec.sizePx, answer?.second == true,
-                presentDelayMs = presentedAt?.let { (it - requestedAt).coerceAtLeast(0L) })
+            val trial = DryEyeTrial(stage, onsetSec, level, direction, answer?.direction, rt, distance, spec.sizePx, answer?.byVoice == true,
+                presentDelayMs = presentedAt?.let { (it - requestedAt).coerceAtLeast(0L) }, byGesture = answer?.byGesture == true)
             out += trial
             staircase.record(trial.correct, maxIndex)
             _uiState.update { it.copy(trialVisible = false, lastAnswerCorrect = trial.correct) }
@@ -607,7 +627,7 @@ class DryEyeEngine(platform: ScreeningPlatform, private val scope: CoroutineScop
                             put("decimal", t.level.toDouble()); put("direction", t.direction)
                             put("answer", t.answer ?: RecordObject.NULL); put("correct", t.correct)
                             put("rtMs", t.rtMs ?: RecordObject.NULL); put("distanceCm", t.distanceCm.toDouble())
-                            put("optotypePx", t.optotypePx.toDouble()); put("byVoice", t.byVoice)
+                            put("optotypePx", t.optotypePx.toDouble()); put("byVoice", t.byVoice); put("byGesture", t.byGesture)
                             put("presentDelayMs", t.presentDelayMs ?: RecordObject.NULL)
                         }) }
                     })

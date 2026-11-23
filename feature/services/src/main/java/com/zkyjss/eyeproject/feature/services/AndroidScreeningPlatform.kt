@@ -16,6 +16,7 @@ import java.io.File
 import androidx.lifecycle.LifecycleOwner
 import com.zkyjss.eyeproject.core.camera.CameraController
 import com.zkyjss.eyeproject.core.camera.CameraIntrinsicsProvider
+import com.zkyjss.eyeproject.core.camera.HandGestureAnalyzer
 import com.zkyjss.eyeproject.core.data.record.ScreeningRecordRepository
 import com.zkyjss.eyeproject.core.model.FaceLandmarkFrame
 import kotlinx.coroutines.Dispatchers
@@ -41,6 +42,24 @@ internal class AndroidScreeningPlatform(
     private val diagnosticImages: (Bitmap,Long) -> Unit = { bitmap,time -> diagnosticRecorder.capture(bitmap,time) }
     override fun diagnosticEvent(json: String) { diagnosticRecorder.event(json) }
     private val sensors = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
+    private var gestureAnalyzer: HandGestureAnalyzer? = null
+    private var gestureImages: ((Bitmap, Long) -> Unit)? = null
+
+    fun startGestureAnswers(onSample: (Int, Long) -> Unit) {
+        stopGestureAnswers()
+        val analyzer = HandGestureAnalyzer(context, onSample)
+        gestureAnalyzer = analyzer
+        gestureImages = analyzer::offer
+        camera.addImageObserver(checkNotNull(gestureImages))
+    }
+
+    fun stopGestureAnswers() {
+        gestureImages?.let(camera::removeImageObserver)
+        gestureImages = null
+        gestureAnalyzer?.close()
+        gestureAnalyzer = null
+    }
+
     private var generation: Int? = null
     private var frameObserver: ((FaceLandmarkFrame) -> Unit)? = null
     private var errorObserver: ((Throwable) -> Unit)? = null
@@ -60,6 +79,7 @@ internal class AndroidScreeningPlatform(
         if (!camera.isRequested || opticalPrecision) generation = camera.start(lifecycleOwner, previewView = null, onFrame = {}, onError = {}, opticalPrecision = opticalPrecision)
     }
     override fun stopCamera() {
+        stopGestureAnswers()
         frameObserver?.let(camera::removeFrameObserver)
         errorObserver?.let(camera::removeErrorObserver)
         generation?.let(camera::stopIfGeneration)

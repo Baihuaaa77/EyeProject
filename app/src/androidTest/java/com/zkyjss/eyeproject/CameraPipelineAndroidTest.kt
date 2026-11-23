@@ -1,6 +1,8 @@
 package com.zkyjss.eyeproject
 
 import android.Manifest
+import android.graphics.Bitmap
+import android.os.SystemClock
 import android.net.LocalSocket
 import android.net.LocalSocketAddress
 import androidx.lifecycle.Lifecycle
@@ -11,6 +13,8 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.zkyjss.eyeproject.core.camera.CameraController
 import com.zkyjss.eyeproject.core.camera.CameraIntrinsicsProvider
 import com.zkyjss.eyeproject.core.camera.DebugCameraFeed
+import com.zkyjss.eyeproject.core.camera.HandGestureAnalyzer
+import com.zkyjss.eyeproject.core.camera.HandPointing
 import java.io.DataOutputStream
 import kotlin.math.tan
 import org.junit.Assert.assertTrue
@@ -58,6 +62,26 @@ class CameraPipelineAndroidTest {
                 provider.focalLengthPx(1280, 720), 0.5f)
             assertEquals("4:3 画面应按裁切后的约 51° 估算", expected(640, CameraIntrinsicsProvider.HOST_HFOV_4_3_DEG),
                 provider.focalLengthPx(640, 480), 0.5f)
+        }
+    }
+
+    @Test
+    fun packagedHandModelRunsOnTheCameraBitmapFormat() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val completed = CountDownLatch(1)
+        val direction = AtomicReference<Int>()
+        val bitmap = Bitmap.createBitmap(480, 640, Bitmap.Config.ARGB_8888)
+        try {
+            HandGestureAnalyzer(context) { result, _ ->
+                direction.set(result)
+                completed.countDown()
+            }.use { analyzer ->
+                analyzer.offer(bitmap, SystemClock.elapsedRealtime())
+                assertTrue("手部模型没有返回分析结果", completed.await(20, TimeUnit.SECONDS))
+                assertEquals(HandPointing.NEUTRAL, direction.get())
+            }
+        } finally {
+            bitmap.recycle()
         }
     }
 

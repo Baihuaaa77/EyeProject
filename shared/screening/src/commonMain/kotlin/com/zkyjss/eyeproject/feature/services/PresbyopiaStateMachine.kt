@@ -152,13 +152,13 @@ internal class PresbyopiaStateMachine(private val host: ScreeningEngine) {
         }
     }
 
-    fun markTrialPresented(trialId: Int, timestampMs: Long) {
-        with(host) {
-            if (_state.value.trialVisible && _state.value.trialId == trialId && questionStartMs == 0L) questionStartMs = timestampMs
-        }
+    fun markTrialPresented(trialId: Int, timestampMs: Long): Boolean = with(host) {
+        if (!_state.value.trialVisible || _state.value.trialId != trialId || questionStartMs != 0L) return false
+        questionStartMs = timestampMs
+        true
     }
 
-    fun answer(direction: Int, byVoice: Boolean = false) {
+    fun answer(direction: Int, byVoice: Boolean = false, byGesture: Boolean = false) {
         with(host) {
             val s = _state.value
             if (helpSession.paused || !s.trialVisible || questionStartMs == 0L ||
@@ -184,7 +184,7 @@ internal class PresbyopiaStateMachine(private val host: ScreeningEngine) {
                 direction == s.direction, latency, s.trialOptotypePx, s.visionEye, questionStartMs,
                 s.trialMovementMs, if (s.step == ScreeningStep.FLIPPER) latency else null,
                 s.trialDistanceSpreadCm, answerDistance ?: s.trialDistanceCm,
-                targetCm = if (s.step == ScreeningStep.DISTANCE_CURVE) target else null, byVoice = byVoice)
+                targetCm = if (s.step == ScreeningStep.DISTANCE_CURVE) target else null, byVoice = byVoice, byGesture = byGesture)
             val answers = s.answers + answer
             platform.feedback(ScreeningFeedbackCue.ANSWER)
             questionStartMs = 0L

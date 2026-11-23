@@ -64,6 +64,7 @@ data class VisionAnswer(
     val targetCm: Float? = null,
     /** true 表示语音作答（反应时包含语音识别延迟）。 */
     val byVoice: Boolean = false,
+    val byGesture: Boolean = false,
 )
 /** 一次移近法测量：确认持续模糊时的距离与当时的移动速度（cm/秒，靠近为正）。 */
 data class NearPoint(

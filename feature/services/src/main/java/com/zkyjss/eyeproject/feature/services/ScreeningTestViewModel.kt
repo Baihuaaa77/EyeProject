@@ -32,6 +32,13 @@ class ScreeningTestViewModel @Inject constructor(
     private val platform = AndroidScreeningPlatform(context, camera, intrinsics, records)
     val engine = ScreeningEngine(platform, viewModelScope)
     val state get() = engine.state
+    internal fun startGestureAnswers() {
+        engine.resetGestureAnswers()
+        platform.startGestureAnswers { direction, capturedAt ->
+            engine.gestureSample(direction, capturedAt, platform.nowMs())
+        }
+    }
+    internal fun stopGestureAnswers() = platform.stopGestureAnswers()
     fun setHelpPresented(presented: Boolean) = engine.setHelpPresented(presented)
     fun feedbackCues(enabled: Boolean) = platform.feedbackSession.poll(screeningFeedbackFrame(state.value, engine.coverRemainingMs()), platform.nowMs(), enabled)
     fun configure(kind: ScreeningKind) { platform.opticalPrecision = kind == ScreeningKind.STRABISMUS; engine.configure(kind) }

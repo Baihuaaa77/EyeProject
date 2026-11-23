@@ -110,6 +110,11 @@ final class EyeCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
     private let queue = DispatchQueue(label: "eye.camera.analysis", autoreleaseFrequency: .workItem)
     private let session = AVCaptureSession()
     private var detector: FaceLandmarker?
+    private var handAnalyzer: HandGestureAnalyzer?
+
+    func setHandAnalyzer(_ analyzer: HandGestureAnalyzer?) {
+        queue.async { self.handAnalyzer = analyzer }
+    }
     private var device: AVCaptureDevice?
     private var lastTime: Int64 = 0
     private var active = false
@@ -306,6 +311,7 @@ final class EyeCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
             recordStats(analyzed: false, now: time); return
         }
         lastTime = time
+        handAnalyzer?.offer(buffer, time: time)
         let started = DispatchTime.now().uptimeNanoseconds
         do {
             // 归一化关键点不依赖推理图大小；保留相机原像素给光学检测。

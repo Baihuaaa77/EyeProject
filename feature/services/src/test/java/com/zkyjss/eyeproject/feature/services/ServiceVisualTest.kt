@@ -314,7 +314,7 @@ class ServiceVisualTest {
         capture("session-pursuit")
     }
 
-    @Test fun voiceSettingsAreInTheGearMenuAndPersistAcrossTests() {
+    @Test fun answerAndFeedbackSettingsAreInTheGearMenuAndPersistAcrossTests() {
         val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
         val preferences = context.getSharedPreferences("screening_settings_test", android.content.Context.MODE_PRIVATE)
         preferences.edit().clear().commit()
@@ -324,7 +324,7 @@ class ServiceVisualTest {
         compose.setContent {
             EyeProjectTheme {
                 TestSessionLayout("老视自测", {}, { open = true }, true) { OptotypeAnswerPad(0, 40.dp, true) {} }
-                if (open) TestSettingsPage(settings, voice, { open = false })
+                if (open) TestSettingsPage(settings, voice, { open = false }, showGestureAnswers = true)
             }
         }
         compose.onNodeWithText("语音播报").assertDoesNotExist()
@@ -340,12 +340,14 @@ class ServiceVisualTest {
         compose.onNodeWithText("试听 / 试一下").performClick()
         assertEquals(android.os.VibrationEffect.EFFECT_CLICK,vibration.effectId)
         compose.onAllNodesWithText("完成").onLast().performClick()
-        listOf("音效反馈","震动反馈","语音辅助").forEach { name ->
+        compose.onNodeWithText("手势作答").assertIsOn()
+        listOf("音效反馈","震动反馈","语音辅助","手势作答").forEach { name ->
             compose.onNodeWithText(name).performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) { it() }
         }
         val restored = TestSettings(preferences)
         assertEquals(false,restored.soundEnabled); assertEquals(false,restored.hapticsEnabled)
         assertEquals(false,restored.speechEnabled); assertEquals(false,restored.answersEnabled)
+        assertEquals(false, restored.gestureAnswersEnabled)
         capture("test-settings")
         compose.onNodeWithText("完成").performClick()
         compose.onNodeWithText("语音辅助").assertDoesNotExist()
@@ -357,7 +359,11 @@ class ServiceVisualTest {
         compose.onNodeWithText("关于").assertExists()
         compose.onNodeWithText("眼健康助手").assertExists()
         compose.onNodeWithText("版本").assertExists()
+        val gestureSwitch = compose.onNodeWithText("手势作答").assertIsOn()
         capture("21-系统设置")
+        gestureSwitch.performScrollTo().performClick().assertIsOff()
+        val preferences = compose.activity.getSharedPreferences("screening_settings", android.content.Context.MODE_PRIVATE)
+        assertEquals(false, TestSettings(preferences).gestureAnswersEnabled)
     }
 
     /** 测前快问：选好人后只问这几天的情况（干眼两三题），答完才能开始；答案原样交给引擎。 */

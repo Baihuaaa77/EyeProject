@@ -102,6 +102,7 @@ data class DryEyeTrial(
      * 此时反应时与 2 秒时限从发出时刻起算。仅说明计时起点，不是屏幕发光时刻的硬件测量。
      */
     val presentDelayMs: Long? = null,
+    val byGesture: Boolean = false,
 ) {
     val correct: Boolean get() = answer == direction
     val timeout: Boolean get() = answer == null

@@ -63,6 +63,38 @@ class DryEyeTimingTest {
         engine.close()
     }
 
+    @Test fun gestureAnswersTheRenderedPracticeQuestionOnlyOnce() = runTest {
+        val platform = Platform { 1_000 + testScheduler.currentTime }
+        val engine = DryEyeEngine(platform, backgroundScope)
+        engine.skipProfile(); engine.startMonitoring()
+        backgroundScope.launch { while (true) { platform.onFrame?.invoke(frame(platform.nowMs())); delay(33) } }
+        advanceTimeBy(1_500); runCurrent()
+        engine.startTest(); engine.confirmPracticeGuide(); runCurrent()
+        val first = engine.uiState.value
+        assertTrue(first.trialVisible)
+
+        fun sample(direction: Int) {
+            val now = platform.nowMs()
+            engine.gestureSample(direction, now, now)
+            advanceTimeBy(90); runCurrent()
+        }
+        repeat(3) { sample(-1) }
+        repeat(3) { sample(first.direction) }
+        assertTrue(engine.uiState.value.trialVisible, "界面尚未回报呈现")
+        engine.markTrialPresented(first.trialId, platform.nowMs()); runCurrent()
+        repeat(3) { sample(first.direction) }
+        assertEquals(true, engine.uiState.value.lastAnswerCorrect)
+        assertFalse(engine.uiState.value.trialVisible)
+        repeat(8) {
+            val s = engine.uiState.value
+            if (s.trialVisible) engine.markTrialPresented(s.trialId, platform.nowMs())
+            sample(first.direction)
+        }
+        assertEquals(first.trialId + 1, engine.uiState.value.trialId)
+        assertTrue(engine.uiState.value.trialVisible, "持续举手不能自动回答下一题")
+        engine.close()
+    }
+
     @Test fun reviewingHelpFreezesTheCurrentQuestionAndSampling() = runTest {
         val platform = Platform { 1_000 + testScheduler.currentTime }
         val engine = DryEyeEngine(platform, backgroundScope)

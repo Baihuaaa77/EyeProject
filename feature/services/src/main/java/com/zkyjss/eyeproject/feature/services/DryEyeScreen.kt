@@ -112,6 +112,7 @@ fun DryEyeScreen(
     LaunchedEffect(settings.speechVolume, settings.speechRate) { voice.configure(settings.speechVolume, settings.speechRate) }
     val voiceEnabled = settings.speechEnabled
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
+    var exitConfirmationOpen by rememberSaveable { mutableStateOf(false) }
     var helpOpen by rememberSaveable { mutableStateOf(false) }
     // 点击时立即暂停，避免弹窗首次绘制前继续消耗题目时限。
     val openHelp = { viewModel.setHelpPresented(true); helpOpen = true }
@@ -143,6 +144,12 @@ fun DryEyeScreen(
     // 与共用反馈门控一致：倒计时期间同样要求固定距离，光边和语音不能缺席。
     val distanceMatters = state.phase in setOf(DryEyePhase.Setup, DryEyePhase.FormalGuide, DryEyePhase.Countdown,
         DryEyePhase.Practice, DryEyePhase.Natural, DryEyePhase.Open)
+    val gestureActive = settings.gestureAnswersEnabled && !settingsOpen && !helpOpen && !exitConfirmationOpen && !state.paused &&
+        state.phase in setOf(DryEyePhase.Practice, DryEyePhase.Natural, DryEyePhase.Open)
+    DisposableEffect(viewModel, gestureActive) {
+        if (gestureActive) viewModel.startGestureAnswers()
+        onDispose { if (gestureActive) viewModel.stopGestureAnswers() }
+    }
     val voiceAnswer = rememberVoiceAnswer(
         active = !settingsOpen && !helpOpen && state.phase in setOf(DryEyePhase.Practice, DryEyePhase.Natural, DryEyePhase.Open),
         voice = voice,
@@ -190,6 +197,7 @@ fun DryEyeScreen(
     val running = state.phase in setOf(DryEyePhase.Practice, DryEyePhase.Countdown, DryEyePhase.Natural, DryEyePhase.OpenCue, DryEyePhase.Open, DryEyePhase.Rest)
     Box(modifier.fillMaxSize()) {
         TestSessionLayout("干眼自测", onBack, { settingsOpen = true }, running, onHelp = openHelp.takeUnless { state.phase == DryEyePhase.Profile || state.phase == DryEyePhase.Result }, progress = dryEyeProgress(state),
+            onExitPromptChanged = { exitConfirmationOpen = it },
             confirmExit = state.phase !in setOf(DryEyePhase.Profile, DryEyePhase.Setup, DryEyePhase.Result),
             status = {
                 if (running && state.phase != DryEyePhase.Rest) DistanceBanner(distance, compact = true)
@@ -239,6 +247,7 @@ fun DryEyeScreen(
     }
     if (settingsOpen) TestSettingsPage(settings, voiceAnswer, { settingsOpen = false },
         speechAvailable = voice.available,
+        showGestureAnswers = true,
         onStop = if (running) { { viewModel.backToSetup("已停止，本次结果不计入") } } else null,
     ) {
         EyeDisclosure("测量详情") {

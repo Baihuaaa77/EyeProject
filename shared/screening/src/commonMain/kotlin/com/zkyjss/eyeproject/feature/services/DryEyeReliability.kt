@@ -15,6 +15,7 @@ internal object DryEyeReliability {
         val openBlinks = session.blinks.count { it >= session.naturalSeconds && it < session.naturalSeconds + DryEyeProtocol.OPEN_SECONDS }
         if (openBlinks > 0) add("持续睁眼阶段记录到 $openBlinks 次眨眼；眨眼会打断持续睁眼，应结合最长睁眼时间解读。")
         if (session.trials.any { it.byVoice }) add("本次包含语音作答，反应时间也包含语音识别延迟。")
+        if (session.trials.any { it.byGesture }) add("本次包含手势作答，反应时间也包含手势识别与确认延迟。")
         add("距离为前摄估计值；距离波动和环境光等明细用于解释采集条件，不单独作为干眼结论。")
     }.distinct()
 

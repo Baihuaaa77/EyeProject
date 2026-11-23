@@ -36,6 +36,35 @@ class SharedParityTest {
         // 8 题全对：50→25→50 完整循环 3 个
         assertEquals(3.0,result.features["flipper_cycles_per_min"])
     }
+    @Test fun presbyopiaGestureHonorsDistanceAndRecordsAnswerSource() = runTest {
+        var now = 1_000L
+        val platform = TestPlatform { now }
+        val engine = ScreeningEngine(platform, backgroundScope)
+        engine.configure(ScreeningKind.PRESBYOPIA)
+        val distance = PresbyopiaProtocol.CURVE_DISTANCES.first()
+        engine._state.value = engine.state.value.copy(step = ScreeningStep.DISTANCE_CURVE,
+            direction = 2, trialVisible = true, trialId = 1, trialDistanceCm = distance)
+        engine.markTrialPresented(1, now)
+
+        fun sample(direction: Int) {
+            now += 90
+            engine.gestureSample(direction, now, now)
+        }
+        repeat(3) { sample(-1) }
+        repeat(3) { sample(2) }
+        assertTrue(engine.state.value.answers.isEmpty(), "没有有效距离，不提交作答")
+
+        engine.distanceTracker.add(now, distance)
+        repeat(3) { sample(-1) }
+        repeat(3) { sample(2) }
+        val answer = engine.state.value.answers.single()
+        assertTrue(answer.correct)
+        assertTrue(answer.byGesture)
+        assertFalse(answer.byVoice)
+        assertFalse(engine.state.value.trialVisible)
+        engine.close()
+    }
+
     @Test fun missingMeasurementsNeverBecomeNormal() {
         assertEquals(ScreeningRiskLevel.UNKNOWN,ScreeningAssessmentModel.presbyopia(ScreeningState()).riskLevel)
         assertEquals(ScreeningRiskLevel.UNCERTAIN,ScreeningAssessmentModel.strabismus(ScreeningState(),emptyList(),0,0).riskLevel)

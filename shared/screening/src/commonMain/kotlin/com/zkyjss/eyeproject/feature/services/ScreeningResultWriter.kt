@@ -114,7 +114,7 @@ internal class ScreeningResultWriter(private val host: ScreeningEngine) {
                             put("movementMs", a.movementMs ?: RecordObject.NULL)
                             put("clarityMs", a.clarityMs ?: RecordObject.NULL)
                             put("distanceSpreadCm", a.distanceSpreadCm.toDouble())
-                            put("answerDistanceCm", a.answerDistanceCm.toDouble()); put("byVoice", a.byVoice)
+                            put("answerDistanceCm", a.answerDistanceCm.toDouble()); put("byVoice", a.byVoice); put("byGesture", a.byGesture)
                         }) } })
                         put("nearPoints", RecordArray().apply { s.nearPoints.forEach { p -> put(RecordObject().apply {
                             put("distanceCm", p.distanceCm.toDouble())

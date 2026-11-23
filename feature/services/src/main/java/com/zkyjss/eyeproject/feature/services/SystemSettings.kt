@@ -60,7 +60,7 @@ fun SystemSettingsScreen(onBack: () -> Unit, onOpenAccount: () -> Unit = {}, onO
         }.getOrNull().orEmpty()
     }
     EyeSubPage("系统设置", onBack) {
-        TestSettingsContent(settings, voiceAnswer)
+        TestSettingsContent(settings, voiceAnswer, showGestureAnswers = true)
         EyeListGroup(title = "通用") {
             EyeListRow("账户管理",onOpenAccount)
             EyeListRow("权限与通知",onOpenPermissions)
@@ -79,6 +79,7 @@ internal fun TestSettingsPage(
     onDismiss: () -> Unit,
     speechAvailable: Boolean? = null,
     onStop: (() -> Unit)? = null,
+    showGestureAnswers: Boolean = false,
     details: @Composable ColumnScope.() -> Unit = {},
 ) {
     EyeFullScreenPage(onDismiss) {
@@ -86,15 +87,20 @@ internal fun TestSettingsPage(
             onStop?.let { stop -> EyeButton("停止测试", EyeButtonRole.SECONDARY, { onDismiss(); stop() }, Modifier.fillMaxWidth()) }
             EyeButton("完成", EyeButtonRole.PRIMARY, onDismiss, Modifier.fillMaxWidth())
         }) {
-            TestSettingsContent(settings, voice, speechAvailable)
+            TestSettingsContent(settings, voice, speechAvailable, showGestureAnswers)
             details()
         }
     }
 }
 
-/** 设置分组：反馈、语音播报、语音作答。 */
+/** 反馈、语音和作答方式由应用与测试内的设置共用。 */
 @Composable
-internal fun TestSettingsContent(settings: TestSettings, voice: VoiceAnswerState, speechAvailable: Boolean? = null) {
+internal fun TestSettingsContent(
+    settings: TestSettings,
+    voice: VoiceAnswerState,
+    speechAvailable: Boolean? = null,
+    showGestureAnswers: Boolean,
+) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
     val haptics = rememberEyeHaptics()
@@ -114,6 +120,12 @@ internal fun TestSettingsContent(settings: TestSettings, voice: VoiceAnswerState
     EyeListGroup(title = "语音") {
         EyeSwitchRow("语音辅助",settings.speechEnabled || settings.answersEnabled,{ settings.setSpeech(it); settings.setAnswers(it) },subtitle = "播报与作答")
         if (settings.speechEnabled || settings.answersEnabled) EyeListRow("声音与语速",{ editor = "声音与语速" },divider = false)
+    }
+    if (showGestureAnswers) {
+        EyeListGroup(title = "作答方式") {
+            EyeSwitchRow("手势作答", settings.gestureAnswersEnabled, settings::setGestureAnswers,
+                subtitle = "在脸旁伸出食指，指向 E 的开口，作答后放下手")
+        }
     }
     editor?.let { title ->
         androidx.compose.ui.window.Dialog(onDismissRequest = { editor = null }) {

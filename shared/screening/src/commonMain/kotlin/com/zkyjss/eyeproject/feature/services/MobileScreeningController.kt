@@ -149,6 +149,16 @@ class MobileScreeningController(
             "retryCamera" -> if (kind == "DRY_EYE") { dry.stopMonitoring(); dry.startMonitoring() } else screening.retryCamera()
         }
     }
+    fun resetGestureAnswers() {
+        if (kind == "DRY_EYE") dry.resetGestureAnswers() else screening.resetGestureAnswers()
+    }
+
+    fun gestureSample(direction: Int, capturedAt: Long) {
+        val now = platform.nowMs()
+        if (kind == "DRY_EYE") dry.gestureSample(direction, capturedAt, now)
+        else screening.gestureSample(direction, capturedAt, now)
+    }
+
     fun answer(direction: Int,byVoice: Boolean) {
         if (kind == "DRY_EYE") dry.answer(direction,byVoice) else screening.answer(direction,byVoice)
     }
@@ -294,7 +304,9 @@ class MobileScreeningController(
                 put("risk",s.report?.riskLevel?.name); put("findings",RecordArray(s.report?.indicators.orEmpty() + s.report?.abnormal.orEmpty()))
                 put("advice",s.report?.advice)
                 // 干眼视标每 2 秒一题：整个作答阶段持续收听，只在视标显示时开关会来不及启动识别
-                put("voiceActive",s.phase in setOf(DryEyePhase.Practice, DryEyePhase.Natural, DryEyePhase.Open))
+                val directionTask = s.phase in setOf(DryEyePhase.Practice, DryEyePhase.Natural, DryEyePhase.Open)
+                put("voiceActive",directionTask)
+                put("gestureActive",directionTask && !s.paused)
                 put("naturalSeconds",s.naturalSeconds); put("afterRest",s.afterRest); put("canExtend",s.canExtend); put("canRest",s.canRestRetest); put("progress",s.progressFraction)
                 dryEyeProgress(s).let { p -> put("overallProgress",p?.fraction); put("remainingText",p?.remainingText) }
                 ResultReports.dryEye(s)?.let { put("report",it.toRecordObject()) }
@@ -303,6 +315,8 @@ class MobileScreeningController(
             val s = screening.state.value
             result.apply {
                 put("phase",s.step.name); put("title",if (s.kind == ScreeningKind.PRESBYOPIA) "老视自测" else "眼位自测")
+                put("gestureActive",s.kind == ScreeningKind.PRESBYOPIA && !s.guidePending && s.step.acceptsGestureDirection() &&
+                    !s.nearAwaitingEyeReady && !s.stabilityInterrupted)
                 put("instruction",s.instruction); put("stepTitle",stepTitle(s.step)); put("guidePending",s.guidePending)
                 put("subjectName",s.subject?.name); put("subjectId",s.subject?.id); put("mode",s.mode)
                 put("guideText",screeningGuideText(s)); put("glassesCheck",s.glassesCheckPending)

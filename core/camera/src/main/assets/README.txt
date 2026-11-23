@@ -12,3 +12,9 @@ https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/
 - 使用 float16 量化版，端侧 GPU/CPU 推理，无需运行时 Google 服务。
 - 若需要 int8 或 float32 版本，参见官方模型页：
   https://developers.google.com/edge/mediapipe/solutions/vision/face_landmarker#models
+
+MediaPipe Hand Landmarker 模型文件（安卓视标手势作答）
+=====================================================
+hand_landmarker.task，float16 第 1 版，应用打包时随附，只在本机分析前摄画面。
+官方来源：https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task
+SHA-256：fbc2a30080c3c557093b5ddfc334698132eb341044ccee322ccf8bcf3607cde1

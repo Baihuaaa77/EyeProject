@@ -1,6 +1,12 @@
 import SwiftUI
 import AVFoundation
 
+enum GestureAnswerPreference {
+    static let key = "eye.gestureAnswersEnabled"
+    static let defaultEnabled = true
+    static var isEnabled: Bool { UserDefaults.standard.object(forKey: key) as? Bool ?? defaultEnabled }
+}
+
 /// 「系统设置」完整页面（不用系统底部弹窗）：反馈、语音；从顶层页右上角齿轮进入时页面底部还有「关于」（应用图标、版本与免责声明）。
 /// 测试进行中以全屏呈现（[inTest]），右上角「完成」返回测试。与安卓 SystemSettingsScreen / TestSettingsPage 同一排版与文案。
 struct SystemSettingsPage: View {
@@ -8,9 +14,11 @@ struct SystemSettingsPage: View {
     @ObservedObject var feedback: EyeFeedback
     var inTest = false
     var testVoiceAnswers: Binding<Bool>? = nil
+    var showGestureAnswers = true
     var openAccount: () -> Void = {}
     var openPermissions: () -> Void = {}
     var openCloud: () -> Void = {}
+    @AppStorage(GestureAnswerPreference.key) private var gestureAnswersEnabled = GestureAnswerPreference.defaultEnabled
     @State private var editor: String?
     @Environment(\.dismiss) private var dismiss
     private let voices = EyeVoice.chineseVoices
@@ -38,10 +46,16 @@ struct SystemSettingsPage: View {
                     SwitchRow(title: "本次使用语音作答", isOn: Binding(
                         get: { voice.answersEnabled && testVoiceAnswers.wrappedValue },
                         set: { testVoiceAnswers.wrappedValue = $0 }
-                    ), subtitle: "默认点按作答")
+                    ))
                     .disabled(!voice.answersEnabled)
                 }
                 if voice.enabled || voice.answersEnabled { ListRow(title: "声音与语速",divider: false) { editor = "声音与语速" } }
+            }
+            if showGestureAnswers {
+                ListGroup(title: "作答方式") {
+                    SwitchRow(title: "手势作答", isOn: $gestureAnswersEnabled,
+                        subtitle: "在脸旁伸出食指，指向 E 的开口，作答后放下手")
+                }
             }
             if !inTest {
                 ListGroup(title: "通用") {

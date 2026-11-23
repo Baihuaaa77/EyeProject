@@ -150,6 +150,13 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, onEditSubje
     val distance = distanceTarget?.let { (target, tolerance) ->
         distanceStatus(s.distanceCm, faceVisible, target, tolerance, moving = s.distanceMoveToCm != null) }
     var voiceAnswersForThisTest by rememberSaveable { mutableStateOf(false) }
+    var exitConfirmationOpen by rememberSaveable { mutableStateOf(false) }
+    val gestureActive = settings.gestureAnswersEnabled && !settingsOpen && !helpOpen && !exitConfirmationOpen && kind == ScreeningKind.PRESBYOPIA &&
+        s.step.acceptsGestureDirection() && !s.guidePending && !s.nearAwaitingEyeReady && !s.stabilityInterrupted
+    DisposableEffect(viewModel, gestureActive) {
+        if (gestureActive) viewModel.startGestureAnswers()
+        onDispose { if (gestureActive) viewModel.stopGestureAnswers() }
+    }
     val voiceActive = voiceAnswersForThisTest && !s.guidePending && s.step in setOf(
         ScreeningStep.NEAR_VISION, ScreeningStep.FLIPPER, ScreeningStep.DISTANCE_CURVE, ScreeningStep.PUSH_UP)
     val voiceAnswer = rememberVoiceAnswer(voiceActive && !settingsOpen && !helpOpen, voice, settings.answersEnabled) { command ->
@@ -213,6 +220,7 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, onEditSubje
             title = if (kind == ScreeningKind.PRESBYOPIA) "老视自测" else "眼位自测",
             onBack = { viewModel.stopCamera(); onBack() }, onSettings = { settingsOpen = true },
             centered = activeTest, onHelp = openHelp.takeUnless { s.step == ScreeningStep.PROFILE || s.step == ScreeningStep.RESULT }, scroll = pageScroll, progress = screeningProgress(s),
+            onExitPromptChanged = { exitConfirmationOpen = it },
             confirmExit = s.step !in setOf(ScreeningStep.PROFILE, ScreeningStep.ENVIRONMENT, ScreeningStep.RESULT),
             // 斜视：距离条放到底部，注视目标紧贴顶栏下方
             statusAtBottom = kind == ScreeningKind.STRABISMUS,
@@ -255,11 +263,12 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, onEditSubje
         }
         distance?.let { DistanceEdgeGlow(it.zone) }
     }
-    if (settingsOpen) TestSettingsPage(settings, voiceAnswer, { settingsOpen = false }, speechAvailable = voice.available) {
+    if (settingsOpen) TestSettingsPage(settings, voiceAnswer, { settingsOpen = false }, speechAvailable = voice.available,
+        showGestureAnswers = kind == ScreeningKind.PRESBYOPIA) {
         if (kind == ScreeningKind.PRESBYOPIA) {
             com.zkyjss.eyeproject.core.ui.component.EyeSwitchRow("本次使用语音作答",
                 voiceAnswersForThisTest && settings.answersEnabled, { voiceAnswersForThisTest = it },
-                subtitle = "默认点按作答", enabled = settings.answersEnabled)
+                enabled = settings.answersEnabled)
         }
         EyeDisclosure("测量详情") {
             EyeText(s.trackingStatus, typography.bodySecondary, colors.textSecondary)

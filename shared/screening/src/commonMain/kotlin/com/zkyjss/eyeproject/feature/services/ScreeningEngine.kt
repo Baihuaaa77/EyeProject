@@ -27,6 +27,8 @@ class ScreeningEngine(platform: ScreeningPlatform, internal val scope: Coroutine
     internal val frames = Channel<Triple<Long, ScreeningStep, FaceLandmarkFrame>>(Channel.UNLIMITED)
     internal val samples = mutableListOf<EyeMotionSample>()
     internal val voiceGuard = VoiceRepeatGuard()
+    private val gestureGate = GestureAnswerGate()
+    private var gesturePresentedAt: Long? = null
     internal data class RenderedTarget(val timeMs: Long, val step: ScreeningStep, val point: GazePoint)
     internal val renderedTargets = ArrayDeque<RenderedTarget>()
     internal var gazeBadSinceMs: Long? = null
@@ -222,7 +224,21 @@ class ScreeningEngine(platform: ScreeningPlatform, internal val scope: Coroutine
     fun showTrial() = presbyopia.showTrial()
 
     /** Compose 完成首帧呈现后调用，避免把移动与渲染时间算进辨认反应。 */
-    fun markTrialPresented(trialId: Int, timestampMs: Long) = presbyopia.markTrialPresented(trialId, helpSession.presentationTime(timestampMs))
+    fun markTrialPresented(trialId: Int, timestampMs: Long) {
+        if (presbyopia.markTrialPresented(trialId, helpSession.presentationTime(timestampMs))) {
+            gesturePresentedAt = timestampMs
+        }
+    }
+
+    fun resetGestureAnswers() = gestureGate.reset()
+
+    fun gestureSample(direction: Int, capturedAt: Long, now: Long) {
+        val s = state.value
+        if (helpSession.paused || s.kind != ScreeningKind.PRESBYOPIA || !s.step.acceptsGestureDirection()) return
+        val presentedAt = gesturePresentedAt.takeIf { s.trialVisible && questionStartMs != 0L }
+        val answer = gestureGate.offer(direction, capturedAt, now, s.trialId, presentedAt) ?: return
+        presbyopia.answer(answer, byGesture = true)
+    }
 
     /** [direction] 为 -1 表示「看不清」，记为错误作答。 */
     fun answer(direction: Int, byVoice: Boolean = false) = presbyopia.answer(direction, byVoice)

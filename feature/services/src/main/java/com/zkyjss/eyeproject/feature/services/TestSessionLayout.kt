@@ -50,6 +50,8 @@ internal class TestSettings(private val preferences: SharedPreferences) {
         private set
     var answersEnabled by mutableStateOf(true)
         private set
+    var gestureAnswersEnabled by mutableStateOf(true)
+        private set
     var soundEnabled by mutableStateOf(true)
         private set
     var hapticsEnabled by mutableStateOf(true)
@@ -69,6 +71,7 @@ internal class TestSettings(private val preferences: SharedPreferences) {
     fun refresh() {
         speechEnabled = preferences.getBoolean("speech", true)
         answersEnabled = preferences.getBoolean("answers", true)
+        gestureAnswersEnabled = preferences.getBoolean("gestureAnswers", true)
         soundEnabled = preferences.getBoolean("sound", true)
         hapticsEnabled = preferences.getBoolean("haptics", true)
         hapticStrength = preferences.getFloat("hapticStrength", DEFAULT_HAPTIC_STRENGTH)
@@ -83,6 +86,10 @@ internal class TestSettings(private val preferences: SharedPreferences) {
     companion object { const val DEFAULT_HAPTIC_STRENGTH = 0.6f }
     fun setSpeech(enabled: Boolean) { speechEnabled = enabled; preferences.edit().putBoolean("speech", enabled).apply() }
     fun setAnswers(enabled: Boolean) { answersEnabled = enabled; preferences.edit().putBoolean("answers", enabled).apply() }
+    fun setGestureAnswers(enabled: Boolean) {
+        gestureAnswersEnabled = enabled
+        preferences.edit().putBoolean("gestureAnswers", enabled).apply()
+    }
     fun setSound(enabled: Boolean) { soundEnabled = enabled; preferences.edit().putBoolean("sound", enabled).apply() }
     fun setHaptics(enabled: Boolean) { hapticsEnabled = enabled; preferences.edit().putBoolean("haptics", enabled).apply() }
 }
@@ -120,15 +127,17 @@ internal fun TestSessionLayout(
     onHelp: (() -> Unit)? = null,
     status: @Composable () -> Unit = {},
     overlay: @Composable BoxScope.() -> Unit = {},
+    onExitPromptChanged: (Boolean) -> Unit = {},
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val colors = LocalEyeColors.current
     var asking by rememberSaveable { mutableStateOf(false) }
-    BackHandler(enabled = confirmExit) { asking = true }
-    if (asking) TestExitDialog(diagnosticSaved = diagnosticSaved, onStay = { asking = false }, onExit = { asking = false; onBack() })
+    val setAsking: (Boolean) -> Unit = { open -> asking = open; onExitPromptChanged(open) }
+    BackHandler(enabled = confirmExit) { setAsking(true) }
+    if (asking) TestExitDialog(diagnosticSaved = diagnosticSaved, onStay = { setAsking(false) }, onExit = { setAsking(false); onBack() })
     Column(modifier.fillMaxSize().background(colors.appBackground).navigationBarsPadding().imePadding().screenHorizontalPaddingLarge()) {
         Box {
-            TopBackBar(title = title, noText = true, onBackClick = { if (confirmExit) asking = true else onBack() })
+            TopBackBar(title = title, noText = true, onBackClick = { if (confirmExit) setAsking(true) else onBack() })
             Row(Modifier.align(Alignment.BottomEnd), verticalAlignment = Alignment.CenterVertically) {
             if (onHelp != null) Box(Modifier.size(48.dp).semantics { contentDescription = "当前环节演示与说明" }
                 .clickable(role = Role.Button, onClick = onHelp), contentAlignment = Alignment.Center) {

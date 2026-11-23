@@ -26,6 +26,9 @@ final class EyeRuntime: ObservableObject {
     private var closed = false
     private var isForeground = true
     private var settingsPresented = false
+    private var exitConfirmationPresented = false
+    private var gestureActive = false
+    private var gestureGeneration = 0
     @Published var voiceAnswersForThisTest = false
     private var allowsVoiceAnswer: Bool { kind != "PRESBYOPIA" || voiceAnswersForThisTest }
     private lazy var presentation = FramePresentationMarker { [weak self] id in
@@ -120,6 +123,30 @@ final class EyeRuntime: ObservableObject {
         }
         speakPrompts()
         voice.setListening(isForeground && !settingsPresented && allowsVoiceAnswer && bool("voiceActive"))
+        updateGestureAnswers()
+    }
+
+    private func updateGestureAnswers() {
+        let active = isForeground && !closed && !settingsPresented && !exitConfirmationPresented &&
+            bool("gestureActive") && GestureAnswerPreference.isEnabled
+        guard active != gestureActive else { return }
+        gestureActive = active
+        gestureGeneration += 1
+        controller.resetGestureAnswers()
+        if active {
+            let generation = gestureGeneration
+            camera.setHandAnalyzer(HandGestureAnalyzer { [weak self] direction, time in
+                guard let self, self.gestureActive, self.gestureGeneration == generation else { return }
+                self.controller.gestureSample(direction: direction, capturedAt: time)
+            })
+        } else {
+            camera.setHandAnalyzer(nil)
+        }
+    }
+
+    func setExitConfirmationPresented(_ value: Bool) {
+        exitConfirmationPresented = value
+        updateGestureAnswers()
     }
     /// 与安卓同一套播报：距离偏离优先，持续偏离每 6 秒换一种说法；回到合适距离先肯定一句，主提示有变化再接着说。
     private func speakPrompts() {
@@ -244,7 +271,7 @@ final class EyeRuntime: ObservableObject {
     }
     func close() {
         guard !closed else { return }
-        closed = true; timer?.invalidate(); promptWork?.cancel(); presentation.cancel(); voice.close(); feedback.stop(); camera.stop(); frames.clear(); controller.close()
+        closed = true; updateGestureAnswers(); timer?.invalidate(); promptWork?.cancel(); presentation.cancel(); voice.close(); feedback.stop(); camera.stop(); frames.clear(); controller.close()
     }
     static func object(_ text: String) -> [String: Any] {
         guard let data = text.data(using: .utf8) else { return [:] }
