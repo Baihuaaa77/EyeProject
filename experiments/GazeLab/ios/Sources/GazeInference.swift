@@ -91,13 +91,16 @@ final class GazeInference {
         }
     }
 
-    func predict(buffer: CVPixelBuffer, face: GazeFace?, poseMatrix: [Double]?, cameraIssue: String?) -> [GazeReading] {
+    func predict(buffer: CVPixelBuffer, face: GazeFace?, poseMatrix: [Double]?, cameraIssue: String?,
+                 methods: Set<GazeMethod>, isCurrent: () -> Bool, onReading: ((GazeReading) -> Void)?) -> [GazeReading] {
+        let selected = loaded.filter { methods.contains($0.entry.identity.method) }
+        guard !selected.isEmpty, isCurrent() else { return [] }
         let lock = CVPixelBufferLockBaseAddress(buffer, .readOnly)
         defer { if lock == kCVReturnSuccess { CVPixelBufferUnlockBaseAddress(buffer, .readOnly) } }
         guard lock == kCVReturnSuccess, let pixels = CVPixelBufferGetBaseAddress(buffer),
               let face, face.openEyes else {
             let reason = cameraIssue != nil ? "人脸检测异常" : face == nil ? "未检测到人脸" : !face!.openEyes ? "闭眼或眼部遮挡" : "相机缓冲不可读"
-            return identities.map { GazeReading(method: $0.method, raw: nil, latencyMs: 0, issue: reason) }
+            return selected.map { GazeReading(method: $0.entry.identity.method, raw: nil, latencyMs: 0, issue: reason) }
         }
 
         let image = GazeImage(
@@ -105,7 +108,9 @@ final class GazeInference {
             width: CVPixelBufferGetWidth(buffer), height: CVPixelBufferGetHeight(buffer)
         )
         var face224: Data?
-        return loaded.map { loaded in
+        var readings: [GazeReading] = []
+        for loaded in selected {
+            guard isCurrent() else { break }
             let start = ProcessInfo.processInfo.systemUptime
             let entry = loaded.entry
             let method = entry.identity.method
@@ -151,6 +156,7 @@ final class GazeInference {
                 }
             }
 
+            guard isCurrent() else { break }
             var prediction: GazePoint?
             if let values {
                 let inputs = Dictionary(uniqueKeysWithValues: zip(entry.inputNames, values))
@@ -167,11 +173,14 @@ final class GazeInference {
                 }
             }
             if prediction?.finite != true { prediction = nil }
-            return GazeReading(method: method, raw: prediction,
-                               latencyMs: (ProcessInfo.processInfo.systemUptime - start) * 1000,
-                               issue: prediction == nil ? (values == nil ? missingInput : "模型推理失败") : nil,
-                               webEyeTrack: geometry)
+            let reading = GazeReading(method: method, raw: prediction,
+                                      latencyMs: (ProcessInfo.processInfo.systemUptime - start) * 1000,
+                                      issue: prediction == nil ? (values == nil ? missingInput : "模型推理失败") : nil,
+                                      webEyeTrack: geometry)
+            readings.append(reading)
+            if prediction != nil { onReading?(reading) }
         }
+        return readings
     }
 
     private static func floats(_ data: Data) -> [Float] {

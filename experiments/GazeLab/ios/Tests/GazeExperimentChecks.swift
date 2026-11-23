@@ -18,16 +18,23 @@ struct GazeExperimentChecks {
                    GazeReading(method: .aff, raw: nil, latencyMs: 4, issue: "模型推理失败")]
         let frame = GazeCameraFrame(time: 1, width: 720, height: 1280, faceBox: nil, headAnglesDegrees: nil,
                                     eyeDistancePx: nil, cameraFocalPx: nil, landmarkMs: 4, processingMs: 14, readings: raw)
+        let nextFrame = GazeCameraFrame(time: 1.025, width: 720, height: 1280, faceBox: nil, headAnglesDegrees: nil,
+                                       eyeDistancePx: nil, cameraFocalPx: nil, landmarkMs: 4, processingMs: 14, readings: raw)
         let models = [GazeMethod.mgaze, .aff].map { GazeModelIdentity(method: $0, source: "测试", sha256: "", filename: "") }
-        var run = GazeRun(kind: .validation, calibrationID: UUID(), widthPx: 1000, heightPx: 2000,
+        let mgazeID = UUID(), affID = UUID()
+        var run = GazeRun(kind: .validation, calibrationID: nil, widthPx: 1000, heightPx: 2000,
                           displayScale: 3, device: "测试机", osVersion: "测试系统", appBuild: "1",
-                          models: models, expectedRateHz: 6, settleSeconds: 0.65, sampleSeconds: 1.8,
-                          targets: [GazeTargetSamples(id: 0, expected: pairs[0].target, frames: [frame])],
-                          calibrations: [.init("MGazeNet"): map, .init("AFF-Net"): map])
+                          models: models, settleSeconds: 0.65, sampleSeconds: 1.8,
+                          targets: [GazeTargetSamples(id: 0, expected: pairs[0].target, frames: [frame, nextFrame])],
+                          calibrations: ["MGazeNet": map, "AFF-Net": map],
+                          calibrationIDs: ["MGazeNet": mgazeID, "AFF-Net": affID])
         run.summarize()
-        precondition(run.metrics[0].valid == 1 && run.metrics[0].pairedFrames == 0)
+        precondition(abs((run.actualFrameRateHz ?? 0) - 40) < 0.001)
+        precondition(run.metrics[0].valid == 2 && run.metrics[0].pairedFrames == 0)
         precondition(run.metrics[0].medianErrorPx != nil && run.metrics[1].medianErrorPx == nil)
-        precondition((try? JSONEncoder().encode(run)) != nil)
+        let json = try! JSONSerialization.jsonObject(with: JSONEncoder().encode(run)) as! [String: Any]
+        precondition(json["expectedRateHz"] == nil)
+        precondition(json["calibrationIDs"] as? [String: String] == ["MGazeNet": mgazeID.uuidString, "AFF-Net": affID.uuidString])
         checkWebEyeTrack()
         print("标定、成对验证指标、记录序列化和 WebEyeTrack 几何通过")
     }

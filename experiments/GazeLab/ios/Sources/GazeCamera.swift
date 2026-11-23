@@ -3,8 +3,14 @@ import MediaPipeTasksVision
 import UIKit
 
 final class GazeCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
-    let rate = 6.0
-    var onFrame: ((GazeCameraFrame) -> Void)?
+    private struct Selection {
+        var methods: Set<GazeMethod> = []
+        var revision = 0
+        var streamResults = false
+    }
+
+    var onReading: ((GazeReading, Double, Int) -> Void)?
+    var onFrame: ((GazeCameraFrame, Int) -> Void)?
     var onReady: (([GazeModelIdentity], [String]) -> Void)?
     var onError: ((String) -> Void)?
 
@@ -13,7 +19,21 @@ final class GazeCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
     private var camera: AVCaptureDevice?
     private var detector: FaceLandmarker?
     private var engines: GazeInference?
-    private var nextFrame = 0.0
+    private let selectionLock = NSLock()
+    private var selection = Selection()
+
+    func select(_ methods: Set<GazeMethod>, streamResults: Bool) -> Int {
+        selectionLock.lock()
+        defer { selectionLock.unlock() }
+        selection = Selection(methods: methods, revision: selection.revision + 1, streamResults: streamResults)
+        return selection.revision
+    }
+
+    private func currentSelection() -> Selection {
+        selectionLock.lock()
+        defer { selectionLock.unlock() }
+        return selection
+    }
 
     func start() {
         queue.async { [self] in
@@ -22,7 +42,6 @@ final class GazeCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
                 if engines == nil { engines = GazeInference() }
                 if let engines { onReady?(engines.identities, engines.issues) }
                 if detector == nil { try configure() }
-                nextFrame = 0
                 session.startRunning()
                 if !session.isRunning { onError?("前置相机启动失败") }
             } catch {
@@ -51,6 +70,7 @@ final class GazeCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
         let input = try AVCaptureDeviceInput(device: camera)
         let output = AVCaptureVideoDataOutput()
         output.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA]
+        // 串行分析繁忙时丢弃迟到帧，避免处理积压的画面。
         output.alwaysDiscardsLateVideoFrames = true
         output.setSampleBufferDelegate(self, queue: queue)
 
@@ -76,9 +96,9 @@ final class GazeCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
 
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
         let now = ProcessInfo.processInfo.systemUptime
-        guard now >= nextFrame, let buffer = CMSampleBufferGetImageBuffer(sampleBuffer),
+        let selection = currentSelection()
+        guard !selection.methods.isEmpty, let buffer = CMSampleBufferGetImageBuffer(sampleBuffer),
               let detector, let engines else { return }
-        nextFrame = now + 1.0 / rate
         let width = CVPixelBufferGetWidth(buffer)
         let height = CVPixelBufferGetHeight(buffer)
         var detection: FaceLandmarkerResult?
@@ -105,13 +125,20 @@ final class GazeCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
         let poseMatrix = detection?.facialTransformationMatrixes.first.map { matrix in
             (0..<16).map { Double(matrix.data[$0]) }
         }
-        let readings = engines.predict(buffer: buffer, face: face, poseMatrix: poseMatrix, cameraIssue: issue)
+        let isCurrent = { self.currentSelection().revision == selection.revision }
+        let publish: ((GazeReading) -> Void)? = selection.streamResults ? { reading in
+            self.onReading?(reading, now, selection.revision)
+        } : nil
+        let readings = engines.predict(buffer: buffer, face: face, poseMatrix: poseMatrix, cameraIssue: issue,
+                                      methods: selection.methods, isCurrent: isCurrent, onReading: publish)
+        guard isCurrent() else { return }
         let angles = poseMatrix.map { m in
             [atan2(-m[8], hypot(m[0], m[4])), atan2(m[9], m[10]), atan2(m[4], m[0])].map { $0 * 180 / .pi }
         }
         onFrame?(GazeCameraFrame(time: now, width: width, height: height,
                                 faceBox: face?.boundsArray, headAnglesDegrees: angles?.allSatisfy(\.isFinite) == true ? angles : nil,
                                 eyeDistancePx: face?.eyeDistance, cameraFocalPx: focal?.isFinite == true ? focal : nil, landmarkMs: landmarkMs,
-                                processingMs: (ProcessInfo.processInfo.systemUptime - now) * 1000, readings: readings))
+                                processingMs: (ProcessInfo.processInfo.systemUptime - now) * 1000, readings: readings),
+                 selection.revision)
     }
 }

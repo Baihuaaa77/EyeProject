@@ -5,8 +5,8 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "0.2.1"
-    CURRENT_PROJECT_VERSION: "4"
+    MARKETING_VERSION: "0.2.2"
+    CURRENT_PROJECT_VERSION: "5"
     TARGETED_DEVICE_FAMILY: "1"
     CLANG_CXX_LANGUAGE_STANDARD: c++17
     HEADER_SEARCH_PATHS: "$(inherited) $(SRCROOT)/build/mnn-source/include"

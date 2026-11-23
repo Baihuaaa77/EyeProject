@@ -154,12 +154,12 @@ struct GazeRun: Encodable, Identifiable {
     let osVersion: String
     let appBuild: String
     let models: [GazeModelIdentity]
-    let expectedRateHz: Double
     let settleSeconds: Double
     let sampleSeconds: Double
     let calibrationMethod = "逐目标中位数、标准化二维岭回归，正则 0.04；L2CS 使用角度到屏幕的经验映射"
     var targets: [GazeTargetSamples]
     var calibrations: [String: GazeCalibration] = [:]
+    var calibrationIDs: [String: UUID] = [:]
     var metrics: [GazeMethodMetrics] = []
     var finished: Date?
     var status: String?

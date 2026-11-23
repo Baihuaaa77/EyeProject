@@ -22,12 +22,12 @@ private final class GazeLabModel: ObservableObject {
     @Published private(set) var report: GazeRun?
     @Published private(set) var archives: [URL] = GazeArchive.records()
     @Published private(set) var calibrations: [String: GazeCalibration] = [:]
-    @Published var visible = Set(GazeMethod.allCases)
-    @Published var showRaw = false
+    @Published private(set) var enabledMethods = Set(GazeMethod.allCases)
 
     private let camera = GazeCamera()
     private var activeSince: Double?
-    private var calibrationID: UUID?
+    private var calibrationIDs: [String: UUID] = [:]
+    private var selectionRevision = 0
     private var pendingRecord: GazeRun?
     private var lastFrame: GazeCameraFrame?
     private var canvasSize = CGSize.zero
@@ -39,20 +39,28 @@ private final class GazeLabModel: ObservableObject {
     let settleSeconds = 0.65
     let sampleSeconds = 1.8
 
+    private var enabledIdentities: [GazeModelIdentity] { identities.filter { enabledMethods.contains($0.method) } }
+    private var hasEnabledCalibration: Bool { enabledMethods.contains { calibrations[$0.rawValue] != nil } }
     var target: GazeTargetSamples? { activeRun?.targets[targetIndex] }
-    var canCalibrate: Bool { activeSince != nil && lastFrame?.faceBox != nil && !identities.isEmpty && pendingRecord == nil }
-    var canValidate: Bool { activeSince != nil && !calibrations.isEmpty && pendingRecord == nil }
+    var canCalibrate: Bool { activeSince != nil && lastFrame?.faceBox != nil && !enabledIdentities.isEmpty && pendingRecord == nil }
+    var canValidate: Bool { activeSince != nil && hasEnabledCalibration && pendingRecord == nil }
     var hasPendingRecord: Bool { pendingRecord != nil }
 
     init() {
-        camera.onFrame = { [weak self] frame in
-            DispatchQueue.main.async { self?.receive(frame) }
+        camera.onReading = { [weak self] reading, time, revision in
+            DispatchQueue.main.async { self?.receive(reading, time: time, revision: revision) }
+        }
+        camera.onFrame = { [weak self] frame, revision in
+            DispatchQueue.main.async { self?.receive(frame, revision: revision) }
         }
         camera.onReady = { [weak self] identities, issues in
             DispatchQueue.main.async {
                 guard let self, self.activeSince != nil else { return }
                 self.identities = identities
                 self.modelIssues = issues
+                self.updateSelection()
+                if identities.isEmpty { self.status = "没有可用模型" }
+                else if self.enabledIdentities.isEmpty { self.status = "请选择至少一个模型" }
             }
         }
         camera.onError = { [weak self] message in
@@ -62,6 +70,28 @@ private final class GazeLabModel: ObservableObject {
                 self.cameraFailed = true
                 self.status = message
             }
+        }
+    }
+
+    private func updateSelection() {
+        let methods = activeSince == nil ? [] : Set(enabledIdentities.map(\.method))
+        selectionRevision = camera.select(methods, streamResults: activeRun == nil)
+    }
+
+    func setEnabled(_ enabled: Bool, for method: GazeMethod) {
+        guard activeRun == nil, enabledMethods.contains(method) != enabled else { return }
+        if enabled {
+            enabledMethods.insert(method)
+        } else {
+            enabledMethods.remove(method)
+            points.removeValue(forKey: method)
+        }
+        updateSelection()
+        if enabledIdentities.isEmpty {
+            lastFrame = nil
+            status = "请选择至少一个模型"
+        } else if lastFrame == nil {
+            status = "等待相机画面"
         }
     }
 
@@ -91,6 +121,7 @@ private final class GazeLabModel: ObservableObject {
         needsPermission = false
         cameraFailed = false
         status = "正在打开相机并加载模型"
+        updateSelection()
         camera.start()
     }
 
@@ -101,6 +132,7 @@ private final class GazeLabModel: ObservableObject {
         lastFrame = nil
         points = [:]
         if activeRun != nil { finish(reason) }
+        else { updateSelection() }
     }
 
     func resize(_ size: CGSize, scale: Double) {
@@ -109,8 +141,9 @@ private final class GazeLabModel: ObservableObject {
         canvasSize = size
         self.scale = scale
         calibrations = [:]
-        calibrationID = nil
+        calibrationIDs = [:]
         points = [:]
+        updateSelection()
     }
 
     func start(_ kind: GazeRun.Kind) {
@@ -133,12 +166,18 @@ private final class GazeLabModel: ObservableObject {
         }
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
         let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? ""
-        activeRun = GazeRun(kind: kind, calibrationID: kind == .validation ? calibrationID : nil,
+        let methods = enabledIdentities
+        let keys = Set(methods.map { $0.method.rawValue })
+        let maps = kind == .validation ? calibrations.filter { keys.contains($0.key) } : [:]
+        let sources = calibrationIDs.filter { maps[$0.key] != nil }
+        let sourceIDs = Set(sources.values)
+        activeRun = GazeRun(kind: kind, calibrationID: sourceIDs.count == 1 ? sourceIDs.first : nil,
                            widthPx: Double(canvasSize.width) * scale, heightPx: Double(canvasSize.height) * scale,
                            displayScale: scale, device: device, osVersion: UIDevice.current.systemVersion,
-                           appBuild: "\(version) (\(build))", models: identities, expectedRateHz: camera.rate,
+                           appBuild: "\(version) (\(build))", models: methods,
                            settleSeconds: settleSeconds, sampleSeconds: sampleSeconds, targets: capturedTargets,
-                           calibrations: kind == .validation ? calibrations : [:])
+                           calibrations: maps, calibrationIDs: sources)
+        updateSelection()
         status = "盯住白点，直到它移动"
     }
 
@@ -164,8 +203,16 @@ private final class GazeLabModel: ObservableObject {
         }
     }
 
-    private func receive(_ frame: GazeCameraFrame) {
-        guard let started = activeSince, frame.time >= started else { return }
+    private func receive(_ reading: GazeReading, time: Double, revision: Int) {
+        guard revision == selectionRevision, let started = activeSince, time >= started,
+              activeRun == nil, pendingRecord == nil, enabledMethods.contains(reading.method),
+              let raw = reading.raw, let map = calibrations[reading.method.rawValue] else { return }
+        let point = map.apply(raw)
+        if point.finite, points[reading.method] != point { points[reading.method] = point }
+    }
+
+    private func receive(_ frame: GazeCameraFrame, revision: Int) {
+        guard revision == selectionRevision, let started = activeSince, frame.time >= started else { return }
         lastFrame = frame
         if activeRun != nil {
             if let onset = targetOnset, frame.time >= onset + settleSeconds,
@@ -174,16 +221,12 @@ private final class GazeLabModel: ObservableObject {
             }
             return
         }
-        guard frame.faceBox != nil else { points = [:]; status = "请让前置相机拍到完整人脸"; return }
-        if pendingRecord != nil { return }
-        if identities.isEmpty { status = "没有可用模型"; return }
-        if calibrations.isEmpty { status = "准备就绪，可以开始标定"; return }
-        points = Dictionary(uniqueKeysWithValues: frame.readings.compactMap { reading in
-            guard let raw = reading.raw, let map = calibrations[reading.method.rawValue] else { return nil }
-            let point = map.apply(raw)
-            return point.finite ? (reading.method, point) : nil
-        })
-        status = points.isEmpty ? "当前帧没有有效落点" : "实时对比"
+        guard pendingRecord == nil else { return }
+        let nextStatus: String
+        if frame.faceBox == nil { nextStatus = "请让前置相机拍到完整人脸" }
+        else if !hasEnabledCalibration { nextStatus = "准备就绪，可以开始标定" }
+        else { nextStatus = points.isEmpty ? "等待有效落点" : "实时对比" }
+        if status != nextStatus { status = nextStatus }
     }
 
     func cancel() { finish("用户取消") }
@@ -195,6 +238,7 @@ private final class GazeLabModel: ObservableObject {
         capturedTargets = []
         targetOnset = nil
         activeRun = nil
+        updateSelection()
 
         if run.kind == .calibration, reason == nil {
             for method in run.models.map(\.method) {
@@ -205,9 +249,9 @@ private final class GazeLabModel: ObservableObject {
                 }
                 if let mapping = GazeCalibration.fit(pairs) { run.calibrations[method.rawValue] = mapping }
             }
-            if !run.calibrations.isEmpty {
-                calibrations = run.calibrations
-                calibrationID = run.id
+            for (method, mapping) in run.calibrations {
+                calibrations[method] = mapping
+                calibrationIDs[method] = run.id
             }
         }
         run.status = reason ?? (run.kind == .calibration && run.calibrations.isEmpty ? "有效标定样本不足" : "完成")
@@ -236,7 +280,6 @@ private struct GazeLabScreen: View {
     @StateObject private var model = GazeLabModel()
     @Environment(\.scenePhase) private var phase
     @Environment(\.displayScale) private var displayScale
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var showingRecords = false
     private let clock = Timer.publish(every: 0.05, on: .main, in: .common).autoconnect()
 
@@ -252,12 +295,10 @@ private struct GazeLabScreen: View {
                 } else {
                     controls
                     ForEach(GazeMethod.allCases, id: \.self) { method in
-                        if let point = model.points[method], point.onScreen, model.visible.contains(method) {
+                        if let point = model.points[method], point.onScreen {
                             Image(systemName: symbol(method)).font(LabStyle.heading)
                                 .foregroundStyle(color(method))
                                 .position(position(point, geometry.size))
-                                .animation(model.showRaw || reduceMotion ? nil : .linear(duration: 1.0 / 6),
-                                           value: point)
                                 .allowsHitTesting(false)
                                 .accessibilityHidden(true)
                         }
@@ -311,12 +352,11 @@ private struct GazeLabScreen: View {
 
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(model.identities.map(\.method), id: \.self) { method in
-                    Button {
-                        if model.visible.contains(method) { model.visible.remove(method) }
-                        else { model.visible.insert(method) }
-                    } label: {
+                    Toggle(isOn: Binding(get: { model.enabledMethods.contains(method) },
+                                         set: { model.setEnabled($0, for: method) })) {
                         HStack(spacing: 8) {
                             Image(systemName: symbol(method)).foregroundStyle(color(method))
+                                .accessibilityHidden(true)
                             Text(method.rawValue).font(LabStyle.subheading)
                             Spacer()
                             if let metric = model.report?.metrics.first(where: { $0.method == method }),
@@ -327,14 +367,11 @@ private struct GazeLabScreen: View {
                             } else if model.calibrations[method.rawValue] == nil {
                                 Text("未标定").font(LabStyle.detail)
                             }
-                            Image(systemName: model.visible.contains(method) ? "eye" : "eye.slash")
-                                .accessibilityHidden(true)
                         }
-                        .frame(minHeight: 44)
-                        .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityHint(model.visible.contains(method) ? "隐藏此方法的落点" : "显示此方法的落点")
+                    .toggleStyle(.switch)
+                    .frame(minHeight: 44)
+                    .accessibilityHint("控制此模型是否参与推理")
                 }
             }
             Spacer(minLength: 0)
@@ -352,9 +389,6 @@ private struct GazeLabScreen: View {
                         Button("五点验证") { model.start(.validation) }.buttonStyle(.bordered)
                             .disabled(!model.canValidate)
                         Spacer(minLength: 0)
-                        Button(model.showRaw ? "原始点" : "插值") { model.showRaw.toggle() }
-                            .buttonStyle(.bordered)
-                            .accessibilityHint("切换实时落点的显示方式")
                     }
                     .controlSize(.large)
                 }
