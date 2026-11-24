@@ -11,11 +11,20 @@ enum BrownStyle {
         if score < 60 { return loadMedium }
         return loadHigh
     }
+    static func loadTrackColor(_ score: Int) -> Color { (30..<60).contains(score) ? EyeStyle.primary : loadColor(score) }
+
     static let sage = Color(rgb: 0xB6C6B3)
     static let terracotta = Color(rgb: 0xED9A78)
     static let rail = Color(rgb: 0x373737)
     static let marker = Color(rgb: 0xFFE8CF)
-    static let surface = LinearGradient(colors: [EyeStyle.heroStart, EyeStyle.heroEnd], startPoint: .top, endPoint: .bottom)
+    static let surface = LinearGradient(stops: [
+        .init(color: EyeStyle.heroStart, location: 0),
+        .init(color: Color(rgb: 0x33261C), location: 0.64),
+        .init(color: EyeStyle.heroEnd, location: 1)
+    ], startPoint: .topLeading, endPoint: .bottomTrailing)
+    static let pressureInk = Color(rgb: 0x20281B)
+    static let pressureText = Color(rgb: 0x303B27)
+    static let pressurePaper = Color(rgb: 0xEFF0D9)
     static let avatar = LinearGradient(colors: [Color(rgb: 0x6E4E36), Color(rgb: 0x3A2C22)], startPoint: .topLeading, endPoint: .bottomTrailing)
 }
 

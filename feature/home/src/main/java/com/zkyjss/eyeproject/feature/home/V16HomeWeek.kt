@@ -31,10 +31,7 @@ internal fun V16HomeWeek(history: List<TrendDay>, onFeeling: () -> Unit, onTrend
     val colors = LocalEyeColors.current
     val type = LocalEyeTypography.current
     val today = LocalDate.now()
-    val startOfWeek = today.with(DayOfWeek.MONDAY)
-    var week by rememberSaveable {
-        mutableIntStateOf(if (history.any { it.screenMinutes != null && it.day >= startOfWeek.minusWeeks(1).toString() && it.day < startOfWeek.toString() }) 1 else 0)
-    }
+    var week by rememberSaveable { mutableIntStateOf(1) }
     val monday = today.with(DayOfWeek.MONDAY).minusWeeks(week.toLong())
     val dates = List(7) { monday.plusDays(it.toLong()) }
     val daysByDate = history.associateBy { it.day }
@@ -99,7 +96,7 @@ internal fun V16HomeWeek(history: List<TrendDay>, onFeeling: () -> Unit, onTrend
                 }
                 points.zipWithNext().forEachIndexed { i, (first, next) ->
                     if (first != null && next != null) {
-                        val color = tone(days[i])
+                        val color = days[i]?.score?.let(EyeBrown::loadTrackColor) ?: colors.textSecondary
                         val light = Path().apply {
                             moveTo(first.x, first.y)
                             lineTo(next.x, next.y)
@@ -113,19 +110,20 @@ internal fun V16HomeWeek(history: List<TrendDay>, onFeeling: () -> Unit, onTrend
                 }
                 points.forEachIndexed { i, point ->
                     if (point != null) {
-                        val color = tone(days[i])
+                        val marker = point.copy(y = bottom)
+                        val color = if (i == selected) tone(days[i]) else days[i]?.score?.let(EyeBrown::loadTrackColor) ?: colors.textSecondary
                         if (i == selected) {
                             val wide = 9.dp.toPx()
                             val tall = 5.dp.toPx()
                             val eye = Path().apply {
-                                moveTo(point.x - wide, point.y)
-                                quadraticTo(point.x, point.y - tall * 2, point.x + wide, point.y)
-                                quadraticTo(point.x, point.y + tall * 2, point.x - wide, point.y)
+                                moveTo(marker.x - wide, marker.y)
+                                quadraticTo(marker.x, marker.y - tall * 2, marker.x + wide, marker.y)
+                                quadraticTo(point.x, point.y + tall * 2, marker.x - wide, marker.y)
                                 close()
                             }
                             drawPath(eye, color)
-                            drawCircle(colors.appBackground, 3.dp.toPx(), point)
-                        } else drawCircle(color, 3.dp.toPx(), point)
+                            drawCircle(colors.appBackground, 3.dp.toPx(), marker)
+                        } else drawCircle(color, 3.dp.toPx(), marker)
                     }
                 }
             }

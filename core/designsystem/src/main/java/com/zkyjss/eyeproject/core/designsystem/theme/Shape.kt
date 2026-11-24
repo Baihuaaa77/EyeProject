@@ -18,8 +18,8 @@ object EyeShapes {
 object EyeControlSizes {
     val guideStageHeight = 200.dp
     val chatAvatar = 48.dp
-    val chatIntroPortraitWidth = 112.dp
-    val chatIntroPortraitHeight = 144.dp
+    val chatIntroPortraitWidth = 100.dp
+    val chatIntroPortraitHeight = 142.dp
     val homePortraitWidth = 124.dp
     val homePortraitHeight = 160.dp
     val homePortraitInset = 8.dp

@@ -24,21 +24,18 @@ internal fun dailyEyeRecords(
     return days.map { day ->
         val today = day.day == context.today
         val metrics = buildList {
-            if (context.usageAccess != EyeCareEngine.ACCESS_UNSUPPORTED) {
-                val periods = listOf(
-                    "累计用屏" to day.screenMinutes,
-                    "最长连续使用" to day.longestSessionMinutes,
-                    "夜间使用" to day.nightMinutes,
-                )
-                for ((title, minutes) in periods) {
-                    val note = when {
-                        minutes != null -> "来自这一天的系统用屏统计。"
-                        context.usageAccess == EyeCareEngine.ACCESS_DENIED -> "开启用屏统计权限后可读取系统记录。"
-                        else -> "这一天暂无系统用屏记录。"
-                    }
-                    add(DailyEyeMetric(title, minutes?.let(EyeCareEngine::duration), note))
+            fun usageMetric(title: String, minutes: Int?): DailyEyeMetric {
+                val note = when {
+                    context.usageAccess == EyeCareEngine.ACCESS_UNSUPPORTED -> "当前设备未提供系统用屏统计。"
+                    minutes != null -> "来自这一天的系统用屏统计。"
+                    context.usageAccess == EyeCareEngine.ACCESS_DENIED -> "开启用屏统计权限后可读取系统记录。"
+                    else -> "这一天暂无系统用屏记录。"
                 }
+                return DailyEyeMetric(title, minutes?.takeUnless { context.usageAccess == EyeCareEngine.ACCESS_UNSUPPORTED }
+                    ?.let(EyeCareEngine::duration), note)
             }
+            add(usageMetric("今日用屏", day.screenMinutes))
+            add(usageMetric("最长连续使用", day.longestSessionMinutes))
             val lightNote = when {
                 !context.ambientSupported -> "当前设备未提供环境光读数。"
                 today -> "当前环境光读数。"
@@ -49,6 +46,7 @@ internal fun dailyEyeRecords(
                 if (today) "当前屏幕亮度。" else "屏幕亮度仅显示当天的实时读数。"))
             add(DailyEyeMetric("用眼距离", day.distanceCm?.let { "$it 厘米" },
                 if (day.distanceCm == null) "这一天暂无有效的用眼距离检测。" else "这一天实时检测的平均用眼距离。"))
+            add(usageMetric("夜间使用", day.nightMinutes))
         }
         DailyEyeRecord(day.day, "${EyeCareDays.monthDay(day.day)} · ${day.label}", day.score, todayTip.takeIf { today }, metrics)
     }

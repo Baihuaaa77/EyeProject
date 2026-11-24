@@ -79,7 +79,7 @@ internal fun BrownHomeOverview(
         EyeWarmCard(padding = 16.dp, spacing = 4.dp, edge = signalColor) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 EyeText("用眼负荷", Modifier.weight(1f), style = t.title, color = c.textPrimary)
-                WarmLink("用眼全记录") { allData = !allData }
+                WarmLink("用眼全记录") { allData = true }
             }
             BoxWithConstraints {
                 val reading: @Composable () -> Unit = {
@@ -107,9 +107,6 @@ internal fun BrownHomeOverview(
                 HomeCardButton("智能挂号", { booking = true }, Modifier.weight(1f))
             }
         }
-        if (allData) V16DailyRecords(report?.dailyRecords.orEmpty(), { allData = false }, actions.openUsageAccess.takeIf {
-            state.usageAccess == com.zkyjss.eyeproject.core.eyecare.EyeCareEngine.ACCESS_DENIED
-        })
         EyeWarmCard(padding = 14.dp, spacing = 4.dp) {
             val habits = listOf("闭眼休息", "远眺20秒", "热敷眼睛")
             val completed = report?.completedCare.orEmpty()
@@ -123,7 +120,7 @@ internal fun BrownHomeOverview(
                     habits.chunked(columns).forEach { row ->
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             row.forEach { name ->
-                                HomeCardButton(if (name in completed) "✓ $name" else name, { careTimer = name }, Modifier.weight(1f))
+                                HomeCardButton(if (name in completed) "✓ $name" else name, { careTimer = name }, Modifier.weight(1f), outlined = true)
                             }
                         }
                     }
@@ -179,6 +176,9 @@ internal fun BrownHomeOverview(
         }
         Spacer(Modifier.height(24.dp))
     }
+    if (allData) V16DailyRecords(report?.dailyRecords.orEmpty(), { allData = false }, actions.openUsageAccess.takeIf {
+        state.usageAccess == com.zkyjss.eyeproject.core.eyecare.EyeCareEngine.ACCESS_DENIED
+    })
     if (booking) EyeOfflineSessionPage(EyeOfflineSession.BOOKING, { booking = false },
         bookingPatientNames = state.bookingPatientNames)
     if (exercise) EyeExercisePage({ exercise = false })
@@ -203,13 +203,14 @@ private fun WarmLink(text: String, action: () -> Unit) {
 }
 
 @Composable
-private fun HomeCardButton(text: String, onClick: () -> Unit, modifier: Modifier) {
+private fun HomeCardButton(text: String, onClick: () -> Unit, modifier: Modifier, outlined: Boolean = false) {
     val colors = LocalEyeColors.current
     val shape = EyeShapes.medium
-    Box(modifier.heightIn(min = 46.dp).clip(shape).background(colors.surfaceVariant)
+    Box(modifier.heightIn(min = 48.dp).clip(shape)
+        .then(if (outlined) Modifier else Modifier.background(colors.surfaceVariant))
         .border(1.dp, colors.cardBorder, shape).clickable(role = Role.Button, onClick = onClick)
         .padding(horizontal = 4.dp, vertical = 8.dp), contentAlignment = Alignment.Center) {
-        EyeText(text, style = LocalEyeTypography.current.navigationTitle, color = colors.textPrimary,
+        EyeText(text, style = LocalEyeTypography.current.button, color = colors.textPrimary,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center)
     }
 }

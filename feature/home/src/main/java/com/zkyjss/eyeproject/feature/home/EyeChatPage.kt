@@ -42,6 +42,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -54,6 +55,7 @@ import com.zkyjss.eyeproject.core.data.chat.ChatRepository
 import com.zkyjss.eyeproject.core.data.chat.ChatState
 import com.zkyjss.eyeproject.core.designsystem.R
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeShapes
+import com.zkyjss.eyeproject.core.designsystem.theme.EyeSpacing
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeControlSizes
 import com.zkyjss.eyeproject.core.designsystem.theme.EyeMotion
 import com.zkyjss.eyeproject.core.designsystem.theme.LocalEyeColors
@@ -292,19 +294,24 @@ internal fun EyechoAvatar(size: Dp) {
         Modifier.size(size).clip(CircleShape).background(LocalEyeColors.current.violetSoft))
 }
 
-/** 对话页顶部：左侧爱科大头像 + 右侧左对齐问候与介绍，不加卡片。与苹果端 EyechoIntro 一致。 */
+/** 对话页与挂号页共用离线参考稿的爱科竖幅形象。 */
 @Composable
 private fun EyechoIntro() {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
-    Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.Top,
-        horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-        Image(painterResource(R.drawable.eyecho_half), contentDescription = "爱科 Eyecho", contentScale = ContentScale.Crop, alignment = Alignment.TopCenter,
-            modifier = Modifier.size(width = EyeControlSizes.chatIntroPortraitWidth, height = EyeControlSizes.chatIntroPortraitHeight))
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            EyeText(EYECHO_HELLO, style = typography.title, color = colors.textPrimary)
-            EyeText(EYECHO_INTRO, style = typography.chatBody, color = colors.textSecondary)
-        }
+    Column(
+        Modifier.fillMaxWidth().padding(vertical = EyeSpacing.sm),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(EyeSpacing.xs),
+    ) {
+        Image(
+            painterResource(R.drawable.v16_eyecho_portrait), contentDescription = null, contentScale = ContentScale.Fit,
+            modifier = Modifier.size(EyeControlSizes.chatIntroPortraitWidth, EyeControlSizes.chatIntroPortraitHeight)
+                .clip(EyeShapes.medium),
+        )
+        EyeText("Eyecho", style = typography.body, color = colors.textPrimary)
+        EyeText(EYECHO_HELLO, style = typography.title, color = colors.textPrimary, textAlign = TextAlign.Center)
+        EyeText(EYECHO_INTRO, style = typography.chatBody, color = colors.textPrimary, textAlign = TextAlign.Center)
     }
 }
 

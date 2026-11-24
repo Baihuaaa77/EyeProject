@@ -6,13 +6,14 @@
 }
 :root {
   color-scheme: dark;
-  --brand-base: #1c1713;
-  --brand-surface: #39291d;
-  --brand-control: #432d1c;
-  --brand-edge: #bf9470;
-  --brand-ink: #2b2119;
+  --brand-base: #1b1511;
+  --brand-surface: #30231a;
+  --brand-gradient: linear-gradient(135deg, #49311e, #33261c 64%, #292019);
+  --brand-control: #402c1c;
+  --brand-edge: #dfb184;
+  --brand-ink: #291606;
   --brand-orange: #ff8a00;
-  --ui-text: #f3f0e9;
+  --ui-text: #ffffff;
   --brand-muted: #bdb7ac;
   --accent: var(--brand-orange);
   --line: var(--brand-edge);

@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import EyeScreening
 
 /// 对话页标题（与安卓 CHAT_TITLE 一致）；首页入口是爱科卡（EyechoCard）。
@@ -230,20 +231,28 @@ struct EyechoAvatar: View {
     }
 }
 
-/// 对话页顶部：左侧爱科大头像 + 右侧左对齐问候与介绍，不加卡片。与安卓 EyechoIntro 同一排版与文案。
+/// 对话页与挂号页共用离线参考稿的爱科竖幅形象。
 private struct EyechoIntro: View {
+    private static let portrait: UIImage? = Bundle.main.url(forResource: "v16_eyecho_portrait", withExtension: "jpg")
+        .flatMap { UIImage(contentsOfFile: $0.path) }
+
     var body: some View {
-        HStack(alignment: .top, spacing: 16) {
-            Image("EyechoHalf").resizable().scaledToFill()
-                .frame(width: EyeStyle.chatIntroPortraitWidth, height: EyeStyle.chatIntroPortraitHeight, alignment: .top).clipped()
-                .accessibilityLabel("爱科 Eyecho")
-            VStack(alignment: .leading, spacing: 8) {
-                Text("你好，我是爱科").font(EyeStyle.title).foregroundStyle(EyeStyle.text)
-                Text("根据您的用眼情况与感受生成护眼参考，不能替代医生诊断。")
-                    .font(EyeStyle.chatBody).foregroundStyle(EyeStyle.secondary).lineSpacing(6)
-                    .fixedSize(horizontal: false, vertical: true)
-            }.frame(maxWidth: .infinity, alignment: .leading)
-        }.frame(maxWidth: .infinity).padding(.vertical, 12)
+        VStack(spacing: EyeSpacing.xs) {
+            if let portrait = Self.portrait {
+                Image(uiImage: portrait).resizable().scaledToFit()
+                    .frame(width: EyeStyle.chatIntroPortraitWidth, height: EyeStyle.chatIntroPortraitHeight)
+                    .clipShape(RoundedRectangle(cornerRadius: EyeStyle.radiusMedium))
+                    .accessibilityHidden(true)
+            }
+            Text("Eyecho").font(EyeStyle.body)
+            Text("你好，我是爱科").font(EyeStyle.title)
+            Text("根据您的用眼情况与感受生成护眼参考，不能替代医生诊断。")
+                .font(EyeStyle.chatBody).fixedSize(horizontal: false, vertical: true)
+        }
+        .multilineTextAlignment(.center)
+        .foregroundStyle(EyeStyle.text)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, EyeSpacing.sm)
     }
 }
 

@@ -118,7 +118,7 @@
 }
 #phone .today-card {
   border-color: var(--eye-color,var(--load-color));
-  background: var(--brand-surface);
+  background: var(--brand-gradient);
 }
 #phone .today-card .card-link, #screen .watch-all-data { color: var(--ui-text); }
 #phone .hero-consult {

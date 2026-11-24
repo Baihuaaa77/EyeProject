@@ -55,14 +55,17 @@ class EyeCareEngineTest {
         assertEquals("2月29日 · 周四", records[12].dateLabel)
         assertEquals("3月1日 · 今天", records.last().dateLabel)
         val previousMetrics = records[12].metrics.associate { it.title to it.value }
-        assertEquals("0分钟", previousMetrics["累计用屏"])
+        assertEquals("0分钟", previousMetrics["今日用屏"])
         assertEquals("28 厘米", previousMetrics["用眼距离"])
         assertNull(previousMetrics["屏幕亮度"])
         val todayMetrics = records.last().metrics.associate { it.title to it.value }
         assertNull(todayMetrics["用眼距离"])
         assertEquals("50%", todayMetrics["屏幕亮度"])
         val iphone = EyeCareEngine.report(ledger, context.copy(usageAccess = EyeCareEngine.ACCESS_UNSUPPORTED, systemUsage = emptyList()))
-        assertEquals(listOf("环境光", "屏幕亮度", "用眼距离"), iphone.dailyRecords.last().metrics.map { it.title })
+        val iphoneMetrics = iphone.dailyRecords.last().metrics
+        assertEquals(listOf("今日用屏", "最长连续使用", "环境光", "屏幕亮度", "用眼距离", "夜间使用"),
+            iphoneMetrics.map { it.title })
+        for (index in listOf(0, 1, 5)) assertNull(iphoneMetrics[index].value)
     }
 
     @Test fun withoutDataAsksToPerceiveFirst() {

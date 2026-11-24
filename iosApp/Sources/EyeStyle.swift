@@ -8,7 +8,7 @@ enum EyeStyle {
     static let diagnosticRight = UIColor.systemPink
     static let diagnosticReference = UIColor.systemGreen
     static let diagnosticGlint = UIColor.white
-    static let background = dyn(0x1C1713, 0x1C1713)
+    static let background = dyn(0x1B1511, 0x1B1511)
     static let optotypeSurround = dyn(0xFFFFFF, 0x1E2023, darkAlpha: 0)
     static let guideStageHeight: CGFloat = 200
     static let gazeCanvasHeight: CGFloat = 600
@@ -19,12 +19,12 @@ enum EyeStyle {
     static func gazeCanvasBaseHeight(_ screenHeight: CGFloat) -> CGFloat {
         min(gazeCanvasHeight, max(gazeCanvasMinHeight, screenHeight * (screenHeight < gazeCanvasHeight ? 0.52 : 0.72)))
     }
-    static let panel = dyn(0x39291D, 0x39291D)
+    static let panel = dyn(0x30231A, 0x30231A)
     /// 浅填充：次要按钮、分段控件底、输入框、圆环底环。
-    static let surfaceVariant = dyn(0x432D1C, 0x432D1C)
+    static let surfaceVariant = dyn(0x402C1C, 0x402C1C)
     static let guideBackground = Color(rgb: 0xE9EDF3)
-    static let borderSubtle = dyn(0x614934, 0x614934)
-    static let text = dyn(0xF3F0E9, 0xF3F0E9)
+    static let borderSubtle = dyn(0x634837, 0x634837)
+    static let text = dyn(0xFFFFFF, 0xFFFFFF)
     /// 示意图墨色：深浅主题都保持深色（视标、示意人物五官）。
     static let ink = dyn(0x14130F, 0x14130F)
     static let secondary = dyn(0xBDB7AC, 0xBDB7AC)
@@ -32,7 +32,7 @@ enum EyeStyle {
     static let primary = dyn(0xFF8A00, 0xFF8A00)
     static let primaryDark = dyn(0xFF8A00, 0xFF8A00)
     static let primarySoft = dyn(0x51331D, 0x51331D)
-    static let onPrimary = dyn(0x2B2119, 0x2B2119)
+    static let onPrimary = dyn(0x291606, 0x291606)
     static let neutralSoft = dyn(0x37291F, 0x37291F)
     static let brandStart = dyn(0xFF8A00, 0xFF8A00)
     static let brandEnd = dyn(0xFF8A00, 0xFF8A00)
@@ -88,15 +88,15 @@ enum EyeStyle {
     static let success = dyn(0xB6C6B3, 0xB6C6B3)
     static let successSoft = dyn(0x262924, 0x262924)
     static let warningSoft = dyn(0x51331D, 0x51331D)
-    static let onStatus = dyn(0x2B2119, 0x2B2119)
+    static let onStatus = dyn(0x291606, 0x291606)
     /// 琥珀「留意」色块上的深色字。
-    static let onWarning = dyn(0x2B2119, 0x2B2119)
+    static let onWarning = dyn(0x291606, 0x291606)
     static let danger = dyn(0xE99A86, 0xE99A86)
     static let dangerSoft = dyn(0x422C29, 0x422C29)
     static let tooClose = dyn(0xE99A86, 0xE99A86)
     static let tooFar = dyn(0xFFE19A, 0xFFE19A)
-    static let heroStart = dyn(0x402C1C, 0x402C1C)
-    static let heroEnd = dyn(0x2D2118, 0x2D2118)
+    static let heroStart = dyn(0x49311E, 0x49311E)
+    static let heroEnd = dyn(0x292019, 0x292019)
     static let heroBorder = glassEdgeTop
     /// 同色浮雕按钮表面，渐变短线标记主操作。
     static let buttonStart = dyn(0xFF8A00, 0xFF8A00)
@@ -106,18 +106,18 @@ enum EyeStyle {
     static let flowEnd = dyn(0xED9A78, 0xED9A78)
     static let glow = dyn(0xC9885D, 0xC9885D)
     static let shadow = Color.black.opacity(0.2)
-    static let glassFill = dyn(0x39291D, 0x39291D)
-    static let glassEdgeTop = dyn(0xBF9470, 0xBF9470)
+    static let glassFill = dyn(0x30231A, 0x30231A)
+    static let glassEdgeTop = dyn(0xDFB184, 0xDFB184)
     static let glassEdgeBottom = borderSubtle
     static let tabBarFill = background
     static let tabBarEdge = glassEdgeTop
 
-    static let heading = dyn(0xF3F0E9, 0xF3F0E9)
+    static let heading = dyn(0xFFFFFF, 0xFFFFFF)
     static let shadowLight = Color.clear
     static let glowRadius: CGFloat = 7
     static let chatAvatarSize: CGFloat = 48
-    static let chatIntroPortraitWidth: CGFloat = 112
-    static let chatIntroPortraitHeight: CGFloat = 144
+    static let chatIntroPortraitWidth: CGFloat = 100
+    static let chatIntroPortraitHeight: CGFloat = 142
     static let homePortraitWidth: CGFloat = 124
     static let homePortraitHeight: CGFloat = 160
     static let homePortraitInset: CGFloat = 8
@@ -225,7 +225,7 @@ enum EyeStyle {
 
     /// 读数排版：把「6小时25分」「180 lx」「22 次/分」拆成数字与单位——数字用 [numberFont]，单位用 unit 字号、次要文字色。
     /// 与安卓 eyeReading 一致。
-    static func reading(_ value: String, unit extra: String? = nil, numberFont: Font = EyeStyle.metricValue, color: Color = EyeStyle.text) -> Text {
+    static func reading(_ value: String, unit extra: String? = nil, numberFont: Font = EyeStyle.metricValue, color: Color = EyeStyle.text, unitColor: Color = EyeStyle.secondary) -> Text {
         let full = extra.map { "\(value) \($0)" } ?? value
         func numeric(_ c: Character) -> Bool { c.isNumber || ".,:+−—".contains(c) }
         var result = Text("")
@@ -235,7 +235,7 @@ enum EyeStyle {
         func flush() {
             guard let isNumber = runIsNumber, !run.isEmpty else { return }
             if let last, last != isNumber { result = result + Text("\u{2009}") }
-            result = result + (isNumber ? Text(run).font(numberFont).foregroundColor(readableText(color)) : Text(run).font(unit).foregroundColor(secondary))
+            result = result + (isNumber ? Text(run).font(numberFont).foregroundColor(readableText(color)) : Text(run).font(unit).foregroundColor(unitColor))
             last = isNumber
             run = ""
         }

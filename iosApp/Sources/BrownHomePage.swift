@@ -43,7 +43,7 @@ struct BrownHomePage: View {
                     HStack {
                         Text("用眼负荷").font(EyeStyle.title).foregroundStyle(EyeStyle.text)
                         Spacer(minLength: 0)
-                        homeLink("用眼全记录") { allData.toggle() }
+                        homeLink("用眼全记录") { allData = true }
                     }
                     ViewThatFits(in: .horizontal) {
                         HStack(spacing: 0) {
@@ -59,7 +59,6 @@ struct BrownHomePage: View {
                         homeAction("智能挂号") { booking = true }
                     }.padding(.top, 8)
                 }
-                if allData { DailyRecordsView(report: report, onClose: { allData = false }) }
                 companionCheckIns
                 HomeWeekChart(history: report.historyDays, feelingExpanded: feeling,
                               onFeeling: { feeling.toggle() }, onTrend: { navigate(.trend) }) {
@@ -91,6 +90,7 @@ struct BrownHomePage: View {
         }
         .onAppear { store.refresh() }
         .onChange(of: reminder.enabled) { _ in store.refresh() }
+        .fullScreenCover(isPresented: $allData) { DailyRecordsView(report: report, onClose: { allData = false }) }
         .fullScreenCover(isPresented: $booking) { OfflineSessionCover(session: .booking) }
         .fullScreenCover(isPresented: $exercise) { EyeExerciseView() }
         .fullScreenCover(isPresented: Binding(get: { careTimer != nil },set: { if !$0 { careTimer = nil } })) {
@@ -144,7 +144,7 @@ struct BrownHomePage: View {
     }
 
     private func habitButton(_ name: String) -> some View {
-        homeAction(report.completedCare.contains(name) ? "✓ \(name)" : name) { careTimer = name }
+        homeAction(report.completedCare.contains(name) ? "✓ \(name)" : name, outlined: true) { careTimer = name }
     }
 
     private var reading: some View {
@@ -158,11 +158,11 @@ struct BrownHomePage: View {
         }.buttonStyle(.plain)
     }
 
-    private func homeAction(_ title: String, action: @escaping () -> Void) -> some View {
+    private func homeAction(_ title: String, outlined: Bool = false, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Text(title).font(EyeStyle.navigationTitle).foregroundStyle(EyeStyle.text).fixedSize(horizontal: true, vertical: false)
-                .padding(.horizontal, 5).frame(maxWidth: .infinity, minHeight: 46)
-                .background(EyeStyle.surfaceVariant, in: RoundedRectangle(cornerRadius: EyeStyle.radiusMedium))
+            Text(title).font(EyeStyle.button).foregroundStyle(EyeStyle.text).fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 5).frame(maxWidth: .infinity, minHeight: 48)
+                .background(outlined ? Color.clear : EyeStyle.surfaceVariant, in: RoundedRectangle(cornerRadius: EyeStyle.radiusMedium))
                 .overlay { RoundedRectangle(cornerRadius: EyeStyle.radiusMedium).strokeBorder(EyeStyle.glassEdgeTop) }
         }.buttonStyle(.plain)
     }

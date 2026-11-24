@@ -156,19 +156,25 @@ class HomeVisualTest {
         } }
         compose.onNodeWithText("用眼全记录", substring = true).performClick()
         compose.onNodeWithText("10月23日 · 今天").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("后一天").assertIsNotEnabled()
-        compose.onNodeWithText("前一天").performScrollTo().performClick()
+        compose.onNodeWithContentDescription("后一天").assertIsNotEnabled()
+        compose.onNodeWithContentDescription("前一天").performScrollTo().performClick()
         compose.onNodeWithText("10月22日 · 周四").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("累计用屏").performScrollTo().performClick()
+        compose.onNodeWithContentDescription("上一项").performScrollTo().performClick()
+        compose.onNodeWithText("6/6").assertIsDisplayed()
+        compose.onNodeWithContentDescription("下一项").performClick()
+        compose.onNodeWithText("1/6").assertIsDisplayed()
+        capture("V16-用眼全记录", dialog = true)
+        compose.onNodeWithText("今日用屏").performScrollTo().performClick()
         compose.onNodeWithText("来自这一天的系统用屏统计。").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("累计用屏").performScrollTo().performClick()
+        compose.onNodeWithContentDescription("返回").performClick()
         compose.onNodeWithText("10月22日 · 周四").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("后一天").performScrollTo().performClick()
+        compose.onNodeWithText("1/6").assertIsDisplayed()
+        compose.onNodeWithContentDescription("后一天").performScrollTo().performClick()
         compose.onNodeWithText("10月23日 · 今天").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("后一天").assertIsNotEnabled()
-        repeat(13) { compose.onNodeWithText("前一天").performScrollTo().performClick() }
+        compose.onNodeWithContentDescription("后一天").assertIsNotEnabled()
+        repeat(13) { compose.onNodeWithContentDescription("前一天").performScrollTo().performClick() }
         compose.onNodeWithText("10月10日 · 周六").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("前一天").assertIsNotEnabled()
+        compose.onNodeWithContentDescription("前一天").assertIsNotEnabled()
     }
 
     @Test fun dryEyeInquiryDemoShowsBookingAfterSummaryWithoutSendingChat() {
@@ -390,7 +396,7 @@ class HomeVisualTest {
         }
         // 对话由爱科主持：顶部是爱科的自我介绍
         compose.onNodeWithText(EYECHO_HELLO).assertExists()
-        compose.onNodeWithContentDescription("爱科 Eyecho").assertExists()
+        compose.onNodeWithText("Eyecho").assertExists()
         compose.onNodeWithText(com.zkyjss.eyeproject.core.sync.Chats.URGENT_NOTICE).assertExists()
         // 同意说明平时不在页面上
         compose.onNodeWithText(com.zkyjss.eyeproject.core.sync.Chats.CONSENT_TEXT).assertDoesNotExist()

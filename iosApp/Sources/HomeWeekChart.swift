@@ -6,19 +6,9 @@ struct HomeWeekChart<FeelingForm: View>: View {
     let onFeeling: () -> Void
     let onTrend: () -> Void
     @ViewBuilder let feelingForm: FeelingForm
-    @State private var pickedWeek: Int?
+    @State private var week = 1
     @State private var chosen: Int?
     @Environment(\.dynamicTypeSize) private var textSize
-    private var week: Int {
-        if let pickedWeek { return pickedWeek }
-        let thisWeek = monday(weeksBack: 0)
-        let previousWeek = monday(weeksBack: 1)
-        let startKey = dayKey(previousWeek)
-        let endKey = dayKey(thisWeek)
-        return history.contains {
-            $0.screenMinutes != nil && $0.id >= startKey && $0.id < endKey
-        } ? 1 : 0
-    }
     private let labels = ["一", "二", "三", "四", "五", "六", "日"]
 
     var body: some View {
@@ -48,7 +38,7 @@ struct HomeWeekChart<FeelingForm: View>: View {
                         .font(EyeStyle.bodySecondary).foregroundStyle(tone(reading))
                 }
                 Spacer(minLength: 6)
-                EyeStyle.reading(reading?.screenMinutes.map { "\($0 / 60)小时\($0 % 60)分" } ?? "—", color: tone(reading))
+                EyeStyle.reading(reading?.screenMinutes.map { "\($0 / 60)小时\($0 % 60)分" } ?? "—", color: tone(reading), unitColor: tone(reading))
             }
             let peak = max(120, ((days.compactMap { $0?.screenMinutes }.max() ?? 0) + 119) / 120 * 120)
             HStack(spacing: 6) {
@@ -88,7 +78,7 @@ struct HomeWeekChart<FeelingForm: View>: View {
     }
 
     private var weekPicker: some View {
-        SegmentedPicker(options: [(1, "上周"), (0, "本周")], selected: week) { pickedWeek = $0; chosen = nil }
+        SegmentedPicker(options: [(1, "上周"), (0, "本周")], selected: week) { week = $0; chosen = nil }
     }
 
     private var localCalendar: Calendar {
@@ -156,7 +146,7 @@ struct HomeWeekChart<FeelingForm: View>: View {
                 }
                 for index in 0..<6 {
                     guard let first = points[index], let next = points[index + 1] else { continue }
-                    let color = tone(days[index])
+                    let color = days[index]?.score.map(BrownStyle.loadTrackColor) ?? EyeStyle.secondary
                     let light = Path { path in
                         path.move(to: first)
                         path.addLine(to: next)
@@ -176,20 +166,21 @@ struct HomeWeekChart<FeelingForm: View>: View {
                 }
                 for (index, point) in points.enumerated() {
                     guard let point else { continue }
-                    let color = tone(days[index])
+                    let marker = CGPoint(x: point.x, y: size.height - 8)
+                    let color = index == selected ? tone(days[index]) : days[index]?.score.map(BrownStyle.loadTrackColor) ?? EyeStyle.secondary
                     if index == selected {
-                        let start = CGPoint(x: point.x - 9, y: point.y)
-                        let end = CGPoint(x: point.x + 9, y: point.y)
+                        let start = CGPoint(x: marker.x - 9, y: marker.y)
+                        let end = CGPoint(x: marker.x + 9, y: marker.y)
                         let eye = Path {
                             $0.move(to: start)
-                            $0.addQuadCurve(to: end, control: CGPoint(x: point.x, y: point.y - 10))
-                            $0.addQuadCurve(to: start, control: CGPoint(x: point.x, y: point.y + 10))
+                            $0.addQuadCurve(to: end, control: CGPoint(x: marker.x, y: marker.y - 10))
+                            $0.addQuadCurve(to: start, control: CGPoint(x: marker.x, y: marker.y + 10))
                             $0.closeSubpath()
                         }
                         context.fill(eye, with: .color(color))
-                        context.fill(Path(ellipseIn: CGRect(x: point.x - 3, y: point.y - 3, width: 6, height: 6)), with: .color(EyeStyle.background))
+                        context.fill(Path(ellipseIn: CGRect(x: marker.x - 3, y: marker.y - 3, width: 6, height: 6)), with: .color(EyeStyle.background))
                     } else {
-                        context.fill(Path(ellipseIn: CGRect(x: point.x - 3, y: point.y - 3, width: 6, height: 6)), with: .color(color))
+                        context.fill(Path(ellipseIn: CGRect(x: marker.x - 3, y: marker.y - 3, width: 6, height: 6)), with: .color(color))
                     }
                 }
             }
