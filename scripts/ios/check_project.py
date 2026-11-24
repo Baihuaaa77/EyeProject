@@ -110,6 +110,12 @@ for path in (root / 'shared').rglob('*.kt'):
         for name in set(re.findall(r'\bconst val ([A-Z][A-Z0-9_]*)\b', text)) & C_MACROS:
             errors.append('Constant name clashes with an Apple SDK C macro (' + name + '): ' + str(path.relative_to(root)))
 
+# 独立实验只选用主 App 的部分源文件，共用相机及其手势分析类型必须一起编译。
+lab_project = (root / 'experiments/CornealCodeLab/project.yml').read_text(encoding='utf-8')
+for name in ('EyeCamera.swift', 'HandGestureAnalyzer.swift'):
+    if f'- path: ../../iosApp/Sources/{name}' not in lab_project or not (root / 'iosApp/Sources' / name).is_file():
+        errors.append('CornealCodeLab must compile shared camera source: ' + name)
+
 sources = list((root / 'iosApp/Sources').glob('*.swift'))
 if len(sources) < 6: errors.append('Missing iOS source files')
 with (root / 'iosApp/Sources/PrivacyInfo.xcprivacy').open('rb') as stream:

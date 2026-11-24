@@ -19,6 +19,7 @@ targets:
     sources:
       - Sources
       - path: ../../iosApp/Sources/EyeCamera.swift
+      - path: ../../iosApp/Sources/HandGestureAnalyzer.swift
       - path: ../../core/camera/src/main/assets/face_landmarker.task
         buildPhase: resources
       - path: ../../core/designsystem/ios/CornealLabStyle.swift
