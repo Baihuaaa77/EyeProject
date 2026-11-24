@@ -7,8 +7,11 @@ final class GazeCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
         var methods: Set<GazeMethod> = []
         var revision = 0
         var streamResults = false
+        var mgazeCalibration: MGazeRidgeCalibration?
         var webCalibration: WebEyeTrackPersonalization?
-        var collectWebSamples = false
+        var webPreprocessorGeneration = 0
+        var webFilterGeneration = 0
+        var collectSamples = false
     }
 
     var onReading: ((GazeReading, Double, Int) -> Void)?
@@ -16,21 +19,38 @@ final class GazeCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
     var onReady: (([GazeModelIdentity], [String], WebEyeTrackHead?) -> Void)?
     var onError: ((String) -> Void)?
 
+    var captureSession: AVCaptureSession { session }
+
     private let queue = DispatchQueue(label: "gazelab.camera", qos: .userInitiated, autoreleaseFrequency: .workItem)
     private let session = AVCaptureSession()
     private var camera: AVCaptureDevice?
     private var detector: FaceLandmarker?
     private var engines: GazeInference?
+    private var lastTimestampMs = 0
     private let selectionLock = NSLock()
     private var selection = Selection()
 
-    func select(_ methods: Set<GazeMethod>, streamResults: Bool, webCalibration: WebEyeTrackPersonalization?,
-                collectWebSamples: Bool) -> Int {
+    func select(_ methods: Set<GazeMethod>, streamResults: Bool,
+                mgazeCalibration: MGazeRidgeCalibration?,
+                webCalibration: WebEyeTrackPersonalization?,
+                webPreprocessorGeneration: Int,
+                webFilterGeneration: Int,
+                collectSamples: Bool) -> Int {
         selectionLock.lock()
         defer { selectionLock.unlock() }
         selection = Selection(methods: methods, revision: selection.revision + 1, streamResults: streamResults,
-                              webCalibration: webCalibration, collectWebSamples: collectWebSamples)
+                              mgazeCalibration: mgazeCalibration, webCalibration: webCalibration,
+                              webPreprocessorGeneration: webPreprocessorGeneration,
+                              webFilterGeneration: webFilterGeneration,
+                              collectSamples: collectSamples)
         return selection.revision
+    }
+
+    /// 仅更新 WebEyeTrack 滤波器代际（例如五点验证切点时），不中断当前正在进行的实验 revision。
+    func bumpWebFilterGeneration(_ generation: Int) {
+        selectionLock.lock()
+        selection.webFilterGeneration = generation
+        selectionLock.unlock()
     }
 
     private func currentSelection() -> Selection {
@@ -107,9 +127,12 @@ final class GazeCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
         let height = CVPixelBufferGetHeight(buffer)
         var detection: FaceLandmarkerResult?
         var issue: String?
+        // MediaPipe Video 模式要求时间戳严格递增，防止相邻帧落在同一毫秒整数。
+        let timestampMs = max(lastTimestampMs + 1, Int(now * 1000))
+        lastTimestampMs = timestampMs
         do {
             let image = try MPImage(pixelBuffer: buffer, orientation: .up)
-            detection = try detector.detect(videoFrame: image, timestampInMilliseconds: Int(now * 1000))
+            detection = try detector.detect(videoFrame: image, timestampInMilliseconds: timestampMs)
         } catch {
             issue = error.localizedDescription
         }
@@ -133,18 +156,28 @@ final class GazeCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
         let publish: ((GazeReading) -> Void)? = selection.streamResults ? { reading in
             self.onReading?(reading, now, selection.revision)
         } : nil
-        let readings = engines.predict(buffer: buffer, face: face, poseMatrix: poseMatrix, cameraIssue: issue,
-                                      methods: selection.methods, revision: selection.revision,
-                                      webCalibration: selection.webCalibration, collectWebSamples: selection.collectWebSamples,
-                                      isCurrent: isCurrent, onReading: publish)
+        let latest = currentSelection()
+        let readings = engines.predict(buffer: buffer, face: face, poseMatrix: poseMatrix, focalPx: focal,
+                                       cameraIssue: issue, methods: selection.methods,
+                                       webPreprocessorGeneration: latest.webPreprocessorGeneration,
+                                       webFilterGeneration: latest.webFilterGeneration,
+                                       mgazeCalibration: selection.mgazeCalibration,
+                                       webCalibration: selection.webCalibration,
+                                       collectSamples: selection.collectSamples,
+                                       isCurrent: isCurrent, onReading: publish)
         guard isCurrent() else { return }
         let angles = poseMatrix.map { m in
             [atan2(-m[8], hypot(m[0], m[4])), atan2(m[9], m[10]), atan2(m[4], m[0])].map { $0 * 180 / .pi }
         }
         onFrame?(GazeCameraFrame(time: now, width: width, height: height,
-                                faceBox: face?.boundsArray, headAnglesDegrees: angles?.allSatisfy(\.isFinite) == true ? angles : nil,
-                                eyeDistancePx: face?.eyeDistance, cameraFocalPx: focal?.isFinite == true ? focal : nil, landmarkMs: landmarkMs,
-                                processingMs: (ProcessInfo.processInfo.systemUptime - now) * 1000, readings: readings),
+                                 faceBox: face?.boundsArray,
+                                 headAnglesDegrees: angles?.allSatisfy(\.isFinite) == true ? angles : nil,
+                                 eyeDistancePx: face?.eyeDistance,
+                                 cameraFocalPx: focal?.isFinite == true ? focal : nil,
+                                 landmarkMs: landmarkMs,
+                                 processingMs: (ProcessInfo.processInfo.systemUptime - now) * 1000,
+                                 readings: readings,
+                                 previewBoxes: face?.previewBoxes),
                  selection.revision)
     }
 }

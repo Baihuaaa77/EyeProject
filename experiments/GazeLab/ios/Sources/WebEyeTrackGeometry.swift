@@ -1,6 +1,7 @@
 import Foundation
 
-// 根据 RedForestAI/WebEyeTrack 的 mathUtils.ts 移植，保留作者的人脸尺度与投影约定。
+// 根据 RedForestAI/WebEyeTrack 的 mathUtils.ts 移植，保留作者的人脸尺度与投影约定，
+// 并修正竖屏焦距与跨标定重置问题。
 // 上游许可证与版本记录见实验目录的 WebEyeTrack-LICENSE.txt。
 struct WebEyeTrackGeometry: Codable {
     let headVector: [Double]
@@ -12,8 +13,14 @@ struct WebEyeTrackPreprocessor {
     private var faceWidthCm: Double?
     private var depthCm = 60.0
 
+    /// 开始新一轮标定或切换受试者时重置缓存的人脸物理宽度与深度初值。
+    mutating func reset() {
+        faceWidthCm = nil
+        depthCm = 60.0
+    }
+
     mutating func geometry(points: [GazePoint], faceMatrix m: [Double], width: Int, height: Int,
-                           updateDepth: Bool = true) -> WebEyeTrackGeometry? {
+                           focalPx: Double? = nil, updateDepth: Bool = true) -> WebEyeTrackGeometry? {
         guard points.count >= 478, m.count == 16, m.allSatisfy(\.isFinite), width > 0, height > 0 else { return nil }
 
         let faceWidthPx = distance(points[356], points[127])
@@ -41,9 +48,16 @@ struct WebEyeTrackPreprocessor {
         let centroidX = points.map(\.x).reduce(0, +) / count
         let centroidY = points.map(\.y).reduce(0, +) / count
 
-        // 浏览器实现缺省 fx=fy=图像宽度。径向尺度优化和人脸原点使用同一焦距。
-        let focal = Double(width)
-        let cx = focal / 2, cy = Double(height) / 2
+        // 优先使用相机真实内参焦距，回退到图像长边（兼容横屏 640×480 的 width，同时避免竖屏 720×1280 焦距系统性偏小）。
+        let minDim = Double(min(width, height))
+        let maxDim = Double(max(width, height))
+        let focal: Double
+        if let f = focalPx, f.isFinite, f >= minDim * 0.5, f <= maxDim * 3.0 {
+            focal = f
+        } else {
+            focal = maxDim
+        }
+        let cx = Double(width) / 2, cy = Double(height) / 2
         let rayX = (nose.x - floor(cx + 0.5)) / focal, rayY = (nose.y - floor(cy + 0.5)) / focal
         var depth = depthCm
         for _ in 0..<10 {

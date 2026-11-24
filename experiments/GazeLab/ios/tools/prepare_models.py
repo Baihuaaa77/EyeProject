@@ -90,10 +90,10 @@ def torch_model(code, weights, target, kind):
     net = Network(model.eval())
     size = 112 if aff else 224
     rng = np.random.default_rng(2441)
-    geometry = np.asarray([[140, 350, 600, 860, 195, 485, 280, 540, 339, 485, 424, 540]],
+    geometry = np.asarray([[72, 175, 300, 430, 98, 242, 140, 270, 170, 242, 212, 270]],
                           dtype=np.float32) if aff else np.zeros((1, 1, 25, 25), dtype=np.float32)
     if not aff:
-        geometry[:, :, 7:19, 5:20] = 1
+        geometry[:, :, 7:19, 5:20] = 1.0 / 255.0
     dims = [(1, 3, size, size), (1, 3, size, size), (1, 3, 224, 224)]
     examples = [rng.random(size=d, dtype=np.float32) for d in dims] + [geometry]
     inputs = ["left", "right", "face", "geometry"]
@@ -323,9 +323,10 @@ def package(args):
     with ZipFile(args.shell) as shell, ZipFile(temp, "w", ZIP_DEFLATED) as ipa:
         plist = plistlib.loads(shell.read(root + "/Info.plist"))
         version = plist["CFBundleShortVersionString"]
-        split_web_versions = {"0.2.3", "0.2.4"}
+        parsed_version = tuple(int(part) for part in version.split(".")[:3])
+        expects_split_web = parsed_version >= (0, 2, 3)
         if (plist["CFBundleIdentifier"] != "com.zkyjss.gazelab"
-                or version not in {"0.2.1", "0.2.2"} | split_web_versions
+                or parsed_version < (0, 2, 1)
                 or plist["DTPlatformName"] != "iphoneos"
                 or root + "/embedded.mobileprovision" in shell.namelist()
                 or any(name.startswith(root + "/_CodeSignature/") for name in shell.namelist())):
@@ -337,7 +338,7 @@ def package(args):
         for item in entries:
             identity = item["identity"]
             head = identity.get("webEyeTrackHead")
-            if identity["method"] == "WebEyeTrack" and bool(head) != (version in split_web_versions):
+            if identity["method"] == "WebEyeTrack" and bool(head) != expects_split_web:
                 raise ValueError("WebEyeTrack 权重结构和 GazeLab 构建版本不匹配")
             for asset in [identity, head] if head else [identity]:
                 model = args.models / asset["filename"]

@@ -10,7 +10,7 @@
     <application
         android:allowBackup="false"
         android:icon="@drawable/gaze_launcher"
-        android:label="屏幕注视追踪"
+        android:label="GazeLab"
         android:theme="@android:style/Theme.Material.NoActionBar">
         <activity android:name=".GazeActivity" android:exported="true">
             <intent-filter>

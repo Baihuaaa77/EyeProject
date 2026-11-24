@@ -43,7 +43,7 @@ struct WebEyeTrackHead: Codable {
     }
 }
 
-struct WebEyeTrackPersonalization: Encodable {
+struct WebEyeTrackPersonalization: Codable {
     struct Sample {
         let features: [Float]
         let target: GazePoint
@@ -60,68 +60,85 @@ struct WebEyeTrackPersonalization: Encodable {
     let supportMSEBefore: Double
     let supportMSEAfter: Double
 
-    static func fit(_ samples: [Sample], baseHead: WebEyeTrackHead) -> Self? {
-        guard (4...9).contains(samples.count), baseHead.valid, samples.allSatisfy({
+    static func fit(_ samples: [Sample], baseHead: WebEyeTrackHead, steps: Int = 1) -> Self? {
+        guard (4...9).contains(samples.count), steps >= 1, baseHead.valid, samples.allSatisfy({
             $0.features.count == WebEyeTrackHead.featureCount && $0.features.allSatisfy(\.isFinite) && $0.target.onScreen
         }) else { return nil }
 
         let centered = samples.map { GazePoint(x: $0.target.x - 0.5, y: $0.target.y - 0.5) }
         let pairs = zip(samples, centered).map { (input: baseHead.predict($0.features), target: $1) }
+        // 加极小岭正则 0.002，防止 4-5 点近共线时仿射矩阵病态外推。
         guard pairs.allSatisfy({ $0.input.finite }),
-              let affine = GazeCalibration.fit(pairs, minimumTargets: 4, ridge: 0) else { return nil }
+              let affine = GazeCalibration.fit(pairs, minimumTargets: 4, ridge: 0.002) else { return nil }
 
-        // 官方 adapt 默认执行一步 Adam，先拟合仿射，再对仿射后的输出计算 MSE。
-        // 一次 adapt 新建优化器，一步的偏差修正后，一阶矩和二阶矩分别等于梯度和梯度平方。
         let rate: Float = 1e-5, beta1: Float = 0.85, beta2: Float = 0.9, epsilon: Float = 1e-8
         let x0 = Float(affine.x[0] / affine.inputScale.x), x1 = Float(affine.x[1] / affine.inputScale.y)
         let y0 = Float(affine.y[0] / affine.inputScale.x), y1 = Float(affine.y[1] / affine.inputScale.y)
         let count = Float(samples.count)
-        var gradients = baseHead.layers.map { $0.zeroed() }
+
+        var current = baseHead
+        var mState = baseHead.layers.map { $0.zeroed() }
+        var vState = baseHead.layers.map { $0.zeroed() }
         var before = 0.0
-        for (sample, target) in zip(samples, centered) {
-            let activations = baseHead.forward(sample.features)
-            let output = activations[baseHead.layers.count]
-            let mapped = affine.apply(GazePoint(x: Double(output[0]), y: Double(output[1])))
-            let dx = mapped.x - target.x, dy = mapped.y - target.y
-            before += dx * dx + dy * dy
-            var error = [(Float(dx) * x0 + Float(dy) * y0) / count,
-                         (Float(dx) * x1 + Float(dy) * y1) / count]
-            for index in baseHead.layers.indices.reversed() {
-                let layer = baseHead.layers[index]
-                let input = activations[index]
-                let width = error.count
-                var inputError = Array(repeating: Float.zero, count: input.count)
-                for j in 0..<width { gradients[index].bias[j] += error[j] }
-                for i in input.indices {
-                    for j in 0..<width {
-                        let k = i * width + j
-                        gradients[index].kernel[k] += input[i] * error[j]
-                        inputError[i] += layer.kernel[k] * error[j]
+
+        for step in 1...steps {
+            var gradients = current.layers.map { $0.zeroed() }
+            var lossSum = 0.0
+            for (sample, target) in zip(samples, centered) {
+                let activations = current.forward(sample.features)
+                let output = activations[current.layers.count]
+                let mapped = affine.apply(GazePoint(x: Double(output[0]), y: Double(output[1])))
+                let dx = mapped.x - target.x, dy = mapped.y - target.y
+                lossSum += dx * dx + dy * dy
+                var error = [(Float(dx) * x0 + Float(dy) * y0) / count,
+                             (Float(dx) * x1 + Float(dy) * y1) / count]
+                for index in current.layers.indices.reversed() {
+                    let layer = current.layers[index]
+                    let input = activations[index]
+                    let width = error.count
+                    var inputError = Array(repeating: Float.zero, count: input.count)
+                    for j in 0..<width { gradients[index].bias[j] += error[j] }
+                    for i in input.indices {
+                        for j in 0..<width {
+                            let k = i * width + j
+                            gradients[index].kernel[k] += input[i] * error[j]
+                            inputError[i] += layer.kernel[k] * error[j]
+                        }
+                        if input[i] <= 0 { inputError[i] = 0 }
                     }
-                    if input[i] <= 0 { inputError[i] = 0 }
+                    error = inputError
                 }
-                error = inputError
+            }
+            if step == 1 { before = lossSum }
+
+            let b1Pow = 1 - pow(beta1, Float(step))
+            let b2Pow = 1 - pow(beta2, Float(step))
+            func adamStep(_ weights: inout [Float], _ m: inout [Float], _ v: inout [Float], _ grad: [Float]) {
+                for i in weights.indices {
+                    let g = grad[i]
+                    m[i] = beta1 * m[i] + (1 - beta1) * g
+                    v[i] = beta2 * v[i] + (1 - beta2) * g * g
+                    let mHat = m[i] / b1Pow
+                    let vHat = v[i] / b2Pow
+                    weights[i] -= rate * mHat / (vHat.squareRoot() + epsilon)
+                }
+            }
+            for index in current.layers.indices {
+                adamStep(&current.layers[index].kernel, &mState[index].kernel, &vState[index].kernel, gradients[index].kernel)
+                adamStep(&current.layers[index].bias, &mState[index].bias, &vState[index].bias, gradients[index].bias)
             }
         }
 
-        func adamUpdate(_ weights: [Float], _ gradient: [Float]) -> [Float] {
-            zip(weights, gradient).map { weight, value in
-                weight - rate * value / ((value * value).squareRoot() + epsilon)
-            }
-        }
-        let updated = WebEyeTrackHead(layers: zip(baseHead.layers, gradients).map { layer, gradient in
-            WebEyeTrackHead.Layer(kernel: adamUpdate(layer.kernel, gradient.kernel), bias: adamUpdate(layer.bias, gradient.bias))
-        })
-        guard updated.valid else { return nil }
+        guard current.valid else { return nil }
         let after = zip(samples, centered).reduce(0.0) { sum, row in
-            let mapped = affine.apply(updated.predict(row.0.features))
+            let mapped = affine.apply(current.predict(row.0.features))
             let dx = mapped.x - row.1.x, dy = mapped.y - row.1.y
             return sum + dx * dx + dy * dy
         }
         let denominator = Double(samples.count * 2)
         guard before.isFinite, after.isFinite else { return nil }
-        return Self(head: updated, affine: affine, sampleCount: samples.count, learningRate: rate,
-                    beta1: beta1, beta2: beta2, epsilon: epsilon, steps: 1,
+        return Self(head: current, affine: affine, sampleCount: samples.count, learningRate: rate,
+                    beta1: beta1, beta2: beta2, epsilon: epsilon, steps: steps,
                     supportMSEBefore: before / denominator, supportMSEAfter: after / denominator)
     }
 }
@@ -154,6 +171,11 @@ struct WebEyeTrackFilter {
 
     private var x = Axis()
     private var y = Axis()
+
+    mutating func reset() {
+        x = Axis()
+        y = Axis()
+    }
 
     mutating func step(_ point: GazePoint) -> GazePoint {
         GazePoint(x: x.step(point.x), y: y.step(point.y))

@@ -28,7 +28,7 @@ jobs:
           path: |
             experiments/GazeLab/ios/build/mnn-source/include
             experiments/GazeLab/ios/build/mnn-device/libMNN.a
-          key: gaze-mnn-ios-3.4.1-xcode26.4-v3
+          key: gaze-mnn-ios-3.4.1-xcode26.4-arm82-v4
       - name: 编译 MNN 的 iPhone arm64 CPU 运行库
         if: steps.mnn.outputs.cache-hit != 'true'
         working-directory: experiments/GazeLab/ios
@@ -41,7 +41,7 @@ jobs:
             -DMNN_BUILD_SHARED_LIBS=OFF -DMNN_SEP_BUILD=OFF \
             -DMNN_BUILD_TOOLS=OFF -DMNN_BUILD_CONVERTER=OFF -DMNN_BUILD_TEST=OFF -DMNN_METAL=OFF \
             -DMNN_COREML=OFF -DMNN_OPENCL=OFF -DMNN_USE_THREAD_POOL=ON \
-            -DMNN_KLEIDIAI=OFF -DMNN_SME2=OFF
+            -DMNN_ARM82=ON -DMNN_KLEIDIAI=OFF -DMNN_SME2=OFF
           cmake --build build/mnn-device --config Release --target MNN --parallel "$(sysctl -n hw.logicalcpu)"
           test -s build/mnn-device/libMNN.a
       - name: 运行注视标定与记录回归
@@ -72,13 +72,13 @@ jobs:
           mkdir -p build/unsigned/Payload
           cp -R "$app" build/unsigned/Payload/
           cd build/unsigned
-          zip -qry GazeLab-v0.2.4-build8-shell-unsigned.ipa Payload
-          shasum -a 256 GazeLab-v0.2.4-build8-shell-unsigned.ipa > SHA256.txt
+          zip -qry GazeLab-v0.3.0-build9-shell-unsigned.ipa Payload
+          shasum -a 256 GazeLab-v0.3.0-build9-shell-unsigned.ipa > SHA256.txt
       - uses: actions/upload-artifact@v4
         with:
           name: gaze-lab-ios-unsigned-ipa
           path: |
-            experiments/GazeLab/ios/build/unsigned/GazeLab-v0.2.4-build8-shell-unsigned.ipa
+            experiments/GazeLab/ios/build/unsigned/GazeLab-v0.3.0-build9-shell-unsigned.ipa
             experiments/GazeLab/ios/build/unsigned/SHA256.txt
           if-no-files-found: error
           retention-days: 14

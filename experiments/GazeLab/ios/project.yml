@@ -5,8 +5,8 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "0.2.4"
-    CURRENT_PROJECT_VERSION: "8"
+    MARKETING_VERSION: "0.3.0"
+    CURRENT_PROJECT_VERSION: "9"
     TARGETED_DEVICE_FAMILY: "1"
     CLANG_CXX_LANGUAGE_STANDARD: c++17
     HEADER_SEARCH_PATHS: "$(inherited) $(SRCROOT)/build/mnn-source/include"
@@ -20,6 +20,7 @@ targets:
     sources:
       - Sources
       - ../../../core/designsystem/ios/CornealLabStyle.swift
+      - Resources/Assets.xcassets
       - path: WebEyeTrack-LICENSE.txt
         buildPhase: resources
       - path: ../../../core/camera/src/main/assets/face_landmarker.task
@@ -27,7 +28,7 @@ targets:
     info:
       path: Info.plist
       properties:
-        CFBundleDisplayName: 屏幕注视追踪
+        CFBundleDisplayName: GazeLab
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         NSCameraUsageDescription: 在本机使用前置摄像头对比不同模型的屏幕注视点。
@@ -40,5 +41,6 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.zkyjss.gazelab
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         GENERATE_INFOPLIST_FILE: NO
     scheme: {}

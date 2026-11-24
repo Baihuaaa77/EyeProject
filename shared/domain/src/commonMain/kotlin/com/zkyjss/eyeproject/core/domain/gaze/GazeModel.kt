@@ -90,7 +90,7 @@ internal class GazeProfile private constructor(
         val a = observation.left?.let { left?.project(it) }
         val b = observation.right?.let { right?.project(it) }
         if (a == null || b == null) return a ?: b
-        return a.mix(b, 0.5f).takeIf { a.distance(b) < 0.32f }
+        return a.mix(b, 0.5f).takeIf { a.distance(b) < 0.22f }
     }
 
     companion object {
