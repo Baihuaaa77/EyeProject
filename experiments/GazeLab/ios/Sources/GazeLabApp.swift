@@ -48,6 +48,7 @@ private final class GazeLabModel: ObservableObject {
     var canCalibrate: Bool { activeSince != nil && lastFrame?.faceBox != nil && !enabledIdentities.isEmpty && pendingRecord == nil }
     var canValidate: Bool { activeSince != nil && hasEnabledCalibration && pendingRecord == nil }
     var hasPendingRecord: Bool { pendingRecord != nil }
+    var showsLivePoints: Bool { activeRun?.kind != .calibration }
 
     init() {
         camera.onReading = { [weak self] reading, time, revision in
@@ -80,7 +81,7 @@ private final class GazeLabModel: ObservableObject {
     private func updateSelection() {
         let methods = activeSince == nil ? [] : Set(enabledIdentities.map(\.method))
         let collecting = activeRun?.kind == .calibration
-        selectionRevision = camera.select(methods, streamResults: activeRun == nil,
+        selectionRevision = camera.select(methods, streamResults: showsLivePoints,
                                           webCalibration: collecting ? nil : webEyeTrackCalibration,
                                           collectWebSamples: collecting)
     }
@@ -222,7 +223,7 @@ private final class GazeLabModel: ObservableObject {
 
     private func receive(_ reading: GazeReading, time: Double, revision: Int) {
         guard revision == selectionRevision, let started = activeSince, time >= started,
-              activeRun == nil, pendingRecord == nil, enabledMethods.contains(reading.method) else { return }
+              showsLivePoints, pendingRecord == nil, enabledMethods.contains(reading.method) else { return }
         let map = calibrations[reading.method.rawValue]
         let output = reading.method == .webEyeTrack ? reading.webEyeTrackPoint : reading.raw.flatMap { map?.apply($0) }
         if let point = output, point.finite, points[reading.method] != point { points[reading.method] = point }
@@ -231,7 +232,13 @@ private final class GazeLabModel: ObservableObject {
     private func receive(_ frame: GazeCameraFrame, revision: Int) {
         guard revision == selectionRevision, let started = activeSince, frame.time >= started else { return }
         lastFrame = frame
-        if activeRun != nil {
+        if let run = activeRun {
+            if run.kind == .validation {
+                for reading in frame.readings where reading.raw == nil
+                    || (reading.method == .webEyeTrack && reading.webEyeTrackPoint == nil) {
+                    if points[reading.method] != nil { points.removeValue(forKey: reading.method) }
+                }
+            }
             if let onset = targetOnset, frame.time >= onset + settleSeconds,
                frame.time < onset + settleSeconds + sampleSeconds {
                 capturedTargets[targetIndex].frames.append(frame)
@@ -325,9 +332,11 @@ private struct GazeLabScreen: View {
                         .task(id: "\(run.id)-\(target.id)") { model.markShown(target.id, runID: run.id) }
                 } else {
                     controls
+                }
+                if model.showsLivePoints {
                     ForEach(GazeMethod.allCases, id: \.self) { method in
                         if let point = model.points[method], point.onScreen {
-                            Image(systemName: symbol(method)).font(LabStyle.heading)
+                            Image(systemName: symbol(method, filled: model.activeRun == nil)).font(LabStyle.heading)
                                 .foregroundStyle(color(method))
                                 .position(position(point, geometry.size))
                                 .allowsHitTesting(false)
@@ -466,13 +475,14 @@ private struct GazeLabScreen: View {
         }
     }
 
-    private func symbol(_ method: GazeMethod) -> String {
-        switch method {
-        case .mgaze: "circle.fill"
-        case .aff: "diamond.fill"
-        case .itracker: "triangle.fill"
-        case .l2cs: "square.fill"
-        case .webEyeTrack: "star.fill"
+    private func symbol(_ method: GazeMethod, filled: Bool = true) -> String {
+        let shape: String = switch method {
+        case .mgaze: "circle"
+        case .aff: "diamond"
+        case .itracker: "triangle"
+        case .l2cs: "square"
+        case .webEyeTrack: "star"
         }
+        return filled ? shape + ".fill" : shape
     }
 }
