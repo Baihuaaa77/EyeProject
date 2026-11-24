@@ -72,13 +72,13 @@ jobs:
           mkdir -p build/unsigned/Payload
           cp -R "$app" build/unsigned/Payload/
           cd build/unsigned
-          zip -qry GazeLab-v0.2.3-build6-shell-unsigned.ipa Payload
-          shasum -a 256 GazeLab-v0.2.3-build6-shell-unsigned.ipa > SHA256.txt
+          zip -qry GazeLab-v0.2.4-build7-shell-unsigned.ipa Payload
+          shasum -a 256 GazeLab-v0.2.4-build7-shell-unsigned.ipa > SHA256.txt
       - uses: actions/upload-artifact@v4
         with:
           name: gaze-lab-ios-unsigned-ipa
           path: |
-            experiments/GazeLab/ios/build/unsigned/GazeLab-v0.2.3-build6-shell-unsigned.ipa
+            experiments/GazeLab/ios/build/unsigned/GazeLab-v0.2.4-build7-shell-unsigned.ipa
             experiments/GazeLab/ios/build/unsigned/SHA256.txt
           if-no-files-found: error
           retention-days: 14

@@ -161,7 +161,8 @@ final class GazeInference {
             case .l2cs:
                 values = [image.crop(face.bounds, size: 448, rgbImageNet: true)]
             case .webEyeTrack:
-                let open = WebEyeTrackPreprocessor.eyesOpen(points: face.landmarksPx, width: image.width, height: image.height)
+                // 与其他模型使用同一套像素空间判定，避免竖屏归一化压低眼纵横比。
+                let open = face.openEyes
                 if let poseMatrix {
                     geometry = webEyeTrack.geometry(points: face.landmarksPx, faceMatrix: poseMatrix,
                                                     width: image.width, height: image.height, updateDepth: open)
@@ -171,7 +172,7 @@ final class GazeInference {
                     values = [pixels]
                 } else {
                     values = nil
-                    missingInput = open ? "WebEyeTrack 眼部透视裁剪或头姿不可用" : "WebEyeTrack 闭眼或眼部遮挡"
+                    missingInput = open ? "眼部透视裁剪或头姿不可用" : "闭眼或眼部遮挡"
                 }
             }
 

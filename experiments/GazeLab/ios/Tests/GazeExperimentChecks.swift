@@ -95,6 +95,32 @@ struct GazeExperimentChecks {
         precondition(abs(profile.head.layers[2].kernel[5] + 1e-5) < 1e-7)
         precondition(head.layers[2].kernel[4] == 0)
 
+        let model = GazeModelIdentity(method: .webEyeTrack, source: "测试", sha256: "", filename: "")
+        let rejected = GazeReading(method: .webEyeTrack, raw: nil, latencyMs: 0, issue: "闭眼或眼部遮挡")
+        func frame(_ reading: GazeReading) -> GazeCameraFrame {
+            GazeCameraFrame(time: 1, width: 720, height: 1280, faceBox: nil, headAnglesDegrees: nil,
+                            eyeDistancePx: nil, cameraFocalPx: nil, landmarkMs: 1, processingMs: 2, readings: [reading])
+        }
+        let rows = samples.enumerated().map { index, sample in
+            let reading = GazeReading(method: .webEyeTrack, raw: head.predict(sample.features), latencyMs: 1, issue: nil,
+                                      webEyeTrackFeatures: sample.features)
+            return GazeTargetSamples(id: index, expected: sample.target, frames: [frame(rejected), frame(reading)])
+        }
+        var run = GazeRun(kind: .calibration, calibrationID: nil, widthPx: 1000, heightPx: 2000,
+                          displayScale: 3, device: "测试机", osVersion: "测试系统", appBuild: "7",
+                          models: [model], settleSeconds: 0.65, sampleSeconds: 1.8, targets: rows.map {
+                              GazeTargetSamples(id: $0.id, expected: $0.expected, frames: [frame(rejected)])
+                          })
+        run.fitWebEyeTrack(baseHead: head)
+        precondition(run.calibratedMethodCount == 0)
+        precondition(run.webEyeTrackCalibrationIssue == "WebEyeTrack 标定失败 · 有效点 0/5 · 闭眼或眼部遮挡")
+        let failure = try! JSONSerialization.jsonObject(with: JSONEncoder().encode(run)) as! [String: Any]
+        precondition(failure["webEyeTrackCalibrationIssue"] as? String == run.webEyeTrackCalibrationIssue)
+        run.targets = rows
+        run.fitWebEyeTrack(baseHead: head)
+        precondition(run.calibratedMethodCount == 1 && run.webEyeTrackCalibration?.sampleCount == 5)
+        precondition(run.webEyeTrackCalibrationIssue == nil)
+
         var filter = WebEyeTrackFilter()
         let initial = GazePoint(x: 0.2, y: -0.3)
         let first = filter.step(initial)

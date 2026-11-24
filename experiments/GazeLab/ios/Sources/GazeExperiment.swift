@@ -176,11 +176,48 @@ struct GazeRun: Encodable, Identifiable {
     var calibrations: [String: GazeCalibration] = [:]
     var calibrationIDs: [String: UUID] = [:]
     var webEyeTrackCalibration: WebEyeTrackPersonalization? = nil
+    var webEyeTrackCalibrationIssue: String? = nil
     var metrics: [GazeMethodMetrics] = []
     var finished: Date?
     var status: String?
     var actualFrameRateHz: Double?
     var calibratedMethodCount: Int { calibrations.count + (webEyeTrackCalibration == nil ? 0 : 1) }
+
+    mutating func fitWebEyeTrack(baseHead: WebEyeTrackHead?) {
+        let readings = targets.map { target in
+            target.frames.compactMap { $0.readings.first { $0.method == .webEyeTrack } }
+        }
+        let samples = zip(targets, readings).compactMap { target, readings -> WebEyeTrackPersonalization.Sample? in
+            let candidates = readings.compactMap { reading -> (GazePoint, [Float])? in
+                guard let raw = reading.raw, let features = reading.webEyeTrackFeatures else { return nil }
+                return (raw, features)
+            }
+            guard !candidates.isEmpty else { return nil }
+            let median = GazePoint.median(candidates.map(\.0))
+            guard let representative = candidates.min(by: {
+                hypot($0.0.x - median.x, $0.0.y - median.y) < hypot($1.0.x - median.x, $1.0.y - median.y)
+            }) else { return nil }
+            return .init(features: representative.1, target: target.expected)
+        }
+        webEyeTrackCalibration = baseHead.flatMap { WebEyeTrackPersonalization.fit(samples, baseHead: $0) }
+        guard webEyeTrackCalibration == nil else {
+            webEyeTrackCalibrationIssue = nil
+            return
+        }
+
+        let reason: String
+        if baseHead == nil {
+            reason = "预测头未加载"
+        } else if samples.count < 4 {
+            let issues = readings.flatMap { $0.compactMap(\.issue) }
+            let counts = Dictionary(grouping: issues, by: { $0 }).mapValues(\.count)
+            let mostCommon = counts.keys.sorted().max { counts[$0, default: 0] < counts[$1, default: 0] }
+            reason = mostCommon ?? (readings.allSatisfy(\.isEmpty) ? "未收到预测帧" : "有效样本不足")
+        } else {
+            reason = "仿射或预测头拟合失败"
+        }
+        webEyeTrackCalibrationIssue = "WebEyeTrack 标定失败 · 有效点 \(samples.count)/\(targets.count) · \(reason)"
+    }
 
     mutating func summarize() {
         let frames = targets.flatMap(\.frames)

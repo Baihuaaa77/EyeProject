@@ -27,6 +27,7 @@ private final class GazeLabModel: ObservableObject {
 
     private let camera = GazeCamera()
     private var webEyeTrackBaseHead: WebEyeTrackHead?
+    private var webEyeTrackCalibrationIssue: String?
     private var activeSince: Double?
     private var calibrationIDs: [String: UUID] = [:]
     private var selectionRevision = 0
@@ -152,6 +153,7 @@ private final class GazeLabModel: ObservableObject {
         self.scale = scale
         calibrations = [:]
         webEyeTrackCalibration = nil
+        webEyeTrackCalibrationIssue = nil
         calibrationIDs = [:]
         points = [:]
         updateSelection()
@@ -212,7 +214,9 @@ private final class GazeLabModel: ObservableObject {
         if let frame = lastFrame, now - frame.time > 0.9 {
             lastFrame = nil
             points = [:]
-            if activeRun == nil, activeSince != nil { status = "等待相机画面" }
+            if activeRun == nil, activeSince != nil, pendingRecord == nil {
+                status = currentWebEyeTrackCalibrationIssue ?? "等待相机画面"
+            }
         }
     }
 
@@ -236,13 +240,18 @@ private final class GazeLabModel: ObservableObject {
         }
         guard pendingRecord == nil else { return }
         let nextStatus: String
-        if frame.faceBox == nil { nextStatus = "请让前置相机拍到完整人脸" }
+        if let issue = currentWebEyeTrackCalibrationIssue { nextStatus = issue }
+        else if frame.faceBox == nil { nextStatus = "请让前置相机拍到完整人脸" }
         else if !hasEnabledCalibration { nextStatus = "准备就绪，可以开始标定" }
         else { nextStatus = points.isEmpty ? "等待有效落点" : "实时对比" }
         if status != nextStatus { status = nextStatus }
     }
 
     func cancel() { finish("用户取消") }
+
+    private var currentWebEyeTrackCalibrationIssue: String? {
+        enabledMethods.contains(.webEyeTrack) ? webEyeTrackCalibrationIssue : nil
+    }
 
     private func finish(_ reason: String?) {
         guard var run = activeRun else { return }
@@ -265,23 +274,10 @@ private final class GazeLabModel: ObservableObject {
                 calibrations[method] = mapping
                 calibrationIDs[method] = run.id
             }
-            if run.models.contains(where: { $0.method == .webEyeTrack }), let base = webEyeTrackBaseHead {
-                let samples = run.targets.compactMap { target -> WebEyeTrackPersonalization.Sample? in
-                    let readings = target.frames.compactMap { frame in
-                        frame.readings.first { $0.method == .webEyeTrack && $0.webEyeTrackFeatures != nil }
-                    }
-                    let raw = readings.compactMap(\.raw)
-                    guard !raw.isEmpty else { return nil }
-                    let median = GazePoint.median(raw)
-                    let representative = readings.min { a, b in
-                        let left = a.raw ?? median, right = b.raw ?? median
-                        return hypot(left.x - median.x, left.y - median.y) < hypot(right.x - median.x, right.y - median.y)
-                    }
-                    guard let features = representative?.webEyeTrackFeatures else { return nil }
-                    return WebEyeTrackPersonalization.Sample(features: features, target: target.expected)
-                }
-                if let profile = WebEyeTrackPersonalization.fit(samples, baseHead: base) {
-                    run.webEyeTrackCalibration = profile
+            if run.models.contains(where: { $0.method == .webEyeTrack }) {
+                run.fitWebEyeTrack(baseHead: webEyeTrackBaseHead)
+                webEyeTrackCalibrationIssue = run.webEyeTrackCalibrationIssue
+                if let profile = run.webEyeTrackCalibration {
                     webEyeTrackCalibration = profile
                     calibrationIDs[GazeMethod.webEyeTrack.rawValue] = run.id
                 }
@@ -302,7 +298,8 @@ private final class GazeLabModel: ObservableObject {
             archives = GazeArchive.records()
             pendingRecord = nil
             if run.kind == .calibration {
-                status = run.calibratedMethodCount == 0 ? (run.status ?? "标定未完成") : "已标定 \(run.calibratedMethodCount) 个模型"
+                status = run.webEyeTrackCalibrationIssue ?? (run.calibratedMethodCount == 0
+                    ? (run.status ?? "标定未完成") : "已标定 \(run.calibratedMethodCount) 个模型")
             } else { status = run.status == "完成" ? "已保存验证结果" : (run.status ?? "已保存") }
         } catch {
             status = "保存失败：\(error.localizedDescription)"

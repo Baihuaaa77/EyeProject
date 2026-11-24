@@ -69,16 +69,6 @@ struct WebEyeTrackPreprocessor {
         return WebEyeTrackGeometry(headVector: head, faceOriginCm: origin, faceWidthCm: faceWidth)
     }
 
-    static func eyesOpen(points: [GazePoint], width: Int, height: Int) -> Bool {
-        guard points.count >= 388, width > 0, height > 0 else { return false }
-        func distance(_ a: Int, _ b: Int) -> Double {
-            hypot((points[a].x - points[b].x) / Double(width), (points[a].y - points[b].y) / Double(height))
-        }
-        // 官方在归一化图像坐标使用六点眼纵横比，两眼的阈值均为 0.2。
-        return distance(385, 380) + distance(387, 373) >= 0.4 * max(distance(362, 263), 1e-8) &&
-               distance(158, 153) + distance(160, 144) >= 0.4 * max(distance(133, 33), 1e-8)
-    }
-
     static func eyePatch(points: [GazePoint]) -> WebEyeTrackPatch? {
         guard points.count >= 380 else { return nil }
         let nose = pixel(points[4])
