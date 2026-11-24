@@ -36,7 +36,8 @@ struct GazeExperimentChecks {
         precondition(json["expectedRateHz"] == nil)
         precondition(json["calibrationIDs"] as? [String: String] == ["MGazeNet": mgazeID.uuidString, "AFF-Net": affID.uuidString])
         checkWebEyeTrack()
-        print("标定、成对验证指标、记录序列化和 WebEyeTrack 几何通过")
+        checkWebEyeTrackPersonalization()
+        print("标定、成对验证、记录序列化和 WebEyeTrack 的几何、预测头、Kalman 通过")
     }
 
     static func checkWebEyeTrack() {
@@ -68,5 +69,45 @@ struct GazeExperimentChecks {
         precondition(abs(head.faceWidthCm - 1.2 * 180 / 14) < 1e-6)
         precondition(abs(head.faceOriginCm[0]) < 1e-6 && head.faceOriginCm[1] < 0)
         precondition(web.geometry(points: Array(points.prefix(468)), faceMatrix: identity, width: 640, height: 800) == nil)
+    }
+
+    static func checkWebEyeTrackPersonalization() {
+        func layer(_ inputCount: Int, _ outputCount: Int, _ diagonal: Int) -> WebEyeTrackHead.Layer {
+            var kernel = Array(repeating: Float.zero, count: inputCount * outputCount)
+            for index in 0..<diagonal { kernel[index * outputCount + index] = 1 }
+            return .init(kernel: kernel, bias: Array(repeating: 0, count: outputCount))
+        }
+        let head = WebEyeTrackHead(layers: [layer(518, 16, 3), layer(16, 16, 3), layer(16, 2, 2)])
+        let points: [(Float, Float, Float, Double, Double)] = [
+            (0.1, 0.1, 0, 0.2, 0.2), (0.6, 0.1, 0, 0.8, 0.2), (0.1, 0.6, 0, 0.2, 0.8),
+            (0.6, 0.6, 0, 0.8, 0.8), (0.35, 0.35, 1, 0.65, 0.40),
+        ]
+        let samples = points.map { x, y, z, targetX, targetY in
+            WebEyeTrackPersonalization.Sample(features: [x, y, z] + Array(repeating: 0, count: 515),
+                                              target: GazePoint(x: targetX, y: targetY))
+        }
+        precondition(head.valid && abs(head.predict(samples[0].features).x - 0.1) < 1e-6)
+        precondition(WebEyeTrackPersonalization.fit(Array(samples.prefix(3)), baseHead: head) == nil)
+        let profile = WebEyeTrackPersonalization.fit(samples, baseHead: head)!
+        precondition(profile.sampleCount == 5 && profile.steps == 1)
+        precondition(profile.supportMSEAfter < profile.supportMSEBefore)
+        precondition(abs(profile.head.layers[2].kernel[4] - 1e-5) < 1e-7)
+        precondition(abs(profile.head.layers[2].kernel[5] + 1e-5) < 1e-7)
+        precondition(head.layers[2].kernel[4] == 0)
+
+        var filter = WebEyeTrackFilter()
+        let initial = GazePoint(x: 0.2, y: -0.3)
+        let first = filter.step(initial)
+        precondition(abs(first.x - initial.x * 2.0001 / 2.0101) < 1e-12)
+        precondition(abs(first.y - initial.y * 2.0001 / 2.0101) < 1e-12)
+        let next = filter.step(GazePoint(x: 0.4, y: 0.1))
+        precondition(next.finite && next.x > first.x && next.y > first.y)
+
+        let reading = GazeReading(method: .webEyeTrack, raw: initial, latencyMs: 5, issue: nil,
+                                  webEyeTrackUnfiltered: first, webEyeTrackPoint: next,
+                                  webEyeTrackFeatures: samples[0].features)
+        let serialized = try! JSONEncoder().encode(reading)
+        let decoded = try! JSONDecoder().decode(GazeReading.self, from: serialized)
+        precondition(decoded.webEyeTrackFeatures == nil && decoded.webEyeTrackPoint == next)
     }
 }

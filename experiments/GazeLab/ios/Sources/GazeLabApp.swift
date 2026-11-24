@@ -21,10 +21,12 @@ private final class GazeLabModel: ObservableObject {
     @Published private(set) var points: [GazeMethod: GazePoint] = [:]
     @Published private(set) var report: GazeRun?
     @Published private(set) var archives: [URL] = GazeArchive.records()
-    @Published private(set) var calibrations: [String: GazeCalibration] = [:]
+    @Published private var calibrations: [String: GazeCalibration] = [:]
+    @Published private var webEyeTrackCalibration: WebEyeTrackPersonalization?
     @Published private(set) var enabledMethods = Set(GazeMethod.allCases)
 
     private let camera = GazeCamera()
+    private var webEyeTrackBaseHead: WebEyeTrackHead?
     private var activeSince: Double?
     private var calibrationIDs: [String: UUID] = [:]
     private var selectionRevision = 0
@@ -40,7 +42,7 @@ private final class GazeLabModel: ObservableObject {
     let sampleSeconds = 1.8
 
     private var enabledIdentities: [GazeModelIdentity] { identities.filter { enabledMethods.contains($0.method) } }
-    private var hasEnabledCalibration: Bool { enabledMethods.contains { calibrations[$0.rawValue] != nil } }
+    private var hasEnabledCalibration: Bool { enabledMethods.contains { isCalibrated($0) } }
     var target: GazeTargetSamples? { activeRun?.targets[targetIndex] }
     var canCalibrate: Bool { activeSince != nil && lastFrame?.faceBox != nil && !enabledIdentities.isEmpty && pendingRecord == nil }
     var canValidate: Bool { activeSince != nil && hasEnabledCalibration && pendingRecord == nil }
@@ -53,11 +55,12 @@ private final class GazeLabModel: ObservableObject {
         camera.onFrame = { [weak self] frame, revision in
             DispatchQueue.main.async { self?.receive(frame, revision: revision) }
         }
-        camera.onReady = { [weak self] identities, issues in
+        camera.onReady = { [weak self] identities, issues, webEyeTrackHead in
             DispatchQueue.main.async {
                 guard let self, self.activeSince != nil else { return }
                 self.identities = identities
                 self.modelIssues = issues
+                self.webEyeTrackBaseHead = webEyeTrackHead
                 self.updateSelection()
                 if identities.isEmpty { self.status = "没有可用模型" }
                 else if self.enabledIdentities.isEmpty { self.status = "请选择至少一个模型" }
@@ -75,7 +78,14 @@ private final class GazeLabModel: ObservableObject {
 
     private func updateSelection() {
         let methods = activeSince == nil ? [] : Set(enabledIdentities.map(\.method))
-        selectionRevision = camera.select(methods, streamResults: activeRun == nil)
+        let collecting = activeRun?.kind == .calibration
+        selectionRevision = camera.select(methods, streamResults: activeRun == nil,
+                                          webCalibration: collecting ? nil : webEyeTrackCalibration,
+                                          collectWebSamples: collecting)
+    }
+
+    func isCalibrated(_ method: GazeMethod) -> Bool {
+        method == .webEyeTrack ? webEyeTrackCalibration != nil : calibrations[method.rawValue] != nil
     }
 
     func setEnabled(_ enabled: Bool, for method: GazeMethod) {
@@ -141,6 +151,7 @@ private final class GazeLabModel: ObservableObject {
         canvasSize = size
         self.scale = scale
         calibrations = [:]
+        webEyeTrackCalibration = nil
         calibrationIDs = [:]
         points = [:]
         updateSelection()
@@ -167,16 +178,18 @@ private final class GazeLabModel: ObservableObject {
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
         let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? ""
         let methods = enabledIdentities
-        let keys = Set(methods.map { $0.method.rawValue })
-        let maps = kind == .validation ? calibrations.filter { keys.contains($0.key) } : [:]
-        let sources = calibrationIDs.filter { maps[$0.key] != nil }
+        let calibrated = kind == .validation ? Set(methods.map(\.method).filter { isCalibrated($0) }) : []
+        let keys = Set(calibrated.map(\.rawValue))
+        let maps = calibrations.filter { keys.contains($0.key) }
+        let sources = calibrationIDs.filter { keys.contains($0.key) }
         let sourceIDs = Set(sources.values)
         activeRun = GazeRun(kind: kind, calibrationID: sourceIDs.count == 1 ? sourceIDs.first : nil,
                            widthPx: Double(canvasSize.width) * scale, heightPx: Double(canvasSize.height) * scale,
                            displayScale: scale, device: device, osVersion: UIDevice.current.systemVersion,
                            appBuild: "\(version) (\(build))", models: methods,
                            settleSeconds: settleSeconds, sampleSeconds: sampleSeconds, targets: capturedTargets,
-                           calibrations: maps, calibrationIDs: sources)
+                           calibrations: maps, calibrationIDs: sources,
+                           webEyeTrackCalibration: calibrated.contains(.webEyeTrack) ? webEyeTrackCalibration : nil)
         updateSelection()
         status = "盯住白点，直到它移动"
     }
@@ -205,10 +218,10 @@ private final class GazeLabModel: ObservableObject {
 
     private func receive(_ reading: GazeReading, time: Double, revision: Int) {
         guard revision == selectionRevision, let started = activeSince, time >= started,
-              activeRun == nil, pendingRecord == nil, enabledMethods.contains(reading.method),
-              let raw = reading.raw, let map = calibrations[reading.method.rawValue] else { return }
-        let point = map.apply(raw)
-        if point.finite, points[reading.method] != point { points[reading.method] = point }
+              activeRun == nil, pendingRecord == nil, enabledMethods.contains(reading.method) else { return }
+        let map = calibrations[reading.method.rawValue]
+        let output = reading.method == .webEyeTrack ? reading.webEyeTrackPoint : reading.raw.flatMap { map?.apply($0) }
+        if let point = output, point.finite, points[reading.method] != point { points[reading.method] = point }
     }
 
     private func receive(_ frame: GazeCameraFrame, revision: Int) {
@@ -238,10 +251,9 @@ private final class GazeLabModel: ObservableObject {
         capturedTargets = []
         targetOnset = nil
         activeRun = nil
-        updateSelection()
 
         if run.kind == .calibration, reason == nil {
-            for method in run.models.map(\.method) {
+            for method in run.models.map(\.method) where method != .webEyeTrack {
                 let pairs = run.targets.compactMap { target -> (input: GazePoint, target: GazePoint)? in
                     let values = target.frames.compactMap { $0.readings.first(where: { $0.method == method })?.raw }
                     guard values.count >= 4 else { return nil }
@@ -253,8 +265,30 @@ private final class GazeLabModel: ObservableObject {
                 calibrations[method] = mapping
                 calibrationIDs[method] = run.id
             }
+            if run.models.contains(where: { $0.method == .webEyeTrack }), let base = webEyeTrackBaseHead {
+                let samples = run.targets.compactMap { target -> WebEyeTrackPersonalization.Sample? in
+                    let readings = target.frames.compactMap { frame in
+                        frame.readings.first { $0.method == .webEyeTrack && $0.webEyeTrackFeatures != nil }
+                    }
+                    let raw = readings.compactMap(\.raw)
+                    guard !raw.isEmpty else { return nil }
+                    let median = GazePoint.median(raw)
+                    let representative = readings.min { a, b in
+                        let left = a.raw ?? median, right = b.raw ?? median
+                        return hypot(left.x - median.x, left.y - median.y) < hypot(right.x - median.x, right.y - median.y)
+                    }
+                    guard let features = representative?.webEyeTrackFeatures else { return nil }
+                    return WebEyeTrackPersonalization.Sample(features: features, target: target.expected)
+                }
+                if let profile = WebEyeTrackPersonalization.fit(samples, baseHead: base) {
+                    run.webEyeTrackCalibration = profile
+                    webEyeTrackCalibration = profile
+                    calibrationIDs[GazeMethod.webEyeTrack.rawValue] = run.id
+                }
+            }
         }
-        run.status = reason ?? (run.kind == .calibration && run.calibrations.isEmpty ? "有效标定样本不足" : "完成")
+        updateSelection()
+        run.status = reason ?? (run.kind == .calibration && run.calibratedMethodCount == 0 ? "有效标定样本不足" : "完成")
         run.summarize()
         if run.kind == .validation { report = run }
         pendingRecord = run
@@ -268,7 +302,7 @@ private final class GazeLabModel: ObservableObject {
             archives = GazeArchive.records()
             pendingRecord = nil
             if run.kind == .calibration {
-                status = run.calibrations.isEmpty ? (run.status ?? "标定未完成") : "已标定 \(run.calibrations.count) 个模型"
+                status = run.calibratedMethodCount == 0 ? (run.status ?? "标定未完成") : "已标定 \(run.calibratedMethodCount) 个模型"
             } else { status = run.status == "完成" ? "已保存验证结果" : (run.status ?? "已保存") }
         } catch {
             status = "保存失败：\(error.localizedDescription)"
@@ -364,7 +398,7 @@ private struct GazeLabScreen: View {
                                 Text("\(Int(median.rounded())) / \(Int(p90.rounded())) px")
                                     .font(LabStyle.code)
                                     .accessibilityLabel("误差中位数 \(Int(median.rounded())) 像素，90 分位 \(Int(p90.rounded())) 像素")
-                            } else if model.calibrations[method.rawValue] == nil {
+                            } else if !model.isCalibrated(method) {
                                 Text("未标定").font(LabStyle.detail)
                             }
                         }

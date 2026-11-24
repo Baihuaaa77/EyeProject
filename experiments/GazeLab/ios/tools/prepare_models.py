@@ -239,21 +239,41 @@ def web_eye_track(template, topology, source, target):
     if pos != len(content):
         raise ValueError("WebEyeTrack 浏览器分片长度不匹配")
     net.set_weights(weights)
+    encoder = net.get_layer("cnn_encoder")
+    head = net.get_layer("gaze_mlp")
+    dense = [head.get_layer(name) for name in ("dense", "dense_1", "gaze_output")]
+    params = [layer.get_weights() for layer in dense]
+    for layer, (kernel, bias), dimensions, activation in zip(
+        dense, params, ((518, 16), (16, 16), (16, 2)), ("relu", "relu", "linear")
+    ):
+        if kernel.shape != dimensions or bias.shape != (dimensions[1],) or layer.get_config()["activation"] != activation:
+            raise ValueError("WebEyeTrack 预测头的结构变化")
     tflite = target.with_suffix(".tflite")
-    tflite.write_bytes(tf.lite.TFLiteConverter.from_keras_model(net).convert())
+    tflite.write_bytes(tf.lite.TFLiteConverter.from_keras_model(encoder).convert())
     convert(tflite, target, "TFLITE")
     runtime = tf.lite.Interpreter(model_path=str(tflite))
-    input_names = [next(item["name"] for item in runtime.get_input_details() if item["name"].split(":")[0].endswith("_" + name))
-                   for name in ("image", "head_vector", "face_origin_3d")]
+    input_names = [item["name"] for item in runtime.get_input_details()]
     output_names = [item["name"] for item in runtime.get_output_details()]
+    if len(input_names) != 1 or len(output_names) != 1:
+        raise ValueError("WebEyeTrack 编码器应只有一个输入和一个输出")
     rng = np.random.default_rng(137)
     for origin in ([0.0, 1.0, 32.0], [-3.0, 2.0, 48.0], [1.0, 3.0, 64.0]):
         sample = [rng.random((1, 128, 512, 3), dtype=np.float32), np.array([[0.02, 0.1, -0.995]], dtype=np.float32),
                   np.array([origin], dtype=np.float32)]
         ref = np.asarray(net(sample, training=False)).reshape(-1)
-        dst = run_mnn(target, dict(zip(input_names, sample)))[output_names[0]]
+        encoded = run_mnn(target, {input_names[0]: sample[0]})[output_names[0]]
+        if encoded.shape != (512,):
+            raise ValueError(f"WebEyeTrack 编码器输出尺寸错误：{encoded.shape}")
+        dst = np.concatenate((encoded, sample[1].ravel(), sample[2].ravel()))
+        for index, (kernel, bias) in enumerate(params):
+            dst = dst @ kernel + bias
+            if index < 2:
+                dst = np.maximum(dst, 0)
         np.testing.assert_allclose(dst, ref, atol=1e-4, rtol=1e-4)
-        print(f"WebEyeTrack：浏览器权重换用 MNN，最大坐标差 {np.max(np.abs(dst - ref)):.8f}")
+        print(f"WebEyeTrack：编码器与独立预测头组合输出的最大坐标差 {np.max(np.abs(dst - ref)):.8f}")
+    target.with_suffix(".head.json").write_text(json.dumps({"layers": [
+        {"kernel": kernel.ravel().tolist(), "bias": bias.tolist()} for kernel, bias in params
+    ]}, separators=(",", ":")), encoding="utf-8")
     return input_names, output_names
 
 
@@ -269,7 +289,7 @@ def prepare(args):
         "L2CS-Net": ("l2cs", args.l2cs, l2cs, "EyeProject l2cs_net.tflite，FP16 常量转 FP32，输出顺序沿用 Android 模块"),
         "WebEyeTrack": ("webeyetrack", args.webe_weights,
                         lambda path, target: web_eye_track(args.webe_template, args.webe_topology, path, target),
-                        "RedForestAI/WebEyeTrack 75fbd2f，浏览器公开 BlazeGaze 权重，GazeLab 统一仿射标定"),
+                        "RedForestAI/WebEyeTrack 75fbd2f，浏览器公开 BlazeGaze 编码器与可个性化预测头"),
     }
     for method, (name, original, prepare_model, source) in methods.items():
         if method in args.skip:
@@ -279,11 +299,12 @@ def prepare(args):
         filename = f"{name}.mnn"
         path = args.output / filename
         input_names, output_names = prepare_model(original, path)
-        entries.append({
-            "identity": {"method": method, "source": f"{source}；原文件 SHA-256 {sha256(original)}",
-                         "sha256": sha256(path), "filename": filename},
-            "inputNames": input_names, "outputNames": output_names,
-        })
+        identity = {"method": method, "source": f"{source}；原文件 SHA-256 {sha256(original)}",
+                    "sha256": sha256(path), "filename": filename}
+        if method == "WebEyeTrack":
+            head = path.with_suffix(".head.json")
+            identity["webEyeTrackHead"] = {"filename": head.name, "sha256": sha256(head)}
+        entries.append({"identity": identity, "inputNames": input_names, "outputNames": output_names})
     manifest = args.output / "manifest.json"
     manifest.write_text(json.dumps({"models": entries}, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"已验证 {len(entries)} 个模型：{manifest}")
@@ -302,7 +323,7 @@ def package(args):
     with ZipFile(args.shell) as shell, ZipFile(temp, "w", ZIP_DEFLATED) as ipa:
         plist = plistlib.loads(shell.read(root + "/Info.plist"))
         if (plist["CFBundleIdentifier"] != "com.zkyjss.gazelab"
-                or plist["CFBundleShortVersionString"] not in {"0.2.1", "0.2.2"}
+                or plist["CFBundleShortVersionString"] not in {"0.2.1", "0.2.2", "0.2.3"}
                 or plist["DTPlatformName"] != "iphoneos"
                 or root + "/embedded.mobileprovision" in shell.namelist()
                 or any(name.startswith(root + "/_CodeSignature/") for name in shell.namelist())):
@@ -313,10 +334,14 @@ def package(args):
         ipa.write(manifest, f"{root}/Models/manifest.json")
         for item in entries:
             identity = item["identity"]
-            model = args.models / identity["filename"]
-            if sha256(model) != identity["sha256"]:
-                raise ValueError(f"{model.name} SHA-256 校验失败")
-            ipa.write(model, f"{root}/Models/{model.name}")
+            head = identity.get("webEyeTrackHead")
+            if identity["method"] == "WebEyeTrack" and bool(head) != (plist["CFBundleShortVersionString"] == "0.2.3"):
+                raise ValueError("WebEyeTrack 权重结构和 GazeLab 构建版本不匹配")
+            for asset in [identity, head] if head else [identity]:
+                model = args.models / asset["filename"]
+                if sha256(model) != asset["sha256"]:
+                    raise ValueError(f"{model.name} SHA-256 校验失败")
+                ipa.write(model, f"{root}/Models/{model.name}")
     with ZipFile(temp) as ipa:
         if ipa.testzip():
             raise ValueError("IPA 压缩校验失败")

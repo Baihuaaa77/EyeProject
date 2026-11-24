@@ -11,8 +11,7 @@ enum GazeMethod: String, CaseIterable, Codable {
     var usesAngles: Bool { self == .l2cs }
     var inputCount: Int {
         switch self {
-        case .l2cs: 1
-        case .webEyeTrack: 3
+        case .l2cs, .webEyeTrack: 1
         default: 4
         }
     }
@@ -51,8 +50,9 @@ struct GazeCalibration: Codable {
         return GazePoint(x: x[0] * u + x[1] * v + x[2], y: y[0] * u + y[1] * v + y[2])
     }
 
-    static func fit(_ pairs: [(input: GazePoint, target: GazePoint)]) -> GazeCalibration? {
-        guard pairs.count >= 6 else { return nil }
+    static func fit(_ pairs: [(input: GazePoint, target: GazePoint)], minimumTargets: Int = 6,
+                    ridge: Double = 0.04) -> GazeCalibration? {
+        guard pairs.count >= minimumTargets else { return nil }
         let count = Double(pairs.count)
         let center = GazePoint(x: pairs.map(\.input.x).reduce(0, +) / count,
                                y: pairs.map(\.input.y).reduce(0, +) / count)
@@ -70,9 +70,10 @@ struct GazeCalibration: Codable {
             }
         }
         // 拒绝输入近乎共线的标定，再用小幅岭正则抑制放大抖动。
-        guard abs(system[0][1]) / count < 0.98 else { return nil }
-        system[0][0] += 0.04 * count
-        system[1][1] += 0.04 * count
+        let correlationLimit = ridge == 0 ? 1 - 1e-9 : 0.98
+        guard abs(system[0][1]) / count < correlationLimit else { return nil }
+        system[0][0] += ridge * count
+        system[1][1] += ridge * count
         for column in 0..<3 {
             guard let pivot = (column..<3).max(by: { abs(system[$0][column]) < abs(system[$1][column]) }),
                   abs(system[pivot][column]) > 1e-8 else { return nil }
@@ -95,6 +96,14 @@ struct GazeReading: Codable {
     let latencyMs: Double
     let issue: String?
     var webEyeTrack: WebEyeTrackGeometry? = nil
+    var webEyeTrackUnfiltered: GazePoint? = nil
+    var webEyeTrackPoint: GazePoint? = nil
+    // 标定用特征仅保留在内存中，实验日志记录输出和个性化参数。
+    var webEyeTrackFeatures: [Float]? = nil
+
+    private enum CodingKeys: String, CodingKey {
+        case method, raw, latencyMs, issue, webEyeTrack, webEyeTrackUnfiltered, webEyeTrackPoint
+    }
 }
 
 struct GazeCameraFrame: Codable {
@@ -111,10 +120,16 @@ struct GazeCameraFrame: Codable {
 }
 
 struct GazeModelIdentity: Codable {
+    struct Asset: Codable {
+        let filename: String
+        let sha256: String
+    }
+
     let method: GazeMethod
     let source: String
     let sha256: String
     let filename: String
+    var webEyeTrackHead: Asset? = nil
 }
 
 struct GazeTargetSamples: Codable, Identifiable {
@@ -156,14 +171,16 @@ struct GazeRun: Encodable, Identifiable {
     let models: [GazeModelIdentity]
     let settleSeconds: Double
     let sampleSeconds: Double
-    let calibrationMethod = "逐目标中位数、标准化二维岭回归，正则 0.04；L2CS 使用角度到屏幕的经验映射"
+    let calibrationMethod = "逐目标中位数、二维岭回归 0.04；WebEyeTrack 使用逐目标代表帧、最小二乘仿射与 Adam 预测头个性化"
     var targets: [GazeTargetSamples]
     var calibrations: [String: GazeCalibration] = [:]
     var calibrationIDs: [String: UUID] = [:]
+    var webEyeTrackCalibration: WebEyeTrackPersonalization? = nil
     var metrics: [GazeMethodMetrics] = []
     var finished: Date?
     var status: String?
     var actualFrameRateHz: Double?
+    var calibratedMethodCount: Int { calibrations.count + (webEyeTrackCalibration == nil ? 0 : 1) }
 
     mutating func summarize() {
         let frames = targets.flatMap(\.frames)
@@ -173,7 +190,9 @@ struct GazeRun: Encodable, Identifiable {
             }
             if let median = quantile(intervals, 0.5), median > 0 { actualFrameRateHz = 1 / median }
         }
-        let calibrated = models.map(\.method).filter { calibrations[$0.rawValue] != nil }
+        let calibrated = models.map(\.method).filter { method in
+            method == .webEyeTrack ? webEyeTrackCalibration != nil : calibrations[method.rawValue] != nil
+        }
         let calibratedSet = Set(calibrated)
         metrics = models.map(\.method).map { method in
             let readings = frames.flatMap(\.readings).filter { $0.method == method }
@@ -183,13 +202,14 @@ struct GazeRun: Encodable, Identifiable {
             var jitter: [Double] = []
             var inScreen = 0
             var validTargets = 0
-            if kind == .validation, let mapping = calibrations[method.rawValue] {
+            if kind == .validation, calibratedSet.contains(method) {
+                let mapping = calibrations[method.rawValue]
                 for target in targets {
                     var points: [GazePoint] = []
                     for frame in target.frames {
-                        guard let raw = frame.readings.first(where: { $0.method == method })?.raw else { continue }
-                        let point = mapping.apply(raw)
-                        guard point.finite else { continue }
+                        guard let reading = frame.readings.first(where: { $0.method == method }) else { continue }
+                        let output = method == .webEyeTrack ? reading.webEyeTrackPoint : reading.raw.flatMap { mapping?.apply($0) }
+                        guard let point = output, point.finite else { continue }
                         points.append(point)
                         let error = distance(point, target.expected)
                         errors.append(error)

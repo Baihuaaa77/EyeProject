@@ -63,8 +63,11 @@ final class GazeInference {
 
     private(set) var identities: [GazeModelIdentity] = []
     private(set) var issues: [String] = []
+    private(set) var webEyeTrackBaseHead: WebEyeTrackHead?
     private var loaded: [Loaded] = []
     private var webEyeTrack = WebEyeTrackPreprocessor()
+    private var webEyeTrackFilter = WebEyeTrackFilter()
+    private var webEyeTrackRevision: Int?
 
     init() {
         guard let folder = Bundle.main.resourceURL?.appendingPathComponent("Models"),
@@ -86,20 +89,31 @@ final class GazeInference {
                 issues.append("\(id.method.rawValue) 加载失败")
                 continue
             }
+            if id.method == .webEyeTrack {
+                guard let asset = id.webEyeTrackHead,
+                      let payload = try? Data(contentsOf: folder.appendingPathComponent(asset.filename)),
+                      SHA256.hash(data: payload).map({ String(format: "%02x", $0) }).joined() == asset.sha256,
+                      let head = try? JSONDecoder().decode(WebEyeTrackHead.self, from: payload), head.valid else {
+                    issues.append("WebEyeTrack 预测头加载失败")
+                    continue
+                }
+                webEyeTrackBaseHead = head
+            }
             loaded.append(Loaded(entry: entry, model: model))
             identities.append(id)
         }
     }
 
     func predict(buffer: CVPixelBuffer, face: GazeFace?, poseMatrix: [Double]?, cameraIssue: String?,
-                 methods: Set<GazeMethod>, isCurrent: () -> Bool, onReading: ((GazeReading) -> Void)?) -> [GazeReading] {
+                 methods: Set<GazeMethod>, revision: Int, webCalibration: WebEyeTrackPersonalization?,
+                 collectWebSamples: Bool, isCurrent: () -> Bool, onReading: ((GazeReading) -> Void)?) -> [GazeReading] {
         let selected = loaded.filter { methods.contains($0.entry.identity.method) }
         guard !selected.isEmpty, isCurrent() else { return [] }
         let lock = CVPixelBufferLockBaseAddress(buffer, .readOnly)
         defer { if lock == kCVReturnSuccess { CVPixelBufferUnlockBaseAddress(buffer, .readOnly) } }
         guard lock == kCVReturnSuccess, let pixels = CVPixelBufferGetBaseAddress(buffer),
-              let face, face.openEyes else {
-            let reason = cameraIssue != nil ? "人脸检测异常" : face == nil ? "未检测到人脸" : !face!.openEyes ? "闭眼或眼部遮挡" : "相机缓冲不可读"
+              let face else {
+            let reason = cameraIssue != nil ? "人脸检测异常" : face == nil ? "未检测到人脸" : "相机缓冲不可读"
             return selected.map { GazeReading(method: $0.entry.identity.method, raw: nil, latencyMs: 0, issue: reason) }
         }
 
@@ -114,6 +128,10 @@ final class GazeInference {
             let start = ProcessInfo.processInfo.systemUptime
             let entry = loaded.entry
             let method = entry.identity.method
+            if method != .webEyeTrack, !face.openEyes {
+                readings.append(GazeReading(method: method, raw: nil, latencyMs: 0, issue: "闭眼或眼部遮挡"))
+                continue
+            }
             let values: [Data]?
             var geometry: WebEyeTrackGeometry?
             var missingInput = "眼部裁剪超出画面"
@@ -143,31 +161,51 @@ final class GazeInference {
             case .l2cs:
                 values = [image.crop(face.bounds, size: 448, rgbImageNet: true)]
             case .webEyeTrack:
-                if let poseMatrix, let patch = WebEyeTrackPreprocessor.eyePatch(points: face.landmarksPx),
-                   let pixels = image.webEyeTrackPatch(patch),
-                   let head = webEyeTrack.geometry(points: face.landmarksPx, faceMatrix: poseMatrix,
-                                                  width: image.width, height: image.height) {
-                    geometry = head
-                    values = [pixels, GazeImage.data(head.headVector.map(Float.init)),
-                              GazeImage.data(head.faceOriginCm.map(Float.init))]
+                let open = WebEyeTrackPreprocessor.eyesOpen(points: face.landmarksPx, width: image.width, height: image.height)
+                if let poseMatrix {
+                    geometry = webEyeTrack.geometry(points: face.landmarksPx, faceMatrix: poseMatrix,
+                                                    width: image.width, height: image.height, updateDepth: open)
+                }
+                if open, geometry != nil, let patch = WebEyeTrackPreprocessor.eyePatch(points: face.landmarksPx),
+                   let pixels = image.webEyeTrackPatch(patch) {
+                    values = [pixels]
                 } else {
                     values = nil
-                    missingInput = "WebEyeTrack 眼部透视裁剪或头姿不可用"
+                    missingInput = open ? "WebEyeTrack 眼部透视裁剪或头姿不可用" : "WebEyeTrack 闭眼或眼部遮挡"
                 }
             }
 
             guard isCurrent() else { break }
             var prediction: GazePoint?
+            var features: [Float]?
+            var unfiltered: GazePoint?
+            var screenPoint: GazePoint?
             if let values {
                 let inputs = Dictionary(uniqueKeysWithValues: zip(entry.inputNames, values))
                 if let output = loaded.model.predict(inputs, output: entry.outputNames[0]) {
                     let a = Self.floats(output)
-                    if method.usesAngles {
+                    if method == .webEyeTrack, a.count == 512, let geometry,
+                       let head = webCalibration?.head ?? webEyeTrackBaseHead {
+                        let input = a + geometry.headVector.map(Float.init) + geometry.faceOriginCm.map(Float.init)
+                        let raw = head.predict(input)
+                        let mapped = webCalibration?.affine.apply(raw) ?? raw
+                        if raw.finite, mapped.finite {
+                            if webEyeTrackRevision != revision {
+                                webEyeTrackFilter = WebEyeTrackFilter()
+                                webEyeTrackRevision = revision
+                            }
+                            let filtered = webEyeTrackFilter.step(mapped)
+                            prediction = raw
+                            unfiltered = GazePoint(x: mapped.x + 0.5, y: mapped.y + 0.5)
+                            screenPoint = GazePoint(x: min(1, max(0, filtered.x + 0.5)), y: min(1, max(0, filtered.y + 0.5)))
+                            if collectWebSamples { features = input }
+                        }
+                    } else if method.usesAngles {
                         if let yaw = Self.angle(a), let second = loaded.model.output(entry.outputNames[1]),
                            let pitch = Self.angle(Self.floats(second)) {
                             prediction = GazePoint(x: yaw, y: pitch)
                         }
-                    } else if a.count >= 2 {
+                    } else if method != .webEyeTrack, a.count >= 2 {
                         prediction = GazePoint(x: Double(a[0]), y: Double(a[1]))
                     }
                 }
@@ -176,7 +214,8 @@ final class GazeInference {
             let reading = GazeReading(method: method, raw: prediction,
                                       latencyMs: (ProcessInfo.processInfo.systemUptime - start) * 1000,
                                       issue: prediction == nil ? (values == nil ? missingInput : "模型推理失败") : nil,
-                                      webEyeTrack: geometry)
+                                      webEyeTrack: geometry, webEyeTrackUnfiltered: unfiltered, webEyeTrackPoint: screenPoint,
+                                      webEyeTrackFeatures: features)
             readings.append(reading)
             if prediction != nil { onReading?(reading) }
         }

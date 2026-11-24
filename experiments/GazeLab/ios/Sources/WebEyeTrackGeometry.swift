@@ -12,7 +12,8 @@ struct WebEyeTrackPreprocessor {
     private var faceWidthCm: Double?
     private var depthCm = 60.0
 
-    mutating func geometry(points: [GazePoint], faceMatrix m: [Double], width: Int, height: Int) -> WebEyeTrackGeometry? {
+    mutating func geometry(points: [GazePoint], faceMatrix m: [Double], width: Int, height: Int,
+                           updateDepth: Bool = true) -> WebEyeTrackGeometry? {
         guard points.count >= 478, m.count == 16, m.allSatisfy(\.isFinite), width > 0, height > 0 else { return nil }
 
         let faceWidthPx = distance(points[356], points[127])
@@ -43,7 +44,7 @@ struct WebEyeTrackPreprocessor {
         // 浏览器实现缺省 fx=fy=图像宽度。径向尺度优化和人脸原点使用同一焦距。
         let focal = Double(width)
         let cx = focal / 2, cy = Double(height) / 2
-        let rayX = (nose.x - cx) / focal, rayY = (nose.y - cy) / focal
+        let rayX = (nose.x - floor(cx + 0.5)) / focal, rayY = (nose.y - floor(cy + 0.5)) / focal
         var depth = depthCm
         for _ in 0..<10 {
             let factor = focal / depth
@@ -64,8 +65,18 @@ struct WebEyeTrackPreprocessor {
                       rayY * depth + eyes.map(\.y).reduce(0, +) / 4, depth]
         guard (head + origin).allSatisfy(\.isFinite) else { return nil }
         faceWidthCm = faceWidth
-        depthCm = depth
+        if updateDepth { depthCm = depth }
         return WebEyeTrackGeometry(headVector: head, faceOriginCm: origin, faceWidthCm: faceWidth)
+    }
+
+    static func eyesOpen(points: [GazePoint], width: Int, height: Int) -> Bool {
+        guard points.count >= 388, width > 0, height > 0 else { return false }
+        func distance(_ a: Int, _ b: Int) -> Double {
+            hypot((points[a].x - points[b].x) / Double(width), (points[a].y - points[b].y) / Double(height))
+        }
+        // 官方在归一化图像坐标使用六点眼纵横比，两眼的阈值均为 0.2。
+        return distance(385, 380) + distance(387, 373) >= 0.4 * max(distance(362, 263), 1e-8) &&
+               distance(158, 153) + distance(160, 144) >= 0.4 * max(distance(133, 33), 1e-8)
     }
 
     static func eyePatch(points: [GazePoint]) -> WebEyeTrackPatch? {

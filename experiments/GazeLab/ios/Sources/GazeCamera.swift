@@ -7,11 +7,13 @@ final class GazeCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
         var methods: Set<GazeMethod> = []
         var revision = 0
         var streamResults = false
+        var webCalibration: WebEyeTrackPersonalization?
+        var collectWebSamples = false
     }
 
     var onReading: ((GazeReading, Double, Int) -> Void)?
     var onFrame: ((GazeCameraFrame, Int) -> Void)?
-    var onReady: (([GazeModelIdentity], [String]) -> Void)?
+    var onReady: (([GazeModelIdentity], [String], WebEyeTrackHead?) -> Void)?
     var onError: ((String) -> Void)?
 
     private let queue = DispatchQueue(label: "gazelab.camera", qos: .userInitiated, autoreleaseFrequency: .workItem)
@@ -22,10 +24,12 @@ final class GazeCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
     private let selectionLock = NSLock()
     private var selection = Selection()
 
-    func select(_ methods: Set<GazeMethod>, streamResults: Bool) -> Int {
+    func select(_ methods: Set<GazeMethod>, streamResults: Bool, webCalibration: WebEyeTrackPersonalization?,
+                collectWebSamples: Bool) -> Int {
         selectionLock.lock()
         defer { selectionLock.unlock() }
-        selection = Selection(methods: methods, revision: selection.revision + 1, streamResults: streamResults)
+        selection = Selection(methods: methods, revision: selection.revision + 1, streamResults: streamResults,
+                              webCalibration: webCalibration, collectWebSamples: collectWebSamples)
         return selection.revision
     }
 
@@ -40,7 +44,7 @@ final class GazeCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
             guard !session.isRunning else { return }
             do {
                 if engines == nil { engines = GazeInference() }
-                if let engines { onReady?(engines.identities, engines.issues) }
+                if let engines { onReady?(engines.identities, engines.issues, engines.webEyeTrackBaseHead) }
                 if detector == nil { try configure() }
                 session.startRunning()
                 if !session.isRunning { onError?("前置相机启动失败") }
@@ -130,7 +134,9 @@ final class GazeCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
             self.onReading?(reading, now, selection.revision)
         } : nil
         let readings = engines.predict(buffer: buffer, face: face, poseMatrix: poseMatrix, cameraIssue: issue,
-                                      methods: selection.methods, isCurrent: isCurrent, onReading: publish)
+                                      methods: selection.methods, revision: selection.revision,
+                                      webCalibration: selection.webCalibration, collectWebSamples: selection.collectWebSamples,
+                                      isCurrent: isCurrent, onReading: publish)
         guard isCurrent() else { return }
         let angles = poseMatrix.map { m in
             [atan2(-m[8], hypot(m[0], m[4])), atan2(m[9], m[10]), atan2(m[4], m[0])].map { $0 * 180 / .pi }
