@@ -322,8 +322,10 @@ def package(args):
     temp = args.output.with_suffix(".tmp")
     with ZipFile(args.shell) as shell, ZipFile(temp, "w", ZIP_DEFLATED) as ipa:
         plist = plistlib.loads(shell.read(root + "/Info.plist"))
+        version = plist["CFBundleShortVersionString"]
+        split_web_versions = {"0.2.3", "0.2.4"}
         if (plist["CFBundleIdentifier"] != "com.zkyjss.gazelab"
-                or plist["CFBundleShortVersionString"] not in {"0.2.1", "0.2.2", "0.2.3"}
+                or version not in {"0.2.1", "0.2.2"} | split_web_versions
                 or plist["DTPlatformName"] != "iphoneos"
                 or root + "/embedded.mobileprovision" in shell.namelist()
                 or any(name.startswith(root + "/_CodeSignature/") for name in shell.namelist())):
@@ -335,7 +337,7 @@ def package(args):
         for item in entries:
             identity = item["identity"]
             head = identity.get("webEyeTrackHead")
-            if identity["method"] == "WebEyeTrack" and bool(head) != (plist["CFBundleShortVersionString"] == "0.2.3"):
+            if identity["method"] == "WebEyeTrack" and bool(head) != (version in split_web_versions):
                 raise ValueError("WebEyeTrack 权重结构和 GazeLab 构建版本不匹配")
             for asset in [identity, head] if head else [identity]:
                 model = args.models / asset["filename"]
