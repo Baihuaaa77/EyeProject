@@ -173,14 +173,28 @@ class DryEyeEngine(platform: ScreeningPlatform, private val scope: CoroutineScop
     /** 回答当前视标；只接受每题第一次作答。[direction] 为 -1 表示「看不清」（记为错误）。 */
     fun answer(direction: Int, byVoice: Boolean = false) = submitAnswer(direction, byVoice, byGesture = false)
 
-    fun resetGestureAnswers() = gestureGate.reset()
+    fun resetGestureAnswers() {
+        gestureGate.reset()
+        updateGestureFeedback(GestureFeedback())
+    }
 
     fun gestureSample(direction: Int, capturedAt: Long, now: Long) {
         val s = _uiState.value
-        if (helpSession.paused || s.paused) return
+        if (helpSession.paused || s.paused) {
+            updateGestureFeedback(GestureFeedback())
+            return
+        }
         val presentedAt = gesturePresentedAt.takeIf { s.trialVisible && pendingAnswer?.isActive == true }
-        val answer = gestureGate.offer(direction, capturedAt, now, s.trialId, presentedAt) ?: return
-        submitAnswer(answer, byVoice = false, byGesture = true)
+        val answer = gestureGate.offer(direction, capturedAt, now, s.trialId, presentedAt)
+        updateGestureFeedback(if (answer != null || !s.trialVisible) GestureFeedback() else gestureGate.feedback)
+        if (answer != null) submitAnswer(answer, byVoice = false, byGesture = true)
+    }
+
+    private fun updateGestureFeedback(next: GestureFeedback) {
+        val current = _uiState.value.gestureFeedback
+        if (current.direction == next.direction && current.needsRelease == next.needsRelease &&
+            abs(current.progress - next.progress) < 0.05f && (next.progress == 0f) == (current.progress == 0f)) return
+        _uiState.update { it.copy(gestureFeedback = next) }
     }
 
     private fun submitAnswer(direction: Int, byVoice: Boolean, byGesture: Boolean) {

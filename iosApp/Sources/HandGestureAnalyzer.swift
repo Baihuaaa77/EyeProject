@@ -18,7 +18,7 @@ final class HandGestureAnalyzer {
 
     /// 仅由相机队列调用。被队列持有的像素缓冲在闭包结束时归还。
     func offer(_ buffer: CVPixelBuffer, time: Int64) {
-        guard time - lastFrame >= 75, slot.wait(timeout: .now()) == .success else { return }
+        guard time - lastFrame >= 50, slot.wait(timeout: .now()) == .success else { return }
         lastFrame = time
         queue.async {
             let direction = self.direction(in: buffer)
@@ -31,7 +31,7 @@ final class HandGestureAnalyzer {
 
     private func direction(in buffer: CVPixelBuffer) -> Int32 {
         let handler = VNImageRequestHandler(cvPixelBuffer: buffer, orientation: .up, options: [:])
-        do { try handler.perform([request]) } catch { return -2 }
+        do { try handler.perform([request]) } catch { return -1 }
         let hands = request.results ?? []
         let width = Float(CVPixelBufferGetWidth(buffer))
         let height = Float(CVPixelBufferGetHeight(buffer))
@@ -46,16 +46,27 @@ final class HandGestureAnalyzer {
     private func direction(of hand: VNHumanHandPoseObservation, xScale: Float, yScale: Float) -> Int32 {
         let points = KotlinFloatArray(size: Int32(Self.joints.count * 2))
         for (index, joint) in Self.joints.enumerated() {
-            guard let point = try? hand.recognizedPoint(joint), point.confidence >= 0.4 else { return -2 }
-            // 转成使用者视角，且将 Vision 的左下原点转为左上原点。
-            points.set(index: Int32(index * 2), value: Float(1 - point.location.x) * xScale)
-            points.set(index: Int32(index * 2 + 1), value: Float(1 - point.location.y) * yScale)
+            if let point = try? hand.recognizedPoint(joint), point.confidence >= Self.minConfidence {
+                // 转成使用者视角，且将 Vision 的左下原点转为左上原点。
+                points.set(index: Int32(index * 2), value: Float(1 - point.location.x) * xScale)
+                points.set(index: Int32(index * 2 + 1), value: Float(1 - point.location.y) * yScale)
+            } else {
+                // 握拳或单指指向时，藏在掌心的其余指尖常被遮挡导致置信度偏低；标记为 NaN 由共用算法按未伸展处理。
+                points.set(index: Int32(index * 2), value: Float.nan)
+                points.set(index: Int32(index * 2 + 1), value: Float.nan)
+            }
         }
         return HandPointing.shared.direction(points: points)
     }
 
+    private static let minConfidence: Float = 0.25
+
     private static let joints: [VNHumanHandPoseObservation.JointName] = [
-        .wrist, .indexMCP, .indexPIP, .indexTip, .middleMCP, .middlePIP, .middleTip,
-        .ringMCP, .ringPIP, .ringTip, .littleMCP, .littlePIP, .littleTip,
+        .wrist,
+        .thumbCMC, .thumbMP, .thumbIP, .thumbTip,
+        .indexMCP, .indexPIP, .indexTip,
+        .middleMCP, .middlePIP, .middleTip,
+        .ringMCP, .ringPIP, .ringTip,
+        .littleMCP, .littlePIP, .littleTip,
     ]
 }

@@ -230,14 +230,28 @@ class ScreeningEngine(platform: ScreeningPlatform, internal val scope: Coroutine
         }
     }
 
-    fun resetGestureAnswers() = gestureGate.reset()
+    fun resetGestureAnswers() {
+        gestureGate.reset()
+        updateGestureFeedback(GestureFeedback())
+    }
 
     fun gestureSample(direction: Int, capturedAt: Long, now: Long) {
         val s = state.value
-        if (helpSession.paused || s.kind != ScreeningKind.PRESBYOPIA || !s.step.acceptsGestureDirection()) return
+        if (helpSession.paused || s.kind != ScreeningKind.PRESBYOPIA || !s.step.acceptsGestureDirection()) {
+            updateGestureFeedback(GestureFeedback())
+            return
+        }
         val presentedAt = gesturePresentedAt.takeIf { s.trialVisible && questionStartMs != 0L }
-        val answer = gestureGate.offer(direction, capturedAt, now, s.trialId, presentedAt) ?: return
-        presbyopia.answer(answer, byGesture = true)
+        val answer = gestureGate.offer(direction, capturedAt, now, s.trialId, presentedAt)
+        updateGestureFeedback(if (answer != null || !s.trialVisible) GestureFeedback() else gestureGate.feedback)
+        if (answer != null) presbyopia.answer(answer, byGesture = true)
+    }
+
+    private fun updateGestureFeedback(next: GestureFeedback) {
+        val current = _state.value.gestureFeedback
+        if (current.direction == next.direction && current.needsRelease == next.needsRelease &&
+            abs(current.progress - next.progress) < 0.05f && (next.progress == 0f) == (current.progress == 0f)) return
+        _state.update { it.copy(gestureFeedback = next) }
     }
 
     /** [direction] 为 -1 表示「看不清」，记为错误作答。 */

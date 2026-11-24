@@ -307,6 +307,9 @@ class MobileScreeningController(
                 val directionTask = s.phase in setOf(DryEyePhase.Practice, DryEyePhase.Natural, DryEyePhase.Open)
                 put("voiceActive",directionTask)
                 put("gestureActive",directionTask && !s.paused)
+                put("gestureDirection",s.gestureFeedback.direction)
+                put("gestureProgress",s.gestureFeedback.progress.toDouble())
+                put("gestureNeedsRelease",s.gestureFeedback.needsRelease)
                 put("naturalSeconds",s.naturalSeconds); put("afterRest",s.afterRest); put("canExtend",s.canExtend); put("canRest",s.canRestRetest); put("progress",s.progressFraction)
                 dryEyeProgress(s).let { p -> put("overallProgress",p?.fraction); put("remainingText",p?.remainingText) }
                 ResultReports.dryEye(s)?.let { put("report",it.toRecordObject()) }
@@ -317,6 +320,9 @@ class MobileScreeningController(
                 put("phase",s.step.name); put("title",if (s.kind == ScreeningKind.PRESBYOPIA) "老视自测" else "眼位自测")
                 put("gestureActive",s.kind == ScreeningKind.PRESBYOPIA && !s.guidePending && s.step.acceptsGestureDirection() &&
                     !s.nearAwaitingEyeReady && !s.stabilityInterrupted)
+                put("gestureDirection",s.gestureFeedback.direction)
+                put("gestureProgress",s.gestureFeedback.progress.toDouble())
+                put("gestureNeedsRelease",s.gestureFeedback.needsRelease)
                 put("instruction",s.instruction); put("stepTitle",stepTitle(s.step)); put("guidePending",s.guidePending)
                 put("subjectName",s.subject?.name); put("subjectId",s.subject?.id); put("mode",s.mode)
                 put("guideText",screeningGuideText(s)); put("glassesCheck",s.glassesCheckPending)

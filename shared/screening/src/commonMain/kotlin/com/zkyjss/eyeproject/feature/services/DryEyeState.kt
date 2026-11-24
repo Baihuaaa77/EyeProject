@@ -39,6 +39,7 @@ data class DryEyeTestUiState(
     val level: Float = DryEyeProtocol.LEVELS[DryEyeProtocol.START_LEVEL_INDEX],
     val optotypePx: Float = 0f,
     val lastAnswerCorrect: Boolean? = null,
+    val gestureFeedback: GestureFeedback = GestureFeedback(),
     // 数据
     val phase1Blinks: List<Float> = emptyList(),
     val phase2Blinks: List<Float> = emptyList(),

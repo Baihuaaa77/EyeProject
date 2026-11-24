@@ -362,6 +362,7 @@ internal fun TrialContent(state: DryEyeTestUiState, onAnswer: (Int) -> Unit) {
             }
             val size = with(LocalDensity.current) { state.optotypePx.toDp() }
             OptotypeAnswerPad(state.direction, size, state.trialVisible,
+                gesture = state.gestureFeedback,
                 belowStimulus = { TrialTimer(state.trialId, state.trialVisible) }, onAnswer = onAnswer)
             TestNotice(state.qualityWarning)
         }

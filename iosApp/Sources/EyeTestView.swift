@@ -426,12 +426,33 @@ private struct OptotypeAnswerPad: View {
             }
         }.disabled(!runtime.bool("trialVisible"))
     }
-    /// 基准箭头朝右，按视标方向编码旋转：0=右 1=下 2=左 3=上。
+    /// 基准箭头朝右，按视标方向编码旋转：0=右 1=下 2=左 3=上；手势命中时同步高亮并显示确认进度环。
     private func arrow(_ label: String, _ direction: Int) -> some View {
-        Button { runtime.answer(direction) } label: {
-            ArrowGlyph().stroke(EyeStyle.text, style: StrokeStyle(lineWidth: 24 * 0.11, lineCap: .round, lineJoin: .round))
+        let visible = runtime.bool("trialVisible")
+        let matched = visible && (runtime.state["gestureDirection"] as? NSNumber)?.intValue == direction
+        let needsRelease = matched && runtime.bool("gestureNeedsRelease")
+        let holding = matched && !needsRelease
+        let progress = holding ? max(0.08, min(1, runtime.number("gestureProgress"))) : 0
+        return Button { runtime.answer(direction) } label: {
+            ArrowGlyph().stroke(holding ? EyeStyle.primary : EyeStyle.text,
+                style: StrokeStyle(lineWidth: 24 * 0.11, lineCap: .round, lineJoin: .round))
                 .frame(width: 24, height: 24).rotationEffect(.degrees(Double(direction) * 90))
-        }.buttonStyle(DirectionKeyStyle()).accessibilityLabel(label)
+        }
+        .buttonStyle(DirectionKeyStyle(highlighted: holding))
+        .overlay {
+            if holding {
+                Circle().stroke(EyeStyle.primary.opacity(0.18), lineWidth: 3).padding(1.5).allowsHitTesting(false)
+                Circle().trim(from: 0, to: CGFloat(progress))
+                    .stroke(EyeStyle.primary, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                    .padding(1.5)
+                    .animation(.easeOut(duration: 0.1), value: progress)
+                    .allowsHitTesting(false)
+            } else if needsRelease {
+                Circle().stroke(EyeStyle.primary.opacity(0.35), lineWidth: 2).padding(1).allowsHitTesting(false)
+            }
+        }
+        .accessibilityLabel(label)
     }
 }
 

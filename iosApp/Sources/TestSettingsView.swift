@@ -54,7 +54,7 @@ struct SystemSettingsPage: View {
             if showGestureAnswers {
                 ListGroup(title: "作答方式") {
                     SwitchRow(title: "手势作答", isOn: $gestureAnswersEnabled,
-                        subtitle: "食指指向 E 的开口，答完放下手")
+                        subtitle: "食指或大拇指指向 E 开口，换向可直接续答")
                 }
             }
             if !inTest {

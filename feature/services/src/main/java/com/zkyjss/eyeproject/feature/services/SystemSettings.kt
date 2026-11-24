@@ -124,7 +124,7 @@ internal fun TestSettingsContent(
     if (showGestureAnswers) {
         EyeListGroup(title = "作答方式") {
             EyeSwitchRow("手势作答", settings.gestureAnswersEnabled, settings::setGestureAnswers,
-                subtitle = "食指指向 E 的开口，答完放下手")
+                subtitle = "食指或大拇指指向 E 开口，换向可直接续答")
         }
     }
     editor?.let { title ->

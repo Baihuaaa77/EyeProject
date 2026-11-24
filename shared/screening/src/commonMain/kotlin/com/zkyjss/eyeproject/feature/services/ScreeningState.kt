@@ -145,6 +145,7 @@ data class ScreeningState(
     val trialVisible: Boolean = false,
     val trialId: Int = 0,
     val trialOptotypePx: Float = 0f,
+    val gestureFeedback: GestureFeedback = GestureFeedback(),
     val trialDistanceCm: Float = 0f,
     val trialMovementMs: Long? = null,
     val trialDistanceSpreadCm: Float = 0f,

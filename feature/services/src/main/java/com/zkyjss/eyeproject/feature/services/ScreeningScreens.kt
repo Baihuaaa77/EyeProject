@@ -328,7 +328,7 @@ internal fun VisionContent(s: ScreeningState, vm: ScreeningTestViewModel) {
                 EyeText("本字号第 ${(s.trialIndex + 1).coerceAtMost(4)}/4 题",
                     LocalEyeTypography.current.bodySecondary, LocalEyeColors.current.textSecondary)
                 if (!s.trialVisible) EyeText("停稳后视标会自动出现", LocalEyeTypography.current.subtitle, LocalEyeColors.current.textSecondary)
-                OptotypeAnswerPad(s.direction, size, s.trialVisible) { vm.answer(it) }
+                OptotypeAnswerPad(s.direction, size, s.trialVisible, gesture = s.gestureFeedback) { vm.answer(it) }
             }
             if (!s.resolutionAdvancePending) s.nearStopReason?.let {
                 EyeText(it, LocalEyeTypography.current.bodySecondary, LocalEyeColors.current.textSecondary)
@@ -381,7 +381,7 @@ private fun CurveContent(s: ScreeningState, vm: ScreeningTestViewModel) {
                 EyeText("本字号第 ${s.trialIndex + 1}/${PresbyopiaProtocol.CURVE_TRIALS_PER_LEVEL} 题",
                     LocalEyeTypography.current.bodySecondary, LocalEyeColors.current.textSecondary)
                 if (!s.trialVisible) EyeText("移到 ${target.toInt()} cm 并停稳", LocalEyeTypography.current.body, LocalEyeColors.current.textPrimary)
-                OptotypeAnswerPad(s.direction, size, s.trialVisible) { vm.answer(it) }
+                OptotypeAnswerPad(s.direction, size, s.trialVisible, gesture = s.gestureFeedback) { vm.answer(it) }
             }
             s.nearStopReason?.let { EyeText(it, LocalEyeTypography.current.bodySecondary, LocalEyeColors.current.textSecondary) }
         }
@@ -396,7 +396,7 @@ internal fun FlipperContent(s: ScreeningState, vm: ScreeningTestViewModel) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
             if (!s.trialVisible) EyeText(if (s.flipperCheck) "移到 ${target.toInt()} cm 停稳" else "停稳后开始",
                 LocalEyeTypography.current.subtitle, LocalEyeColors.current.textSecondary)
-            OptotypeAnswerPad(s.direction, size, s.trialVisible) { vm.answer(it) }
+            OptotypeAnswerPad(s.direction, size, s.trialVisible, gesture = s.gestureFeedback) { vm.answer(it) }
 
         }
     }

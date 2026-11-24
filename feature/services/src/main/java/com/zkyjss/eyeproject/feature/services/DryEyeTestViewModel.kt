@@ -38,7 +38,10 @@ class DryEyeTestViewModel @Inject constructor(
             engine.gestureSample(direction, capturedAt, platform.nowMs())
         }
     }
-    internal fun stopGestureAnswers() = platform.stopGestureAnswers()
+    internal fun stopGestureAnswers() {
+        platform.stopGestureAnswers()
+        engine.resetGestureAnswers()
+    }
     fun setHelpPresented(presented: Boolean) = engine.setHelpPresented(presented)
     fun feedbackCues(enabled: Boolean) = platform.feedbackSession.poll(screeningFeedbackFrame(uiState.value), platform.nowMs(), enabled)
     /** 本人与家庭成员：测试开始时选「这次测谁」，资料在「我的」维护。 */

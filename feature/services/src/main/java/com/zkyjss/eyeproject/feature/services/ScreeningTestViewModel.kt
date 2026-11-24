@@ -38,7 +38,10 @@ class ScreeningTestViewModel @Inject constructor(
             engine.gestureSample(direction, capturedAt, platform.nowMs())
         }
     }
-    internal fun stopGestureAnswers() = platform.stopGestureAnswers()
+    internal fun stopGestureAnswers() {
+        platform.stopGestureAnswers()
+        engine.resetGestureAnswers()
+    }
     fun setHelpPresented(presented: Boolean) = engine.setHelpPresented(presented)
     fun feedbackCues(enabled: Boolean) = platform.feedbackSession.poll(screeningFeedbackFrame(state.value, engine.coverRemainingMs()), platform.nowMs(), enabled)
     fun configure(kind: ScreeningKind) { platform.opticalPrecision = kind == ScreeningKind.STRABISMUS; engine.configure(kind) }

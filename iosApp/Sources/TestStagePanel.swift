@@ -154,17 +154,19 @@ enum AnswerKey {
     static let gap: CGFloat = 8
 }
 
-/// 方向键：浅填充圆底、不描边，按下换浅主色底（2026-11 改版）。
+/// 方向键：浅填充圆底、不描边，按下或手势命中换浅主色底（2026-11 改版）。
 struct DirectionKeyStyle: ButtonStyle {
+    var highlighted = false
     @Environment(\.isEnabled) private var enabled
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .frame(width: AnswerKey.size, height: AnswerKey.size)
-            .background(configuration.isPressed && enabled ? EyeStyle.primarySoft : EyeStyle.surfaceVariant, in: Circle())
+            .background((configuration.isPressed || highlighted) && enabled ? EyeStyle.primarySoft : EyeStyle.surfaceVariant, in: Circle())
             .contentShape(Circle())
             .scaleEffect(configuration.isPressed && enabled ? 0.9 : 1)
             .opacity(enabled ? 1 : 0.35)
             .animation(EyeStyle.pressSpring, value: configuration.isPressed)
+            .animation(.easeOut(duration: 0.16), value: highlighted)
             .animation(.easeOut(duration: 0.16), value: enabled)
     }
 }

@@ -18,6 +18,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
@@ -50,7 +52,7 @@ private val KeyGap = 8.dp
  */
 @Composable
 internal fun OptotypeAnswerPad(direction: Int, size: Dp, visible: Boolean, belowStimulus: @Composable () -> Unit = {},
-    onAnswer: (Int) -> Unit) {
+    gesture: GestureFeedback = GestureFeedback(), onAnswer: (Int) -> Unit) {
     val colors = LocalEyeColors.current
     Column(Modifier.fillMaxWidth().testTag("answer-pad"), horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -63,27 +65,34 @@ internal fun OptotypeAnswerPad(direction: Int, size: Dp, visible: Boolean, below
         ) { FramedOptotype(direction, size, visible) }
         belowStimulus()
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(KeyGap)) {
-            DirectionButton(3, "向上", visible) { onAnswer(3) }
+            DirectionButton(3, "向上", visible, gesture) { onAnswer(3) }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(KeyGap)) {
-                DirectionButton(2, "向左", visible) { onAnswer(2) }
+                DirectionButton(2, "向左", visible, gesture) { onAnswer(2) }
                 SkipButton(visible) { onAnswer(-1) }
-                DirectionButton(0, "向右", visible) { onAnswer(0) }
+                DirectionButton(0, "向右", visible, gesture) { onAnswer(0) }
             }
-            DirectionButton(1, "向下", visible) { onAnswer(1) }
+            DirectionButton(1, "向下", visible, gesture) { onAnswer(1) }
         }
     }
 }
 
-/** 圆形方向键：浅填充圆底 + 正文色箭头（绘制，不依赖字体字形），按下时轻缩并换浅主色底；不描边。 */
+/** 圆形方向键：浅填充圆底 + 正文色箭头（绘制，不依赖字体字形），按下或手势命中时换浅主色底并显示确认环。 */
 @Composable
-private fun DirectionButton(direction: Int, label: String, enabled: Boolean, onClick: () -> Unit) {
+private fun DirectionButton(direction: Int, label: String, enabled: Boolean, gesture: GestureFeedback, onClick: () -> Unit) {
     val colors = LocalEyeColors.current
     val keySize = if (LocalDensity.current.fontScale > 1.2f) EyeControlSizes.answerKeyCompact else EyeControlSizes.answerKey
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
+    val gestureMatched = enabled && gesture.direction == direction
+    val gestureHolding = gestureMatched && !gesture.needsRelease
+    val gestureNeedsRelease = gestureMatched && gesture.needsRelease
     val scale by animateFloatAsState(if (pressed && enabled) 0.9f else 1f, EyeMotion.pressSpring(), label = "方向键缩放")
-    val fill by animateColorAsState(if (pressed && enabled) colors.primarySoft else colors.surfaceVariant,
+    val fill by animateColorAsState(if ((pressed || gestureHolding) && enabled) colors.primarySoft else colors.surfaceVariant,
         tween(EyeMotion.SHORT), label = "方向键底色")
+    val arrowColor by animateColorAsState(if (gestureHolding) colors.primary else colors.textPrimary,
+        tween(EyeMotion.SHORT), label = "方向键箭头色")
+    val ringProgress by animateFloatAsState(if (gestureHolding) gesture.progress.coerceIn(0f, 1f) else 0f,
+        tween(EyeMotion.SHORT), label = "手势确认进度")
     val alpha by animateFloatAsState(if (enabled) 1f else 0.35f, tween(EyeMotion.SHORT), label = "方向键可用")
     Box(
         Modifier.size(keySize)
@@ -93,6 +102,44 @@ private fun DirectionButton(direction: Int, label: String, enabled: Boolean, onC
             .semantics { contentDescription = label },
         contentAlignment = Alignment.Center,
     ) {
+        if (gestureHolding || gestureNeedsRelease) {
+            Canvas(Modifier.fillMaxSize()) {
+                val strokeWidth = if (gestureHolding) 3.dp.toPx() else 2.dp.toPx()
+                val inset = strokeWidth / 2f
+                val arcSize = Size(size.width - strokeWidth, size.height - strokeWidth)
+                if (gestureHolding) {
+                    drawArc(
+                        color = colors.primary.copy(alpha = 0.18f),
+                        startAngle = 0f,
+                        sweepAngle = 360f,
+                        useCenter = false,
+                        topLeft = Offset(inset, inset),
+                        size = arcSize,
+                        style = Stroke(strokeWidth),
+                    )
+                    val sweep = (ringProgress * 360f).coerceAtLeast(24f)
+                    drawArc(
+                        color = colors.primary,
+                        startAngle = -90f,
+                        sweepAngle = sweep,
+                        useCenter = false,
+                        topLeft = Offset(inset, inset),
+                        size = arcSize,
+                        style = Stroke(strokeWidth, cap = StrokeCap.Round),
+                    )
+                } else {
+                    drawArc(
+                        color = colors.primary.copy(alpha = 0.35f),
+                        startAngle = 0f,
+                        sweepAngle = 360f,
+                        useCenter = false,
+                        topLeft = Offset(inset, inset),
+                        size = arcSize,
+                        style = Stroke(strokeWidth),
+                    )
+                }
+            }
+        }
         // 基准箭头朝右，按视标方向编码旋转：0=右 1=下 2=左 3=上。
         Canvas(Modifier.size(24.dp).rotate(direction * 90f)) {
             val w = size.width
@@ -101,7 +148,7 @@ private fun DirectionButton(direction: Int, label: String, enabled: Boolean, onC
                 moveTo(w * 0.12f, h * 0.5f); lineTo(w * 0.86f, h * 0.5f)
                 moveTo(w * 0.54f, h * 0.18f); lineTo(w * 0.86f, h * 0.5f); lineTo(w * 0.54f, h * 0.82f)
             }
-            drawPath(path, colors.textPrimary, style = Stroke(w * 0.11f, cap = StrokeCap.Round, join = StrokeJoin.Round))
+            drawPath(path, arrowColor, style = Stroke(w * 0.11f, cap = StrokeCap.Round, join = StrokeJoin.Round))
         }
     }
 }
