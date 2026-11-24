@@ -76,6 +76,7 @@ class CameraController @Inject constructor(
      * @param previewView 传 `null` 表示只分析帧、不展示预览；否则把画面接到该容器
      * @param onFrame 每帧人脸关键点，**在分析线程回调**
      * @param onError 启动或分析失败，在主线程回调
+     * @param measureOptics 普通分辨率下是否额外计算瞳孔和角膜反光
      */
     fun start(
         lifecycleOwner: LifecycleOwner,
@@ -83,6 +84,7 @@ class CameraController @Inject constructor(
         onFrame: (FaceLandmarkFrame) -> Unit,
         onError: (Throwable) -> Unit,
         opticalPrecision: Boolean = false,
+        measureOptics: Boolean = true,
     ): Int {
         val myGeneration = ++generation
         releaseCamera()
@@ -100,6 +102,7 @@ class CameraController @Inject constructor(
                     val eyeAnalyzer = FaceLandmarkerAnalyzer(
                         context = context,
                         opticalPrecision = opticalPrecision,
+                        measureOptics = measureOptics,
                         onSourceImage = { bitmap, time -> imageObservers.forEach { observer -> runCatching { observer(bitmap,time) } } },
                         onResult = { frame ->
                             runCatching { onFrame(frame) }

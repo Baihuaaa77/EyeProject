@@ -34,6 +34,7 @@ class FaceLandmarkerAnalyzer(
     private val onError: (Throwable) -> Unit,
     private val opticalPrecision: Boolean = false,
     private val onSourceImage: ((Bitmap, Long) -> Unit)? = null,
+    private val measureOptics: Boolean = true,
 ) : ImageAnalysis.Analyzer {
 
     private val faceLandmarker: FaceLandmarker
@@ -193,7 +194,7 @@ class FaceLandmarkerAnalyzer(
         }
         // 同一 478 点索引、头姿矩阵和光学算法也用于 iOS，拒判条件一起维护。
         return (if (opticalPrecision) ScreenPointOptics.face(points, matrix ?: FloatArray(0), BitmapGrayImage(bitmap))
-            else LandmarkGeometry.face(points, matrix ?: FloatArray(0), BitmapGrayImage(bitmap)))
+            else LandmarkGeometry.face(points, matrix ?: FloatArray(0), BitmapGrayImage(bitmap), optics = measureOptics))
             ?: FaceMetrics(lms.boundingBox(sourceWidth, sourceHeight), null, null)
     }
 

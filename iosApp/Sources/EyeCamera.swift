@@ -95,6 +95,8 @@ final class EyeCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
     /// 是否测量瞳孔 / 角膜反光（斜视用；干眼与眨眼对比用不到，关掉省下每帧的眼区像素计算）。在 start 前设置。
     var measureOptics = true
     var opticalPrecision = false
+    /// 自定义分析频率，仅在启动前设置；空值沿用原采样策略。
+    var analysisFramesPerSecond: Double?
     private let resizeContext = CIContext(options: [.cacheIntermediates: false])
     /// 最近一秒的诊断读数；相机队列写、界面读。
     var stats: CameraStats { statsLock.lock(); defer { statsLock.unlock() }; return currentStats }
@@ -117,6 +119,7 @@ final class EyeCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
     }
     private var device: AVCaptureDevice?
     private var lastTime: Int64 = 0
+    private var nextAnalysisTime: Double?
     private var active = false
     private var generation = 0
     private let requestLock = NSLock()
@@ -124,6 +127,7 @@ final class EyeCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
     private var pressureObservation: NSKeyValueObservation?
     private var pressureThrottled = false
     private var notificationTokens: [NSObjectProtocol] = []
+    private var videoOrientation: AVCaptureVideoOrientation = .portrait
 
     override init() {
         super.init()
@@ -152,6 +156,7 @@ final class EyeCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
     private func resumeIfNeeded() {
         guard active, !session.isRunning else { return }
         lastTime = 0
+        nextAnalysisTime = nil
         session.startRunning()
     }
 
@@ -179,6 +184,17 @@ final class EyeCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
         get { let value = UserDefaults.standard.float(forKey: "eye.distanceScale"); return value > 0 ? value : 1 }
         set { UserDefaults.standard.set(newValue, forKey: "eye.distanceScale") }
     }
+    /// 独立注视实验按当前界面方向分析，默认仍为主 App 使用的竖屏。
+    func setVideoOrientation(_ orientation: AVCaptureVideoOrientation) {
+        queue.async {
+            self.videoOrientation = orientation
+            for output in self.session.outputs {
+                guard let connection = output.connection(with: .video), connection.isVideoOrientationSupported else { continue }
+                connection.videoOrientation = orientation
+            }
+        }
+    }
+
     func start() {
         requestLock.lock(); requestNumber += 1; let ticket = requestNumber; requestLock.unlock()
         switch AVCaptureDevice.authorizationStatus(for: .video) {
@@ -224,13 +240,13 @@ final class EyeCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
                 session.sessionPreset = session.canSetSessionPreset(requested) ? requested
                     : session.canSetSessionPreset(.hd1920x1080) ? .hd1920x1080 : .hd1280x720
                 if let connection = output.connection(with: .video) {
-                    if connection.isVideoOrientationSupported { connection.videoOrientation = .portrait }
+                    if connection.isVideoOrientationSupported { connection.videoOrientation = videoOrientation }
                     if connection.isVideoMirroringSupported { connection.automaticallyAdjustsVideoMirroring = false; connection.isVideoMirrored = false }
                     if connection.isCameraIntrinsicMatrixDeliverySupported { connection.isCameraIntrinsicMatrixDeliveryEnabled = true }
                 }
                 session.commitConfiguration()
             }
-            active = true; generation += 1; lastTime = 0
+            active = true; generation += 1; lastTime = 0; nextAnalysisTime = nil
             session.startRunning()
         } catch { onError?("相机启动失败：\(error.localizedDescription)") }
     }
@@ -307,7 +323,7 @@ final class EyeCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
         let time = Int64(ProcessInfo.processInfo.systemUptime * 1000)
         guard active else { return }
         // 约 30 帧/秒：眨眼只持续 100–150 ms，帧率过低会漏检；追随速度相关也需要足够的相邻帧。
-        guard time - lastTime >= 30, let buffer = CMSampleBufferGetImageBuffer(sampleBuffer), let detector = detector else {
+        guard let buffer = CMSampleBufferGetImageBuffer(sampleBuffer), let detector = detector, shouldAnalyze(at: time) else {
             recordStats(analyzed: false, now: time); return
         }
         lastTime = time
@@ -364,5 +380,16 @@ final class EyeCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
             let finished = DispatchTime.now().uptimeNanoseconds
             recordStats(analyzed: true, detectMs: Double(detected - started) / 1_000_000, frameMs: Double(finished - started) / 1_000_000, now: time)
         } catch { onError?("眼部检测失败：\(error.localizedDescription)") }
+    }
+
+    private func shouldAnalyze(at time: Int64) -> Bool {
+        guard let rate = analysisFramesPerSecond, rate.isFinite, rate > 0 else { return time - lastTime >= 30 }
+        let period = 1000 / rate
+        let current = Double(time)
+        let deadline = nextAnalysisTime ?? current
+        guard current >= deadline else { return false }
+        // 按原节拍前进，遇到丢帧只跳过已错过的时刻，避免不断向后漂移或补跑积压。
+        nextAnalysisTime = deadline + ((current - deadline) / period).rounded(.down) * period + period
+        return true
     }
 }
