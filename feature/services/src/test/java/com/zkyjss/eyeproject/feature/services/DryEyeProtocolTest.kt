@@ -97,6 +97,28 @@ class DryEyeProtocolTest {
         assertEquals(ScreeningRiskLevel.HIGH, high.riskLevel)
     }
 
+    @Test fun storyScriptCoversRegularAndExtendedDurationsWithChineseNarration() {
+        assertEquals(6, DryEyeStoryScript.totalScenesFor(DryEyeProtocol.NATURAL_SECONDS))
+        assertEquals(18, DryEyeStoryScript.totalScenesFor(DryEyeProtocol.EXTENDED_NATURAL_SECONDS))
+        assertEquals(18, DryEyeStoryScript.scenes.size)
+        val uniqueKeys = DryEyeStoryScript.scenes.take(12).map { it.sceneKey }.toSet()
+        assertEquals("前 12 幕应覆盖 12 套独立科普矢量场景", 12, uniqueKeys.size)
+        DryEyeStoryScript.scenes.forEachIndexed { idx, scene ->
+            assertEquals(idx, scene.index)
+            assertTrue("第 ${idx + 1} 幕标题不能为空", scene.title.isNotBlank())
+            assertTrue("第 ${idx + 1} 幕标签不能为空", scene.factTag.isNotBlank())
+            assertTrue("第 ${idx + 1} 幕中文讲解应有完整内容", scene.narration.length >= 20)
+        }
+        assertEquals("WATER_WORLD", DryEyeStoryScript.sceneAt(0).sceneKey)
+        assertEquals("SCREEN_VS_TALK", DryEyeStoryScript.sceneAt(25).sceneKey)
+        assertEquals("WARM_COMPRESS", DryEyeStoryScript.sceneAt(55).sceneKey)
+        assertEquals("HYDRATION_NUTRITION", DryEyeStoryScript.sceneAt(115).sceneKey)
+        assertEquals(17, DryEyeStoryScript.sceneAt(175).index)
+        val firstHalf = DryEyeStoryScript.openNarration(3)
+        val secondHalf = DryEyeStoryScript.openNarration(15)
+        assertTrue(firstHalf.isNotBlank() && secondHalf.isNotBlank() && firstHalf != secondHalf)
+    }
+
     /** 原文研究内容一（1）的问卷条目，现在都在「我的」资料里（年龄由出生年份换算）。 */
     @Test fun profileCoversDocumentItems() {
         // 长期资料在「我的」维护，症状、用眼、用药为测前快问

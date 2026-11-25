@@ -311,7 +311,7 @@ class DryEyeEngine(platform: ScreeningPlatform, private val scope: CoroutineScop
         _uiState.update {
             // 进入新阶段先清零阶段进度，避免沿用上一阶段的满值。
             it.copy(phase = DryEyePhase.Natural,
-                instruction = if (theaterMode) "观看护眼小剧场，像平时一样自然眨眼" else "看 E 选方向，同时像平时一样自然眨眼",
+                instruction = if (theaterMode) DryEyeStoryScript.sceneAt(0).narration else "看 E 选方向，同时像平时一样自然眨眼",
                 progressFraction = 0f, remainingSeconds = naturalSeconds,
                 phase1Blinks = emptyList(), phase2Blinks = emptyList(), phase1BlinkCount = 0, phase2BlinkCount = 0,
                 trialCount = 0, distanceSamples = emptyList(), error = null)
@@ -380,9 +380,15 @@ class DryEyeEngine(platform: ScreeningPlatform, private val scope: CoroutineScop
                 val phaseSeconds = if (inNatural) naturalSeconds else DryEyeProtocol.OPEN_SECONDS
                 val naturalBlinks = blinks.filter { it < naturalSeconds }
                 val openBlinks = blinks.filter { it >= naturalSeconds }.map { it - naturalSeconds }
+                val theaterInstruction = if (theaterMode) {
+                    val elapsedSec = (phaseElapsed / 1000L).toInt()
+                    if (inNatural) DryEyeStoryScript.sceneAt(elapsedSec).narration
+                    else DryEyeStoryScript.openNarration(elapsedSec)
+                } else null
                 _uiState.update {
                     it.copy(
                         phase = if (inNatural) DryEyePhase.Natural else DryEyePhase.Open,
+                        instruction = theaterInstruction ?: it.instruction,
                         remainingSeconds = (((phaseSeconds * 1000L - phaseElapsed) + 999) / 1000L).toInt(),
                         progressFraction = (phaseElapsed.toFloat() / (phaseSeconds * 1000L)).coerceIn(0f, 1f),
                         phase1Blinks = naturalBlinks, phase1BlinkCount = naturalBlinks.size,

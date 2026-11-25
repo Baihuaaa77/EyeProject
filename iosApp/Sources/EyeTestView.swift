@@ -283,8 +283,8 @@ struct EyeTestView: View {
                 Text("休息结束，下面进行复测，流程与首次相同").font(EyeStyle.body).frame(maxWidth: .infinity, alignment: .leading)
                     .padding(14).background(EyeStyle.accentSoft, in: RoundedRectangle(cornerRadius: EyeStyle.radiusMedium))
             }
-            TestGuideView(motion: .blink, title: "护眼小剧场 · \(seconds) 秒 + 20 秒",
-                cue: "观看护眼科普小动画。前 \(seconds) 秒像平时一样自然眨眼，看到屏幕提示后，尽量保持睁眼 20 秒", readyTitle: "开始护眼小剧场") {
+            TestGuideView(motion: .blink, title: "护眼科普动画 · \(seconds) 秒 + 20 秒",
+                cue: "观看多幕护眼科普动画并收听中文讲解。前 \(seconds) 秒像平时一样自然眨眼，看到提示后尽量保持睁眼 20 秒", readyTitle: "开始观看护眼动画") {
                 runtime.act("formal")
             }
         } else if runtime.bool("guidePending") && runtime.bool("glassesCheck") {
@@ -848,98 +848,165 @@ private struct DarkControlsHeight: PreferenceKey {
     static func reduce(value: inout CGFloat,nextValue: () -> CGFloat) { value = nextValue() }
 }
 
-// MARK: - 三项自测趣味小游戏场景（与安卓 ScreeningGameScenes.kt 同情景同配色）
+// MARK: - 三项自测趣味小游戏场景（与安卓 DryEyeCinemaTheater / ScreeningGameScenes 同情景同配色）
 
+/// 干眼自测电影级护眼科普动画剧场（与安卓 DryEyeCinemaTheater 对齐，直接共享 KMP DryEyeStoryScript）。
 private struct DryEyeStoryTheaterView: View {
     @ObservedObject var runtime: EyeRuntime
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    private let acts: [(badge: String, title: String, subtitle: String)] = [
-        ("第 1 幕 · 泪膜守护盾", "眨眼就是天然保湿刷", "每一次轻眨眼，都会给眼球铺上一层隐形的锁水保护膜。"),
-        ("第 2 幕 · 盯屏蒸发记", "专注看屏容易忘记眨眼", "长时间紧盯屏幕时，眨眼次数会悄悄减少，泪膜更容易变薄蒸发。"),
-        ("第 3 幕 · 远眺松口气", "20-20-20 护眼魔法", "每用眼 20 分钟，抬头看看远处风景 20 秒，让紧绷的眼肌舒展一下。"),
-        ("第 4 幕 · 暖雾润眼时", "温热与眨眼让眼睛水润", "规律眨眼搭配温和热敷，能帮睑板腺保持畅通，眼睛更清爽舒适。"),
-    ]
     var body: some View {
         let isOpen = runtime.string("phase") == "Open"
+        let paused = runtime.bool("paused")
+        let voiceEnabled = runtime.voice.enabled
         let remaining = max(0, Int(runtime.number("secondsLeft")))
-        let total = isOpen ? 20 : max(1, Int(runtime.number("naturalSeconds")))
-        let elapsed = max(0, total - remaining)
-        let actIdx = min(acts.count - 1, (elapsed / 15) % acts.count)
-        let act = acts[actIdx]
+        let naturalTotal = max(1, Int(runtime.number("naturalSeconds")))
+        let total = isOpen ? 20 : naturalTotal
+        let progress = min(max(runtime.number("progress"), 0), 1)
+        let elapsedFloat = progress * Double(total)
+        let elapsed = max(0, min(total, Int(elapsedFloat)))
+        let scene = DryEyeStoryScript.shared.sceneAt(elapsedSeconds: Int32(elapsed))
+        let totalActs = Int(DryEyeStoryScript.shared.totalScenesFor(totalSeconds: Int32(naturalTotal)))
+        let currentActNumber = min(Int(scene.index) + 1, max(1, totalActs))
         let blinks = Int(runtime.number(isOpen ? "phase2BlinkCount" : "phase1BlinkCount"))
-        VStack(spacing: 12) {
+        let subtitleHeader: String = isOpen
+            ? (blinks == 0 ? "稳住晶莹水膜，尽量不要眨眼" : "已眨眼 \(blinks) 次，继续稳住视线坚持")
+            : "护眼小课堂 · \(scene.title)"
+        let subtitleText: String = isOpen
+            ? DryEyeStoryScript.shared.openNarration(elapsedSeconds: Int32(elapsed))
+            : scene.narration
+
+        VStack(spacing: 10) {
             HStack {
-                Text(isOpen ? "持续睁眼" : "自然眨眼")
-                    .font(EyeStyle.chip)
-                    .foregroundStyle(isOpen ? EyeStyle.warning : EyeStyle.moodGold)
-                    .padding(.horizontal, 12).padding(.vertical, 5)
-                    .background(isOpen ? EyeStyle.warningSoft : EyeStyle.primarySoft, in: EyeStyle.chipShape)
+                HStack(spacing: 6) {
+                    Text(isOpen ? "持续睁眼" : "自然眨眼")
+                        .font(EyeStyle.chip)
+                        .foregroundStyle(isOpen ? EyeStyle.warning : EyeStyle.moodGold)
+                        .padding(.horizontal, 11).padding(.vertical, 4)
+                        .background(isOpen ? EyeStyle.warningSoft : EyeStyle.primarySoft, in: EyeStyle.chipShape)
+                    if !isOpen {
+                        Text("\(currentActNumber) / \(totalActs) 幕")
+                            .font(EyeStyle.caption)
+                            .foregroundStyle(EyeStyle.secondary)
+                    }
+                }
                 Spacer()
                 Text("已眨眼 \(blinks) 次")
                     .font(EyeStyle.chip)
                     .foregroundStyle(EyeStyle.Game.Theater.tearHighlight)
-                    .padding(.horizontal, 10).padding(.vertical, 5)
+                    .padding(.horizontal, 10).padding(.vertical, 4)
                     .background(EyeStyle.surfaceVariant, in: EyeStyle.chipShape)
+                    .overlay {
+                        EyeStyle.chipShape.strokeBorder(EyeStyle.Game.Theater.tearCyan.opacity(0.35), lineWidth: 1)
+                    }
                 Text("剩余 \(remaining) 秒").font(EyeStyle.subtitle).monospacedDigit()
             }
-            TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: reduceMotion)) { timeline in
-                let phase = reduceMotion ? 0.25 : (timeline.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 4.2) / 4.2)
-                ZStack(alignment: .topLeading) {
+
+            TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: reduceMotion || paused)) { timeline in
+                let t = timeline.date.timeIntervalSinceReferenceDate
+                let sceneSec = Double(DryEyeStoryScript.shared.SCENE_DURATION_SEC)
+                let baseActT = (elapsedFloat.truncatingRemainder(dividingBy: sceneSec)) / sceneSec
+                let actT: CGFloat = reduceMotion ? 0.58 : CGFloat(min(max(progress > 0 ? baseActT : (t.truncatingRemainder(dividingBy: sceneSec) / sceneSec), 0), 1))
+                let wave: CGFloat = reduceMotion ? 0.35 : CGFloat((t.truncatingRemainder(dividingBy: 2.4)) / 2.4)
+                let eqPhase: CGFloat = (reduceMotion || paused || !voiceEnabled) ? 0.4 : CGFloat((t.truncatingRemainder(dividingBy: 0.9)) / 0.9)
+                let segCount = isOpen ? 3 : min(max(totalActs, 1), 12)
+                let activeSeg = isOpen ? min(max(elapsed / 7, 0), 2) : (Int(scene.index) % segCount)
+                let activeFill: CGFloat = isOpen ? CGFloat(min(max((elapsedFloat.truncatingRemainder(dividingBy: 7.0)) / 7.0, 0), 1)) : actT
+                let factBadge: String = isOpen
+                    ? (elapsed >= 14 ? "满级星盾" : elapsed >= 7 ? "暖金护盾" : "青露护盾")
+                    : scene.factTag
+
+                ZStack {
                     Canvas { ctx, size in
-                        let c = CGPoint(x: size.width * 0.5, y: size.height * 0.54)
-                        let unit = min(size.width, size.height)
                         if isOpen {
-                            let shield = blinks > 0 ? EyeStyle.Game.Theater.warmLamp : EyeStyle.Game.Theater.tearCyan
-                            let r = unit * 0.36
-                            ctx.stroke(Path(ellipseIn: CGRect(x: c.x - r, y: c.y - r, width: r * 2, height: r * 2)),
-                                       with: .color(shield.opacity(0.24)), lineWidth: unit * 0.032)
-                            var arc = Path()
-                            arc.addArc(center: c, radius: r, startAngle: .degrees(-90),
-                                       endAngle: .degrees(-90 + 360 * Double(elapsed) / Double(max(1, total))), clockwise: false)
-                            ctx.stroke(arc, with: .color(shield), style: StrokeStyle(lineWidth: unit * 0.042, lineCap: .round))
-                            let dr = unit * 0.16
-                            ctx.fill(Path(ellipseIn: CGRect(x: c.x - dr * 0.85, y: c.y - dr * 0.6, width: dr * 1.7, height: dr * 1.5)),
-                                     with: .color(EyeStyle.Game.Theater.tearCyan))
+                            DryEyeCinemaRenderer.drawOpenShield(ctx, size: size, progress: CGFloat(progress), elapsedSec: elapsed, wave: wave, blinkCount: blinks)
                         } else {
-                            let glowR = unit * 0.65
-                            ctx.fill(Path(ellipseIn: CGRect(x: c.x - glowR, y: c.y - glowR, width: glowR * 2, height: glowR * 2)),
-                                     with: .radialGradient(Gradient(colors: [EyeStyle.Game.Theater.stageGlow.opacity(0.72), .clear]),
-                                                           center: c, startRadius: 0, endRadius: glowR))
-                            let r = unit * 0.28
-                            ctx.fill(Path(ellipseIn: CGRect(x: c.x - r * 1.3, y: c.y - r * 0.72, width: r * 2.6, height: r * 1.44)),
-                                     with: .color(EyeStyle.Game.Theater.steam))
-                            ctx.stroke(Path(ellipseIn: CGRect(x: c.x - r * 1.3, y: c.y - r * 0.72, width: r * 2.6, height: r * 1.44)),
-                                       with: .color(EyeStyle.Game.Theater.tearCyan.opacity(0.7)), lineWidth: 3)
-                            let ir = r * 0.44
-                            ctx.fill(Path(ellipseIn: CGRect(x: c.x - ir, y: c.y - ir, width: ir * 2, height: ir * 2)),
-                                     with: .color(EyeStyle.Game.Theater.tearDeep))
-                            let pr = ir * 0.52
-                            ctx.fill(Path(ellipseIn: CGRect(x: c.x - pr, y: c.y - pr, width: pr * 2, height: pr * 2)),
-                                     with: .color(EyeStyle.Game.Firefly.bodyDark))
-                            var wave = Path()
-                            wave.addArc(center: c, radius: r * 1.45, startAngle: .degrees(-140 + phase * 360),
-                                        endAngle: .degrees(-45 + phase * 360), clockwise: false)
-                            ctx.stroke(wave, with: .color(EyeStyle.Game.Theater.tearCyan.opacity(0.6)), style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                            DryEyeCinemaRenderer.drawStoryScene(ctx, size: size, sceneKey: scene.sceneKey, actT: actT, wave: wave)
                         }
                     }
-                    Text(isOpen ? "定格挑战 · 守护水膜" : act.badge)
-                        .font(EyeStyle.caption)
-                        .foregroundStyle(EyeStyle.Game.Theater.tearHighlight)
-                        .padding(.horizontal, 10).padding(.vertical, 4)
-                        .background(EyeStyle.background.opacity(0.72), in: EyeStyle.chipShape)
-                        .padding(12)
+
+                    VStack(spacing: 0) {
+                        // 顶部分段电影时间轴
+                        HStack(spacing: 4) {
+                            ForEach(0..<segCount, id: \.self) { idx in
+                                let fill: CGFloat = idx < activeSeg ? 1 : (idx == activeSeg ? activeFill : 0)
+                                GeometryReader { geo in
+                                    ZStack(alignment: .leading) {
+                                        Capsule().fill(Color.white.opacity(0.2))
+                                        if fill > 0 {
+                                            Capsule()
+                                                .fill(isOpen ? EyeStyle.Game.Theater.tearCyan : EyeStyle.primary)
+                                                .frame(width: geo.size.width * fill)
+                                        }
+                                    }
+                                }
+                                .frame(height: 3)
+                            }
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.top, 8)
+
+                        // 左上剧目名 + 右上科普要点标签
+                        HStack {
+                            Text(isOpen ? "定格挑战 · 守护水膜" : scene.title)
+                                .font(EyeStyle.caption)
+                                .foregroundStyle(EyeStyle.text)
+                                .padding(.horizontal, 10).padding(.vertical, 4)
+                                .background(EyeStyle.Game.Theater.stageDeep.opacity(0.78), in: EyeStyle.chipShape)
+                            Spacer()
+                            Text(factBadge)
+                                .font(EyeStyle.caption)
+                                .foregroundStyle(EyeStyle.Game.Theater.tearHighlight)
+                                .padding(.horizontal, 9).padding(.vertical, 4)
+                                .background(EyeStyle.Game.Theater.stageDeep.opacity(0.78), in: EyeStyle.chipShape)
+                                .overlay {
+                                    EyeStyle.chipShape.strokeBorder(EyeStyle.Game.Theater.tearCyan.opacity(0.4), lineWidth: 1)
+                                }
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.top, 7)
+
+                        Spacer()
+
+                        // 右下角中文语音讲解动态声波指示
+                        HStack {
+                            Spacer()
+                            HStack(spacing: 5) {
+                                Canvas { ctx, size in
+                                    let barW = size.width / 7
+                                    for i in 0..<4 {
+                                        let amp: CGFloat = (voiceEnabled && !paused)
+                                            ? 0.32 + 0.68 * ((sin((eqPhase + CGFloat(i) * 0.24) * 2 * .pi) + 1) * 0.5)
+                                            : 0.25
+                                        let bh = size.height * amp
+                                        let rect = CGRect(x: CGFloat(i) * barW * 1.9, y: (size.height - bh) * 0.5, width: barW, height: bh)
+                                        ctx.fill(RoundedRectangle(cornerRadius: barW * 0.5).path(in: rect),
+                                                 with: .color(voiceEnabled ? EyeStyle.Game.Theater.lipidGold : EyeStyle.tertiary))
+                                    }
+                                }
+                                .frame(width: 16, height: 12)
+                                Text(voiceEnabled ? "中文讲解中" : "静音字幕")
+                                    .font(EyeStyle.caption)
+                                    .foregroundStyle(voiceEnabled ? EyeStyle.Game.Theater.lipidGold : EyeStyle.secondary)
+                            }
+                            .padding(.horizontal, 9).padding(.vertical, 4)
+                            .background(EyeStyle.Game.Theater.stageDeep.opacity(0.76), in: EyeStyle.chipShape)
+                        }
+                        .padding(10)
+                    }
                 }
-                .stageHeight(228)
+                .stageHeight(250)
                 .background(EyeStyle.Game.Theater.stageBg, in: RoundedRectangle(cornerRadius: EyeStyle.radiusHero, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: EyeStyle.radiusHero, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: EyeStyle.radiusHero, style: .continuous)
                         .strokeBorder(EyeStyle.glassEdgeTop.opacity(0.45), lineWidth: 1)
                 }
             }
+
+            // 底部同步电影中文字幕栏
             VStack(alignment: .leading, spacing: 4) {
-                Text(isOpen ? "稳住晶莹水膜，尽量不要眨眼" : act.title).font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text)
-                Text(isOpen ? (blinks == 0 ? "目前还没有眨眼，水膜护盾正在持续充能！" : "已经眨眼 \(blinks) 次，继续稳住视线坚持到倒计时结束。") : act.subtitle)
-                    .font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
+                Text(subtitleHeader).font(EyeStyle.caption).foregroundStyle(EyeStyle.moodGold)
+                Text(subtitleText).font(EyeStyle.body).foregroundStyle(EyeStyle.text)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 16).padding(.vertical, 12)
@@ -948,7 +1015,519 @@ private struct DryEyeStoryTheaterView: View {
                 RoundedRectangle(cornerRadius: EyeStyle.radiusMedium, style: .continuous)
                     .strokeBorder(EyeStyle.borderSubtle, lineWidth: 1)
             }
+            .animation(.easeInOut(duration: 0.24), value: subtitleText)
         }
+    }
+}
+
+/// 干眼科普 12 幕代码渲染矢量分镜 + 三阶进化睁眼护盾（与 Android DryEyeCinemaTheater 同源同绘）。
+private enum DryEyeCinemaRenderer {
+    static func drawStoryScene(_ ctx: GraphicsContext, size: CGSize, sceneKey: String, actT: CGFloat, wave: CGFloat) {
+        let c = CGPoint(x: size.width * 0.5, y: size.height * 0.56)
+        let u = min(size.width, size.height)
+        let topColor: Color = switch sceneKey {
+        case "RULE_20_20_20", "HYDRATION_NUTRITION": EyeStyle.Game.Theater.skyDay
+        case "NIGHT_LIGHT", "AC_WIND": EyeStyle.Game.Theater.skyNight
+        default: EyeStyle.Game.Theater.stageBg
+        }
+        ctx.fill(Path(CGRect(origin: .zero, size: size)),
+                 with: .linearGradient(Gradient(colors: [topColor, EyeStyle.Game.Theater.stageBg, EyeStyle.Game.Theater.stageDeep]),
+                                       startPoint: CGPoint(x: size.width * 0.5, y: 0),
+                                       endPoint: CGPoint(x: size.width * 0.5, y: size.height)))
+        let glowR = u * 0.72
+        ctx.fill(Path(ellipseIn: CGRect(x: c.x - glowR, y: c.y - glowR, width: glowR * 2, height: glowR * 2)),
+                 with: .radialGradient(Gradient(colors: [EyeStyle.Game.Theater.stageGlow.opacity(0.65), .clear]),
+                                       center: c, startRadius: 0, endRadius: glowR))
+
+        switch sceneKey {
+        case "WATER_WORLD": drawWaterWorld(ctx, size: size, c: c, u: u, actT: actT, wave: wave)
+        case "TEAR_LAYERS": drawTearLayers(ctx, size: size, c: c, u: u, actT: actT, wave: wave)
+        case "SCREEN_VS_TALK": drawScreenVsTalk(ctx, size: size, c: c, u: u, actT: actT, wave: wave)
+        case "TEAR_BREAKUP": drawTearBreakup(ctx, c: c, u: u, actT: actT)
+        case "RULE_20_20_20": drawRule202020(ctx, size: size, u: u, actT: actT, wave: wave)
+        case "WARM_COMPRESS": drawWarmCompress(ctx, size: size, u: u, actT: actT, wave: wave)
+        case "AC_WIND": drawAcWind(ctx, size: size, c: c, u: u, actT: actT, wave: wave)
+        case "SCREEN_ANGLE": drawScreenAngle(ctx, size: size, u: u, actT: actT)
+        case "NIGHT_LIGHT": drawNightLight(ctx, size: size, u: u, actT: actT)
+        case "COMPLETE_BLINK": drawCompleteBlink(ctx, c: c, u: u, actT: actT, wave: wave)
+        case "CONTACT_LENS": drawContactLens(ctx, c: c, u: u, actT: actT, wave: wave)
+        default: drawHydrationNutrition(ctx, size: size, c: c, u: u, actT: actT, wave: wave)
+        }
+    }
+
+    static func drawOpenShield(_ ctx: GraphicsContext, size: CGSize, progress: CGFloat, elapsedSec: Int, wave: CGFloat, blinkCount: Int) {
+        let c = CGPoint(x: size.width * 0.5, y: size.height * 0.55)
+        let u = min(size.width, size.height)
+        let ringR = u * 0.34
+        let pulse = 0.5 + 0.5 * sin(wave * 2 * .pi)
+        let shieldColor: Color = blinkCount > 0 ? EyeStyle.Game.Theater.dryCoral
+            : elapsedSec >= 14 ? EyeStyle.Game.Theater.lipidGold
+            : elapsedSec >= 7 ? EyeStyle.Game.Theater.warmLamp
+            : EyeStyle.Game.Theater.tearCyan
+
+        ctx.fill(Path(CGRect(origin: .zero, size: size)),
+                 with: .linearGradient(Gradient(colors: [EyeStyle.Game.Theater.skyNight, EyeStyle.Game.Theater.stageDeep]),
+                                       startPoint: .zero, endPoint: CGPoint(x: 0, y: size.height)))
+        let haloR = ringR * 1.85
+        ctx.fill(Path(ellipseIn: CGRect(x: c.x - haloR, y: c.y - haloR, width: haloR * 2, height: haloR * 2)),
+                 with: .radialGradient(Gradient(colors: [shieldColor.opacity(0.35 + pulse * 0.14), .clear]),
+                                       center: c, startRadius: 0, endRadius: haloR))
+        for i in 0..<8 {
+            let a = wave * 2 * .pi + CGFloat(i) * (.pi / 4)
+            let pt = CGPoint(x: c.x + cos(a) * ringR * 1.24, y: c.y + sin(a) * ringR * 1.24)
+            let pr = u * 0.016
+            ctx.fill(Path(ellipseIn: CGRect(x: pt.x - pr, y: pt.y - pr, width: pr * 2, height: pr * 2)),
+                     with: .color(shieldColor.opacity(0.55 + 0.35 * CGFloat(i % 2))))
+        }
+        ctx.stroke(Path(ellipseIn: CGRect(x: c.x - ringR, y: c.y - ringR, width: ringR * 2, height: ringR * 2)),
+                   with: .color(shieldColor.opacity(0.22)), lineWidth: u * 0.032)
+        var arc = Path()
+        arc.addArc(center: c, radius: ringR, startAngle: .degrees(-90),
+                   endAngle: .degrees(-90 + 360 * Double(min(max(progress, 0), 1))), clockwise: false)
+        ctx.stroke(arc, with: .color(shieldColor), style: StrokeStyle(lineWidth: u * 0.044, lineCap: .round))
+        drawSmilingDrop(ctx, center: c, radius: u * (0.15 + pulse * 0.012))
+    }
+
+    private static func drawWaterWorld(_ ctx: GraphicsContext, size: CGSize, c: CGPoint, u: CGFloat, actT: CGFloat, wave: CGFloat) {
+        let blink1: CGFloat = (actT >= 0.30 && actT <= 0.42) ? sin(((actT - 0.30) / 0.12) * .pi) : 0
+        let blink2: CGFloat = (actT >= 0.72 && actT <= 0.84) ? sin(((actT - 0.72) / 0.12) * .pi) : 0
+        drawDetailedEye(ctx, center: c, radius: u * 0.34, lidClose: max(blink1, blink2), gazeX: sin(wave * 2 * .pi) * 0.25, dryRatio: 0)
+        for i in 0..<3 {
+            let r = u * (0.37 + CGFloat(i) * 0.065)
+            let startDeg = -145 + Double(actT) * 360 * (i % 2 == 0 ? 1.0 : -0.7)
+            var arc = Path()
+            arc.addArc(center: c, radius: r, startAngle: .degrees(startDeg), endAngle: .degrees(startDeg + 82), clockwise: false)
+            ctx.stroke(arc, with: .color(EyeStyle.Game.Theater.tearCyan.opacity(0.55 - Double(i) * 0.15)),
+                       style: StrokeStyle(lineWidth: 3.2, lineCap: .round))
+        }
+        let arcAngle = -CGFloat.pi * (0.82 - actT * 0.64)
+        let dropPos = CGPoint(x: c.x + cos(arcAngle) * u * 0.42, y: c.y + sin(arcAngle) * u * 0.30)
+        drawSmilingDrop(ctx, center: dropPos, radius: u * 0.082)
+        for i in 0..<6 {
+            let px = size.width * (0.14 + CGFloat(i) * 0.145)
+            let py = size.height * (0.32 + (CGFloat(i) * 0.23 + wave).truncatingRemainder(dividingBy: 0.5))
+            let pr = u * 0.014
+            ctx.fill(Path(ellipseIn: CGRect(x: px - pr, y: py - pr, width: pr * 2, height: pr * 2)),
+                     with: .color(EyeStyle.Game.Theater.tearHighlight.opacity(0.32)))
+        }
+    }
+
+    private static func drawTearLayers(_ ctx: GraphicsContext, size: CGSize, c: CGPoint, u: CGFloat, actT: CGFloat, wave: CGFloat) {
+        let left = size.width * 0.10, right = size.width * 0.90, w = right - left, baseY = size.height * 0.78
+        var cornea = Path()
+        cornea.move(to: CGPoint(x: left, y: size.height * 0.88))
+        cornea.addLine(to: CGPoint(x: left, y: baseY))
+        cornea.addQuadCurve(to: CGPoint(x: right, y: baseY), control: CGPoint(x: c.x, y: baseY - u * 0.08))
+        cornea.addLine(to: CGPoint(x: right, y: size.height * 0.88))
+        cornea.closeSubpath()
+        ctx.fill(cornea, with: .color(EyeStyle.Game.Theater.skinWarm.opacity(0.52)))
+
+        let mucinA = min(max(actT / 0.25, 0.35), 1)
+        let aqueousA = min(max((actT - 0.18) / 0.25, 0.25), 1)
+        let lipidA = min(max((actT - 0.36) / 0.25, 0.25), 1)
+        drawWaveBand(ctx, left: left, right: right, topY: baseY - u * 0.06, thickness: u * 0.09, phase: wave, color: EyeStyle.Game.Theater.mucinViolet.opacity(0.75 * mucinA))
+        drawWaveBand(ctx, left: left, right: right, topY: baseY - u * 0.19, thickness: u * 0.15, phase: wave * 1.4 + 0.3, color: EyeStyle.Game.Theater.tearCyan.opacity(0.78 * aqueousA))
+        drawWaveBand(ctx, left: left, right: right, topY: baseY - u * 0.31, thickness: u * 0.065, phase: wave * 1.1 + 0.6, color: EyeStyle.Game.Theater.lipidGold.opacity(0.92 * lipidA))
+
+        for i in 0..<5 {
+            let cycle = (wave + CGFloat(i) * 0.21).truncatingRemainder(dividingBy: 1)
+            let mx = left + w * (0.16 + CGFloat(i) * 0.17)
+            let my = (baseY - u * 0.14) - sin(cycle * .pi) * u * 0.12
+            let mr = u * 0.022
+            ctx.fill(Path(ellipseIn: CGRect(x: mx - mr, y: my - mr, width: mr * 2, height: mr * 2)),
+                     with: .color(EyeStyle.Game.Theater.tearHighlight.opacity(0.9)))
+        }
+        let legendY = size.height * 0.29
+        let items: [(Color, CGFloat, CGFloat)] = [
+            (EyeStyle.Game.Theater.lipidGold, 0.24, 0.32),
+            (EyeStyle.Game.Theater.tearCyan, 0.50, 0.20),
+            (EyeStyle.Game.Theater.mucinViolet, 0.76, 0.08),
+        ]
+        for (col, rx, drop) in items {
+            let lx = size.width * rx, lr = u * 0.026
+            ctx.fill(Path(ellipseIn: CGRect(x: lx - lr, y: legendY - lr, width: lr * 2, height: lr * 2)), with: .color(col))
+            var line = Path()
+            line.move(to: CGPoint(x: lx, y: legendY + u * 0.03))
+            line.addLine(to: CGPoint(x: lx, y: baseY - u * drop))
+            ctx.stroke(line, with: .color(col.opacity(0.55)), style: StrokeStyle(lineWidth: 2, dash: [6, 6]))
+        }
+    }
+
+    private static func drawScreenVsTalk(_ ctx: GraphicsContext, size: CGSize, c: CGPoint, u: CGFloat, actT: CGFloat, wave: CGFloat) {
+        let leftC = CGPoint(x: size.width * 0.27, y: size.height * 0.50)
+        let rightC = CGPoint(x: size.width * 0.73, y: size.height * 0.50)
+        var divider = Path()
+        divider.move(to: CGPoint(x: c.x, y: size.height * 0.24))
+        divider.addLine(to: CGPoint(x: c.x, y: size.height * 0.86))
+        ctx.stroke(divider, with: .color(EyeStyle.Game.Theater.steam.opacity(0.18)), lineWidth: 2)
+
+        let leftBlink: CGFloat = (wave >= 0.42 && wave <= 0.56) ? sin(((wave - 0.42) / 0.14) * .pi) : 0
+        drawDetailedEye(ctx, center: CGPoint(x: leftC.x, y: leftC.y - u * 0.04), radius: u * 0.18, lidClose: leftBlink, gazeX: 0, dryRatio: 0)
+        let barW = u * 0.12, barMaxH = u * 0.26, barBottom = size.height * 0.85
+        let leftFill = min(0.35 + actT * 0.58, 0.92)
+        ctx.fill(RoundedRectangle(cornerRadius: 6).path(in: CGRect(x: leftC.x - barW * 0.5, y: barBottom - barMaxH, width: barW, height: barMaxH)),
+                 with: .color(EyeStyle.Game.Theater.tearCyan.opacity(0.22)))
+        ctx.fill(RoundedRectangle(cornerRadius: 6).path(in: CGRect(x: leftC.x - barW * 0.5, y: barBottom - barMaxH * leftFill, width: barW, height: barMaxH * leftFill)),
+                 with: .color(EyeStyle.Game.Theater.leafSage))
+
+        drawDetailedEye(ctx, center: CGPoint(x: rightC.x, y: rightC.y - u * 0.04), radius: u * 0.18, lidClose: 0, gazeX: 0, dryRatio: min(max(actT * 0.85, 0.2), 0.9))
+        let rightFill = max(0.72 - actT * 0.44, 0.26)
+        ctx.fill(RoundedRectangle(cornerRadius: 6).path(in: CGRect(x: rightC.x - barW * 0.5, y: barBottom - barMaxH, width: barW, height: barMaxH)),
+                 with: .color(EyeStyle.Game.Theater.dryCoral.opacity(0.22)))
+        ctx.fill(RoundedRectangle(cornerRadius: 6).path(in: CGRect(x: rightC.x - barW * 0.5, y: barBottom - barMaxH * rightFill, width: barW, height: barMaxH * rightFill)),
+                 with: .color(EyeStyle.Game.Theater.dryCoral))
+        for i in 0..<3 {
+            let st = (wave + CGFloat(i) * 0.33).truncatingRemainder(dividingBy: 1)
+            let sx = rightC.x + CGFloat(i - 1) * u * 0.08
+            let sy = rightC.y - u * 0.18 - st * u * 0.18
+            let sr = u * 0.018
+            ctx.stroke(Path(ellipseIn: CGRect(x: sx - sr, y: sy - sr, width: sr * 2, height: sr * 2)),
+                       with: .color(EyeStyle.Game.Theater.dryCoral.opacity((1 - st) * 0.65)), lineWidth: 2)
+        }
+    }
+
+    private static func drawTearBreakup(_ ctx: GraphicsContext, c: CGPoint, u: CGFloat, actT: CGFloat) {
+        let filmR = u * 0.34
+        ctx.fill(Path(ellipseIn: CGRect(x: c.x - filmR, y: c.y - filmR, width: filmR * 2, height: filmR * 2)),
+                 with: .radialGradient(Gradient(colors: [EyeStyle.Game.Theater.tearCyan.opacity(0.78), EyeStyle.Game.Theater.tearDeep.opacity(0.62), EyeStyle.Game.Theater.tearDeep.opacity(0.25)]),
+                                       center: c, startRadius: 0, endRadius: filmR))
+        ctx.stroke(Path(ellipseIn: CGRect(x: c.x - filmR, y: c.y - filmR, width: filmR * 2, height: filmR * 2)),
+                   with: .color(EyeStyle.Game.Theater.tearHighlight.opacity(0.7)), lineWidth: 3)
+
+        let drySeverity: CGFloat = actT < 0.62 ? (actT / 0.62) : actT < 0.88 ? max(0, 1 - (actT - 0.62) / 0.26) : 0
+        if drySeverity > 0.05 {
+            let spots: [(CGPoint, CGFloat)] = [
+                (CGPoint(x: c.x - filmR * 0.34, y: c.y - filmR * 0.12), 0.22),
+                (CGPoint(x: c.x + filmR * 0.28, y: c.y + filmR * 0.18), 0.26),
+                (CGPoint(x: c.x + filmR * 0.06, y: c.y - filmR * 0.32), 0.17),
+            ]
+            for (pt, sc) in spots {
+                let r = filmR * sc * drySeverity
+                ctx.fill(Path(ellipseIn: CGRect(x: pt.x - r, y: pt.y - r, width: r * 2, height: r * 2)),
+                         with: .color(EyeStyle.Game.Theater.dryCoral.opacity(0.72 * drySeverity)))
+                let r2 = r * 1.15
+                ctx.stroke(Path(ellipseIn: CGRect(x: pt.x - r2, y: pt.y - r2, width: r2 * 2, height: r2 * 2)),
+                           with: .color(EyeStyle.Game.Theater.warmLamp.opacity(0.55 * drySeverity)), lineWidth: 2)
+            }
+        }
+        if actT >= 0.60 && actT <= 0.92 {
+            let barY = c.y - filmR + ((actT - 0.60) / 0.32) * filmR * 2
+            var wiper = Path()
+            wiper.move(to: CGPoint(x: c.x - filmR * 1.1, y: barY))
+            wiper.addLine(to: CGPoint(x: c.x + filmR * 1.1, y: barY))
+            ctx.stroke(wiper, with: .color(EyeStyle.Game.Theater.tearHighlight), style: StrokeStyle(lineWidth: 7, lineCap: .round))
+        } else if actT >= 0.90 {
+            drawSparkle(ctx, center: CGPoint(x: c.x - filmR * 0.25, y: c.y - filmR * 0.22), radius: u * 0.055, color: EyeStyle.Game.Theater.tearHighlight)
+            drawSparkle(ctx, center: CGPoint(x: c.x + filmR * 0.30, y: c.y + filmR * 0.10), radius: u * 0.045, color: EyeStyle.Game.Theater.lipidGold)
+        }
+    }
+
+    private static func drawRule202020(_ ctx: GraphicsContext, size: CGSize, u: CGFloat, actT: CGFloat, wave: CGFloat) {
+        let winW = size.width * 0.76, winH = size.height * 0.52
+        let winRect = CGRect(x: (size.width - winW) * 0.5, y: size.height * 0.26, width: winW, height: winH)
+        ctx.fill(RoundedRectangle(cornerRadius: 16).path(in: winRect),
+                 with: .linearGradient(Gradient(colors: [EyeStyle.Game.Theater.skyDay, EyeStyle.Game.Theater.leafSage.opacity(0.5)]),
+                                       startPoint: CGPoint(x: winRect.midX, y: winRect.minY),
+                                       endPoint: CGPoint(x: winRect.midX, y: winRect.maxY)))
+        var mountain = Path()
+        mountain.move(to: CGPoint(x: winRect.minX, y: winRect.maxY))
+        mountain.addLine(to: CGPoint(x: winRect.minX, y: winRect.minY + winH * 0.66))
+        mountain.addQuadCurve(to: CGPoint(x: winRect.minX + winW * 0.56, y: winRect.minY + winH * 0.62),
+                              control: CGPoint(x: winRect.minX + winW * 0.28, y: winRect.minY + winH * 0.30))
+        mountain.addQuadCurve(to: CGPoint(x: winRect.maxX, y: winRect.minY + winH * 0.64),
+                              control: CGPoint(x: winRect.minX + winW * 0.80, y: winRect.minY + winH * 0.36))
+        mountain.addLine(to: CGPoint(x: winRect.maxX, y: winRect.maxY))
+        mountain.closeSubpath()
+        ctx.drawLayer { layerCtx in
+            layerCtx.clip(to: RoundedRectangle(cornerRadius: 16).path(in: winRect))
+            layerCtx.fill(mountain, with: .color(EyeStyle.Game.Theater.leafSage.opacity(0.78)))
+        }
+
+        let sunC = CGPoint(x: winRect.minX + winW * 0.80, y: winRect.minY + winH * 0.28)
+        let haloR = u * 0.11, sunR = u * 0.055
+        ctx.fill(Path(ellipseIn: CGRect(x: sunC.x - haloR, y: sunC.y - haloR, width: haloR * 2, height: haloR * 2)),
+                 with: .color(EyeStyle.Game.Theater.warmLamp.opacity(0.25)))
+        ctx.fill(Path(ellipseIn: CGRect(x: sunC.x - sunR, y: sunC.y - sunR, width: sunR * 2, height: sunR * 2)),
+                 with: .color(EyeStyle.Game.Theater.warmLamp))
+
+        var gaze = Path()
+        gaze.move(to: CGPoint(x: winRect.minX + winW * 0.18, y: winRect.minY + winH * 0.56))
+        gaze.addLine(to: CGPoint(x: winRect.minX + winW * (0.25 + actT * 0.52), y: winRect.minY + winH * (0.56 - actT * 0.24)))
+        ctx.stroke(gaze, with: .color(EyeStyle.Game.Theater.tearHighlight.opacity(0.7)),
+                   style: StrokeStyle(lineWidth: 3, lineCap: .round, dash: [10, 8]))
+        for i in 0..<3 {
+            let rt = (wave + CGFloat(i) * 0.33).truncatingRemainder(dividingBy: 1)
+            let rr = u * (0.04 + rt * 0.15)
+            ctx.stroke(Path(ellipseIn: CGRect(x: sunC.x - rr, y: sunC.y - rr, width: rr * 2, height: rr * 2)),
+                       with: .color(EyeStyle.Game.Theater.tearHighlight.opacity((1 - rt) * 0.55)), lineWidth: 2.2)
+        }
+        ctx.stroke(RoundedRectangle(cornerRadius: 16).path(in: winRect),
+                   with: .color(EyeStyle.Game.Theater.warmLamp.opacity(0.65)), lineWidth: 3.5)
+
+        let relax = min(max(actT, 0), 1)
+        var spring = Path()
+        let sx = winRect.minX + winW * 0.15, sw = winW * (0.35 + relax * 0.35), sy = size.height * 0.85
+        spring.move(to: CGPoint(x: sx, y: sy))
+        for i in 1...8 {
+            let x = sx + sw * (CGFloat(i) / 8)
+            let y = sy + (i % 2 == 0 ? -1 : 1) * u * (0.045 - relax * 0.025)
+            spring.addLine(to: CGPoint(x: x, y: y))
+        }
+        ctx.stroke(spring, with: .color(relax > 0.45 ? EyeStyle.Game.Theater.leafSage : EyeStyle.Game.Theater.dryCoral),
+                   style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
+    }
+
+    private static func drawWarmCompress(_ ctx: GraphicsContext, size: CGSize, u: CGFloat, actT: CGFloat, wave: CGFloat) {
+        let melt = min(max((actT - 0.22) / 0.60, 0), 1)
+        let baseY = size.height * 0.84, glandTop = size.height * 0.56
+        for i in 0..<6 {
+            let gx = size.width * (0.20 + CGFloat(i) * 0.12)
+            ctx.fill(RoundedRectangle(cornerRadius: 12).path(in: CGRect(x: gx - u * 0.032, y: glandTop, width: u * 0.064, height: baseY - glandTop)),
+                     with: .color(EyeStyle.Game.Theater.skinWarm.opacity(0.35)))
+            let beadY = glandTop + (baseY - glandTop) * (0.55 - melt * 0.55) - melt * u * 0.10 * (wave + CGFloat(i) * 0.17).truncatingRemainder(dividingBy: 1)
+            let br = u * (0.024 + melt * 0.008)
+            ctx.fill(Path(ellipseIn: CGRect(x: gx - br, y: beadY - br, width: br * 2, height: br * 2)),
+                     with: .color(melt > 0.35 ? EyeStyle.Game.Theater.lipidGold : EyeStyle.Game.Theater.steam.opacity(0.85)))
+        }
+        let towelRect = CGRect(x: size.width * 0.22, y: size.height * 0.29, width: size.width * 0.56, height: u * 0.17)
+        ctx.fill(RoundedRectangle(cornerRadius: 24).path(in: towelRect),
+                 with: .linearGradient(Gradient(colors: [EyeStyle.Game.Theater.dryCoral.opacity(0.72), EyeStyle.Game.Theater.warmLamp.opacity(0.88), EyeStyle.Game.Theater.dryCoral.opacity(0.72)]),
+                                       startPoint: CGPoint(x: towelRect.minX, y: towelRect.midY),
+                                       endPoint: CGPoint(x: towelRect.maxX, y: towelRect.midY)))
+        for i in 0..<4 {
+            let sx = size.width * (0.30 + CGFloat(i) * 0.13)
+            let drift = sin((wave + CGFloat(i) * 0.25) * 2 * .pi) * u * 0.028
+            var steam = Path()
+            steam.move(to: CGPoint(x: sx, y: glandTop - u * 0.02))
+            steam.addQuadCurve(to: CGPoint(x: sx - drift * 0.7, y: towelRect.maxY),
+                               control: CGPoint(x: sx + drift, y: glandTop - u * 0.09))
+            ctx.stroke(steam, with: .color(EyeStyle.Game.Theater.warmLamp.opacity(0.48 + melt * 0.35)),
+                       style: StrokeStyle(lineWidth: 3, lineCap: .round))
+        }
+    }
+
+    private static func drawAcWind(_ ctx: GraphicsContext, size: CGSize, c: CGPoint, u: CGFloat, actT: CGFloat, wave: CGFloat) {
+        let fixed = actT > 0.45
+        drawDetailedEye(ctx, center: CGPoint(x: c.x, y: c.y + u * 0.04), radius: u * 0.24, lidClose: 0, gazeX: 0, dryRatio: fixed ? 0 : 0.7)
+        for i in 0..<3 {
+            let y0 = size.height * (0.42 + CGFloat(i) * 0.10)
+            let endY = fixed ? size.height * (0.24 + CGFloat(i) * 0.05) : y0
+            var wind = Path()
+            wind.move(to: CGPoint(x: size.width * 0.06, y: y0))
+            wind.addQuadCurve(to: CGPoint(x: size.width * 0.34, y: endY),
+                              control: CGPoint(x: size.width * 0.22, y: (y0 + endY) * 0.5 - u * 0.04))
+            ctx.stroke(wind, with: .color(EyeStyle.Game.Theater.coldWind.opacity(0.75)),
+                       style: StrokeStyle(lineWidth: 3.5, lineCap: .round, dash: [12, 8], dashPhase: -wave * 40))
+        }
+        if fixed {
+            let humC = CGPoint(x: size.width * 0.80, y: size.height * 0.74)
+            ctx.fill(RoundedRectangle(cornerRadius: 14).path(in: CGRect(x: humC.x - u * 0.09, y: humC.y - u * 0.08, width: u * 0.18, height: u * 0.18)),
+                     with: .color(EyeStyle.Game.Theater.tearDeep))
+            for i in 0..<5 {
+                let mt = (wave + CGFloat(i) * 0.2).truncatingRemainder(dividingBy: 1)
+                let mp = CGPoint(x: humC.x - mt * u * 0.22 + sin(mt * 5) * u * 0.03, y: humC.y - u * 0.12 - mt * u * 0.32)
+                let mr = u * (0.022 + mt * 0.02)
+                ctx.fill(Path(ellipseIn: CGRect(x: mp.x - mr, y: mp.y - mr, width: mr * 2, height: mr * 2)),
+                         with: .color(EyeStyle.Game.Theater.tearHighlight.opacity((1 - mt) * 0.75)))
+            }
+        }
+    }
+
+    private static func drawScreenAngle(_ ctx: GraphicsContext, size: CGSize, u: CGFloat, actT: CGFloat) {
+        let lowered = min(max((actT - 0.25) / 0.45, 0), 1)
+        let eyePos = CGPoint(x: size.width * 0.28, y: size.height * 0.48)
+        let screenPos = CGPoint(x: size.width * 0.76, y: size.height * (0.44 + lowered * 0.22))
+        var horiz = Path()
+        horiz.move(to: eyePos); horiz.addLine(to: CGPoint(x: size.width * 0.82, y: eyePos.y))
+        ctx.stroke(horiz, with: .color(EyeStyle.Game.Theater.steam.opacity(0.28)), style: StrokeStyle(lineWidth: 2, dash: [8, 8]))
+        var sight = Path()
+        sight.move(to: eyePos); sight.addLine(to: screenPos)
+        ctx.stroke(sight, with: .color(lowered > 0.5 ? EyeStyle.Game.Theater.leafSage : EyeStyle.Game.Theater.dryCoral),
+                   style: StrokeStyle(lineWidth: 4, lineCap: .round))
+        drawDetailedEye(ctx, center: eyePos, radius: u * 0.19, lidClose: lowered * 0.34, gazeX: 0.5, dryRatio: (1 - lowered) * 0.65)
+        ctx.fill(RoundedRectangle(cornerRadius: 8).path(in: CGRect(x: screenPos.x - u * 0.04, y: screenPos.y - u * 0.14, width: u * 0.08, height: u * 0.28)),
+                 with: .color(EyeStyle.Game.Theater.tearCyan.opacity(0.85)))
+    }
+
+    private static func drawNightLight(_ ctx: GraphicsContext, size: CGSize, u: CGFloat, actT: CGFloat) {
+        let lampOn = min(max((actT - 0.35) / 0.35, 0), 1)
+        let lampGlowC = CGPoint(x: size.width * 0.24, y: size.height * 0.45)
+        if lampOn > 0.05 {
+            let r = u * 0.72
+            ctx.fill(Path(ellipseIn: CGRect(x: lampGlowC.x - r, y: lampGlowC.y - r, width: r * 2, height: r * 2)),
+                     with: .radialGradient(Gradient(colors: [EyeStyle.Game.Theater.warmLamp.opacity(0.42 * lampOn), .clear]),
+                                           center: lampGlowC, startRadius: 0, endRadius: r))
+        }
+        let lampC = CGPoint(x: size.width * 0.24, y: size.height * 0.48)
+        var shade = Path()
+        shade.move(to: CGPoint(x: lampC.x - u * 0.10, y: lampC.y + u * 0.06))
+        shade.addLine(to: CGPoint(x: lampC.x - u * 0.06, y: lampC.y - u * 0.07))
+        shade.addLine(to: CGPoint(x: lampC.x + u * 0.06, y: lampC.y - u * 0.07))
+        shade.addLine(to: CGPoint(x: lampC.x + u * 0.10, y: lampC.y + u * 0.06))
+        shade.closeSubpath()
+        ctx.fill(shade, with: .color(lampOn > 0.2 ? EyeStyle.Game.Theater.warmLamp : EyeStyle.Game.Theater.steam.opacity(0.35)))
+        var stand = Path()
+        stand.move(to: CGPoint(x: lampC.x, y: lampC.y + u * 0.06)); stand.addLine(to: CGPoint(x: lampC.x, y: size.height * 0.80))
+        ctx.stroke(stand, with: .color(EyeStyle.Game.Theater.steam.opacity(0.55)), lineWidth: 5)
+        drawDetailedEye(ctx, center: CGPoint(x: size.width * 0.62, y: size.height * 0.54), radius: u * 0.24, lidClose: 0, gazeX: 0, dryRatio: (1 - lampOn) * 0.75)
+    }
+
+    private static func drawCompleteBlink(_ ctx: GraphicsContext, c: CGPoint, u: CGFloat, actT: CGFloat, wave: CGFloat) {
+        let isComplete = actT >= 0.46
+        let lid: CGFloat
+        if !isComplete {
+            lid = 0.5 * ((sin(wave * 4 * .pi) + 1) * 0.5)
+        } else {
+            let cyc = (actT - 0.46) / 0.54
+            lid = (cyc >= 0.2 && cyc <= 0.7) ? sin(((cyc - 0.2) / 0.5) * .pi) : 0
+        }
+        drawDetailedEye(ctx, center: c, radius: u * 0.32, lidClose: lid, gazeX: 0, dryRatio: isComplete ? 0 : 0.55)
+        if isComplete && lid > 0.65 {
+            for i in -2...2 {
+                let r = u * 0.025
+                let px = c.x + CGFloat(i) * u * 0.10, py = c.y + u * 0.04
+                ctx.fill(Path(ellipseIn: CGRect(x: px - r, y: py - r, width: r * 2, height: r * 2)),
+                         with: .color(EyeStyle.Game.Theater.lipidGold))
+            }
+        }
+    }
+
+    private static func drawContactLens(_ ctx: GraphicsContext, c: CGPoint, u: CGFloat, actT: CGFloat, wave: CGFloat) {
+        let removed = min(max((actT - 0.38) / 0.32, 0), 1)
+        drawDetailedEye(ctx, center: c, radius: u * 0.28, lidClose: 0, gazeX: 0, dryRatio: (1 - removed) * 0.5)
+        if removed < 0.95 {
+            let lensC = CGPoint(x: c.x + removed * u * 0.38, y: c.y - removed * u * 0.28)
+            let r = u * 0.16
+            ctx.stroke(Path(ellipseIn: CGRect(x: lensC.x - r, y: lensC.y - r, width: r * 2, height: r * 2)),
+                       with: .color(EyeStyle.Game.Theater.tearHighlight.opacity((1 - removed) * 0.55)), lineWidth: 3.5)
+        }
+        let count = removed > 0.3 ? 7 : 2
+        for i in 0..<count {
+            let a = CGFloat(i) * (2 * .pi / CGFloat(count)) + wave * 2 * .pi
+            let dist = u * (0.44 - removed * 0.14)
+            let bx = c.x + cos(a) * dist, by = c.y + sin(a) * dist * 0.72, br = u * 0.026
+            ctx.stroke(Path(ellipseIn: CGRect(x: bx - br, y: by - br, width: br * 2, height: br * 2)),
+                       with: .color(EyeStyle.Game.Theater.tearHighlight.opacity(0.72)), lineWidth: 2.2)
+        }
+    }
+
+    private static func drawHydrationNutrition(_ ctx: GraphicsContext, size: CGSize, c: CGPoint, u: CGFloat, actT: CGFloat, wave: CGFloat) {
+        let cupC = CGPoint(x: size.width * 0.30, y: size.height * 0.58)
+        let cupW = u * 0.26, cupH = u * 0.32, fillH = cupH * (0.30 + actT * 0.58)
+        ctx.fill(RoundedRectangle(cornerRadius: 10).path(in: CGRect(x: cupC.x - cupW * 0.45, y: cupC.y + cupH * 0.46 - fillH, width: cupW * 0.90, height: fillH)),
+                 with: .color(EyeStyle.Game.Theater.tearCyan.opacity(0.78)))
+        ctx.stroke(RoundedRectangle(cornerRadius: 14).path(in: CGRect(x: cupC.x - cupW * 0.5, y: cupC.y - cupH * 0.5, width: cupW, height: cupH)),
+                   with: .color(EyeStyle.Game.Theater.tearHighlight.opacity(0.85)), lineWidth: 3.5)
+        let rightC = CGPoint(x: size.width * 0.68, y: size.height * 0.56)
+        drawDetailedEye(ctx, center: rightC, radius: u * 0.22, lidClose: 0, gazeX: 0, dryRatio: 0)
+        drawSparkle(ctx, center: CGPoint(x: rightC.x + u * 0.22, y: rightC.y - u * 0.22), radius: u * 0.055, color: EyeStyle.Game.Theater.lipidGold)
+        for i in 0..<4 {
+            let ft = (wave + CGFloat(i) * 0.25).truncatingRemainder(dividingBy: 1)
+            let px = cupC.x + cupW * 0.5 + ft * (rightC.x - cupC.x - cupW * 0.7)
+            let py = c.y - sin(ft * .pi) * u * 0.16
+            let pr = u * 0.024
+            ctx.fill(Path(ellipseIn: CGRect(x: px - pr, y: py - pr, width: pr * 2, height: pr * 2)),
+                     with: .color(i % 2 == 0 ? EyeStyle.Game.Theater.tearCyan : EyeStyle.Game.Theater.lipidGold))
+        }
+    }
+
+    private static func drawDetailedEye(_ ctx: GraphicsContext, center: CGPoint, radius: CGFloat, lidClose: CGFloat, gazeX: CGFloat, dryRatio: CGFloat) {
+        let open = min(max(1 - lidClose, 0), 1)
+        let w = radius * 1.82
+        let h = radius * 1.12 * max(open, 0.14)
+        if open < 0.22 {
+            var closed = Path()
+            closed.move(to: CGPoint(x: center.x - w * 0.48, y: center.y))
+            closed.addQuadCurve(to: CGPoint(x: center.x + w * 0.48, y: center.y),
+                                control: CGPoint(x: center.x, y: center.y + radius * 0.38))
+            ctx.stroke(closed, with: .color(EyeStyle.Game.Theater.warmLamp), style: StrokeStyle(lineWidth: radius * 0.11, lineCap: .round))
+            return
+        }
+        var contour = Path()
+        contour.move(to: CGPoint(x: center.x - w * 0.5, y: center.y))
+        contour.addQuadCurve(to: CGPoint(x: center.x + w * 0.5, y: center.y), control: CGPoint(x: center.x, y: center.y - h))
+        contour.addQuadCurve(to: CGPoint(x: center.x - w * 0.5, y: center.y), control: CGPoint(x: center.x, y: center.y + h))
+        contour.closeSubpath()
+        ctx.fill(contour, with: .color(EyeStyle.Game.Theater.steam))
+        let rim = dryRatio > 0.4 ? EyeStyle.Game.Theater.dryCoral : EyeStyle.Game.Theater.tearCyan
+        ctx.stroke(contour, with: .color(rim.opacity(0.78)), style: StrokeStyle(lineWidth: radius * 0.085, lineJoin: .round))
+
+        let irisC = CGPoint(x: center.x + gazeX * radius * 0.22, y: center.y)
+        let irisR = radius * 0.39 * max(open, 0.55)
+        ctx.fill(Path(ellipseIn: CGRect(x: irisC.x - irisR, y: irisC.y - irisR, width: irisR * 2, height: irisR * 2)),
+                 with: .radialGradient(Gradient(colors: [EyeStyle.Game.Theater.tearCyan, EyeStyle.Game.Theater.tearDeep, EyeStyle.Game.Theater.skyNight]),
+                                       center: irisC, startRadius: 0, endRadius: irisR))
+        for i in 0..<12 {
+            let a = CGFloat(i) * (2 * .pi / 12)
+            var ray = Path()
+            ray.move(to: CGPoint(x: irisC.x + cos(a) * irisR * 0.48, y: irisC.y + sin(a) * irisR * 0.48))
+            ray.addLine(to: CGPoint(x: irisC.x + cos(a) * irisR * 0.90, y: irisC.y + sin(a) * irisR * 0.90))
+            ctx.stroke(ray, with: .color(EyeStyle.Game.Theater.tearHighlight.opacity(0.22)), lineWidth: 1.6)
+        }
+        let pr = irisR * 0.48
+        ctx.fill(Path(ellipseIn: CGRect(x: irisC.x - pr, y: irisC.y - pr, width: pr * 2, height: pr * 2)),
+                 with: .color(EyeStyle.Game.Firefly.bodyDark))
+        let hr1 = irisR * 0.24
+        ctx.fill(Path(ellipseIn: CGRect(x: irisC.x - irisR * 0.28 - hr1, y: irisC.y - irisR * 0.26 - hr1, width: hr1 * 2, height: hr1 * 2)),
+                 with: .color(EyeStyle.Game.Theater.tearHighlight))
+        let hr2 = irisR * 0.10
+        ctx.fill(Path(ellipseIn: CGRect(x: irisC.x + irisR * 0.22 - hr2, y: irisC.y + irisR * 0.20 - hr2, width: hr2 * 2, height: hr2 * 2)),
+                 with: .color(EyeStyle.Game.Theater.tearHighlight.opacity(0.65)))
+    }
+
+    private static func drawSmilingDrop(_ ctx: GraphicsContext, center: CGPoint, radius: CGFloat) {
+        var drop = Path()
+        drop.move(to: CGPoint(x: center.x, y: center.y - radius * 1.25))
+        drop.addCurve(to: CGPoint(x: center.x + radius * 0.90, y: center.y + radius * 0.55),
+                      control1: CGPoint(x: center.x + radius * 0.45, y: center.y - radius * 0.45),
+                      control2: CGPoint(x: center.x + radius * 0.95, y: center.y + radius * 0.15))
+        drop.addCurve(to: CGPoint(x: center.x - radius * 0.90, y: center.y + radius * 0.55),
+                      control1: CGPoint(x: center.x + radius * 0.85, y: center.y + radius * 1.05),
+                      control2: CGPoint(x: center.x - radius * 0.85, y: center.y + radius * 1.05))
+        drop.addCurve(to: CGPoint(x: center.x, y: center.y - radius * 1.25),
+                      control1: CGPoint(x: center.x - radius * 0.95, y: center.y + radius * 0.15),
+                      control2: CGPoint(x: center.x - radius * 0.45, y: center.y - radius * 0.45))
+        drop.closeSubpath()
+        ctx.fill(drop, with: .linearGradient(Gradient(colors: [EyeStyle.Game.Theater.tearHighlight, EyeStyle.Game.Theater.tearCyan, EyeStyle.Game.Theater.tearDeep]),
+                                             startPoint: CGPoint(x: center.x, y: center.y - radius * 1.2),
+                                             endPoint: CGPoint(x: center.x, y: center.y + radius)))
+        let er = radius * 0.11
+        ctx.fill(Path(ellipseIn: CGRect(x: center.x - radius * 0.25 - er, y: center.y + radius * 0.26 - er, width: er * 2, height: er * 2)),
+                 with: .color(EyeStyle.Game.Firefly.bodyDark))
+        ctx.fill(Path(ellipseIn: CGRect(x: center.x + radius * 0.25 - er, y: center.y + radius * 0.26 - er, width: er * 2, height: er * 2)),
+                 with: .color(EyeStyle.Game.Firefly.bodyDark))
+        var mouth = Path()
+        mouth.move(to: CGPoint(x: center.x - radius * 0.18, y: center.y + radius * 0.46))
+        mouth.addQuadCurve(to: CGPoint(x: center.x + radius * 0.18, y: center.y + radius * 0.46),
+                           control: CGPoint(x: center.x, y: center.y + radius * 0.64))
+        ctx.stroke(mouth, with: .color(EyeStyle.Game.Firefly.bodyDark), style: StrokeStyle(lineWidth: radius * 0.08, lineCap: .round))
+    }
+
+    private static func drawWaveBand(_ ctx: GraphicsContext, left: CGFloat, right: CGFloat, topY: CGFloat, thickness: CGFloat, phase: CGFloat, color: Color) {
+        let steps = 16, w = right - left, amp = thickness * 0.20
+        var p = Path()
+        p.move(to: CGPoint(x: left, y: topY + thickness))
+        for i in 0...steps {
+            let f = CGFloat(i) / CGFloat(steps)
+            let x = left + w * f
+            let y = topY + sin((f * 2.5 + phase) * 2 * .pi) * amp
+            p.addLine(to: CGPoint(x: x, y: y))
+        }
+        p.addLine(to: CGPoint(x: right, y: topY + thickness))
+        p.closeSubpath()
+        ctx.fill(p, with: .color(color))
+    }
+
+    private static func drawSparkle(_ ctx: GraphicsContext, center: CGPoint, radius: CGFloat, color: Color) {
+        let inner = radius * 0.28
+        var p = Path()
+        p.move(to: CGPoint(x: center.x, y: center.y - radius))
+        p.addQuadCurve(to: CGPoint(x: center.x + radius, y: center.y), control: CGPoint(x: center.x + inner * 0.3, y: center.y - inner * 0.3))
+        p.addQuadCurve(to: CGPoint(x: center.x, y: center.y + radius), control: CGPoint(x: center.x + inner * 0.3, y: center.y + inner * 0.3))
+        p.addQuadCurve(to: CGPoint(x: center.x - radius, y: center.y), control: CGPoint(x: center.x - inner * 0.3, y: center.y + inner * 0.3))
+        p.addQuadCurve(to: CGPoint(x: center.x, y: center.y - radius), control: CGPoint(x: center.x - inner * 0.3, y: center.y - inner * 0.3))
+        p.closeSubpath()
+        ctx.fill(p, with: .color(color))
     }
 }
 

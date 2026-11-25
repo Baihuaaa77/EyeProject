@@ -490,6 +490,72 @@ class ServiceVisualTest {
         capture("game-presbyopia-postoffice")
     }
 
+    @Test fun dryEyeCinemaStoryActsRenderCleanly() {
+        var progress by androidx.compose.runtime.mutableFloatStateOf(0.24f) // 第 2 幕：三层泪膜解剖
+        var phase by androidx.compose.runtime.mutableStateOf(DryEyePhase.Natural)
+        var voiceOn by androidx.compose.runtime.mutableStateOf(true)
+        var remaining by androidx.compose.runtime.mutableIntStateOf(46)
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            EyeProjectTheme(darkTheme = true) {
+                Column(
+                    Modifier
+                        .fillMaxSize()
+                        .background(LocalEyeColors.current.appBackground)
+                        .padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    DryEyeCinemaTheater(
+                        DryEyeTestUiState(
+                            phase = phase,
+                            naturalSeconds = 60,
+                            remainingSeconds = remaining,
+                            progressFraction = progress,
+                            phase1BlinkCount = 7,
+                            phase2BlinkCount = 0,
+                        ),
+                        voiceEnabled = voiceOn,
+                    )
+                }
+            }
+        }
+        compose.mainClock.advanceTimeBy(300)
+        compose.onNodeWithText("神奇的三层泪膜护盾").assertExists()
+        compose.onNodeWithText("中文讲解中").assertExists()
+        capture("game-dryeye-act2-layers")
+
+        // 第 3 幕：聊天 vs 盯屏对比
+        progress = 0.42f; remaining = 35
+        compose.mainClock.advanceTimeBy(300)
+        compose.onNodeWithText("盯屏幕时的眨眼危机").assertExists()
+        capture("game-dryeye-act3-screen")
+
+        // 第 4 幕：微距泪膜破裂与雨刷修复
+        progress = 0.59f; remaining = 25
+        compose.mainClock.advanceTimeBy(300)
+        compose.onNodeWithText("眼睑就像温柔的小雨刷").assertExists()
+        capture("game-dryeye-act4-breakup")
+
+        // 第 5 幕：20-20-20 远眺窗外
+        progress = 0.74f; remaining = 16
+        compose.mainClock.advanceTimeBy(300)
+        compose.onNodeWithText("20-20-20 远眺放松法").assertExists()
+        capture("game-dryeye-act5-rule202020")
+
+        // 第 6 幕：40°C 热敷融化睑板腺油脂（并验证静音字幕态）
+        progress = 0.91f; remaining = 5; voiceOn = false
+        compose.mainClock.advanceTimeBy(300)
+        compose.onNodeWithText("40°C 暖雾热敷魔法").assertExists()
+        compose.onNodeWithText("静音字幕").assertExists()
+        capture("game-dryeye-act6-warm")
+
+        // 持续睁眼满级星盾
+        phase = DryEyePhase.Open; progress = 0.80f; remaining = 4; voiceOn = true
+        compose.mainClock.advanceTimeBy(300)
+        compose.onNodeWithText("满级星盾").assertExists()
+        capture("game-dryeye-open-shield")
+    }
+
     @Test fun strabismusMoonlitFireflySessionRenders() {
         val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
         val vm = ScreeningTestViewModel(context,

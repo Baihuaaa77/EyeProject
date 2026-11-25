@@ -303,13 +303,14 @@ class MobileScreeningController(
                 put("direction",s.direction); put("optotypePx",s.optotypePx); put("savedFile",s.savedFile); put("saveError",s.saveError)
                 put("risk",s.report?.riskLevel?.name); put("findings",RecordArray(s.report?.indicators.orEmpty() + s.report?.abnormal.orEmpty()))
                 put("advice",s.report?.advice)
-                // 干眼视标每 2 秒一题：整个作答阶段持续收听，只在视标显示时开关会来不及启动识别
-                val directionTask = s.phase in setOf(DryEyePhase.Practice, DryEyePhase.Natural, DryEyePhase.Open)
-                put("voiceActive",directionTask)
-                put("gestureActive",directionTask && !s.paused)
+                // 干眼小剧场观影测眨眼模式下不需要语音收听与手势识别，避免干扰中文科普讲解
+                put("voiceActive",false)
+                put("gestureActive",false)
                 put("gestureDirection",s.gestureFeedback.direction)
                 put("gestureProgress",s.gestureFeedback.progress.toDouble())
                 put("gestureNeedsRelease",s.gestureFeedback.needsRelease)
+                put("phase1BlinkCount", s.phase1BlinkCount)
+                put("phase2BlinkCount", s.phase2BlinkCount)
                 put("naturalSeconds",s.naturalSeconds); put("afterRest",s.afterRest); put("canExtend",s.canExtend); put("canRest",s.canRestRetest); put("progress",s.progressFraction)
                 dryEyeProgress(s).let { p -> put("overallProgress",p?.fraction); put("remainingText",p?.remainingText) }
                 ResultReports.dryEye(s)?.let { put("report",it.toRecordObject()) }

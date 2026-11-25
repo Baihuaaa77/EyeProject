@@ -144,14 +144,15 @@ fun DryEyeScreen(
     // 与共用反馈门控一致：倒计时期间同样要求固定距离，光边和语音不能缺席。
     val distanceMatters = state.phase in setOf(DryEyePhase.Setup, DryEyePhase.FormalGuide, DryEyePhase.Countdown,
         DryEyePhase.Practice, DryEyePhase.Natural, DryEyePhase.Open)
+    // 干眼小剧场观影模式不启动手势与麦克风作答，避免与中文科普语音讲解冲突
     val gestureActive = settings.gestureAnswersEnabled && !settingsOpen && !helpOpen && !exitConfirmationOpen && !state.paused &&
-        state.phase in setOf(DryEyePhase.Practice, DryEyePhase.Natural, DryEyePhase.Open)
+        state.phase == DryEyePhase.Practice
     DisposableEffect(viewModel, gestureActive) {
         if (gestureActive) viewModel.startGestureAnswers()
         onDispose { if (gestureActive) viewModel.stopGestureAnswers() }
     }
     val voiceAnswer = rememberVoiceAnswer(
-        active = !settingsOpen && !helpOpen && state.phase in setOf(DryEyePhase.Practice, DryEyePhase.Natural, DryEyePhase.Open),
+        active = !settingsOpen && !helpOpen && state.phase == DryEyePhase.Practice,
         voice = voice,
         enabled = settings.answersEnabled,
     ) { command ->
@@ -166,8 +167,8 @@ fun DryEyeScreen(
         DryEyePhase.Profile -> ""
         DryEyePhase.Setup -> "建议佩戴最佳矫正视力眼镜。准备好后开始"
         DryEyePhase.PracticeGuide -> guideCueDryEyePractice
-        DryEyePhase.FormalGuide -> "护眼小剧场即将开始。前六十秒观看动画自然眨眼，看到提示后尽量保持睁眼二十秒"
-        DryEyePhase.OpenCue, DryEyePhase.Open -> "现在尽量保持睁眼，稳住水膜"
+        DryEyePhase.FormalGuide -> "护眼科普小剧场即将开始。前六十秒观看动画自然眨眼，看到提示后尽量保持睁眼二十秒"
+        DryEyePhase.OpenCue -> "现在尽量保持睁眼，稳住水膜"
         DryEyePhase.Rest -> if (state.remainingSeconds <= 1) "请睁开眼睛" else "请闭上眼睛休息"
         DryEyePhase.Result -> "测试完成"
         else -> state.qualityWarning ?: state.instruction
@@ -218,7 +219,7 @@ fun DryEyeScreen(
                 DryEyePhase.Countdown -> CountdownContent(state.instruction, state.remainingSeconds)
                 DryEyePhase.OpenCue -> Unit
                 DryEyePhase.Practice, DryEyePhase.Natural, DryEyePhase.Open -> {
-                    TrialContent(state) { viewModel.answer(it) }
+                    TrialContent(state, voiceEnabled = voiceEnabled) { viewModel.answer(it) }
                 }
                 DryEyePhase.Rest -> RestContent(state)
                 DryEyePhase.Result -> ResultContent(state, viewModel::startExtended, viewModel::startRestRetest, viewModel::restartAll,
@@ -291,10 +292,10 @@ private fun FormalGuideContent(state: DryEyeTestUiState, onStart: () -> Unit) {
     DistanceBanner(distanceStatus(state.distanceCm, state.faceDetected, DryEyeProtocol.TARGET_DISTANCE_CM, DryEyeProtocol.DISTANCE_TOLERANCE_CM), compact = true)
     TestGuide(
         GuideMotion.BLINK,
-        "护眼小剧场 · ${state.naturalSeconds} 秒 + 20 秒",
-        "观看护眼科普小动画。前 ${state.naturalSeconds} 秒像平时一样自然眨眼，看到屏幕提示后，尽量保持睁眼 20 秒",
+        "护眼科普动画 · ${state.naturalSeconds} 秒 + 20 秒",
+        "观看多幕护眼科普动画并收听中文讲解。前 ${state.naturalSeconds} 秒像平时一样自然眨眼，看到提示后尽量保持睁眼 20 秒",
     )
-    EyeButton("开始护眼小剧场", EyeButtonRole.PRIMARY, onStart, Modifier.fillMaxWidth(), state.gateReady)
+    EyeButton("开始观看护眼动画", EyeButtonRole.PRIMARY, onStart, Modifier.fillMaxWidth(), state.gateReady)
     state.error?.let { EyeText(it, style = LocalEyeTypography.current.body, color = colors.danger) }
 }
 
@@ -344,9 +345,9 @@ private fun TimerRing(progress: () -> Float, modifier: Modifier = Modifier, cont
     }
 }
 
-/** 正式观影与睁眼挑战：护眼科普小剧场 + 实时眨眼监测；练习态仍保留兼容呈现。 */
+/** 正式观影与睁眼挑战：多幕电影级护眼科普动画 + 中文语音讲解；练习态仍保留兼容呈现。 */
 @Composable
-internal fun TrialContent(state: DryEyeTestUiState, onAnswer: (Int) -> Unit) {
+internal fun TrialContent(state: DryEyeTestUiState, voiceEnabled: Boolean = true, onAnswer: (Int) -> Unit) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
     if (state.phase == DryEyePhase.Practice) {
@@ -367,7 +368,7 @@ internal fun TrialContent(state: DryEyeTestUiState, onAnswer: (Int) -> Unit) {
     }
     TestStageCard {
         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            DryEyeStoryTheater(state)
+            DryEyeCinemaTheater(state, voiceEnabled = voiceEnabled)
             TestNotice(state.qualityWarning)
         }
     }

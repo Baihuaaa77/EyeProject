@@ -8,14 +8,22 @@ import androidx.compose.ui.graphics.Color
  */
 object EyeGamePalette {
     object Theater {
-        val stageBg = Color(0xFF221A14)
+        val stageBg = Color(0xFF1D1713)
+        val stageDeep = Color(0xFF12100E)
         val stageGlow = Color(0xFF3E2D20)
+        val skyNight = Color(0xFF132238)
+        val skyDay = Color(0xFF284B63)
         val tearCyan = Color(0xFF7ED6DF)
         val tearHighlight = Color(0xFFDFF8FB)
-        val tearDeep = Color(0xFF3A8FA0)
+        val tearDeep = Color(0xFF2E8699)
+        val mucinViolet = Color(0xFFB39DDB)
+        val lipidGold = Color(0xFFFFCA58)
+        val dryCoral = Color(0xFFEB7D65)
+        val coldWind = Color(0xFF7FA9D6)
         val leafSage = Color(0xFF8DB596)
         val warmLamp = Color(0xFFFFD166)
         val steam = Color(0xFFF4EAE0)
+        val skinWarm = Color(0xFFF3C6A5)
     }
 
     object PostOffice {

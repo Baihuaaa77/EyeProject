@@ -88,14 +88,22 @@ enum EyeStyle {
     /// 三项自测趣味小游戏场景色板（与安卓 EyeGamePalette 同值）。
     enum Game {
         enum Theater {
-            static let stageBg = Color(rgb: 0x221A14)
+            static let stageBg = Color(rgb: 0x1D1713)
+            static let stageDeep = Color(rgb: 0x12100E)
             static let stageGlow = Color(rgb: 0x3E2D20)
+            static let skyNight = Color(rgb: 0x132238)
+            static let skyDay = Color(rgb: 0x284B63)
             static let tearCyan = Color(rgb: 0x7ED6DF)
             static let tearHighlight = Color(rgb: 0xDFF8FB)
-            static let tearDeep = Color(rgb: 0x3A8FA0)
+            static let tearDeep = Color(rgb: 0x2E8699)
+            static let mucinViolet = Color(rgb: 0xB39DDB)
+            static let lipidGold = Color(rgb: 0xFFCA58)
+            static let dryCoral = Color(rgb: 0xEB7D65)
+            static let coldWind = Color(rgb: 0x7FA9D6)
             static let leafSage = Color(rgb: 0x8DB596)
             static let warmLamp = Color(rgb: 0xFFD166)
             static let steam = Color(rgb: 0xF4EAE0)
+            static let skinWarm = Color(rgb: 0xF3C6A5)
         }
         enum PostOffice {
             static let skyTop = Color(rgb: 0x478598)
