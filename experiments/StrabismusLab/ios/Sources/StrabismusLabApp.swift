@@ -52,7 +52,7 @@ struct LabConsoleView: View {
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("StrabismusLab").font(LabFont.title).foregroundColor(LabPalette.inkPrimary)
-                            Text("3D CODED CORNEAL LAB · v0.9.2").font(LabFont.microMono).foregroundColor(LabPalette.accent)
+                            Text("3D CODED CORNEAL LAB · v0.9.3").font(LabFont.microMono).foregroundColor(LabPalette.accent)
                         }
                         Spacer()
                         Button(action: store.openHistory) {
@@ -323,7 +323,7 @@ struct LabCaptureStageView: View {
                 VStack(spacing: 14) {
                     if store.analyzing {
                         ProgressView().tint(LabPalette.accent)
-                        Text("正在执行 v0.9.2 3D 光学反演与遮盖拐点回溯…").font(LabFont.body).foregroundColor(LabPalette.inkSecondary)
+                        Text("正在执行 v0.9.3 3D 光学反演与遮盖拐点回溯…").font(LabFont.body).foregroundColor(LabPalette.inkSecondary)
                     } else if store.live.stageWaitingConfirm {
                         stageBriefingCard
                             .padding(.horizontal, 20)

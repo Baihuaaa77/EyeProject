@@ -664,7 +664,7 @@ private fun CaptureStageScreen(
         ) {
             if (analyzing) {
                 CircularProgressIndicator(color = LabColors.accent)
-                Text("正在执行 v0.9.2 3D 光学反演与遮盖拐点回溯…", style = LabType.body, color = LabColors.inkSecondary)
+                Text("正在执行 v0.9.3 3D 光学反演与遮盖拐点回溯…", style = LabType.body, color = LabColors.inkSecondary)
             } else if (live.stageWaitingConfirm) {
                 Column(
                     modifier = Modifier

@@ -68,14 +68,14 @@ jobs:
           mkdir -p build/unsigned/Payload
           cp -R "$app" build/unsigned/Payload/
           cd build/unsigned
-          zip -qry StrabismusLab-v0.9.2-unsigned.ipa Payload
-          shasum -a 256 StrabismusLab-v0.9.2-unsigned.ipa > SHA256.txt
-          ls -lh StrabismusLab-v0.9.2-unsigned.ipa SHA256.txt
+          zip -qry StrabismusLab-v0.9.3-unsigned.ipa Payload
+          shasum -a 256 StrabismusLab-v0.9.3-unsigned.ipa > SHA256.txt
+          ls -lh StrabismusLab-v0.9.3-unsigned.ipa SHA256.txt
       - uses: actions/upload-artifact@v4
         with:
           name: strabismus-lab-unsigned-ipa
           path: |
-            experiments/StrabismusLab/ios/build/unsigned/StrabismusLab-v0.9.2-unsigned.ipa
+            experiments/StrabismusLab/ios/build/unsigned/StrabismusLab-v0.9.3-unsigned.ipa
             experiments/StrabismusLab/ios/build/unsigned/SHA256.txt
           if-no-files-found: error
           retention-days: 14

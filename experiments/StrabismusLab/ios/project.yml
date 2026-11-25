@@ -6,8 +6,8 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "0.9.2"
-    CURRENT_PROJECT_VERSION: "4"
+    MARKETING_VERSION: "0.9.3"
+    CURRENT_PROJECT_VERSION: "5"
     CODE_SIGN_STYLE: Automatic
     TARGETED_DEVICE_FAMILY: "1"
     FRAMEWORK_SEARCH_PATHS: "$(inherited) $(SRCROOT)/../../../shared/screening/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)"

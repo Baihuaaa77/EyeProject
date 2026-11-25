@@ -920,12 +920,14 @@ class StrabismusLabEngine(
 
             val hVals = robustTrim(usable.map { it.hdePrism!! })
             val vVals = robustTrim(usable.map { it.vdePrism!! })
-            // 主 3D 水平指标优先采用对共轭偏转与人脸偏移免疫的 3D 聚散分量（Vergence 3D），并保留不对称与线性对照
-            val verg3dVals = robustTrim(usable.mapNotNull { it.hdeVergence3dPrism })
+            // 主 3D 水平指标必须使用 3D 不对称分量（Asymmetry 3D = leftNasal - rightNasal），
+            // 自动抵消正常人双眼对称的生理 Kappa 角（+4°~+5°），避免把正常 κ 角翻倍（+2κ ≈ +18Δ~20Δ）误报为外斜；
+            // 3D 聚散分量（Vergence 3D = leftNasal + rightNasal）仅保留作为科研消融与看近/看远聚散差对照。
             val asym3dVals = robustTrim(usable.mapNotNull { it.hde3dPrism })
+            val verg3dVals = robustTrim(usable.mapNotNull { it.hdeVergence3dPrism })
             val v3dVals = robustTrim(usable.mapNotNull { it.vde3dPrism })
 
-            val primaryH3d = verg3dVals.ifEmpty { asym3dVals }
+            val primaryH3d = asym3dVals
             val effN = max(1.0, usable.size / max(1.0, medFps * 0.2))
             val hSd = stdDev(hVals)
             val vSd = stdDev(vVals)

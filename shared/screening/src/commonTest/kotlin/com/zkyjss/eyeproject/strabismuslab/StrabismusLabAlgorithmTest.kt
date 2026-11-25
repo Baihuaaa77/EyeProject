@@ -571,4 +571,91 @@ class StrabismusLabAlgorithmTest {
         val vde = abs(report.nearMetrics?.vde3dPrism ?: 0.0)
         assertTrue(vde < 4.0, "MAD/锚点过滤后正视眼 3D VDE 应保持在 4Δ 内，实际=$vde")
     }
+
+    @Test
+    fun symmetricPhysiologicalAngleKappaDoesNotTriggerStrabismus() {
+        // 复现 v0.9.2 实测发现：健康人双眼存在对称正 Kappa 角（两眼映光同时偏鼻侧约 0.10 R），
+        // 导致 3D 聚散分量 verg3d = leftNasal + rightNasal ≈ +18Δ~20Δ；
+        // v0.9.3 主 3D HDE 必须采用抵消双目对称 κ 角的 3D 不对称分量，健康正视眼应稳定判为 NORMAL。
+        val engine = StrabismusLabEngine(platformName = "Test", deviceModel = "Sim")
+        val cfg = LabProtocolConfig(
+            codingScheme = LabCodingScheme.STEADY,
+            includeNear = true,
+            includeFar = false,
+            includeCover = false,
+            includePursuit = false,
+            nearDurationSec = 4,
+            lightOffsetXMm = 0.0,
+            lightOffsetYMm = 22.0,
+        )
+        val intr = LabCameraIntrinsics(fx = 2595.0, fy = 2595.0, cx = 1080.0, cy = 1920.0, lightOffsetXMm = 0.0, lightOffsetYMm = 22.0)
+        engine.startSession(cfg, nowMs = 30_000L)
+        engine.confirmStageReady(nowMs = 30_000L)
+
+        var tMs = 30_000L
+        for (i in 0 until 60) {
+            tMs = 30_000L + i * 33L
+            engine.recordDisplayTick(tMs, screenBrightness = 1.0)
+            // 非镜像前摄坐标系（与 iPhone 一致）：leftIrisX=1440 > rightIrisX=900，nasalSign = -1
+            // 双目对称正 κ 角：左眼映光偏鼻侧（-x，-0.10R = -5.4px），右眼映光偏鼻侧（+x，+0.10R = +5.4px）
+            val lEye = EyeLandmarks(
+                "LEFT",
+                listOf(Point2f(1390f, 1600f), Point2f(1420f, 1580f), Point2f(1460f, 1580f), Point2f(1490f, 1600f), Point2f(1460f, 1620f), Point2f(1420f, 1620f)),
+                listOf(Point2f(1440f, 1600f)),
+                108f,
+            )
+            val rEye = EyeLandmarks(
+                "RIGHT",
+                listOf(Point2f(850f, 1600f), Point2f(880f, 1580f), Point2f(920f, 1580f), Point2f(950f, 1600f), Point2f(920f, 1620f), Point2f(880f, 1620f)),
+                listOf(Point2f(900f, 1600f)),
+                108f,
+            )
+            val lGlint = Point2f(1440f - 5.4f, 1600f - 10.0f)
+            val rGlint = Point2f(900f + 5.4f, 1600f - 10.0f)
+            val face = FaceMetrics(
+                faceBox = BoundingBox(600f, 1200f, 1740f, 2400f),
+                leftEye = lEye,
+                rightEye = rEye,
+                leftOptical = OpticalEyeMeasurement(
+                    pupilCenter = lEye.irisPoints.first(),
+                    cornealReflex = lGlint,
+                    irisDiameterPx = 108f,
+                    pupilContrast = 30f,
+                    reflexContrast = 95f,
+                    rejectionReason = null,
+                    irisVisibilityContrast = 60f,
+                    reflexCandidates = listOf(ReflexCandidate(lGlint, 95f, 230f, 0.90f, 18f, 2.8f, 0.9f)),
+                    reflexConfidence = 0.90f,
+                ),
+                rightOptical = OpticalEyeMeasurement(
+                    pupilCenter = rEye.irisPoints.first(),
+                    cornealReflex = rGlint,
+                    irisDiameterPx = 108f,
+                    pupilContrast = 30f,
+                    reflexContrast = 95f,
+                    rejectionReason = null,
+                    irisVisibilityContrast = 60f,
+                    reflexCandidates = listOf(ReflexCandidate(rGlint, 95f, 230f, 0.90f, 18f, 2.8f, 0.9f)),
+                    reflexConfidence = 0.90f,
+                ),
+                headPose = HeadPoseEstimate(0f, 0f, 0f),
+            )
+            val frame = FaceLandmarkFrame(
+                faces = listOf(face),
+                sourceWidth = 2160,
+                sourceHeight = 3840,
+                timestampMillis = tMs,
+                detectionLatencyMillis = 8L,
+                fps = 30f,
+                analysisElapsedRealtimeMs = tMs,
+            )
+            engine.onFrameWithIntrinsics(frame, intr, nowMs = tMs)
+        }
+        val report = engine.stopAndBuildReport(tMs + 33L)
+        val nm = report.nearMetrics
+        assertNotNull(nm)
+        assertTrue(abs(nm.hdeVergence3dPrism ?: 0.0) > 12.0, "应能复现对称 κ 角引起的聚散分量偏置，实际=${nm.hdeVergence3dPrism}")
+        assertTrue(abs(nm.hde3dPrism ?: 99.0) < 3.0, "主 3D HDE 必须抵消双目对称 κ 角，实际=${nm.hde3dPrism}")
+        assertEquals(LabRiskGrade.NORMAL, report.riskGrade, "双目对称正 κ 角健康眼应判 NORMAL，实际=${report.riskGrade}, headline=${report.headline}")
+    }
 }
