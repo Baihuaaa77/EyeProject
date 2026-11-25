@@ -111,16 +111,24 @@ class LabViewModel(application: Application) : AndroidViewModel(application) {
     fun onDisplayFrameTick(screenBrightness: Double): Pair<Float, Double> =
         engine.recordDisplayTick(SystemClock.elapsedRealtime(), screenBrightness)
 
-    fun confirmFarReady() {
-        engine.confirmFarReady(SystemClock.elapsedRealtime())
+    fun confirmStageReady() {
+        engine.confirmStageReady(SystemClock.elapsedRealtime())
     }
+
+    fun confirmFarReady() = confirmStageReady()
 
     fun manualAdvanceCover() {
         engine.manualAdvanceCover(SystemClock.elapsedRealtime())
+        if (live.value.stage == LabStage.COMPLETED) {
+            finishEarlyAndAnalyze()
+        }
     }
 
     fun skipStage() {
         engine.skipCurrentStage(SystemClock.elapsedRealtime())
+        if (live.value.stage == LabStage.COMPLETED) {
+            finishEarlyAndAnalyze()
+        }
     }
 
     fun finishEarlyAndAnalyze() {

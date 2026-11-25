@@ -14,7 +14,7 @@ enum LabExportFormat: String, CaseIterable, Identifiable {
     var id: String { rawValue }
     var label: String {
         switch self {
-        case .annotatedVideo: return "叠加可视化诊断视频 (MP4)"
+        case .annotatedVideo: return "四联科研拼接视频 (MP4)"
         case .originalVideo: return "原始高清录制视频 (MP4)"
         case .summaryJson: return "完整科研报告 (JSON)"
         case .framesJsonl: return "逐帧明细日志 (JSONL)"
@@ -64,7 +64,9 @@ final class StrabismusLabStore: ObservableObject {
     )
     @Published var live: LabLiveState = LabLiveState(
         stage: .idle, stageIndex: 0, totalStages: 4, remainingSec: 0, stageProgress: 0,
-        farWaitingConfirm: false, prompt: "保持正面平视，距离约 33 cm", warning: nil,
+        stageWaitingConfirm: false, farWaitingConfirm: false,
+        stageBriefingTitle: "", stageBriefingBody: "",
+        prompt: "保持正面平视，距离约 33 cm", warning: nil,
         faceDetected: false, distanceCm: 0, distanceOk: false, fps: 0,
         yawDeg: nil, pitchDeg: nil, rollDeg: nil, sourceWidth: 0, sourceHeight: 0,
         leftIrisCenter: nil, rightIrisCenter: nil, leftIrisDiameterPx: 0, rightIrisDiameterPx: 0,
@@ -89,10 +91,19 @@ final class StrabismusLabStore: ObservableObject {
     @Published var renderedIntensity: Float = 1.0
 
     let camera = StrabismusLabCamera()
+    let feedback = StrabismusLabFeedback()
     private let videoRecorder = StrabismusLabVideoRecorder()
     private let engine: StrabismusLabEngine
     private var savedBrightness: CGFloat?
     private var activeSessionDir: URL?
+
+    // 语音与音效状态跃迁追踪（防重复播报）
+    private var lastAnnouncedStage: LabStage = .idle
+    private var lastWaitingConfirm = false
+    private var lastRemainingSec: Int32 = -1
+    private var lastCoverHolding = false
+    private var lastCoverStepIndex: Int32 = -1
+    private var lastWarningSpokenMs: Int64 = 0
 
     init() {
         let model = UIDevice.current.model
@@ -136,9 +147,12 @@ final class StrabismusLabStore: ObservableObject {
 
     func startCapture() {
         guard !config.activeStages.isEmpty else { return }
+        feedback.activateSession()
         savedBrightness = UIScreen.main.brightness
         UIScreen.main.brightness = 1.0
         UIApplication.shared.isIdleTimerDisabled = true
+        resetFeedbackTrackers()
+
         let sessionId = engine.startSession(newConfig: config, nowMs: uptimeMs())
         let dir = sessionsRoot().appendingPathComponent(sanitize(sessionId), isDirectory: true)
         activeSessionDir = dir
@@ -148,8 +162,10 @@ final class StrabismusLabStore: ObservableObject {
         if recordVideo {
             videoRecorder.startSession(sessionId: sessionId, directory: dir)
         }
-        live = engine.live.value as! LabLiveState
+        let nextLive = engine.live.value as! LabLiveState
+        live = nextLive
         destination = .capture
+        announceTransition(nextLive, nowMs: uptimeMs())
     }
 
     func onDisplayTick() {
@@ -158,29 +174,66 @@ final class StrabismusLabStore: ObservableObject {
         renderedIntensity = pair.first?.floatValue ?? 1.0
     }
 
-    func confirmFarReady() {
-        engine.confirmFarReady(nowMs: uptimeMs())
-        live = engine.live.value as! LabLiveState
+    func confirmStageReady() {
+        let now = uptimeMs()
+        engine.confirmStageReady(nowMs: now)
+        let nextLive = engine.live.value as! LabLiveState
+        live = nextLive
+        feedback.play(.start)
+        lastWaitingConfirm = false
+        lastRemainingSec = -1
+        lastCoverHolding = false
+        lastCoverStepIndex = -1
+        switch nextLive.stage {
+        case .nearFixation:
+            feedback.speak("开始看近采集，请注视顶部白点中央，保持不动。")
+        case .farFixation:
+            feedback.speak("开始看远采集，请持续注视六米外远处目标。")
+        case .coverTest:
+            feedback.speak("开始动态遮盖。\(nextLive.coverInstruction)")
+            lastCoverStepIndex = nextLive.coverStepIndex
+        case .pursuit:
+            feedback.speak("开始平滑追踪，头部不动，双眼跟随橙色圆点。")
+        default:
+            break
+        }
     }
 
     func manualAdvanceCover() {
+        feedback.play(.confirm)
         engine.manualAdvanceCover(nowMs: uptimeMs())
-        live = engine.live.value as! LabLiveState
+        let nextLive = engine.live.value as! LabLiveState
+        live = nextLive
+        if nextLive.stage == .completed {
+            finishEarlyAndAnalyze()
+        } else {
+            announceTransition(nextLive, nowMs: uptimeMs())
+        }
     }
 
     func skipStage() {
+        feedback.tap()
         engine.skipCurrentStage(nowMs: uptimeMs())
-        live = engine.live.value as! LabLiveState
+        let nextLive = engine.live.value as! LabLiveState
+        live = nextLive
+        if nextLive.stage == .completed {
+            finishEarlyAndAnalyze()
+        } else {
+            announceTransition(nextLive, nowMs: uptimeMs())
+        }
     }
 
     func finishEarlyAndAnalyze() {
         guard !analyzing else { return }
+        feedback.tap()
         analyzing = true
         let report = engine.stopAndBuildReport(nowMs: uptimeMs())
         finishWithReport(report)
     }
 
     func cancelCapture() {
+        feedback.tap()
+        feedback.deactivateSession()
         restoreBrightness()
         videoRecorder.cancelSession()
         engine.resetToIdle()
@@ -189,6 +242,8 @@ final class StrabismusLabStore: ObservableObject {
     }
 
     func backToConsole() {
+        feedback.tap()
+        feedback.stopSpeech()
         restoreBrightness()
         engine.resetToIdle()
         live = engine.live.value as! LabLiveState
@@ -196,11 +251,13 @@ final class StrabismusLabStore: ObservableObject {
     }
 
     func openHistory() {
+        feedback.tap()
         refreshHistory()
         destination = .history
     }
 
     func openReport(_ report: LabSessionReport) {
+        feedback.tap()
         let dir = sessionsRoot().appendingPathComponent(sanitize(report.sessionId), isDirectory: true)
         let ann = dir.appendingPathComponent("annotated.mp4")
         let orig = dir.appendingPathComponent("original.mp4")
@@ -212,6 +269,7 @@ final class StrabismusLabStore: ObservableObject {
     }
 
     func deleteSession(_ id: String) {
+        feedback.tap()
         let dir = sessionsRoot().appendingPathComponent(sanitize(id), isDirectory: true)
         try? FileManager.default.removeItem(at: dir)
         refreshHistory()
@@ -224,6 +282,7 @@ final class StrabismusLabStore: ObservableObject {
     }
 
     func saveVideoToPhotos(_ url: URL) {
+        feedback.tap()
         PHPhotoLibrary.requestAuthorization(for: .addOnly) { [weak self] status in
             guard status == .authorized || status == .limited else {
                 Task { @MainActor in self?.photoSaveBanner = "请在系统设置中允许写入相册权限" }
@@ -233,7 +292,12 @@ final class StrabismusLabStore: ObservableObject {
                 PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: url)
             }) { success, error in
                 Task { @MainActor in
-                    self?.photoSaveBanner = success ? "已保存诊断视频到系统相册" : "保存失败：\(error?.localizedDescription ?? "未知错误")"
+                    if success {
+                        self?.feedback.success()
+                        self?.photoSaveBanner = "已保存诊断视频到系统相册"
+                    } else {
+                        self?.photoSaveBanner = "保存失败：\(error?.localizedDescription ?? "未知错误")"
+                    }
                 }
             }
         }
@@ -264,11 +328,80 @@ final class StrabismusLabStore: ObservableObject {
             finishWithReport(completed)
         } else if let state = engine.live.value as? LabLiveState {
             live = state
+            if destination == .capture {
+                announceTransition(state, nowMs: nowMs)
+            }
+        }
+    }
+
+    private func resetFeedbackTrackers() {
+        lastAnnouncedStage = .idle
+        lastWaitingConfirm = false
+        lastRemainingSec = -1
+        lastCoverHolding = false
+        lastCoverStepIndex = -1
+        lastWarningSpokenMs = 0
+    }
+
+    /// 统一驱动各阶段语音播报、倒计时音效、遮盖识别反馈与异常提醒（带防刷屏冷却）。
+    private func announceTransition(_ state: LabLiveState, nowMs: Int64) {
+        // 1) 进入新阶段准备确认页
+        if state.stage != lastAnnouncedStage {
+            lastAnnouncedStage = state.stage
+            lastWaitingConfirm = state.stageWaitingConfirm
+            lastRemainingSec = -1
+            lastCoverHolding = false
+            lastCoverStepIndex = -1
+            if state.stageWaitingConfirm {
+                feedback.play(.phase)
+                feedback.speak("第 \(state.stageIndex) 阶段，\(state.stage.title)。\(state.stageBriefingBody)")
+            }
+            return
+        }
+        guard !state.stageWaitingConfirm else { return }
+
+        // 2) 定时阶段最后 3、2、1 秒倒计时节拍
+        if state.remainingSec > 0 && state.remainingSec <= 3 && state.remainingSec != lastRemainingSec {
+            lastRemainingSec = state.remainingSec
+            feedback.play(.count)
+        }
+
+        // 3) 动态交替遮盖动作识别确认与下一步指令播报
+        if state.stage == .coverTest {
+            if state.coverStepIndex != lastCoverStepIndex && !state.coverInstruction.isEmpty {
+                lastCoverStepIndex = state.coverStepIndex
+                lastCoverHolding = state.coverHolding
+                feedback.play(.tick)
+                feedback.speak(state.coverInstruction, interrupt: true)
+            } else if state.coverHolding && !lastCoverHolding {
+                lastCoverHolding = true
+                feedback.play(.confirm)
+                feedback.speak("已识别，请保持", interrupt: true)
+            } else if !state.coverHolding && lastCoverHolding {
+                lastCoverHolding = false
+            }
+        }
+
+        // 4) 距离或头姿异常提醒（至少间隔 4.5 秒，避免吵闹）
+        if let warn = state.warning, nowMs - lastWarningSpokenMs >= 4_500 {
+            lastWarningSpokenMs = nowMs
+            feedback.play(.warning)
+            if warn.contains("距离") {
+                let target: Float = state.stage == .pursuit ? 25 : 33
+                let cue = state.distanceCm < target ? "距离偏近，请稍拿远一点" : "距离偏远，请稍拿近一点"
+                feedback.speak(cue, interrupt: false)
+            } else if warn.contains("头姿") {
+                feedback.speak("请摆正头部，正对屏幕", interrupt: false)
+            } else if warn.contains("人脸") {
+                feedback.speak("未检测到人脸，请居中对准镜头", interrupt: false)
+            }
         }
     }
 
     private func finishWithReport(_ report: LabSessionReport) {
         restoreBrightness()
+        feedback.play(.complete)
+        feedback.speak("采集完成，正在生成科研报告和四联诊断视频。", interrupt: true)
         let dir = ensureSaved(report)
         activeReport = report
         analyzing = false
@@ -289,6 +422,7 @@ final class StrabismusLabStore: ObservableObject {
                         self?.annotatedVideoURL = annURL
                         self?.renderingVideo = false
                         self?.videoRenderProgress = 1.0
+                        self?.feedback.success()
                         self?.refreshHistory()
                     }
                 }

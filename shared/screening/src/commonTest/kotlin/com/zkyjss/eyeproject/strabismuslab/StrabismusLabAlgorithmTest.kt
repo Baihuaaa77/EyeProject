@@ -334,6 +334,9 @@ class StrabismusLabAlgorithmTest {
             pursuitDurationSec = 10,
         )
         engine.startSession(cfg, nowMs = 1_000L)
+        assertTrue(engine.live.value.stageWaitingConfirm, "进入每个阶段前应先展示准备确认页")
+        engine.confirmStageReady(nowMs = 1_000L)
+        assertFalse(engine.live.value.stageWaitingConfirm)
         val totalFrames = 300
         for (i in 0 until totalFrames) {
             val tMs = 1_000L + i * 33L
@@ -392,6 +395,8 @@ class StrabismusLabAlgorithmTest {
             includePursuit = false,
         )
         engine.startSession(cfg, nowMs = 10_000L)
+        assertTrue(engine.live.value.stageWaitingConfirm)
+        engine.confirmStageReady(nowMs = 10_000L)
         // 验证遮盖阶段始终保持白点常亮，消除 250ms 暗码盲区
         for (step in 0 until 20) {
             val (intensity, _) = engine.recordDisplayTick(10_000L + step * 100L)
@@ -480,5 +485,90 @@ class StrabismusLabAlgorithmTest {
         assertTrue(uncoverEvent.amplitudePrism > 14.0, "去遮盖同侧眼应捕获 ~21Δ 隐斜复位，amplitude=${uncoverEvent.amplitudePrism}")
         assertTrue(uncoverEvent.trace.size >= 8, "应生成完整毫秒级再注视轨迹曲线")
         assertTrue(report.coverClassification?.contains("隐斜") == true, "classification=${report.coverClassification}")
+    }
+
+    @Test
+    fun briefEnvironmentalVdeGlitchDoesNotFalselyTriggerHighRisk() {
+        // 复现 v0.9.1 真机误报场景：正视眼在 60 帧稳态采集期间出现 8 帧短时环境反光垂直跳变（约 -26Δ），
+        // v0.9.2 的锚点空间离群过滤 + 2.5×MAD 截尾 + 95%CI 下界/稳定性门控应杜绝将其误判为 HIGH_RISK。
+        val engine = StrabismusLabEngine(platformName = "Test", deviceModel = "Sim")
+        val cfg = LabProtocolConfig(
+            codingScheme = LabCodingScheme.STEADY,
+            includeNear = true,
+            includeFar = false,
+            includeCover = false,
+            includePursuit = false,
+            nearDurationSec = 4,
+            lightOffsetXMm = 0.0,
+            lightOffsetYMm = 22.0,
+        )
+        val intr = LabCameraIntrinsics(fx = 2600.0, fy = 2600.0, cx = 540.0, cy = 960.0, lightOffsetXMm = 0.0, lightOffsetYMm = 22.0)
+        engine.startSession(cfg, nowMs = 20_000L)
+        assertTrue(engine.live.value.stageWaitingConfirm)
+        engine.confirmStageReady(nowMs = 20_000L)
+
+        var tMs = 20_000L
+        for (i in 0 until 80) {
+            tMs = 20_000L + i * 33L
+            engine.recordDisplayTick(tMs, screenBrightness = 1.0)
+            // 前 68 帧双眼映光垂直对称（正视，VDE≈0），中间 8 帧模拟右眼短时环境反光向下跳变 +12px（≈-26Δ）
+            val glitch = i in 30..37
+            val lEye = EyeLandmarks(
+                "LEFT",
+                listOf(Point2f(240f, 800f), Point2f(270f, 782f), Point2f(310f, 782f), Point2f(340f, 800f), Point2f(310f, 818f), Point2f(270f, 818f)),
+                listOf(Point2f(290f, 800f)),
+                90f,
+            )
+            val rEye = EyeLandmarks(
+                "RIGHT",
+                listOf(Point2f(740f, 800f), Point2f(770f, 782f), Point2f(810f, 782f), Point2f(840f, 800f), Point2f(810f, 818f), Point2f(770f, 818f)),
+                listOf(Point2f(790f, 800f)),
+                90f,
+            )
+            val lGlint = Point2f(291f, 796f)
+            val rGlint = if (glitch) Point2f(780f, 808f) else Point2f(789f, 796f)
+            val face = FaceMetrics(
+                faceBox = BoundingBox(150f, 500f, 930f, 1300f),
+                leftEye = lEye,
+                rightEye = rEye,
+                leftOptical = OpticalEyeMeasurement(
+                    pupilCenter = lEye.irisPoints.first(),
+                    cornealReflex = lGlint,
+                    irisDiameterPx = 90f,
+                    pupilContrast = 30f,
+                    reflexContrast = 95f,
+                    rejectionReason = null,
+                    irisVisibilityContrast = 60f,
+                    reflexCandidates = listOf(ReflexCandidate(lGlint, 95f, 230f, 0.88f, 18f, 2.8f, 0.9f)),
+                    reflexConfidence = 0.88f,
+                ),
+                rightOptical = OpticalEyeMeasurement(
+                    pupilCenter = rEye.irisPoints.first(),
+                    cornealReflex = rGlint,
+                    irisDiameterPx = 90f,
+                    pupilContrast = 30f,
+                    reflexContrast = 95f,
+                    rejectionReason = null,
+                    irisVisibilityContrast = 60f,
+                    reflexCandidates = listOf(ReflexCandidate(rGlint, 95f, 230f, 0.88f, 18f, 2.8f, 0.9f)),
+                    reflexConfidence = 0.88f,
+                ),
+                headPose = HeadPoseEstimate(0f, 0f, 0f),
+            )
+            val frame = FaceLandmarkFrame(
+                faces = listOf(face),
+                sourceWidth = 1080,
+                sourceHeight = 1920,
+                timestampMillis = tMs,
+                detectionLatencyMillis = 8L,
+                fps = 30f,
+                analysisElapsedRealtimeMs = tMs,
+            )
+            engine.onFrameWithIntrinsics(frame, intr, nowMs = tMs)
+        }
+        val report = engine.stopAndBuildReport(tMs + 33L)
+        assertTrue(report.riskGrade != LabRiskGrade.HIGH_RISK, "短时环境反光跳变绝不应触发 HIGH_RISK，实际=${report.riskGrade}, headline=${report.headline}")
+        val vde = abs(report.nearMetrics?.vde3dPrism ?: 0.0)
+        assertTrue(vde < 4.0, "MAD/锚点过滤后正视眼 3D VDE 应保持在 4Δ 内，实际=$vde")
     }
 }

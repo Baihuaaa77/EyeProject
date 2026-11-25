@@ -27,7 +27,11 @@ data class LabLiveState(
     val totalStages: Int = 4,
     val remainingSec: Int = 0,
     val stageProgress: Float = 0f,
+    /** 进入任意测试阶段前先展示准备引导页，点击确认后再开始采集（避免还没准备好就开跑）。 */
+    val stageWaitingConfirm: Boolean = false,
     val farWaitingConfirm: Boolean = false,
+    val stageBriefingTitle: String = "",
+    val stageBriefingBody: String = "",
     val prompt: String = "保持正面平视，距离约 33 cm",
     val warning: String? = null,
     val faceDetected: Boolean = false,
@@ -84,7 +88,7 @@ class StrabismusLabEngine(
     private var sessionId = ""
     private var sessionStartMs = 0L
     private var stageStartMs = 0L
-    private var farWaiting = false
+    private var stageWaiting = false
     private var frameCounter = 0
     private var validFrameCounter = 0
     private var nasalSign = 1f
@@ -185,16 +189,31 @@ class StrabismusLabEngine(
         return sessionId
     }
 
-    fun confirmFarReady(nowMs: Long) {
-        if (_live.value.stage != LabStage.FAR_FIXATION || !farWaiting) return
-        farWaiting = false
+    /** 通用阶段确认入口：受试者阅读完当前环节说明并摆好距离后点击确认，正式开始本阶段采集。 */
+    fun confirmStageReady(nowMs: Long) {
+        val stage = _live.value.stage
+        if (!stageWaiting || stage == LabStage.IDLE || stage == LabStage.COMPLETED) return
+        stageWaiting = false
         stageStartMs = nowMs
-        stageStartTimesSec[LabStage.FAR_FIXATION] = nowMs / 1000.0
+        stageStartTimesSec[stage] = nowMs / 1000.0
+        coverActionWaitStartMs = nowMs
+        if (stage == LabStage.COVER_TEST) coverDetector.clear()
+        val runningPrompt = when (stage) {
+            LabStage.NEAR_FIXATION -> "注视顶部编码白点中心，保持头与手机约 33 cm"
+            LabStage.FAR_FIXATION -> "越过手机注视 6 m 远目标，保持稳定"
+            LabStage.COVER_TEST -> coverSteps.first().label
+            LabStage.PURSUIT -> "头部不动，双眼平滑跟随移动圆点"
+            else -> ""
+        }
         _live.value = _live.value.copy(
+            stageWaitingConfirm = false,
             farWaitingConfirm = false,
-            prompt = "越过手机注视 6 m 远目标，保持稳定",
+            prompt = runningPrompt,
         )
     }
+
+    /** 兼容旧看远确认入口。 */
+    fun confirmFarReady(nowMs: Long) = confirmStageReady(nowMs)
 
     /** 遮盖识别超时或实验需要手动标记下一步时使用，明确记录 source = MANUAL。 */
     fun manualAdvanceCover(nowMs: Long) {
@@ -240,7 +259,7 @@ class StrabismusLabEngine(
 
     fun resetToIdle() {
         currentStageIdx = -1
-        farWaiting = false
+        stageWaiting = false
         coverHolding = false
         _live.value = LabLiveState(searchRadiusFraction = config.searchRadiusFraction)
     }
@@ -251,7 +270,7 @@ class StrabismusLabEngine(
     /** 显示刷新帧回调（由 Compose / SwiftUI 60Hz 帧时钟触发），写入真实绘制时间戳供 v0.8 解调。 */
     fun recordDisplayTick(hostTimeMs: Long, screenBrightness: Double = 1.0): Pair<Float, Double> {
         val stage = _live.value.stage
-        if (!stage.usesOpticalStimulus || (stage == LabStage.FAR_FIXATION && farWaiting)) {
+        if (!stage.usesOpticalStimulus || stageWaiting) {
             return 1f to 1.0
         }
         val elapsedSec = max(0.0, (hostTimeMs - stageStartMs) / 1000.0)
@@ -362,7 +381,7 @@ class StrabismusLabEngine(
             return null
         }
 
-        if (stage == LabStage.FAR_FIXATION && farWaiting) {
+        if (stageWaiting) {
             _live.value = _live.value.copy(
                 faceDetected = leftEye != null && rightEye != null,
                 distanceCm = distCm,
@@ -626,25 +645,45 @@ class StrabismusLabEngine(
     private fun enterStage(stage: LabStage, nowMs: Long) {
         stageStartMs = nowMs
         stageStartTimesSec[stage] = nowMs / 1000.0
-        farWaiting = stage == LabStage.FAR_FIXATION
+        stageWaiting = stage != LabStage.IDLE && stage != LabStage.COMPLETED
         coverIndex = 0
         coverHolding = false
         coverActionWaitStartMs = nowMs
         if (stage == LabStage.COVER_TEST) coverDetector.clear()
 
-        val prompt = when (stage) {
-            LabStage.NEAR_FIXATION -> "注视顶部编码白点中心，保持头与手机约 33 cm"
-            LabStage.FAR_FIXATION -> "准备好后点「开始看远」，越过手机看 6 m 远目标"
-            LabStage.COVER_TEST -> coverSteps.first().label
-            LabStage.PURSUIT -> "头部不动，双眼平滑跟随移动圆点"
-            else -> ""
+        val (briefTitle, briefBody, prompt) = when (stage) {
+            LabStage.NEAR_FIXATION -> Triple(
+                "准备：看近光码映光（${config.nearDurationSec} 秒）",
+                "将手机举在眼前约 33 厘米处，头部摆正。点击开始后，双眼自然注视屏幕顶部闪烁的白点中央，尽量保持头部和手机稳定。",
+                "调整至约 33 cm，准备好后点击开始看近",
+            )
+            LabStage.FAR_FIXATION -> Triple(
+                "准备：看远越屏光码（${config.farDurationSec} 秒）",
+                "手机保持在眼前约 33 厘米、略低于视线。点击开始后，越过手机顶部注视 6 米外远处固定目标，不要看屏幕上的白点。",
+                "越过手机找好 6 m 远目标，准备好后点击开始",
+            )
+            LabStage.COVER_TEST -> Triple(
+                "准备：动态交替遮盖（共 ${coverSteps.size} 步）",
+                "保持约 33 厘米注视顶部常亮白点，按语音提示用手掌完全遮住指定眼睛并保持，听到提示音后再快速移开或换遮另一眼。",
+                "准备好单手遮眼，点击开始动态遮盖",
+            )
+            LabStage.PURSUIT -> Triple(
+                "准备：双眼平滑追踪（${config.pursuitDurationSec} 秒）",
+                "手机距离约 25 厘米，头部保持完全不动，仅用双眼平滑跟随屏幕上移动的橙色圆点（依次水平、垂直与斜向运动）。",
+                "调整至约 25 cm，头部固定，准备好后点击开始",
+            )
+            else -> Triple("", "", "")
         }
         _live.value = _live.value.copy(
             stage = stage,
             stageIndex = currentStageIdx + 1,
             totalStages = stages.size,
+            remainingSec = 0,
             stageProgress = 0f,
-            farWaitingConfirm = farWaiting,
+            stageWaitingConfirm = stageWaiting,
+            farWaitingConfirm = stage == LabStage.FAR_FIXATION && stageWaiting,
+            stageBriefingTitle = briefTitle,
+            stageBriefingBody = briefBody,
             prompt = prompt,
             warning = null,
             coverStepIndex = 0,
@@ -839,28 +878,58 @@ class StrabismusLabEngine(
                     rightCodeVerified = rCode?.codeVerified == true,
                 )
             }
+            // 锚点空间一致性过滤：若已有光码锚点，剔除偏离锚点 > 0.20R 的短时跳点帧（防止偶发环境反光拖偏中位数与 SD）
+            val lRefX = lCode?.referenceRelX
+            val lRefY = lCode?.referenceRelY
+            val rRefX = rCode?.referenceRelX
+            val rRefY = rCode?.referenceRelY
+            fun withinAnchor(f: LabFrameLog): Boolean {
+                val lOk = if (lRefX != null && lRefY != null && f.leftRelX != null && f.leftRelY != null) {
+                    hypot(f.leftRelX - lRefX, f.leftRelY - lRefY) <= 0.20
+                } else true
+                val rOk = if (rRefX != null && rRefY != null && f.rightRelX != null && f.rightRelY != null) {
+                    hypot(f.rightRelX - rRefX, f.rightRelY - rRefY) <= 0.20
+                } else true
+                return lOk && rOk
+            }
             // 优先仅保留稳定 ON 且 OBSERVED 的双目帧，剔除 TRANSITION 过渡帧与弱观测噪点
             val stableOnObserved = observedBinocular.filter {
                 it.leftEmissionPhase == LabEmissionPhase.ON && it.rightEmissionPhase == LabEmissionPhase.ON
             }
-            val stableOnOnly = stableOnObserved.size >= 12
+            val stableOnInlier = stableOnObserved.filter(::withinAnchor)
+            val observedInlier = observedBinocular.filter(::withinAnchor)
+            val stableOnOnly = stableOnInlier.size >= 12 || stableOnObserved.size >= 12
             val usable = when {
-                stableOnOnly -> stableOnObserved
+                stableOnInlier.size >= 12 -> stableOnInlier
+                stableOnObserved.size >= 12 -> stableOnObserved
+                observedInlier.size >= 12 -> observedInlier
                 observedBinocular.size >= 12 -> observedBinocular
                 else -> allMeasured
             }
 
-            val hVals = usable.map { it.hdePrism!! }
-            val vVals = usable.map { it.vdePrism!! }
-            // 主 3D 水平指标优先采用对共轭偏转与人脸偏移免疫的 3D 聚散分量（Vergence 3D），并保留不对称与线性对照
-            val verg3dVals = usable.mapNotNull { it.hdeVergence3dPrism }
-            val asym3dVals = usable.mapNotNull { it.hde3dPrism }
-            val v3dVals = usable.mapNotNull { it.vde3dPrism }
+            fun robustTrim(values: List<Double>): List<Double> {
+                if (values.size < 8) return values
+                val med = median(values) ?: return values
+                val absDevs = values.map { abs(it - med) }
+                val madSigma = (median(absDevs) ?: 0.0) * 1.4826
+                if (madSigma < 0.5) return values
+                val limit = max(4.0, 2.5 * madSigma)
+                val kept = values.filter { abs(it - med) <= limit }
+                return if (kept.size >= 6) kept else values
+            }
 
+            val hVals = robustTrim(usable.map { it.hdePrism!! })
+            val vVals = robustTrim(usable.map { it.vdePrism!! })
+            // 主 3D 水平指标优先采用对共轭偏转与人脸偏移免疫的 3D 聚散分量（Vergence 3D），并保留不对称与线性对照
+            val verg3dVals = robustTrim(usable.mapNotNull { it.hdeVergence3dPrism })
+            val asym3dVals = robustTrim(usable.mapNotNull { it.hde3dPrism })
+            val v3dVals = robustTrim(usable.mapNotNull { it.vde3dPrism })
+
+            val primaryH3d = verg3dVals.ifEmpty { asym3dVals }
             val effN = max(1.0, usable.size / max(1.0, medFps * 0.2))
             val hSd = stdDev(hVals)
             val vSd = stdDev(vVals)
-            val h3dSd = stdDev(verg3dVals.ifEmpty { asym3dVals })
+            val h3dSd = stdDev(primaryH3d)
             val v3dSd = stdDev(v3dVals)
             return LabAlignmentMetrics(
                 stage = stage,
@@ -870,7 +939,7 @@ class StrabismusLabEngine(
                 vdeSdPrism = vSd,
                 hdeCi95HalfPrism = hSd?.let { 1.96 * it / sqrt(effN) },
                 vdeCi95HalfPrism = vSd?.let { 1.96 * it / sqrt(effN) },
-                hde3dPrism = median(verg3dVals.ifEmpty { asym3dVals }),
+                hde3dPrism = median(primaryH3d),
                 vde3dPrism = median(v3dVals),
                 hde3dSdPrism = h3dSd,
                 vde3dSdPrism = v3dSd,
@@ -897,12 +966,35 @@ class StrabismusLabEngine(
         val leftScatter = buildScatter(enrichedFrames, isLeft = true)
         val rightScatter = buildScatter(enrichedFrames, isLeft = false)
 
-        // 综合分级：优先使用 3D 球面光学主指标（若无内参回退线性）
-        val nearH = abs(nearMetrics?.hde3dPrism ?: nearMetrics?.hdePrism ?: 0.0)
-        val nearV = abs(nearMetrics?.vde3dPrism ?: nearMetrics?.vdePrism ?: 0.0)
-        val nearReady = (nearMetrics?.validBinocularFrames ?: 0) >= 12
+        // 综合分级（对齐 ScreeningAssessment 严格统计门控）：
+        // 仅当「测量稳定且越线」或「95% 置信区间下界仍越线」才判显著异常；
+        // 越线但抖动大导致误差区间覆盖判定线时，判为 INCONCLUSIVE（证据不足/波动大），绝不误报高度斜视。
+        val nearHVal = nearMetrics?.hde3dPrism ?: nearMetrics?.hdePrism
+        val nearVVal = nearMetrics?.vde3dPrism ?: nearMetrics?.vdePrism
+        val nearH = abs(nearHVal ?: 0.0)
+        val nearV = abs(nearVVal ?: 0.0)
+        val nearHSd = nearMetrics?.hde3dSdPrism ?: nearMetrics?.hdeSdPrism ?: Double.MAX_VALUE
+        val nearVSd = nearMetrics?.vde3dSdPrism ?: nearMetrics?.vdeSdPrism ?: Double.MAX_VALUE
+        val nearHCi = nearMetrics?.hde3dCi95HalfPrism ?: nearMetrics?.hdeCi95HalfPrism ?: 0.0
+        val nearVCi = nearMetrics?.vde3dCi95HalfPrism ?: nearMetrics?.vdeCi95HalfPrism ?: 0.0
+        val nearReady = (nearMetrics?.validBinocularFrames ?: 0) >= 12 && nearHVal != null && nearVVal != null
         val nearVerified = nearMetrics?.let { it.leftCodeVerified && it.rightCodeVerified } == true
-        val nearAbnormal = nearReady && (nearH >= StrabismusProtocol.HIGH_H_PRISM || nearV >= StrabismusProtocol.HIGH_V_PRISM)
+
+        val nearHStable = nearHSd <= StrabismusProtocol.STABLE_SD_H_PRISM
+        val nearVStable = nearVSd <= 3.0 // 3D 球面垂直灵敏度略高于线性，稳定 SD 上限取 3.0Δ
+        val nearHAbnormal = nearReady && (
+            (nearHStable && nearH >= StrabismusProtocol.HIGH_H_PRISM) ||
+                (nearH - nearHCi >= StrabismusProtocol.HIGH_H_PRISM)
+            )
+        // 无头托前置相机下 MediaPipe 上下眼睑微遮可能引入 ~2–3px 垂直微差，垂直显斜门槛需满足 ≥ 6.0Δ 且统计显著
+        val nearVThreshold = 6.0
+        val nearVAbnormal = nearReady && (
+            (nearVStable && nearV >= nearVThreshold) ||
+                (nearV - nearVCi >= nearVThreshold)
+            )
+        val nearAbnormal = nearHAbnormal || nearVAbnormal
+        val nearUncertain = nearReady && !nearAbnormal && (nearH >= StrabismusProtocol.HIGH_H_PRISM || nearV >= nearVThreshold)
+
         val coverMedian = coverSummary.overallMedianPrism
         val coverNoise = coverSummary.noiseFloorPrism
         val coverAbnormal = coverMedian != null && coverMedian >= StrabismusProtocol.REFIX_PRISM &&
@@ -912,8 +1004,17 @@ class StrabismusLabEngine(
         val riskGrade = when {
             nearAbnormal && (nearVerified || !config.codingScheme.usesTemporalCode) -> LabRiskGrade.HIGH_RISK
             nearAbnormal || coverAbnormal || bsiAbnormal -> LabRiskGrade.SUSPECT
+            nearUncertain -> LabRiskGrade.INCONCLUSIVE
             nearReady && (nearVerified || !config.codingScheme.usesTemporalCode) -> LabRiskGrade.NORMAL
             else -> LabRiskGrade.INCONCLUSIVE
+        }
+
+        val triggerDesc = when {
+            nearHAbnormal && nearVAbnormal -> "看近 3D HDE ${fmt1(nearH)}Δ / VDE ${fmt1(nearV)}Δ"
+            nearHAbnormal -> "看近 3D HDE ${fmt1(nearH)}Δ (±${fmt1(nearHCi)})"
+            nearVAbnormal -> "看近 3D VDE ${fmt1(nearV)}Δ (±${fmt1(nearVCi)})"
+            nearUncertain -> "看近 3D VDE ${fmt1(nearV)}Δ ± ${fmt1(nearVCi)}Δ 波动较大"
+            else -> "看近 3D HDE ${fmt1(nearH)}Δ"
         }
 
         val codeScore = listOfNotNull(nearL, nearR, farL, farR).let { list ->
@@ -960,10 +1061,10 @@ class StrabismusLabEngine(
             riskGrade = riskGrade,
             confidenceScore = confidenceScore,
             headline = when (riskGrade) {
-                LabRiskGrade.HIGH_RISK -> "检测到持续性眼位不对称（看近 3D HDE ${fmt1(nearH)}Δ）"
-                LabRiskGrade.SUSPECT -> "存在可疑眼位或遮盖再注视信号（${coverSummary.classification ?: "建议复测对照"}）"
-                LabRiskGrade.NORMAL -> "本次科研采集未见显著眼位偏斜"
-                LabRiskGrade.INCONCLUSIVE -> "有效光码或双眼帧不足，请在 Debug 页核查拒判原因"
+                LabRiskGrade.HIGH_RISK -> "检测到持续且显著的眼位偏斜（$triggerDesc）"
+                LabRiskGrade.SUSPECT -> "存在可疑眼位或遮盖再注视信号（${coverSummary.classification ?: triggerDesc}）"
+                LabRiskGrade.NORMAL -> "本次科研采集未见显著眼位偏斜（看近 3D HDE ${fmt1(nearH)}Δ）"
+                LabRiskGrade.INCONCLUSIVE -> if (nearUncertain) "测得眼位接近门槛但抖动较大（$triggerDesc），建议复测" else "有效光码或双眼帧不足，请在 Debug 页核查拒判原因"
             },
             summaryNotes = notes,
             nearMetrics = nearMetrics,

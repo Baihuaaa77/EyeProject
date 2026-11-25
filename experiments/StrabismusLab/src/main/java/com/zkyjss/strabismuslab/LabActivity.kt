@@ -90,6 +90,7 @@ import java.util.Locale
 class LabActivity : ComponentActivity() {
     private val viewModel by viewModels<LabViewModel>()
     private lateinit var camera: CameraController
+    private lateinit var feedback: LabAndroidFeedback
     private var cameraGeneration: Int? = null
     private var previewViewRef: PreviewView? = null
     private var lastSearchRadius: Float = 0.80f
@@ -105,6 +106,7 @@ class LabActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.dark(AndroidColor.TRANSPARENT),
         )
         camera = CameraController(applicationContext)
+        feedback = LabAndroidFeedback(applicationContext)
 
         setContent {
             StrabismusLabTheme {
@@ -169,12 +171,28 @@ class LabActivity : ComponentActivity() {
                         live = live,
                         config = ui.config,
                         analyzing = ui.analyzing,
+                        feedback = feedback,
                         onDisplayTick = { viewModel.onDisplayFrameTick(1.0) },
-                        onConfirmFar = viewModel::confirmFarReady,
-                        onManualCover = viewModel::manualAdvanceCover,
-                        onSkipStage = viewModel::skipStage,
-                        onFinishEarly = viewModel::finishEarlyAndAnalyze,
-                        onCancel = viewModel::cancelCapture,
+                        onConfirmStage = {
+                            feedback.play(LabAndroidFeedback.Cue.START)
+                            viewModel.confirmStageReady()
+                        },
+                        onManualCover = {
+                            feedback.play(LabAndroidFeedback.Cue.CONFIRM)
+                            viewModel.manualAdvanceCover()
+                        },
+                        onSkipStage = {
+                            feedback.play(LabAndroidFeedback.Cue.TICK)
+                            viewModel.skipStage()
+                        },
+                        onFinishEarly = {
+                            feedback.play(LabAndroidFeedback.Cue.TICK)
+                            viewModel.finishEarlyAndAnalyze()
+                        },
+                        onCancel = {
+                            feedback.stopSpeech()
+                            viewModel.cancelCapture()
+                        },
                     )
 
                     LabDestination.DASHBOARD -> {
@@ -215,6 +233,11 @@ class LabActivity : ComponentActivity() {
         resumed = false
         stopCamera()
         super.onPause()
+    }
+
+    override fun onDestroy() {
+        feedback.release()
+        super.onDestroy()
     }
 
     private fun refreshCamera(destination: LabDestination, searchRadius: Float, force: Boolean = false) {
@@ -534,8 +557,9 @@ private fun CaptureStageScreen(
     live: LabLiveState,
     config: LabProtocolConfig,
     analyzing: Boolean,
+    feedback: LabAndroidFeedback,
     onDisplayTick: () -> Pair<Float, Double>,
-    onConfirmFar: () -> Unit,
+    onConfirmStage: () -> Unit,
     onManualCover: () -> Unit,
     onSkipStage: () -> Unit,
     onFinishEarly: () -> Unit,
@@ -545,8 +569,37 @@ private fun CaptureStageScreen(
     var renderedIntensity by remember { mutableFloatStateOf(1f) }
     val density = LocalDensity.current
 
+    // 阶段准备页语音播报
+    LaunchedEffect(live.stage, live.stageWaitingConfirm) {
+        if (live.stageWaitingConfirm && live.stageBriefingBody.isNotBlank()) {
+            feedback.play(LabAndroidFeedback.Cue.PHASE)
+            feedback.speak("第 ${live.stageIndex} 阶段，${live.stage.title}。${live.stageBriefingBody}")
+        } else if (!live.stageWaitingConfirm && live.stage == LabStage.COVER_TEST && live.coverInstruction.isNotBlank()) {
+            feedback.speak("开始动态遮盖。${live.coverInstruction}")
+        }
+    }
+    // 倒计时 3-2-1 节拍音
+    LaunchedEffect(live.remainingSec, live.stageWaitingConfirm) {
+        if (!live.stageWaitingConfirm && live.remainingSec in 1..3) {
+            feedback.play(LabAndroidFeedback.Cue.COUNT)
+        }
+    }
+    // 遮盖识别确认与下一步语音
+    LaunchedEffect(live.coverHolding) {
+        if (!live.stageWaitingConfirm && live.stage == LabStage.COVER_TEST && live.coverHolding) {
+            feedback.play(LabAndroidFeedback.Cue.CONFIRM)
+            feedback.speak("已识别，请保持")
+        }
+    }
+    LaunchedEffect(live.coverStepIndex) {
+        if (!live.stageWaitingConfirm && live.stage == LabStage.COVER_TEST && live.coverStepIndex > 0 && live.coverInstruction.isNotBlank()) {
+            feedback.play(LabAndroidFeedback.Cue.TICK)
+            feedback.speak(live.coverInstruction)
+        }
+    }
+
     // 60Hz 显示帧同步驱动白点明暗，并将真实绘制时间写入 v0.8 显示事件序列
-    LaunchedEffect(live.stage, live.farWaitingConfirm) {
+    LaunchedEffect(live.stage, live.stageWaitingConfirm) {
         while (isActive) {
             withFrameNanos {
                 val (intensity, _) = onDisplayTick()
@@ -564,9 +617,9 @@ private fun CaptureStageScreen(
             .background(LabColors.stimulusBlack)
             .safeDrawingPadding(),
     ) {
-        // 顶部贴近前置摄像头的光学编码白点（纯黑画布，真实 0% 灭灯）
-        if (live.stage.usesOpticalStimulus && !live.farWaitingConfirm) {
-            val lum = renderedIntensity.coerceIn(0f, 1f)
+        // 顶部贴近前置摄像头的光学编码白点（纯黑画布，真实 0% 灭灯；确认页期间隐藏）
+        if (live.stage.usesOpticalStimulus && !live.stageWaitingConfirm) {
+            val lum = if (live.stage.forcesSteadyStimulus) 1f else renderedIntensity.coerceIn(0f, 1f)
             Box(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
@@ -580,14 +633,14 @@ private fun CaptureStageScreen(
                     }
                     // 极微弱中心固视准星（仅亮灯时显示，辅助受试者稳固注视）
                     if (lum > 0.5f && live.stage != LabStage.FAR_FIXATION) {
-                        drawCircle(color = LabColors.accent.copy(alpha = 0.65f), radius = 4f)
+                        drawCircle(color = LabColors.accent.copy(alpha = 0.45f), radius = 3f)
                     }
                 }
             }
         }
 
-        // 平滑追踪阶段：纯黑画布上的高精度橙金移动目标点
-        if (live.stage == LabStage.PURSUIT) {
+        // 平滑追踪阶段：纯黑画布上的高精度橙金移动目标点（确认开始后显示）
+        if (live.stage == LabStage.PURSUIT && !live.stageWaitingConfirm) {
             Canvas(
                 modifier = Modifier
                     .fillMaxSize()
@@ -601,7 +654,7 @@ private fun CaptureStageScreen(
             }
         }
 
-        // 中央阶段提示与交互按钮（仅在需要人工确认/遮盖引导时出现）
+        // 中央阶段准备说明页 / 遮盖实时指令卡
         Column(
             modifier = Modifier
                 .align(Alignment.Center)
@@ -611,19 +664,62 @@ private fun CaptureStageScreen(
         ) {
             if (analyzing) {
                 CircularProgressIndicator(color = LabColors.accent)
-                Text("正在执行 v0.8 双向光码解调与 63 错码核验…", style = LabType.body, color = LabColors.inkSecondary)
-            } else if (live.farWaitingConfirm) {
-                Text("阶段 ${live.stageIndex}/${live.totalStages} · 看远光码映光", style = LabType.section)
-                Text("保持手机在 33 cm 略低于视线，越过屏幕盯住 6 m 远目标", style = LabType.body, color = LabColors.inkSecondary)
-                Button(
-                    onClick = onConfirmFar,
-                    shape = LabShapes.control,
-                    colors = ButtonDefaults.buttonColors(containerColor = LabColors.accent, contentColor = LabColors.onAccent),
-                    modifier = Modifier.height(48.dp),
-                ) { Text("已注视远目标，开始采集", style = LabType.section, color = LabColors.onAccent) }
+                Text("正在执行 v0.9.2 3D 光学反演与遮盖拐点回溯…", style = LabType.body, color = LabColors.inkSecondary)
+            } else if (live.stageWaitingConfirm) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(LabShapes.card)
+                        .background(LabColors.surface)
+                        .border(1.dp, LabColors.hairlineStrong, LabShapes.card)
+                        .padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = "阶段 ${live.stageIndex} / ${live.totalStages}",
+                            style = LabType.microMono,
+                            color = LabColors.accent,
+                            modifier = Modifier
+                                .background(LabColors.accentSoft, LabShapes.pill)
+                                .padding(horizontal = 10.dp, vertical = 4.dp),
+                        )
+                        OutlinedButton(
+                            onClick = { feedback.speak(live.stageBriefingBody) },
+                            shape = LabShapes.pill,
+                            border = androidx.compose.foundation.BorderStroke(1.dp, LabColors.hairlineStrong),
+                        ) { Text("重播语音", style = LabType.caption, color = LabColors.inkSecondary) }
+                    }
+                    Text(live.stageBriefingTitle.ifBlank { live.stage.title }, style = LabType.title)
+                    Text(live.stageBriefingBody.ifBlank { live.prompt }, style = LabType.body, color = LabColors.inkSecondary)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = if (live.faceDetected) "双眼已就绪" else "未检测到双眼",
+                            style = LabType.microMono,
+                            color = if (live.faceDetected) LabColors.verified else LabColors.caution,
+                        )
+                        Text(
+                            text = if (live.distanceCm > 0f) String.format("%.1f cm", live.distanceCm) else "测距中…",
+                            style = LabType.microMono,
+                            color = if (live.distanceOk) LabColors.verified else LabColors.caution,
+                        )
+                    }
+                    Button(
+                        onClick = onConfirmStage,
+                        shape = LabShapes.control,
+                        colors = ButtonDefaults.buttonColors(containerColor = LabColors.accent, contentColor = LabColors.onAccent),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(50.dp),
+                    ) { Text("我已准备好，开始本阶段", style = LabType.section, color = LabColors.onAccent) }
+                }
             } else if (live.stage == LabStage.COVER_TEST) {
                 Text(live.coverInstruction, style = LabType.title, color = if (live.coverHolding) LabColors.verified else LabColors.inkPrimary)
-                Text("遮盖动作 ${live.coverStepIndex}/${live.coverStepTotal}", style = LabType.microMono)
+                Text("遮盖动作 ${live.coverStepIndex}/${live.coverStepTotal} · 白点常亮防盲区", style = LabType.microMono)
                 OutlinedButton(
                     onClick = onManualCover,
                     shape = LabShapes.pill,

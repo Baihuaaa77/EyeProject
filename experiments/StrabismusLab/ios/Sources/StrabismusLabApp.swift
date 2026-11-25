@@ -52,7 +52,7 @@ struct LabConsoleView: View {
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("StrabismusLab").font(LabFont.title).foregroundColor(LabPalette.inkPrimary)
-                            Text("3D CODED CORNEAL LAB · v0.9.1").font(LabFont.microMono).foregroundColor(LabPalette.accent)
+                            Text("3D CODED CORNEAL LAB · v0.9.2").font(LabFont.microMono).foregroundColor(LabPalette.accent)
                         }
                         Spacer()
                         Button(action: store.openHistory) {
@@ -162,11 +162,15 @@ struct LabConsoleView: View {
                             HStack(spacing: 8) {
                                 ForEach(["裸眼", "框架眼镜", "隐形眼镜"], id: \.self) { g in
                                     pillButton(g, active: store.config.glassesState == g) {
+                                        store.feedback.toggle()
                                         store.updateConfig { copyConfig($0, glassesState: g) }
                                     }
                                 }
                             }
                         }
+
+                        Divider().background(LabPalette.hairline)
+                        LabFeedbackControlBar(feedback: store.feedback)
                     }
                     .labCard()
 
@@ -279,7 +283,7 @@ struct LabCaptureStageView: View {
                     .onChange(of: context.date) { _ in store.onDisplayTick() }
 
                 // 顶部贴近前摄的纯白实心编码白点（外围细环引导注视，绝不在核心区画大红十字挖暗峰值！）
-                if store.live.stage.usesOpticalStimulus && !store.live.farWaitingConfirm {
+                if store.live.stage.usesOpticalStimulus && !store.live.stageWaitingConfirm {
                     let lum = store.live.stage.forcesSteadyStimulus ? 1.0 : Double(min(1, max(0, store.renderedIntensity)))
                     let dotPt = CGFloat(min(140, max(28, store.config.stimulusDiameterMm * 6.3)))
                     VStack {
@@ -301,8 +305,8 @@ struct LabCaptureStageView: View {
                     }
                 }
 
-                // 追踪目标
-                if store.live.stage == .pursuit {
+                // 追踪目标（仅确认开始后显示）
+                if store.live.stage == .pursuit && !store.live.stageWaitingConfirm {
                     GeometryReader { geo in
                         let cx = geo.size.width * CGFloat(min(0.92, max(0.08, store.live.pursuitTargetX)))
                         let cy = geo.size.height * CGFloat(min(0.85, max(0.12, store.live.pursuitTargetY)))
@@ -315,30 +319,48 @@ struct LabCaptureStageView: View {
                     }
                 }
 
-                // 中央确认 / 遮盖提示
+                // 中央阶段说明确认页 / 遮盖实时指令卡片
                 VStack(spacing: 14) {
                     if store.analyzing {
                         ProgressView().tint(LabPalette.accent)
-                        Text("正在执行 v0.9 3D 光学反演与遮盖拐点回溯…").font(LabFont.body).foregroundColor(LabPalette.inkSecondary)
-                    } else if store.live.farWaitingConfirm {
-                        Text("看远光码映光").font(LabFont.section).foregroundColor(LabPalette.inkPrimary)
-                        Text("保持手机 33 cm，越过屏幕注视 6 m 远目标").font(LabFont.body).foregroundColor(LabPalette.inkSecondary)
-                        Button("已注视远目标，开始采集", action: store.confirmFarReady)
-                            .padding(.horizontal, 20).padding(.vertical, 12)
-                            .background(LabPalette.accent)
-                            .foregroundColor(LabPalette.onAccent)
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                        Text("正在执行 v0.9.2 3D 光学反演与遮盖拐点回溯…").font(LabFont.body).foregroundColor(LabPalette.inkSecondary)
+                    } else if store.live.stageWaitingConfirm {
+                        stageBriefingCard
+                            .padding(.horizontal, 20)
                     } else if store.live.stage == .coverTest {
-                        Text(store.live.coverInstruction)
-                            .font(LabFont.title)
-                            .foregroundColor(store.live.coverHolding ? LabPalette.verified : LabPalette.inkPrimary)
-                        Text("遮盖动作 \(store.live.coverStepIndex)/\(store.live.coverStepTotal) · 白点常亮防盲区")
-                            .font(LabFont.microMono).foregroundColor(LabPalette.inkSecondary)
-                        Button("手动确认本步遮盖", action: store.manualAdvanceCover)
-                            .font(LabFont.caption)
-                            .foregroundColor(LabPalette.inkSecondary)
-                            .padding(.horizontal, 14).padding(.vertical, 8)
-                            .overlay(Capsule().stroke(LabPalette.hairlineStrong, lineWidth: 1))
+                        VStack(spacing: 12) {
+                            HStack(spacing: 8) {
+                                Circle()
+                                    .fill(store.live.coverHolding ? LabPalette.verified : LabPalette.accent)
+                                    .frame(width: 9, height: 9)
+                                Text(store.live.coverHolding ? "已识别，请保持" : "等待遮盖动作")
+                                    .font(LabFont.caption)
+                                    .foregroundColor(store.live.coverHolding ? LabPalette.verified : LabPalette.accent)
+                            }
+                            .padding(.horizontal, 12).padding(.vertical, 5)
+                            .background((store.live.coverHolding ? LabPalette.verified : LabPalette.accent).opacity(0.15))
+                            .clipShape(Capsule())
+
+                            Text(store.live.coverInstruction)
+                                .font(LabFont.title)
+                                .multilineTextAlignment(.center)
+                                .foregroundColor(store.live.coverHolding ? LabPalette.verified : LabPalette.inkPrimary)
+                            Text("遮盖动作 \(store.live.coverStepIndex)/\(store.live.coverStepTotal) · 白点常亮防盲区")
+                                .font(LabFont.microMono).foregroundColor(LabPalette.inkSecondary)
+                            Button("手动确认本步遮盖", action: store.manualAdvanceCover)
+                                .font(LabFont.caption)
+                                .foregroundColor(LabPalette.inkSecondary)
+                                .padding(.horizontal, 16).padding(.vertical, 10)
+                                .overlay(Capsule().stroke(LabPalette.hairlineStrong, lineWidth: 1))
+                        }
+                        .padding(20)
+                        .background(LabPalette.surface.opacity(0.92))
+                        .clipShape(RoundedRectangle(cornerRadius: 18))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 18)
+                                .stroke(store.live.coverHolding ? LabPalette.verified : LabPalette.hairlineStrong, lineWidth: store.live.coverHolding ? 2 : 1)
+                        )
+                        .padding(.horizontal, 24)
                     }
                 }
 
@@ -390,6 +412,90 @@ struct LabCaptureStageView: View {
                 }
             }
         }
+    }
+
+    private var stageSymbol: String {
+        switch store.live.stage {
+        case .nearFixation: return "dot.scope"
+        case .farFixation: return "binoculars"
+        case .coverTest: return "hand.raised"
+        case .pursuit: return "point.topleft.down.to.point.bottomright.curvepath"
+        default: return "eye"
+        }
+    }
+
+    private var stageBriefingCard: some View {
+        let targetDist = store.live.stage == .pursuit ? "25 cm" : "33 cm"
+        let yawOk = abs(store.live.yawDeg?.floatValue ?? 0) <= 15
+        let pitchOk = abs(store.live.pitchDeg?.floatValue ?? 0) <= 18
+        let poseOk = store.live.faceDetected && yawOk && pitchOk
+
+        return VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                HStack(spacing: 6) {
+                    Image(systemName: stageSymbol)
+                        .foregroundColor(LabPalette.accent)
+                    Text("阶段 \(store.live.stageIndex) / \(store.live.totalStages)")
+                        .font(LabFont.microMono)
+                        .foregroundColor(LabPalette.accent)
+                }
+                .padding(.horizontal, 10).padding(.vertical, 4)
+                .background(LabPalette.accentSoft)
+                .clipShape(Capsule())
+                Spacer()
+                Button {
+                    store.feedback.tap()
+                    store.feedback.speak(store.live.stageBriefingBody, interrupt: true)
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "speaker.wave.2")
+                        Text("重播语音").font(LabFont.caption)
+                    }
+                    .foregroundColor(LabPalette.inkSecondary)
+                    .padding(.horizontal, 10).padding(.vertical, 6)
+                    .overlay(Capsule().stroke(LabPalette.hairlineStrong, lineWidth: 1))
+                }
+            }
+
+            Text(store.live.stageBriefingTitle.isEmpty ? store.live.stage.title : store.live.stageBriefingTitle)
+                .font(LabFont.title)
+                .foregroundColor(LabPalette.inkPrimary)
+
+            Text(store.live.stageBriefingBody.isEmpty ? store.live.prompt : store.live.stageBriefingBody)
+                .font(LabFont.body)
+                .foregroundColor(LabPalette.inkSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            // 实时就绪状态条（受试者可在点击确认前先调好距离与头姿）
+            HStack(spacing: 8) {
+                hudPill(
+                    store.live.faceDetected ? "双眼已就绪" : "未检测到双眼",
+                    store.live.faceDetected ? LabPalette.verified : LabPalette.caution
+                )
+                hudPill(
+                    store.live.distanceCm > 0 ? "\(String(format: "%.1f", store.live.distanceCm)) cm · 目标 \(targetDist)" : "测距中…",
+                    store.live.distanceOk ? LabPalette.verified : LabPalette.caution
+                )
+                if store.live.faceDetected {
+                    hudPill(poseOk ? "头姿正" : "请摆正头", poseOk ? LabPalette.verified : LabPalette.caution)
+                }
+            }
+
+            Button(action: store.confirmStageReady) {
+                HStack(spacing: 8) {
+                    Image(systemName: "checkmark.circle.fill")
+                    Text("我已准备好，开始本阶段").font(LabFont.section)
+                }
+                .frame(maxWidth: .infinity, minHeight: 50)
+                .background(LabPalette.accent)
+                .foregroundColor(LabPalette.onAccent)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+            }
+        }
+        .padding(18)
+        .background(LabPalette.surface)
+        .clipShape(RoundedRectangle(cornerRadius: 18))
+        .overlay(RoundedRectangle(cornerRadius: 18).stroke(LabPalette.hairlineStrong, lineWidth: 1))
     }
 }
 
@@ -837,6 +943,34 @@ struct LabHistoryView: View {
             }
         }
         .background(LabPalette.canvas.ignoresSafeArea())
+    }
+}
+
+struct LabFeedbackControlBar: View {
+    @ObservedObject var feedback: StrabismusLabFeedback
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Toggle(isOn: $feedback.voiceEnabled) {
+                HStack(spacing: 5) {
+                    Image(systemName: feedback.voiceEnabled ? "speaker.wave.2.fill" : "speaker.slash")
+                        .foregroundColor(feedback.voiceEnabled ? LabPalette.accent : LabPalette.inkTertiary)
+                    Text("语音提示").font(LabFont.caption).foregroundColor(LabPalette.inkSecondary)
+                }
+            }
+            .tint(LabPalette.accent)
+
+            Toggle(isOn: $feedback.soundHapticsEnabled) {
+                HStack(spacing: 5) {
+                    Image(systemName: feedback.soundHapticsEnabled ? "waveform.circle.fill" : "waveform.circle")
+                        .foregroundColor(feedback.soundHapticsEnabled ? LabPalette.verified : LabPalette.inkTertiary)
+                    Text("音效震动").font(LabFont.caption).foregroundColor(LabPalette.inkSecondary)
+                }
+            }
+            .tint(LabPalette.verified)
+        }
+        .onChange(of: feedback.voiceEnabled) { _ in feedback.toggle() }
+        .onChange(of: feedback.soundHapticsEnabled) { on in if on { feedback.play(.tick) } }
     }
 }
 

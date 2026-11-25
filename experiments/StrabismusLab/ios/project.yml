@@ -6,8 +6,8 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "0.9.1"
-    CURRENT_PROJECT_VERSION: "3"
+    MARKETING_VERSION: "0.9.2"
+    CURRENT_PROJECT_VERSION: "4"
     CODE_SIGN_STYLE: Automatic
     TARGETED_DEVICE_FAMILY: "1"
     FRAMEWORK_SEARCH_PATHS: "$(inherited) $(SRCROOT)/../../../shared/screening/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)"
@@ -20,6 +20,8 @@ targets:
     sources:
       - Sources
       - path: ../../../core/camera/src/main/assets/face_landmarker.task
+        buildPhase: resources
+      - path: ../../../shared/feedback/res/raw
         buildPhase: resources
     info:
       path: Info.plist
