@@ -62,6 +62,29 @@ class StrabismusLabAlgorithmTest {
     }
 
     @Test
+    fun glintDetectorSeparatesBrightScreenGlintOverlappingWideCeilingBand() {
+        // 模拟实测宿舍环境：瞳孔上方横贯一条 24×5 px 浅亮白灯带（灰度 145），
+        // 在灯带边缘 (32, 26) 叠加一颗 2×2 屏幕白点（灰度 250）：二次核心阈值 0.65 应将其精准摘出。
+        val image = object : GrayImage {
+            override val width = 64
+            override val height = 64
+            override fun grayRegion(left: Int, top: Int, width: Int, height: Int) = IntArray(width * height) { i ->
+                val x = left + i % width
+                val y = top + i / width
+                when {
+                    x in 31..32 && y in 25..26 -> 250
+                    x in 20..44 && y in 23..27 -> 145
+                    else -> 36
+                }
+            }
+        }
+        val measured = EyeOpticalAlgorithm.measureScreenPoint(image, eye, searchRadiusFraction = 0.80f)
+        assertNotNull(measured?.cornealReflex, "叠加在浅亮灯带上的高亮屏幕白点不应被误杀")
+        assertTrue(abs(measured.cornealReflex!!.x - 31.5f) < 1.5f, "x=${measured.cornealReflex!!.x}")
+        assertTrue(abs(measured.cornealReflex!!.y - 25.5f) < 1.5f, "y=${measured.cornealReflex!!.y}")
+    }
+
+    @Test
     fun v8AnalyzerSeparatesCodedGlintFromBrighterConstantWindowReflectionAndFindsLag() {
         val chipSec = 0.25
         val durationSec = 16.0

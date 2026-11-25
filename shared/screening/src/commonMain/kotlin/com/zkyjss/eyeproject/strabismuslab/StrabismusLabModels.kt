@@ -228,7 +228,7 @@ data class LabGlintScatterPoint(
 data class LabSessionReport(
     val sessionId: String,
     val createdAtMs: Long,
-    val algorithmVersion: String = "strabismus-lab-v0.9-optics3d",
+    val algorithmVersion: String = "strabismus-lab-v0.9.1-optics3d",
     val platform: String = "Android",
     val deviceModel: String = "",
     val sourceWidth: Int = 0,

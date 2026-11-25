@@ -823,24 +823,44 @@ class StrabismusLabEngine(
             val settleMs = if (stage == LabStage.FAR_FIXATION) StrabismusProtocol.FAR_SETTLE_MS else 0L
             val firstMs = stageRows.first().timestampMs
             val allMeasured = stageRows.filter { it.timestampMs >= firstMs + settleMs && it.hdePrism != null && it.vdePrism != null }
+            val observedBinocular = allMeasured.filter {
+                it.leftGlintSource == LabGlintSource.OBSERVED && it.rightGlintSource == LabGlintSource.OBSERVED
+            }
+            val codeAnyVerified = (lCode?.codeVerified == true) || (rCode?.codeVerified == true)
+            // 可信度门控：当某阶段双眼均未通过光码验证且几乎没有高置信 OBSERVED 帧（全是低置信 WEAK 噪点）时，
+            // 拒绝输出荒谬的极值偏斜（如 223Δ），显式返回空值提示复测或核查视频。
+            if (!codeAnyVerified && observedBinocular.size < 6) {
+                return LabAlignmentMetrics(
+                    stage = stage,
+                    stableOnOnly = false,
+                    validBinocularFrames = 0,
+                    totalStageFrames = stageRows.size,
+                    leftCodeVerified = lCode?.codeVerified == true,
+                    rightCodeVerified = rCode?.codeVerified == true,
+                )
+            }
             // 优先仅保留稳定 ON 且 OBSERVED 的双目帧，剔除 TRANSITION 过渡帧与弱观测噪点
-            val stableOnObserved = allMeasured.filter {
-                it.leftEmissionPhase == LabEmissionPhase.ON && it.rightEmissionPhase == LabEmissionPhase.ON &&
-                    it.leftGlintSource == LabGlintSource.OBSERVED && it.rightGlintSource == LabGlintSource.OBSERVED
+            val stableOnObserved = observedBinocular.filter {
+                it.leftEmissionPhase == LabEmissionPhase.ON && it.rightEmissionPhase == LabEmissionPhase.ON
             }
             val stableOnOnly = stableOnObserved.size >= 12
-            val usable = if (stableOnOnly) stableOnObserved else allMeasured
+            val usable = when {
+                stableOnOnly -> stableOnObserved
+                observedBinocular.size >= 12 -> observedBinocular
+                else -> allMeasured
+            }
 
             val hVals = usable.map { it.hdePrism!! }
             val vVals = usable.map { it.vdePrism!! }
-            val h3dVals = usable.mapNotNull { it.hde3dPrism }
-            val v3dVals = usable.mapNotNull { it.vde3dPrism }
+            // 主 3D 水平指标优先采用对共轭偏转与人脸偏移免疫的 3D 聚散分量（Vergence 3D），并保留不对称与线性对照
             val verg3dVals = usable.mapNotNull { it.hdeVergence3dPrism }
+            val asym3dVals = usable.mapNotNull { it.hde3dPrism }
+            val v3dVals = usable.mapNotNull { it.vde3dPrism }
 
             val effN = max(1.0, usable.size / max(1.0, medFps * 0.2))
             val hSd = stdDev(hVals)
             val vSd = stdDev(vVals)
-            val h3dSd = stdDev(h3dVals)
+            val h3dSd = stdDev(verg3dVals.ifEmpty { asym3dVals })
             val v3dSd = stdDev(v3dVals)
             return LabAlignmentMetrics(
                 stage = stage,
@@ -850,7 +870,7 @@ class StrabismusLabEngine(
                 vdeSdPrism = vSd,
                 hdeCi95HalfPrism = hSd?.let { 1.96 * it / sqrt(effN) },
                 vdeCi95HalfPrism = vSd?.let { 1.96 * it / sqrt(effN) },
-                hde3dPrism = median(h3dVals),
+                hde3dPrism = median(verg3dVals.ifEmpty { asym3dVals }),
                 vde3dPrism = median(v3dVals),
                 hde3dSdPrism = h3dSd,
                 vde3dSdPrism = v3dSd,

@@ -7,14 +7,20 @@ import EyeScreening
 import Foundation
 import UIKit
 
-/// StrabismusLab iOS 诊断视频双路管线：
-/// 1) 采集期间零阻塞录制高清原始视频 `original.mp4`（记录每帧与 `report.frames` 的精确帧号映射）；
-/// 2) 测试结束完成 v0.9 双向光码解调与 3D 球面光学反演后，离线合成叠加可视化视频 `annotated.mp4`
-///    （含双眼 4× 眼区特写画中画、虹膜外圈、0.80R 搜索边界、v0.8 锁定映光准星、光码相位灯与实时 3D HDE/VDE 读数）。
+/// StrabismusLab iOS 诊断视频双路管线（v0.9.1 四联科研对比拼接版）：
+/// 1) 采集期间零阻塞录制高清原始视频 `original.mp4`（1080×1920，精确记录每帧与 `report.frames` 的帧号与候选点映射）；
+/// 2) 测试结束完成 v0.9.1 双向光码解调与 3D 球面光学反演后，离线渲染 **1280×720 横屏四联科研拼接视频 `annotated.mp4`**：
+///    - 左列：原始不镜像全画面（叠加双眼虹膜与搜索框）
+///    - 中列上排：左右眼高清纯净放大（无任何线条遮挡，与主画面左右严格对齐）
+///    - 中列下排：同帧映光检测叠加（虹膜外圈 + 0.80R 虚线圈 + 全部单帧候选点 + v0.8 锁定映光准星，上下直接对照）
+///    - 右列：模拟手机屏幕编码白点亮灭 / 追踪目标 + 实时 3D 聚散 HDE/VDE、光码相位灯与遮盖状态仪表
+///    - 底部通栏：时间、阶段、测距、头姿、Roll 旋正与遮盖复位窗高亮横幅
 final class StrabismusLabVideoRecorder {
     struct RecordedFrameStamp {
         let frameIndex: Int32
         let ptsMs: Int64
+        let leftCandidates: [(Float, Float)]
+        let rightCandidates: [(Float, Float)]
     }
 
     private let queue = DispatchQueue(label: "com.zkyjss.strabismuslab.video", qos: .utility, autoreleaseFrequency: .workItem)
@@ -23,24 +29,26 @@ final class StrabismusLabVideoRecorder {
 
     private var active = false
     private var sessionId = ""
+    private var sessionDirectory: URL?
     private var outputURL: URL?
     private var writer: AVAssetWriter?
     private var input: AVAssetWriterInput?
     private var adaptor: AVAssetWriterInputPixelBufferAdaptor?
     private var baseTimeMs: Int64 = -1
     private var lastPtsMs: Int64 = -1
-    private var videoWidth = 720
-    private var videoHeight = 1280
+    private var videoWidth = 1080
+    private var videoHeight = 1920
     private var sourceWidth = 0
     private var sourceHeight = 0
     private var stamps: [RecordedFrameStamp] = []
 
-    /// 单槽防堆积，绝不拖慢 30fps 相机推理队列。
     private struct PendingFrame {
         let buffer: CVPixelBuffer
         let frameIndex: Int32
         let timeMs: Int64
         let sessionId: String
+        let leftCandidates: [(Float, Float)]
+        let rightCandidates: [(Float, Float)]
     }
     private var pending: PendingFrame?
     private var draining = false
@@ -58,6 +66,7 @@ final class StrabismusLabVideoRecorder {
             guard let self = self else { return }
             self.abortWriterLocked()
             try? FileManager.default.removeItem(at: url)
+            self.sessionDirectory = directory
             self.outputURL = url
             self.baseTimeMs = -1
             self.lastPtsMs = -1
@@ -75,21 +84,40 @@ final class StrabismusLabVideoRecorder {
         queue.async { [weak self] in
             guard let self = self else { return }
             let oldURL = self.outputURL
+            let oldDir = self.sessionDirectory
             self.abortWriterLocked()
             if let u = oldURL { try? FileManager.default.removeItem(at: u) }
+            // 取消未完成会话时顺手清理空目录，避免历史库残留空文件夹
+            if let d = oldDir {
+                let contents = (try? FileManager.default.contentsOfDirectory(atPath: d.path)) ?? []
+                if contents.isEmpty { try? FileManager.default.removeItem(at: d) }
+            }
             self.outputURL = nil
+            self.sessionDirectory = nil
             self.stamps.removeAll()
         }
     }
 
-    /// 由相机队列在每帧送入引擎后立刻调用；仅保留最新待编码帧，零阻塞。
-    func appendFrame(_ buffer: CVPixelBuffer, frameIndex: Int32, timeMs: Int64) {
+    func appendFrame(
+        _ buffer: CVPixelBuffer,
+        frameIndex: Int32,
+        timeMs: Int64,
+        leftCandidates: [(Float, Float)],
+        rightCandidates: [(Float, Float)]
+    ) {
         lock.lock()
         guard active, frameIndex > 0 else {
             lock.unlock()
             return
         }
-        pending = PendingFrame(buffer: buffer, frameIndex: frameIndex, timeMs: timeMs, sessionId: sessionId)
+        pending = PendingFrame(
+            buffer: buffer,
+            frameIndex: frameIndex,
+            timeMs: timeMs,
+            sessionId: sessionId,
+            leftCandidates: leftCandidates,
+            rightCandidates: rightCandidates
+        )
         let shouldLaunch = !draining
         draining = true
         lock.unlock()
@@ -124,7 +152,8 @@ final class StrabismusLabVideoRecorder {
         if writer == nil {
             sourceWidth = srcW
             sourceHeight = srcH
-            let scale = min(1.0, 1280.0 / Double(max(srcW, srcH)))
+            // 1080×1920 高清原画（从 4K 精确 2× 缩放），确保离线裁剪眼区放大像素锐利清晰
+            let scale = min(1.0, 1920.0 / Double(max(srcW, srcH)))
             videoWidth = max(2, Int((Double(srcW) * scale / 2.0).rounded()) * 2)
             videoHeight = max(2, Int((Double(srcH) * scale / 2.0).rounded()) * 2)
             guard setupWriter(url: url, width: videoWidth, height: videoHeight) else { return }
@@ -151,7 +180,12 @@ final class StrabismusLabVideoRecorder {
         let pts = CMTime(value: ptsMs, timescale: 1000)
         if adaptor.append(dst, withPresentationTime: pts) {
             lastPtsMs = ptsMs
-            stamps.append(RecordedFrameStamp(frameIndex: item.frameIndex, ptsMs: ptsMs))
+            stamps.append(RecordedFrameStamp(
+                frameIndex: item.frameIndex,
+                ptsMs: ptsMs,
+                leftCandidates: item.leftCandidates,
+                rightCandidates: item.rightCandidates
+            ))
         }
     }
 
@@ -163,7 +197,7 @@ final class StrabismusLabVideoRecorder {
                 AVVideoWidthKey: width,
                 AVVideoHeightKey: height,
                 AVVideoCompressionPropertiesKey: [
-                    AVVideoAverageBitRateKey: 4_500_000,
+                    AVVideoAverageBitRateKey: 6_500_000,
                     AVVideoMaxKeyFrameIntervalKey: 30,
                     AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel,
                 ],
@@ -197,7 +231,7 @@ final class StrabismusLabVideoRecorder {
         adaptor = nil
     }
 
-    /// 结束原始视频封箱，随后离线叠加 v0.9 最终解调结果与双眼 4× 放大特写，输出 `annotated.mp4`。
+    /// 结束原始视频封箱，随后离线渲染 1280×720 四联科研拼接视频 `annotated.mp4`。
     func finishAndRenderAnnotated(
         report: LabSessionReport,
         directory: URL,
@@ -235,6 +269,7 @@ final class StrabismusLabVideoRecorder {
             self.input = nil
             self.adaptor = nil
             self.outputURL = nil
+            self.sessionDirectory = nil
 
             guard ok, FileManager.default.fileExists(atPath: rawURL.path) else {
                 DispatchQueue.main.async { completion(nil, nil) }
@@ -243,7 +278,7 @@ final class StrabismusLabVideoRecorder {
 
             let annotatedURL = directory.appendingPathComponent("annotated.mp4")
             try? FileManager.default.removeItem(at: annotatedURL)
-            let rendered = Self.renderOverlayVideo(
+            let rendered = Self.renderQuadPanelVideo(
                 inputURL: rawURL,
                 outputURL: annotatedURL,
                 report: report,
@@ -258,9 +293,9 @@ final class StrabismusLabVideoRecorder {
         }
     }
 
-    // MARK: - 离线科研级叠加渲染引擎
+    // MARK: - 1280×720 四联科研对比拼接渲染器
 
-    private static func renderOverlayVideo(
+    private static func renderQuadPanelVideo(
         inputURL: URL,
         outputURL: URL,
         report: LabSessionReport,
@@ -272,8 +307,11 @@ final class StrabismusLabVideoRecorder {
         let asset = AVURLAsset(url: inputURL)
         guard let track = asset.tracks(withMediaType: .video).first else { return false }
         let natural = track.naturalSize
-        let outW = max(2, Int(natural.width))
-        let outH = max(2, Int(natural.height))
+        let rawW = max(2, Int(natural.width))
+        let rawH = max(2, Int(natural.height))
+
+        let outW = 1280
+        let outH = 720
 
         guard let reader = try? AVAssetReader(asset: asset) else { return false }
         let readOutput = AVAssetReaderTrackOutput(
@@ -290,7 +328,7 @@ final class StrabismusLabVideoRecorder {
             AVVideoWidthKey: outW,
             AVVideoHeightKey: outH,
             AVVideoCompressionPropertiesKey: [
-                AVVideoAverageBitRateKey: 5_000_000,
+                AVVideoAverageBitRateKey: 6_000_000,
                 AVVideoMaxKeyFrameIntervalKey: 30,
                 AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel,
             ],
@@ -314,7 +352,7 @@ final class StrabismusLabVideoRecorder {
         let frameByIndex: [Int32: LabFrameLog] = Dictionary(
             uniqueKeysWithValues: report.frames.map { ($0.index, $0) }
         )
-        let coverOnsetSecs = report.coverRefixations.map { ($0.uncoveredAtSec, $0.eventType, $0.eye) }
+        let coverEvents = report.coverRefixations.map { ($0.uncoveredAtSec, $0.eventType, $0.eye) }
         let searchRadius = CGFloat(report.config.searchRadiusFraction)
         let ciContext = CIContext(options: [.cacheIntermediates: false])
         let colorSpace = CGColorSpaceCreateDeviceRGB()
@@ -334,19 +372,13 @@ final class StrabismusLabVideoRecorder {
                 let pts = CMSampleBufferGetPresentationTimeStamp(sample)
                 let ptsMs = Int64((CMTimeGetSeconds(pts) * 1000.0).rounded())
 
-                // 匹配对应的 LabFrameLog（优先按精确录制顺序，回退按时间戳最近邻）
-                let matchedLog: LabFrameLog? = {
-                    if frameIdx < stamps.count {
-                        let stamp = stamps[frameIdx]
-                        if abs(stamp.ptsMs - ptsMs) <= 80, let log = frameByIndex[stamp.frameIndex] {
-                            return log
-                        }
+                let matchedStamp: RecordedFrameStamp? = {
+                    if frameIdx < stamps.count && abs(stamps[frameIdx].ptsMs - ptsMs) <= 80 {
+                        return stamps[frameIdx]
                     }
-                    if let nearest = stamps.min(by: { abs($0.ptsMs - ptsMs) < abs($1.ptsMs - ptsMs) }) {
-                        return frameByIndex[nearest.frameIndex]
-                    }
-                    return nil
+                    return stamps.min(by: { abs($0.ptsMs - ptsMs) < abs($1.ptsMs - ptsMs) })
                 }()
+                let matchedLog = matchedStamp.flatMap { frameByIndex[$0.frameIndex] }
 
                 while !writeInput.isReadyForMoreMediaData && writer.status == .writing {
                     Thread.sleep(forTimeInterval: 0.002)
@@ -357,24 +389,27 @@ final class StrabismusLabVideoRecorder {
                 guard CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &dstOpt) == kCVReturnSuccess,
                       let dstBuf = dstOpt else { return }
 
-                if let cgImg = ciContext.createCGImage(CIImage(cvPixelBuffer: srcBuf), from: CGRect(x: 0, y: 0, width: outW, height: outH)) {
-                    drawAnnotatedFrame(
+                if let cgImg = ciContext.createCGImage(CIImage(cvPixelBuffer: srcBuf), from: CGRect(x: 0, y: 0, width: rawW, height: rawH)) {
+                    drawQuadPanelFrame(
                         into: dstBuf,
-                        baseImage: cgImg,
+                        rawImage: cgImg,
                         log: matchedLog,
+                        stamp: matchedStamp,
                         outW: outW,
                         outH: outH,
+                        rawW: rawW,
+                        rawH: rawH,
                         sourceW: sourceWidth,
                         sourceH: sourceHeight,
                         searchRadius: searchRadius,
-                        coverEvents: coverOnsetSecs,
+                        coverEvents: coverEvents,
                         colorSpace: colorSpace
                     )
                     adaptor.append(dstBuf, withPresentationTime: pts)
                 }
 
                 frameIdx += 1
-                if frameIdx % 15 == 0 {
+                if frameIdx % 12 == 0 {
                     let p = min(0.99, Double(frameIdx) / Double(totalCount))
                     DispatchQueue.main.async { onProgress(p) }
                 }
@@ -390,12 +425,30 @@ final class StrabismusLabVideoRecorder {
         return writer.status == .completed
     }
 
-    private static func drawAnnotatedFrame(
+    private struct EyeSlot {
+        let title: String
+        let irisX: Float?
+        let irisY: Float?
+        let irisD: Float?
+        let glintX: Float?
+        let glintY: Float?
+        let relX: Float?
+        let relY: Float?
+        let confidence: Float?
+        let source: LabGlintSource
+        let candidates: [(Float, Float)]
+        let tint: UIColor
+    }
+
+    private static func drawQuadPanelFrame(
         into buffer: CVPixelBuffer,
-        baseImage: CGImage,
+        rawImage: CGImage,
         log: LabFrameLog?,
+        stamp: RecordedFrameStamp?,
         outW: Int,
         outH: Int,
+        rawW: Int,
+        rawH: Int,
         sourceW: Int,
         sourceH: Int,
         searchRadius: CGFloat,
@@ -420,22 +473,16 @@ final class StrabismusLabVideoRecorder {
 
         let W = CGFloat(outW)
         let H = CGFloat(outH)
-        let sx = W / CGFloat(sourceW)
-        let sy = H / CGFloat(sourceH)
 
-        // 1) 底图：正立绘制原始相机画面
-        ctx.draw(baseImage, in: CGRect(x: 0, y: 0, width: W, height: H))
-
-        // 2) 切换到左上角原点坐标系，与 LabFrameLog / UIKit 绘制完全对齐
-        ctx.saveGState()
+        // 切换到左上角原点坐标系（所有文字与几何统一左上角原点）
         ctx.translateBy(x: 0, y: H)
         ctx.scaleBy(x: 1, y: -1)
         UIGraphicsPushContext(ctx)
-        defer {
-            UIGraphicsPopContext()
-            ctx.restoreGState()
-        }
+        defer { UIGraphicsPopContext() }
 
+        let colCanvas = UIColor(red: 9/255, green: 12/255, blue: 16/255, alpha: 1)
+        let colSurface = UIColor(red: 18/255, green: 23/255, blue: 31/255, alpha: 1)
+        let colHairline = UIColor(red: 36/255, green: 46/255, blue: 61/255, alpha: 1)
         let colCyan = UIColor(red: 56/255, green: 189/255, blue: 248/255, alpha: 1)
         let colAmber = UIColor(red: 245/255, green: 158/255, blue: 11/255, alpha: 1)
         let colGreen = UIColor(red: 34/255, green: 197/255, blue: 94/255, alpha: 1)
@@ -443,159 +490,239 @@ final class StrabismusLabVideoRecorder {
         let colRed = UIColor(red: 244/255, green: 63/255, blue: 94/255, alpha: 1)
         let colInk = UIColor(red: 241/255, green: 245/255, blue: 249/255, alpha: 1)
         let colSub = UIColor(red: 148/255, green: 163/255, blue: 184/255, alpha: 1)
-        let colPanel = UIColor(red: 9/255, green: 12/255, blue: 16/255, alpha: 0.78)
 
-        func drawEyeOverlay(
-            irisX: Float?, irisY: Float?, irisD: Float?,
-            glintX: Float?, glintY: Float?,
-            source: LabGlintSource,
-            tint: UIColor
-        ) {
-            guard let ix = irisX, let iy = irisY, let id = irisD, id > 0 else { return }
-            let cx = CGFloat(ix) * sx
-            let cy = CGFloat(iy) * sy
-            let r = CGFloat(id) * 0.5 * sx
+        // 背景底板
+        ctx.setFillColor(colCanvas.cgColor)
+        ctx.fill(CGRect(x: 0, y: 0, width: W, height: H))
 
-            // 完整虹膜边缘
-            ctx.setStrokeColor(UIColor(white: 0.85, alpha: 0.75).cgColor)
-            ctx.setLineWidth(1.5)
-            ctx.setLineDash(phase: 0, lengths: [])
-            ctx.strokeEllipse(in: CGRect(x: cx - r, y: cy - r, width: r * 2, height: r * 2))
-
-            // 0.80R 搜索圈
-            let sr = r * searchRadius
-            ctx.setStrokeColor(tint.withAlphaComponent(0.9).cgColor)
-            ctx.setLineWidth(1.8)
-            ctx.setLineDash(phase: 0, lengths: [6, 4])
-            ctx.strokeEllipse(in: CGRect(x: cx - sr, y: cy - sr, width: sr * 2, height: sr * 2))
-            ctx.setLineDash(phase: 0, lengths: [])
-
-            // 虹膜中心细十字
-            ctx.setStrokeColor(tint.withAlphaComponent(0.6).cgColor)
-            ctx.setLineWidth(1.0)
-            ctx.move(to: CGPoint(x: cx - 5, y: cy)); ctx.addLine(to: CGPoint(x: cx + 5, y: cy))
-            ctx.move(to: CGPoint(x: cx, y: cy - 5)); ctx.addLine(to: CGPoint(x: cx, y: cy + 5))
-            ctx.strokePath()
-
-            // v0.8 最终角膜映光准星
-            if let gx = glintX, let gy = glintY {
-                let px = CGFloat(gx) * sx
-                let py = CGFloat(gy) * sy
-                if source == .observed || source == .weak {
-                    let gCol = source == .observed ? colGreen : colCyan
-                    ctx.setStrokeColor(gCol.cgColor)
-                    ctx.setLineWidth(2.0)
-                    ctx.move(to: CGPoint(x: px - 8, y: py)); ctx.addLine(to: CGPoint(x: px + 8, y: py))
-                    ctx.move(to: CGPoint(x: px, y: py - 8)); ctx.addLine(to: CGPoint(x: px, y: py + 8))
-                    ctx.strokePath()
-                    ctx.strokeEllipse(in: CGRect(x: px - 4, y: py - 4, width: 8, height: 8))
-                } else if source == .predicted {
-                    ctx.setStrokeColor(colWarn.withAlphaComponent(0.75).cgColor)
-                    ctx.setLineWidth(1.4)
-                    ctx.setLineDash(phase: 0, lengths: [3, 3])
-                    ctx.strokeEllipse(in: CGRect(x: px - 5, y: py - 5, width: 10, height: 10))
-                    ctx.setLineDash(phase: 0, lengths: [])
-                }
-            }
+        func drawText(_ s: String, at pt: CGPoint, color: UIColor = colInk, size: CGFloat = 14, bold: Bool = false, mono: Bool = false) {
+            let font: UIFont = mono
+                ? UIFont.monospacedSystemFont(ofSize: size, weight: bold ? .bold : .medium)
+                : UIFont.systemFont(ofSize: size, weight: bold ? .semibold : .regular)
+            NSAttributedString(string: s, attributes: [.font: font, .foregroundColor: color]).draw(at: pt)
         }
 
-        // 双眼 4× 放大特写画中画（左上 = 左眼 L，右上 = 右眼 R）
-        func drawEyeZoomBox(
-            label: String,
-            boxRect: CGRect,
-            irisX: Float?, irisY: Float?, irisD: Float?,
-            glintX: Float?, glintY: Float?,
-            source: LabGlintSource,
-            tint: UIColor
-        ) {
-            ctx.setFillColor(colPanel.cgColor)
-            ctx.fill(boxRect)
-            if let ix = irisX, let iy = irisY, let id = irisD, id > 4 {
-                let cx = CGFloat(ix) * sx
-                let cy = CGFloat(iy) * sy
-                let cropHalf = max(24.0, CGFloat(id) * sx * 1.25)
-                let cropRect = CGRect(
-                    x: max(0, min(W - cropHalf * 2, cx - cropHalf)),
-                    y: max(0, min(H - cropHalf * 2, cy - cropHalf)),
-                    width: min(W, cropHalf * 2),
-                    height: min(H, cropHalf * 2)
-                )
-                if let sub = baseImage.cropping(to: cropRect) {
-                    // CGContext.draw 在当前翻转坐标系中需局部再翻转才能正立画出裁剪块
-                    ctx.saveGState()
-                    ctx.translateBy(x: boxRect.minX, y: boxRect.maxY)
-                    ctx.scaleBy(x: 1, y: -1)
-                    ctx.draw(sub, in: CGRect(x: 0, y: 0, width: boxRect.width, height: boxRect.height))
-                    ctx.restoreGState()
-
-                    let zsx = boxRect.width / max(1, cropRect.width)
-                    let zsy = boxRect.height / max(1, cropRect.height)
-                    let zIx = boxRect.minX + (cx - cropRect.minX) * zsx
-                    let zIy = boxRect.minY + (cy - cropRect.minY) * zsy
-                    let zR = CGFloat(id) * 0.5 * sx * zsx
-
-                    ctx.setStrokeColor(UIColor(white: 0.9, alpha: 0.8).cgColor)
-                    ctx.setLineWidth(1.4)
-                    ctx.strokeEllipse(in: CGRect(x: zIx - zR, y: zIy - zR, width: zR * 2, height: zR * 2))
-
-                    let zSr = zR * searchRadius
-                    ctx.setStrokeColor(tint.withAlphaComponent(0.9).cgColor)
-                    ctx.setLineWidth(1.8)
-                    ctx.setLineDash(phase: 0, lengths: [6, 4])
-                    ctx.strokeEllipse(in: CGRect(x: zIx - zSr, y: zIy - zSr, width: zSr * 2, height: zSr * 2))
-                    ctx.setLineDash(phase: 0, lengths: [])
-
-                    // 虹膜中心蓝/黄细十字
-                    ctx.setStrokeColor(tint.cgColor)
-                    ctx.setLineWidth(1.2)
-                    ctx.move(to: CGPoint(x: zIx - 8, y: zIy)); ctx.addLine(to: CGPoint(x: zIx + 8, y: zIy))
-                    ctx.move(to: CGPoint(x: zIx, y: zIy - 8)); ctx.addLine(to: CGPoint(x: zIx, y: zIy + 8))
-                    ctx.strokePath()
-
-                    if let gx = glintX, let gy = glintY {
-                        let zGx = boxRect.minX + (CGFloat(gx) * sx - cropRect.minX) * zsx
-                        let zGy = boxRect.minY + (CGFloat(gy) * sy - cropRect.minY) * zsy
-                        let col = (source == .observed) ? colGreen : (source == .weak ? colCyan : colWarn)
-                        ctx.setStrokeColor(col.cgColor)
-                        ctx.setLineWidth(2.2)
-                        ctx.move(to: CGPoint(x: zGx - 11, y: zGy)); ctx.addLine(to: CGPoint(x: zGx + 11, y: zGy))
-                        ctx.move(to: CGPoint(x: zGx, y: zGy - 11)); ctx.addLine(to: CGPoint(x: zGx, y: zGy + 11))
-                        ctx.strokePath()
-                        ctx.strokeEllipse(in: CGRect(x: zGx - 6, y: zGy - 6, width: 12, height: 12))
-                    }
-                }
-            }
-            ctx.setStrokeColor(tint.cgColor)
-            ctx.setLineWidth(2.0)
-            ctx.stroke(boxRect)
-
-            let badge = NSAttributedString(
-                string: " \(label) · \(source.label) ",
-                attributes: [
-                    .font: UIFont.monospacedSystemFont(ofSize: 13, weight: .bold),
-                    .foregroundColor: tint,
-                    .backgroundColor: colPanel,
-                ]
-            )
-            badge.draw(at: CGPoint(x: boxRect.minX + 4, y: boxRect.minY + 4))
+        func drawUpright(_ image: CGImage, in rect: CGRect, crisp: Bool = false) {
+            ctx.saveGState()
+            ctx.interpolationQuality = crisp ? .high : .medium
+            ctx.translateBy(x: rect.minX, y: rect.maxY)
+            ctx.scaleBy(x: 1, y: -1)
+            ctx.draw(image, in: CGRect(x: 0, y: 0, width: rect.width, height: rect.height))
+            ctx.restoreGState()
         }
+
+        func aspectFit(_ imgSize: CGSize, into box: CGRect) -> CGRect {
+            let k = min(box.width / max(1, imgSize.width), box.height / max(1, imgSize.height))
+            let w = imgSize.width * k
+            let h = imgSize.height * k
+            return CGRect(x: box.midX - w * 0.5, y: box.midY - h * 0.5, width: w, height: h)
+        }
+
+        let toRawX = CGFloat(rawW) / CGFloat(sourceW)
+        let toRawY = CGFloat(rawH) / CGFloat(sourceH)
+
+        // ==================== 1) 左侧面板：原相机全画面（不镜像） ====================
+        drawText("原画全览 · 不镜像", at: CGPoint(x: 16, y: 12), color: colInk, size: 15, bold: true)
+        let leftBox = CGRect(x: 16, y: 38, width: 302, height: 564)
+        ctx.setFillColor(UIColor.black.cgColor)
+        ctx.fill(leftBox)
+        let fullRect = aspectFit(CGSize(width: rawW, height: rawH), into: leftBox)
+        drawUpright(rawImage, in: fullRect)
+        ctx.setStrokeColor(colHairline.cgColor)
+        ctx.setLineWidth(1.2)
+        ctx.stroke(leftBox)
+
+        // ==================== 2) 中间四格：上排纯净放大原图 + 下排同帧标注对照 ====================
+        drawText("原始高清眼区放大（纯净无遮挡）", at: CGPoint(x: 334, y: 12), color: colInk, size: 15, bold: true)
+        drawText("同帧映光检测对照（绿十字=实测 · 白圈=候选 · 虚线=\(Int(searchRadius * 100))%R）", at: CGPoint(x: 334, y: 318), color: colSub, size: 13, bold: true)
 
         if let f = log {
-            drawEyeOverlay(
+            let leftModelSlot = EyeSlot(
+                title: "受试者左眼 · L",
                 irisX: f.leftIrisX?.floatValue, irisY: f.leftIrisY?.floatValue, irisD: f.leftIrisDiameterPx?.floatValue,
                 glintX: f.leftGlintX?.floatValue, glintY: f.leftGlintY?.floatValue,
-                source: f.leftGlintSource, tint: colCyan
+                relX: f.leftRelX?.floatValue, relY: f.leftRelY?.floatValue,
+                confidence: f.leftGlintConfidence?.floatValue, source: f.leftGlintSource,
+                candidates: stamp?.leftCandidates ?? [], tint: colCyan
             )
-            drawEyeOverlay(
+            let rightModelSlot = EyeSlot(
+                title: "受试者右眼 · R",
                 irisX: f.rightIrisX?.floatValue, irisY: f.rightIrisY?.floatValue, irisD: f.rightIrisDiameterPx?.floatValue,
                 glintX: f.rightGlintX?.floatValue, glintY: f.rightGlintY?.floatValue,
-                source: f.rightGlintSource, tint: colAmber
+                relX: f.rightRelX?.floatValue, relY: f.rightRelY?.floatValue,
+                confidence: f.rightGlintConfidence?.floatValue, source: f.rightGlintSource,
+                candidates: stamp?.rightCandidates ?? [], tint: colAmber
             )
+            // 按主画面实际左右位置排列：画面左侧眼放左格、画面右侧眼放右格，视觉 1:1 顺眼对齐！
+            let rightIsOnLeftOfImage = (f.rightIrisX?.floatValue ?? 0) < (f.leftIrisX?.floatValue ?? Float.greatestFiniteMagnitude)
+            let orderedSlots = rightIsOnLeftOfImage ? [rightModelSlot, leftModelSlot] : [leftModelSlot, rightModelSlot]
 
-            // 顶部信息栏
-            let topBar = CGRect(x: 0, y: 0, width: W, height: 76)
-            ctx.setFillColor(colPanel.cgColor)
-            ctx.fill(topBar)
+            // 在全览图上标出双眼虹膜框
+            for slot in orderedSlots {
+                if let ix = slot.irisX, let iy = slot.irisY, let id = slot.irisD, id > 0 {
+                    let fx = fullRect.minX + CGFloat(ix) / CGFloat(sourceW) * fullRect.width
+                    let fy = fullRect.minY + CGFloat(iy) / CGFloat(sourceH) * fullRect.height
+                    let fr = CGFloat(id) * 0.5 / CGFloat(sourceW) * fullRect.width
+                    ctx.setStrokeColor(slot.tint.withAlphaComponent(0.9).cgColor)
+                    ctx.setLineWidth(1.5)
+                    ctx.strokeEllipse(in: CGRect(x: fx - fr, y: fy - fr, width: fr * 2, height: fr * 2))
+                }
+            }
+
+            for (colIdx, slot) in orderedSlots.enumerated() {
+                let colX = CGFloat(334 + colIdx * 300)
+                let colW: CGFloat = 286
+                let rawBox = CGRect(x: colX, y: 60, width: colW, height: 244)
+                let annBox = CGRect(x: colX, y: 342, width: colW, height: 244)
+
+                drawText(slot.title, at: CGPoint(x: colX, y: 38), color: slot.tint, size: 13, bold: true)
+
+                ctx.setFillColor(colSurface.cgColor)
+                ctx.fill(rawBox)
+                ctx.fill(annBox)
+
+                if let ix = slot.irisX, let iy = slot.irisY, let id = slot.irisD, id > 4 {
+                    let rx = CGFloat(ix) * toRawX
+                    let ry = CGFloat(iy) * toRawY
+                    let rRaw = CGFloat(id) * 0.5 * toRawX
+                    let halfW = max(36.0, rRaw * 2.35)
+                    let halfH = halfW * (rawBox.height / rawBox.width)
+                    let cropRect = CGRect(
+                        x: max(0, min(CGFloat(rawW) - halfW * 2, rx - halfW)),
+                        y: max(0, min(CGFloat(rawH) - halfH * 2, ry - halfH)),
+                        width: min(CGFloat(rawW), halfW * 2),
+                        height: min(CGFloat(rawH), halfH * 2)
+                    )
+
+                    if let sub = rawImage.cropping(to: cropRect) {
+                        // 上排：纯净原图放大
+                        drawUpright(sub, in: rawBox, crisp: true)
+                        // 下排：同帧放大 + 科研叠加层
+                        drawUpright(sub, in: annBox, crisp: true)
+
+                        let zsx = annBox.width / max(1, cropRect.width)
+                        let zsy = annBox.height / max(1, cropRect.height)
+                        func mapPt(_ srcX: Float, _ srcY: Float) -> CGPoint {
+                            CGPoint(
+                                x: annBox.minX + (CGFloat(srcX) * toRawX - cropRect.minX) * zsx,
+                                y: annBox.minY + (CGFloat(srcY) * toRawY - cropRect.minY) * zsy
+                            )
+                        }
+
+                        ctx.saveGState()
+                        ctx.clip(to: annBox)
+
+                        let cPt = mapPt(ix, iy)
+                        let cR = rRaw * zsx
+
+                        // 完整虹膜缘
+                        ctx.setStrokeColor(UIColor(white: 0.92, alpha: 0.85).cgColor)
+                        ctx.setLineWidth(1.4)
+                        ctx.strokeEllipse(in: CGRect(x: cPt.x - cR, y: cPt.y - cR, width: cR * 2, height: cR * 2))
+
+                        // 0.80R 搜索虚线圈
+                        let sr = cR * searchRadius
+                        ctx.setStrokeColor(slot.tint.withAlphaComponent(0.9).cgColor)
+                        ctx.setLineWidth(1.8)
+                        ctx.setLineDash(phase: 0, lengths: [7, 5])
+                        ctx.strokeEllipse(in: CGRect(x: cPt.x - sr, y: cPt.y - sr, width: sr * 2, height: sr * 2))
+                        ctx.setLineDash(phase: 0, lengths: [])
+
+                        // 虹膜中心细十字
+                        ctx.setStrokeColor(slot.tint.withAlphaComponent(0.8).cgColor)
+                        ctx.setLineWidth(1.2)
+                        ctx.move(to: CGPoint(x: cPt.x - 8, y: cPt.y)); ctx.addLine(to: CGPoint(x: cPt.x + 8, y: cPt.y))
+                        ctx.move(to: CGPoint(x: cPt.x, y: cPt.y - 8)); ctx.addLine(to: CGPoint(x: cPt.x, y: cPt.y + 8))
+                        ctx.strokePath()
+
+                        // 单帧全部候选点（白色细小圈，便于一眼审计候选池）
+                        ctx.setStrokeColor(UIColor.white.withAlphaComponent(0.75).cgColor)
+                        ctx.setLineWidth(1.2)
+                        for (cx, cy) in slot.candidates {
+                            let cp = mapPt(cx, cy)
+                            ctx.strokeEllipse(in: CGRect(x: cp.x - 4, y: cp.y - 4, width: 8, height: 8))
+                        }
+
+                        // v0.8 最终锁定角膜映光准星
+                        if let gx = slot.glintX, let gy = slot.glintY {
+                            let gp = mapPt(gx, gy)
+                            if slot.source == .observed || slot.source == .weak {
+                                let gCol = slot.source == .observed ? colGreen : colCyan
+                                ctx.setStrokeColor(gCol.cgColor)
+                                ctx.setLineWidth(2.4)
+                                ctx.move(to: CGPoint(x: gp.x - 13, y: gp.y)); ctx.addLine(to: CGPoint(x: gp.x + 13, y: gp.y))
+                                ctx.move(to: CGPoint(x: gp.x, y: gp.y - 13)); ctx.addLine(to: CGPoint(x: gp.x, y: gp.y + 13))
+                                ctx.strokePath()
+                                ctx.strokeEllipse(in: CGRect(x: gp.x - 7, y: gp.y - 7, width: 14, height: 14))
+                            } else if slot.source == .predicted {
+                                ctx.setStrokeColor(colWarn.withAlphaComponent(0.85).cgColor)
+                                ctx.setLineWidth(1.8)
+                                ctx.setLineDash(phase: 0, lengths: [4, 4])
+                                ctx.strokeEllipse(in: CGRect(x: gp.x - 8, y: gp.y - 8, width: 16, height: 16))
+                                ctx.setLineDash(phase: 0, lengths: [])
+                            }
+                        }
+                        ctx.restoreGState()
+                    }
+                } else {
+                    drawText("眼区不可定位/被遮盖", at: CGPoint(x: colX + 60, y: 170), color: colSub, size: 13)
+                    drawText("无可用光学像素", at: CGPoint(x: colX + 80, y: 452), color: colSub, size: 13)
+                }
+
+                ctx.setStrokeColor(slot.tint.withAlphaComponent(0.75).cgColor)
+                ctx.setLineWidth(1.5)
+                ctx.stroke(rawBox)
+                ctx.stroke(annBox)
+
+                // 下格说明行
+                let confTxt = slot.confidence.map { "\(Int($0 * 100))%" } ?? "—"
+                let relTxt = (slot.relX != nil && slot.relY != nil)
+                    ? String(format: "(%+.2f,%+.2f)R", slot.relX!, slot.relY!)
+                    : "—"
+                drawText("\(slot.source.label) · 置信 \(confTxt) · 候选 \(slot.candidates.count) · \(relTxt)",
+                         at: CGPoint(x: colX, y: 590), color: slot.tint, size: 11, mono: true)
+            }
+
+            // ==================== 3) 右侧面板：屏幕刺激模拟器 + 科研仪表 ====================
+            drawText("屏幕光码同步 & 实时读数", at: CGPoint(x: 944, y: 12), color: colInk, size: 15, bold: true)
+            let phoneOuter = CGRect(x: 1014, y: 44, width: 176, height: 306)
+            ctx.setFillColor(UIColor.black.cgColor)
+            let phonePath = UIBezierPath(roundedRect: phoneOuter, cornerRadius: 20)
+            phonePath.fill()
+            colHairline.setStroke()
+            phonePath.lineWidth = 2
+            phonePath.stroke()
+
+            // 灵动岛小条
+            let island = CGRect(x: phoneOuter.midX - 24, y: phoneOuter.minY + 8, width: 48, height: 10)
+            UIColor(white: 0.14, alpha: 1).setFill()
+            UIBezierPath(roundedRect: island, cornerRadius: 5).fill()
+
+            if f.stage.usesOpticalStimulus {
+                let lum = CGFloat(min(1, max(0, f.stimulusIntensity)))
+                let dotR: CGFloat = 24
+                let dotRect = CGRect(x: phoneOuter.midX - dotR, y: phoneOuter.minY + 26, width: dotR * 2, height: dotR * 2)
+                UIColor(white: lum, alpha: 1).setFill()
+                UIBezierPath(ovalIn: dotRect).fill()
+                colCyan.withAlphaComponent(0.55).setStroke()
+                let ring = UIBezierPath(ovalIn: dotRect.insetBy(dx: -3, dy: -3))
+                ring.lineWidth = 1.2
+                ring.stroke()
+                drawText("亮度 \(Int(lum * 100))%", at: CGPoint(x: phoneOuter.minX + 46, y: phoneOuter.maxY - 26), color: colSub, size: 12, mono: true)
+            } else if f.stage == .pursuit, let tx = f.targetNormX?.floatValue, let ty = f.targetNormY?.floatValue {
+                let px = phoneOuter.minX + CGFloat(min(0.92, max(0.08, tx))) * phoneOuter.width
+                let py = phoneOuter.minY + CGFloat(min(0.90, max(0.10, ty))) * phoneOuter.height
+                colAmber.setFill()
+                UIBezierPath(ovalIn: CGRect(x: px - 7, y: py - 7, width: 14, height: 14)).fill()
+            }
+
+            // 仪表读数卡
+            let cardRect = CGRect(x: 944, y: 364, width: 320, height: 242)
+            ctx.setFillColor(colSurface.cgColor)
+            ctx.fill(cardRect)
+            ctx.setStrokeColor(colHairline.cgColor)
+            ctx.setLineWidth(1.2)
+            ctx.stroke(cardRect)
 
             let phaseColor: UIColor = {
                 switch f.leftEmissionPhase {
@@ -606,82 +733,52 @@ final class StrabismusLabVideoRecorder {
                 }
             }()
             ctx.setFillColor(phaseColor.cgColor)
-            ctx.fillEllipse(in: CGRect(x: 16, y: 18, width: 12, height: 12))
+            ctx.fillEllipse(in: CGRect(x: 960, y: 380, width: 11, height: 11))
+            drawText("光码相位：\(f.leftEmissionPhase.label)", at: CGPoint(x: 978, y: 376), color: phaseColor, size: 13, bold: true, mono: true)
 
-            let headerStr = "StrabismusLab v0.9 · \(f.stage.title) · #\(f.index) · \(String(format: "%.2fs", f.elapsedSec))"
-            NSAttributedString(string: headerStr, attributes: [
-                .font: UIFont.monospacedSystemFont(ofSize: 16, weight: .bold),
-                .foregroundColor: colInk,
-            ]).draw(at: CGPoint(x: 36, y: 14))
-
-            let yawS = f.yawDeg.map { String(format: "%+.0f", $0.floatValue) } ?? "-"
-            let pitS = f.pitchDeg.map { String(format: "%+.0f", $0.floatValue) } ?? "-"
-            let rolS = f.rollDeg.map { String(format: "%+.0f", $0.floatValue) } ?? "-"
-            let subStr = "d=\(String(format: "%.1f", f.distanceCm))cm · Y/P/R \(yawS)/\(pitS)/\(rolS)° · 相位 \(f.leftEmissionPhase.label) · 刺激 \(String(format: "%.0f%%", f.stimulusIntensity * 100))"
-            NSAttributedString(string: subStr, attributes: [
-                .font: UIFont.monospacedSystemFont(ofSize: 13, weight: .medium),
-                .foregroundColor: colSub,
-            ]).draw(at: CGPoint(x: 16, y: 44))
-
-            // 左右眼 4× 放大特写画中画
-            let boxSize: CGFloat = min(184, W * 0.27)
-            drawEyeZoomBox(
-                label: "L 4×",
-                boxRect: CGRect(x: 14, y: 88, width: boxSize, height: boxSize),
-                irisX: f.leftIrisX?.floatValue, irisY: f.leftIrisY?.floatValue, irisD: f.leftIrisDiameterPx?.floatValue,
-                glintX: f.leftGlintX?.floatValue, glintY: f.leftGlintY?.floatValue,
-                source: f.leftGlintSource, tint: colCyan
-            )
-            drawEyeZoomBox(
-                label: "R 4×",
-                boxRect: CGRect(x: W - boxSize - 14, y: 88, width: boxSize, height: boxSize),
-                irisX: f.rightIrisX?.floatValue, irisY: f.rightIrisY?.floatValue, irisD: f.rightIrisDiameterPx?.floatValue,
-                glintX: f.rightGlintX?.floatValue, glintY: f.rightGlintY?.floatValue,
-                source: f.rightGlintSource, tint: colAmber
-            )
-
-            // 遮盖拐点高亮横幅（若处于精确拐点后 0..600ms 窗口）
-            if let hit = coverEvents.first(where: { f.elapsedSec >= $0.0 && f.elapsedSec <= $0.0 + 0.65 }) {
-                let tag = hit.1 == "COVER_CONTRALATERAL" ? "显斜检测窗 · 对侧眼 \(hit.2)" : "隐斜/IXT 复位窗 · 同侧眼 \(hit.2)"
-                let bannerRect = CGRect(x: 16, y: H - 142, width: W - 32, height: 30)
-                ctx.setFillColor(colWarn.withAlphaComponent(0.9).cgColor)
-                ctx.fill(bannerRect)
-                NSAttributedString(string: " \(tag) (dt=\(String(format: "+%.0f", (f.elapsedSec - hit.0) * 1000))ms)", attributes: [
-                    .font: UIFont.monospacedSystemFont(ofSize: 14, weight: .bold),
-                    .foregroundColor: UIColor.black,
-                ]).draw(at: CGPoint(x: 22, y: H - 137))
-            }
-
-            // 底部科研遥测条
-            let botBar = CGRect(x: 0, y: H - 104, width: W, height: 104)
-            ctx.setFillColor(colPanel.cgColor)
-            ctx.fill(botBar)
-
-            let h3d = f.hde3dPrism.map { String(format: "%+.1fΔ", $0.doubleValue) } ?? "—"
-            let v3d = f.vde3dPrism.map { String(format: "%+.1fΔ", $0.doubleValue) } ?? "—"
-            let hLin = f.hdePrism.map { String(format: "%+.1fΔ", $0.doubleValue) } ?? "—"
-            let line1 = "3D HDE \(h3d) · 3D VDE \(v3d)   (线性对照 \(hLin))"
-            let mainColor = (f.hde3dPrism.map { abs($0.doubleValue) >= 10.0 } ?? false) ? colRed : colCyan
-            NSAttributedString(string: line1, attributes: [
-                .font: UIFont.monospacedSystemFont(ofSize: 18, weight: .bold),
-                .foregroundColor: mainColor,
-            ]).draw(at: CGPoint(x: 16, y: H - 92))
+            let vergStr = f.hdeVergence3dPrism.map { String(format: "%+.1fΔ", $0.doubleValue) } ?? "—"
+            let v3dStr = f.vde3dPrism.map { String(format: "%+.1fΔ", $0.doubleValue) } ?? "—"
+            let linStr = f.hdePrism.map { String(format: "%+.1fΔ", $0.doubleValue) } ?? "—"
+            let rollStr = f.rollCorrectionDeg.map { String(format: "%+.1f°", $0.doubleValue) } ?? "—"
+            drawText("3D 聚散 HDE", at: CGPoint(x: 960, y: 406), color: colSub, size: 12)
+            drawText(vergStr, at: CGPoint(x: 960, y: 424), color: colCyan, size: 28, bold: true, mono: true)
+            drawText("3D VDE \(v3dStr)  ·  线性 \(linStr)", at: CGPoint(x: 960, y: 462), color: colInk, size: 13, mono: true)
+            drawText("Roll 旋正：\(rollStr)", at: CGPoint(x: 960, y: 484), color: colSub, size: 12, mono: true)
 
             let lVis = f.leftVisibilityContrast.map { String(format: "%.0f", $0.floatValue) } ?? "-"
             let rVis = f.rightVisibilityContrast.map { String(format: "%.0f", $0.floatValue) } ?? "-"
             let cov = f.coveredEye ?? "NONE"
-            let rollCorr = f.rollCorrectionDeg.map { String(format: "%+.1f°", $0.doubleValue) } ?? "-"
-            let line2 = "遮盖:\(cov) · 可见对比度 L:\(lVis) R:\(rVis) · Roll旋正:\(rollCorr) · 候选:\(f.leftCandidateCount)/\(f.rightCandidateCount)"
-            NSAttributedString(string: line2, attributes: [
-                .font: UIFont.monospacedSystemFont(ofSize: 13, weight: .medium),
-                .foregroundColor: colInk,
-            ]).draw(at: CGPoint(x: 16, y: H - 56))
+            drawText("遮盖状态：\(cov)", at: CGPoint(x: 960, y: 514), color: cov == "NONE" ? colInk : colWarn, size: 13, bold: true, mono: true)
+            drawText("眼区对比度 L:\(lVis)  R:\(rVis)", at: CGPoint(x: 960, y: 536), color: colSub, size: 12, mono: true)
 
-            let line3 = f.rejectionReason.map { "拒判: \($0)" } ?? "帧有效 · 绿十字=亮灯观测 / 琥珀虚圈=灭灯预测 / 虚线框=\(Int(searchRadius * 100))%R"
-            NSAttributedString(string: line3, attributes: [
-                .font: UIFont.monospacedSystemFont(ofSize: 12, weight: .regular),
-                .foregroundColor: f.rejectionReason != nil ? colRed : colSub,
-            ]).draw(at: CGPoint(x: 16, y: H - 28))
+            if let hit = coverEvents.first(where: { f.elapsedSec >= $0.0 && f.elapsedSec <= $0.0 + 0.65 }) {
+                let tag = hit.1 == "COVER_CONTRALATERAL" ? "显斜窗·对侧 \(hit.2)" : "隐斜/IXT窗·\(hit.2)"
+                let banner = CGRect(x: 956, y: 564, width: 296, height: 30)
+                ctx.setFillColor(colWarn.cgColor)
+                ctx.fill(banner)
+                drawText(" \(tag) \(String(format: "+%.0f", (f.elapsedSec - hit.0) * 1000))ms",
+                         at: CGPoint(x: 962, y: 571), color: UIColor.black, size: 13, bold: true, mono: true)
+            } else {
+                drawText("双指捏合可 1–6× 放大检视眼区像素", at: CGPoint(x: 960, y: 574), color: colSub, size: 11)
+            }
+
+            // ==================== 4) 底部通栏：完整状态遥测 ====================
+            let botBar = CGRect(x: 16, y: 620, width: 1248, height: 86)
+            ctx.setFillColor(colSurface.cgColor)
+            ctx.fill(botBar)
+            ctx.setStrokeColor(colHairline.cgColor)
+            ctx.setLineWidth(1.2)
+            ctx.stroke(botBar)
+
+            let yawS = f.yawDeg.map { String(format: "%+.1f", $0.floatValue) } ?? "-"
+            let pitS = f.pitchDeg.map { String(format: "%+.1f", $0.floatValue) } ?? "-"
+            let rolS = f.rollDeg.map { String(format: "%+.1f", $0.floatValue) } ?? "-"
+            let line1 = "StrabismusLab v0.9.1  ·  \(f.stage.title)  ·  #\(f.index)  ·  t=\(String(format: "%.2fs", f.elapsedSec))  ·  距离 \(String(format: "%.1f", f.distanceCm)) cm  ·  头姿 Y/P/R \(yawS)/\(pitS)/\(rolS)°  ·  \(String(format: "%.0f", f.fps)) fps"
+            drawText(line1, at: CGPoint(x: 30, y: 634), color: colInk, size: 14, bold: true, mono: true)
+
+            let line2 = f.rejectionReason.map { "本帧拒判：\($0)" }
+                ?? "质量门控通过 · 上排原始高清眼区 vs 下排同帧叠加对照 · 绿十字=亮灯实测 / 青十字=弱观测 / 琥珀虚圈=灭灯预测 / 白小圈=单帧候选池"
+            drawText(line2, at: CGPoint(x: 30, y: 668), color: f.rejectionReason != nil ? colRed : colSub, size: 12, mono: false)
         }
     }
 }

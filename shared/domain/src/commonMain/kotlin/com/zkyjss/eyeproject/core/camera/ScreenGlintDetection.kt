@@ -128,7 +128,7 @@ internal object ScreenGlintDetection {
             var head = 0
             var tail = 1
             pending[0] = peak
-            val stamp = index + 1
+            var stamp = index * 2 + 1
             visited[peak] = stamp
             var weight = 0f
             var weightedX = 0f
@@ -138,35 +138,61 @@ internal object ScreenGlintDetection {
             var weightedXY = 0f
             var halfHeightArea = 0
             var clipped = false
-            while (head < tail) {
-                val p = pending[head++]
-                val px = p % width
-                val py = p / width
-                val value = (gray[p] - background).toFloat()
-                weight += value
-                weightedX += px * value
-                weightedY += py * value
-                weightedX2 += px * px * value
-                weightedY2 += py * py * value
-                weightedXY += px * py * value
-                if (value >= signal * 0.5f) {
-                    halfHeightArea++
-                    if (abs(px - x) == halfWindow || abs(py - y) == halfWindow ||
-                        intArrayOf(p - 1, p + 1, p - width, p + width).any {
-                            !mask[it] && gray[it] - background >= signal * 0.5f
-                        }) clipped = true
-                }
-                for (dy in -1..1) for (dx in -1..1) {
-                    if (abs(px + dx - x) > halfWindow || abs(py + dy - y) > halfWindow) continue
-                    val next = p + dy * width + dx
-                    if (mask[next] && visited[next] != stamp && gray[next] - background >= signal * 0.35f) {
-                        visited[next] = stamp
-                        pending[tail++] = next
+
+            fun extractBlob(floorFraction: Float, localStamp: Int, maxRadiusPx: Int) {
+                head = 0
+                tail = 1
+                pending[0] = peak
+                visited[peak] = localStamp
+                weight = 0f
+                weightedX = 0f
+                weightedY = 0f
+                weightedX2 = 0f
+                weightedY2 = 0f
+                weightedXY = 0f
+                halfHeightArea = 0
+                clipped = false
+                val floor = signal * floorFraction
+                val halfThresh = signal * maxOf(0.5f, floorFraction)
+                while (head < tail) {
+                    val p = pending[head++]
+                    val px = p % width
+                    val py = p / width
+                    val value = (gray[p] - background).toFloat()
+                    weight += value
+                    weightedX += px * value
+                    weightedY += py * value
+                    weightedX2 += px * px * value
+                    weightedY2 += py * py * value
+                    weightedXY += px * py * value
+                    if (value >= halfThresh) {
+                        halfHeightArea++
+                        if (abs(px - x) == maxRadiusPx || abs(py - y) == maxRadiusPx ||
+                            intArrayOf(p - 1, p + 1, p - width, p + width).any {
+                                !mask[it] && gray[it] - background >= halfThresh
+                            }) clipped = true
+                    }
+                    for (dy in -1..1) for (dx in -1..1) {
+                        if (abs(px + dx - x) > maxRadiusPx || abs(py + dy - y) > maxRadiusPx) continue
+                        val next = p + dy * width + dx
+                        if (mask[next] && visited[next] != localStamp && gray[next] - background >= floor) {
+                            visited[next] = localStamp
+                            pending[tail++] = next
+                        }
                     }
                 }
             }
-            val diameter = 2f * sqrt(halfHeightArea / kotlin.math.PI.toFloat())
+
+            extractBlob(floorFraction = 0.35f, localStamp = stamp, maxRadiusPx = halfWindow)
+            var diameter = 2f * sqrt(halfHeightArea / kotlin.math.PI.toFloat())
             val maxDiameter = if (expectedDiameterPx != null) max(5f, max(radius * 0.24f, expectedDiameterPx * 2.8f)) else maxOf(4f, radius * 0.19f)
+            // 当屏幕白点紧贴或叠加在天花板灯条/窗面浅亮反光上时，0.35 阈值会与周围亮背景粘连；
+            // 对高对比度局部峰用更紧的 0.65 核心阈值二次提取，将真正的小亮斑从浅亮大背景中分离出来。
+            if ((clipped || diameter > maxDiameter) && signal >= 24 && snr >= 6.0f) {
+                stamp += 1
+                extractBlob(floorFraction = 0.65f, localStamp = stamp, maxRadiusPx = minOf(halfWindow, 5))
+                diameter = 2f * sqrt(halfHeightArea / kotlin.math.PI.toFloat())
+            }
             if (clipped || weight <= 0f || diameter > maxDiameter) continue
             val cx = weightedX / weight
             val cy = weightedY / weight

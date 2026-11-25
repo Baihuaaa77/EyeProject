@@ -52,7 +52,7 @@ struct LabConsoleView: View {
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("StrabismusLab").font(LabFont.title).foregroundColor(LabPalette.inkPrimary)
-                            Text("3D CODED CORNEAL LAB · v0.9").font(LabFont.microMono).foregroundColor(LabPalette.accent)
+                            Text("3D CODED CORNEAL LAB · v0.9.1").font(LabFont.microMono).foregroundColor(LabPalette.accent)
                         }
                         Spacer()
                         Button(action: store.openHistory) {
@@ -278,21 +278,22 @@ struct LabCaptureStageView: View {
                     .onAppear { store.onDisplayTick() }
                     .onChange(of: context.date) { _ in store.onDisplayTick() }
 
-                // 顶部贴近前摄的编码白点（中央精密注视十字，减少看近共轭偏视）
+                // 顶部贴近前摄的纯白实心编码白点（外围细环引导注视，绝不在核心区画大红十字挖暗峰值！）
                 if store.live.stage.usesOpticalStimulus && !store.live.farWaitingConfirm {
                     let lum = store.live.stage.forcesSteadyStimulus ? 1.0 : Double(min(1, max(0, store.renderedIntensity)))
                     let dotPt = CGFloat(min(140, max(28, store.config.stimulusDiameterMm * 6.3)))
                     VStack {
                         ZStack {
+                            if store.live.stage != .farFixation {
+                                Circle()
+                                    .stroke(LabPalette.accent.opacity(0.45), lineWidth: 1.5)
+                                    .frame(width: dotPt + 10, height: dotPt + 10)
+                            }
                             Circle()
                                 .fill(Color(white: lum))
                                 .frame(width: dotPt, height: dotPt)
                             if lum > 0.5 && store.live.stage != .farFixation {
-                                ZStack {
-                                    Rectangle().fill(LabPalette.danger.opacity(0.85)).frame(width: 14, height: 2)
-                                    Rectangle().fill(LabPalette.danger.opacity(0.85)).frame(width: 2, height: 14)
-                                    Circle().fill(LabPalette.accent).frame(width: 4, height: 4)
-                                }
+                                Circle().fill(LabPalette.accent.opacity(0.45)).frame(width: 2.5, height: 2.5)
                             }
                         }
                         .padding(.top, 4)
@@ -400,15 +401,13 @@ struct LabDashboardView: View {
     @State private var tab = 0
     @State private var stageChoice = 0
     @State private var eyeChoice = 0
-    @State private var videoMode = 0 // 0 = 叠加可视化 annotated.mp4, 1 = 原始 original.mp4
-    @State private var player: AVPlayer?
+    @State private var videoMode = 0 // 0 = 四联科研拼接 annotated.mp4 (16:9), 1 = 原始高清 original.mp4 (9:16)
     @State private var shareItem: URL?
 
     var body: some View {
         VStack(spacing: 0) {
             HStack {
                 Button(action: {
-                    player?.pause()
                     store.backToConsole()
                 }) {
                     Image(systemName: "chevron.left").foregroundColor(LabPalette.inkPrimary).frame(width: 44, height: 44)
@@ -475,26 +474,10 @@ struct LabDashboardView: View {
             }
         }
         .background(LabPalette.canvas.ignoresSafeArea())
-        .onChange(of: tab) { newTab in
-            if newTab == 3 { reloadPlayer() } else { player?.pause() }
-        }
-        .onChange(of: videoMode) { _ in reloadPlayer() }
-        .onChange(of: store.annotatedVideoURL) { _ in if tab == 3 { reloadPlayer() } }
         .sheet(isPresented: Binding(get: { shareItem != nil }, set: { if !$0 { shareItem = nil } })) {
             if let url = shareItem {
                 LabShareSheet(items: [url])
             }
-        }
-    }
-
-    private func reloadPlayer() {
-        let targetURL = (videoMode == 0 ? store.annotatedVideoURL : store.originalVideoURL)
-            ?? store.annotatedVideoURL ?? store.originalVideoURL
-        player?.pause()
-        if let url = targetURL {
-            player = AVPlayer(url: url)
-        } else {
-            player = nil
         }
     }
 
@@ -683,54 +666,53 @@ struct LabDashboardView: View {
     }
 
     private var videoContent: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        let activeURL = (videoMode == 0 ? store.annotatedVideoURL : store.originalVideoURL)
+            ?? store.annotatedVideoURL ?? store.originalVideoURL
+        let isQuad = (activeURL == store.annotatedVideoURL)
+
+        return VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 8) {
-                pillButton("叠加可视化视频 (4× 眼区)", active: videoMode == 0) { videoMode = 0 }
-                pillButton("原始高清视频", active: videoMode == 1) { videoMode = 1 }
+                pillButton("四联科研拼接 (16:9)", active: videoMode == 0) { videoMode = 0 }
+                pillButton("原始高清视频 (9:16)", active: videoMode == 1) { videoMode = 1 }
             }
 
             if store.renderingVideo {
                 VStack(spacing: 10) {
                     ProgressView(value: store.videoRenderProgress).tint(LabPalette.accent)
-                    Text("正在用 v0.9 最终解调结果渲染叠加可视化视频（\(Int(store.videoRenderProgress * 100))%）…")
+                    Text("正在合成 1280×720 四联科研对比视频（\(Int(store.videoRenderProgress * 100))%）…")
                         .font(LabFont.caption).foregroundColor(LabPalette.inkSecondary)
                 }
                 .labCard()
-            } else if let activePlayer = player {
-                VideoPlayer(player: activePlayer)
-                    .aspectRatio(9.0 / 16.0, contentMode: .fit)
-                    .clipShape(RoundedRectangle(cornerRadius: 14))
-                    .overlay(RoundedRectangle(cornerRadius: 14).stroke(LabPalette.hairline, lineWidth: 1))
+            } else if let url = activeURL {
+                LabZoomableVideoPlayer(url: url, aspectRatio: isQuad ? (16.0 / 9.0) : (9.0 / 16.0))
+                    .id(url)
+                    .labCard()
 
-                let currentURL = (videoMode == 0 ? store.annotatedVideoURL : store.originalVideoURL)
-                    ?? store.annotatedVideoURL ?? store.originalVideoURL
-                if let url = currentURL {
-                    HStack(spacing: 10) {
-                        Button {
-                            store.saveVideoToPhotos(url)
-                        } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: "photo.on.rectangle.angled")
-                                Text("保存到相册").font(LabFont.caption)
-                            }
-                            .frame(maxWidth: .infinity, minHeight: 44)
-                            .background(LabPalette.accent)
-                            .foregroundColor(LabPalette.onAccent)
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                HStack(spacing: 10) {
+                    Button {
+                        store.saveVideoToPhotos(url)
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "photo.on.rectangle.angled")
+                            Text("保存到相册").font(LabFont.caption)
                         }
-                        Button {
-                            shareItem = url
-                        } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: "square.and.arrow.up")
-                                Text("分享 MP4").font(LabFont.caption)
-                            }
-                            .frame(maxWidth: .infinity, minHeight: 44)
-                            .background(LabPalette.surfaceElevated)
-                            .foregroundColor(LabPalette.inkPrimary)
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
-                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(LabPalette.hairline, lineWidth: 1))
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .background(LabPalette.accent)
+                        .foregroundColor(LabPalette.onAccent)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                    }
+                    Button {
+                        shareItem = url
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "square.and.arrow.up")
+                            Text("分享 MP4").font(LabFont.caption)
                         }
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .background(LabPalette.surfaceElevated)
+                        .foregroundColor(LabPalette.inkPrimary)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(LabPalette.hairline, lineWidth: 1))
                     }
                 }
                 if let banner = store.photoSaveBanner {
@@ -745,11 +727,11 @@ struct LabDashboardView: View {
             }
 
             VStack(alignment: .leading, spacing: 6) {
-                Text("叠加图层图例").font(LabFont.section).foregroundColor(LabPalette.inkPrimary)
-                auditRow("顶部左右角画中画", "双眼 4× 实时放大特写")
-                auditRow("灰白圆 / 青·琥珀虚线圈", "虹膜外缘 / \(Int(report.config.searchRadiusFraction * 100))%R 搜索区")
-                auditRow("绿十字 / 琥珀虚圈", "亮灯实测映光 / 灭灯门控预测")
-                auditRow("顶部状态灯 / 底部横幅", "光码相位 ON·OFF / 遮盖复位窗")
+                Text("四联科研拼接视频图例").font(LabFont.section).foregroundColor(LabPalette.inkPrimary)
+                auditRow("中上 / 中下两排", "原始纯净眼区放大 vs 同帧映光叠加对照")
+                auditRow("左右格顺序", "与主画面左右完全一致（不交叉错位）")
+                auditRow("绿十字 / 白小圈 / 琥珀虚圈", "实测映光 / 单帧候选池 / 灭灯预测")
+                auditRow("交互操作", "双指 1–6× 缩放 · 拖动 · 双击 · ±1帧单步")
             }
             .labCard()
         }

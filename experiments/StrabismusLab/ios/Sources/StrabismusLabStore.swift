@@ -249,7 +249,16 @@ final class StrabismusLabStore: ObservableObject {
         let completed = engine.onFrameWithIntrinsics(frame: frame, intrinsics: intrinsics, nowMs: nowMs)
         let newIndex = engine.lastLoggedFrameIndex
         if recordVideo && destination == .capture && newIndex > prevIndex {
-            videoRecorder.appendFrame(pixelBuffer, frameIndex: newIndex, timeMs: nowMs)
+            let face = frame.faces.first
+            let lCands = (face?.leftOptical?.reflexCandidates ?? []).map { ($0.point.x, $0.point.y) }
+            let rCands = (face?.rightOptical?.reflexCandidates ?? []).map { ($0.point.x, $0.point.y) }
+            videoRecorder.appendFrame(
+                pixelBuffer,
+                frameIndex: newIndex,
+                timeMs: nowMs,
+                leftCandidates: lCands,
+                rightCandidates: rCands
+            )
         }
         if let completed = completed {
             finishWithReport(completed)
