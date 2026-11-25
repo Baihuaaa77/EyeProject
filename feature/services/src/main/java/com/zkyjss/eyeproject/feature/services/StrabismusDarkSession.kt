@@ -20,7 +20,7 @@ import com.zkyjss.eyeproject.core.ui.component.*
 import com.zkyjss.eyeproject.core.ui.component.EyeText as BaseEyeText
 import kotlinx.coroutines.delay
 
-/** 正式采集中，黑屏上的实心白点同时作为视标与映光光源；提示固定在底部，不挤动视标。 */
+/** 月夜森林萤火虫全屏注视与交替遮盖舞台；底部浮层固定不挤动萤火虫注视锚点。 */
 @Composable
 internal fun StrabismusDarkSession(s: ScreeningState, vm: ScreeningTestViewModel, onBack: () -> Unit,
                                   onSettings: () -> Unit, onHelp: () -> Unit, distance: @Composable () -> Unit) {
@@ -33,29 +33,41 @@ internal fun StrabismusDarkSession(s: ScreeningState, vm: ScreeningTestViewModel
     var footerHeight by remember { mutableStateOf(230.dp) }
     val ppm = LocalContext.current.resources.displayMetrics.xdpi / 25.4f
     var lightChip by remember { mutableIntStateOf(-1) }
+    var animClock by remember { mutableLongStateOf(0L) }
     LaunchedEffect(s.step) {
         while (true) {
             lightChip = vm.engine.reflectionChip()
+            animClock += 40L
             delay(40L)
         }
     }
-    Box(Modifier.fillMaxSize().background(colors.black).navigationBarsPadding()) {
+    Box(Modifier.fillMaxSize().background(EyeGamePalette.Firefly.skyTop).navigationBarsPadding()) {
+        // 全屏深蓝月夜森林底图
+        Canvas(Modifier.fillMaxSize()) {
+            drawMoonlitForestBackdrop(phase = (animClock % 4800L) / 4800f)
+        }
+        // 上部萤火虫注视舞台（坐标上报与原映光位置一致，萤火虫灵巧精致不遮挡月夜）
         Canvas(Modifier.fillMaxSize().statusBarsPadding().padding(bottom = footerHeight)
             .onGloballyPositioned { origin = it.positionInWindow() }) {
             val diameter = StrabismusProtocol.targetDiameterMm(s.fields["年龄"]?.toIntOrNull()) * ppm
-            val radius = (diameter / 2f).coerceAtMost(minOf(size.width, size.height) / 4f)
-            val point = Offset(center.x, radius + 4.dp.toPx())
+            val radius = (diameter * 0.42f).coerceIn(14.dp.toPx(), 24.dp.toPx())
+            val point = Offset(center.x, radius * 2.2f + 16.dp.toPx())
             val drawnChip = lightChip
             val lightOn = vm.engine.reflectionLightOn(drawnChip)
-            if (lightOn) drawCircle(colors.white, radius, point)
+            drawMoonlitFirefly(
+                center = point,
+                radius = radius,
+                wingPhase = (animClock % 720L) / 720f,
+                glowIntensity = if (lightOn) 1f else 0.45f,
+            )
             vm.engine.reportReflectionLight(drawnChip)
             vm.reportGazeTarget(origin.x + point.x, origin.y + point.y)
         }
         Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().onSizeChanged { footerHeight = with(density) { it.height.toDp() } }.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             BaseEyeText(if (s.stabilityInterrupted) "本段已中断" else when (s.step) {
-                ScreeningStep.COVER -> if (s.reflectionPreparing) s.instruction else if (s.coverHolding) "保持：${s.coverMarks.lastOrNull()?.label.orEmpty()}" else "下一步：${StrabismusProtocol.COVER_SEQUENCE.getOrNull(s.coverMarks.size)?.label.orEmpty()}"
-                ScreeningStep.FAR_FIXATION -> "越过手机看6米外 · ${s.secondsLeft}秒"
-                else -> "${s.secondsLeft}秒"
+                ScreeningStep.COVER -> if (s.reflectionPreparing) s.instruction else if (s.coverHolding) "保持：${s.coverMarks.lastOrNull()?.label.orEmpty()}，看着萤火虫" else "下一步：${StrabismusProtocol.COVER_SEQUENCE.getOrNull(s.coverMarks.size)?.label.orEmpty()}"
+                ScreeningStep.FAR_FIXATION -> "越过月夜萤火虫看 6 米外 · ${s.secondsLeft}秒"
+                else -> "双眼注视萤火虫 · ${s.secondsLeft}秒"
             }, style = typography.subtitle, color = colors.white)
             val action = StrabismusProtocol.COVER_SEQUENCE.getOrNull(s.coverMarks.size - 1)
             if (s.step == ScreeningStep.COVER && s.coverHolding && action != null && action.holdMs > 0) {

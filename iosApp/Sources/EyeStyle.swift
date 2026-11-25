@@ -85,6 +85,61 @@ enum EyeStyle {
         /// 袖子的描边：手臂叠在身体上时把两者分开
         static let shirtShade = EyeStyle.dyn(0x4A72B3, 0x5479B4)
     }
+    /// 三项自测趣味小游戏场景色板（与安卓 EyeGamePalette 同值）。
+    enum Game {
+        enum Theater {
+            static let stageBg = Color(rgb: 0x221A14)
+            static let stageGlow = Color(rgb: 0x3E2D20)
+            static let tearCyan = Color(rgb: 0x7ED6DF)
+            static let tearHighlight = Color(rgb: 0xDFF8FB)
+            static let tearDeep = Color(rgb: 0x3A8FA0)
+            static let leafSage = Color(rgb: 0x8DB596)
+            static let warmLamp = Color(rgb: 0xFFD166)
+            static let steam = Color(rgb: 0xF4EAE0)
+        }
+        enum PostOffice {
+            static let skyTop = Color(rgb: 0x478598)
+            static let skyMid = Color(rgb: 0x7CB2BC)
+            static let skyBottom = Color(rgb: 0xC2E1DF)
+            static let cloud = Color(rgb: 0xEAF5F3)
+            static let townFar = Color(rgb: 0x69A2AA)
+            static let spireGreen = Color(rgb: 0x4B8E78)
+            static let lampGold = Color(rgb: 0xF3BF68)
+            static let lampBrass = Color(rgb: 0xD08334)
+            static let lampBeam = Color(rgb: 0xFFF3C4)
+            static let envelopeBase = Color(rgb: 0x1E388E)
+            static let envelopeDeep = Color(rgb: 0x14276B)
+            static let envelopeShadow = Color(rgb: 0x0D1B4D)
+            static let envelopeFiligree = Color(rgb: 0xC4D3F2)
+            static let flowerOuter = Color(rgb: 0x4A74F0)
+            static let flowerInner = Color(rgb: 0x80A2FF)
+            static let flowerCenter = Color(rgb: 0x192A6E)
+            static let stemGreen = Color(rgb: 0x4D8A67)
+            static let waxSeal = Color(rgb: 0x9EA8BA)
+            static let optotypePinkWhite = Color(rgb: 0xFFE4EE)
+            static let boxBody = Color(rgb: 0x3A5A4E)
+            static let boxTop = Color(rgb: 0x567A6C)
+            static let boxSlot = Color(rgb: 0x1E332B)
+            static let boxRivet = Color(rgb: 0xC2D4CC)
+        }
+        enum Firefly {
+            static let skyTop = Color(rgb: 0x071326)
+            static let skyMid = Color(rgb: 0x0E2549)
+            static let skyBottom = Color(rgb: 0x183D68)
+            static let moon = Color(rgb: 0xE3F5FF)
+            static let moonHalo = Color(rgb: 0x7AB8E0)
+            static let treeFar = Color(rgb: 0x0D2442)
+            static let treeNear = Color(rgb: 0x061020)
+            static let creek = Color(rgb: 0x1D4E7A)
+            static let creekHighlight = Color(rgb: 0x7EC0E6)
+            static let bodyDark = Color(rgb: 0x2C2017)
+            static let bodyWarm = Color(rgb: 0x6B4226)
+            static let wing = Color(rgb: 0xE4F2E8)
+            static let glowCore = Color(rgb: 0xFFFDE3)
+            static let glowMid = Color(rgb: 0xFFDF6B)
+            static let glowOuter = Color(rgb: 0xF5B335)
+        }
+    }
     static let success = dyn(0xB6C6B3, 0xB6C6B3)
     static let successSoft = dyn(0x262924, 0x262924)
     static let warningSoft = dyn(0x51331D, 0x51331D)

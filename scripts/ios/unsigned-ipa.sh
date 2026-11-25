@@ -19,5 +19,5 @@ APP="build/DeviceData/Build/Products/Release-iphoneos/EyeProject.app"
 test -f "$APP/EyeProject"
 rm -rf build/unsigned && mkdir -p build/unsigned/Payload
 cp -R "$APP" build/unsigned/Payload/
-(cd build/unsigned && zip -qry EyeProject-unsigned.ipa Payload)
-echo "未签名 IPA：iosApp/build/unsigned/EyeProject-unsigned.ipa"
+(cd build/unsigned && zip -qry EyeProject-Game-unsigned.ipa Payload)
+echo "未签名 IPA：iosApp/build/unsigned/EyeProject-Game-unsigned.ipa"

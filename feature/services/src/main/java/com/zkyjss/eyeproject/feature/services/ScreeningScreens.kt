@@ -137,10 +137,10 @@ private fun ScreeningScreen(kind: ScreeningKind, onBack: () -> Unit, onEditSubje
         // 换距离的「请移动到 xx 厘米处」由距离提示播报，到位后不再重复
         ScreeningStep.DISTANCE_CURVE -> "停稳后视标会自动出现，请选择开口方向。"
         ScreeningStep.FLIPPER -> if (s.flipperCheck) "先确认两个距离都能看清。停稳后视标会自动出现，请选择开口方向。" else "停稳后视标会自动出现，请选择开口方向。"
-        ScreeningStep.FIXATION -> "请看着白点，保持三十三厘米。"
+        ScreeningStep.FIXATION -> "请看着月夜里的萤火虫，保持三十三厘米。"
         ScreeningStep.FAR_FIXATION -> if (s.farWaiting) FAR_WAIT_PROMPT else "请看六米外的目标，头和手机不动。"
         ScreeningStep.COVER -> coverSpokenPrompt(s)
-        ScreeningStep.PURSUIT -> "请只用眼睛跟随圆点，头不要动。"
+        ScreeningStep.PURSUIT -> "请只用眼睛跟随飞舞的萤火虫，头不要动。"
         ScreeningStep.RESULT -> "测试完成，请查看结果。"
     }
     val guidance = screeningGuidance(s)
@@ -314,7 +314,7 @@ private fun EnvironmentContent(kind: ScreeningKind, s: ScreeningState, vm: Scree
 @Composable
 internal fun VisionContent(s: ScreeningState, vm: ScreeningTestViewModel) {
     val size = with(LocalDensity.current) { s.trialOptotypePx.toDp() }
-    TestStageCard(title = "第 ${s.visionEye.ordinal + 1}/3 轮 · ${s.visionEye.label}") {
+    TestStageCard(title = "星空邮局 · 第 ${s.visionEye.ordinal + 1}/3 轮 · ${s.visionEye.label}") {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
             if (s.resolutionAdvancePending) {
                 EyeText(s.nearStopReason.orEmpty(), LocalEyeTypography.current.body, LocalEyeColors.current.textPrimary)
@@ -325,10 +325,10 @@ internal fun VisionContent(s: ScreeningState, vm: ScreeningTestViewModel) {
             } else if (s.nearRetryRequired) {
                 EyeButton("重做本题", EyeButtonRole.PRIMARY, vm::retryNearQuestion)
             } else {
-                EyeText("本字号第 ${(s.trialIndex + 1).coerceAtMost(4)}/4 题",
+                EyeText("第 ${(s.trialIndex + 1).coerceAtMost(4)}/4 封信 · 看信封上的 E 选邮筒",
                     LocalEyeTypography.current.bodySecondary, LocalEyeColors.current.textSecondary)
-                if (!s.trialVisible) EyeText("停稳后视标会自动出现", LocalEyeTypography.current.subtitle, LocalEyeColors.current.textSecondary)
-                OptotypeAnswerPad(s.direction, size, s.trialVisible, gesture = s.gestureFeedback) { vm.answer(it) }
+                if (!s.trialVisible) EyeText("停稳后信封上的 E 会自动出现", LocalEyeTypography.current.subtitle, LocalEyeColors.current.textSecondary)
+                PostOfficeEnvelopePad(s.direction, size, s.trialVisible, gesture = s.gestureFeedback) { vm.answer(it) }
             }
             if (!s.resolutionAdvancePending) s.nearStopReason?.let {
                 EyeText(it, LocalEyeTypography.current.bodySecondary, LocalEyeColors.current.textSecondary)
@@ -343,7 +343,7 @@ internal fun PushUpContent(s: ScreeningState, vm: ScreeningTestViewModel) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
     val done = s.nearPoints.count { it.eye == s.visionEye }
-    TestStageCard(title = "第 ${s.visionEye.ordinal + 1}/2 轮 · ${s.visionEye.label}") {
+    TestStageCard(title = "星空邮局 · 第 ${s.visionEye.ordinal + 1}/2 轮 · ${s.visionEye.label}") {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
             EyeText("本眼第 ${(done + 1).coerceAtMost(PresbyopiaProtocol.PUSH_REPEATS)}/${PresbyopiaProtocol.PUSH_REPEATS} 次",
                 typography.bodySecondary, colors.textSecondary)
@@ -353,8 +353,8 @@ internal fun PushUpContent(s: ScreeningState, vm: ScreeningTestViewModel) {
                 EyeButton("开始第 ${done + 1} 次", EyeButtonRole.PRIMARY, vm::startPushTrial,
                     enabled = s.presbyopiaCoverReady && s.distanceCm >= PresbyopiaProtocol.PUSH_START_MIN_CM)
             } else {
-                EyeText("缓慢移近，每秒一两厘米", typography.body, colors.textPrimary)
-                if (s.trialVisible) OptotypeSurface(0, size)
+                EyeText("缓慢移近信封，每秒一两厘米", typography.body, colors.textPrimary)
+                if (s.trialVisible) PostOfficeEnvelopeSurface(0, size)
                 EyeButton("开始持续模糊", EyeButtonRole.PRIMARY, vm::markPushBlur, Modifier.fillMaxWidth())
                 if (s.distanceCm in 1f..PresbyopiaProtocol.PUSH_MIN_CM) {
                     EyeButton("仍看得清", EyeButtonRole.SECONDARY, vm::markPushStillClear, Modifier.fillMaxWidth())
@@ -368,20 +368,20 @@ internal fun PushUpContent(s: ScreeningState, vm: ScreeningTestViewModel) {
 /** 单眼移近法遮哪只眼（界面与语音共用）。 */
 internal fun pushEyeCue(eye: VisionEye) = if (eye == VisionEye.LEFT) "遮住右眼，用左眼看" else "遮住左眼，用右眼看"
 
-/** 距离—视觉表现：在 67 / 50 / 33 cm 依次停稳，视标自动出现。 */
+/** 距离—视觉表现：在 67 / 50 / 33 cm 依次停稳，信封视标自动出现。 */
 @Composable
 private fun CurveContent(s: ScreeningState, vm: ScreeningTestViewModel) {
     val size = with(LocalDensity.current) { s.trialOptotypePx.toDp() }
     val target = PresbyopiaProtocol.CURVE_DISTANCES.getOrElse(s.curveIndex) { 40f }
-    TestStageCard(title = "第 ${s.curveIndex + 1}/${PresbyopiaProtocol.CURVE_DISTANCES.size} 轮 · ${target.toInt()} cm") {
+    TestStageCard(title = "星空邮局 · 第 ${s.curveIndex + 1}/${PresbyopiaProtocol.CURVE_DISTANCES.size} 轮 · ${target.toInt()} cm") {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
             if (s.resolutionAdvancePending) {
                 EyeButton("继续", EyeButtonRole.PRIMARY, vm::advanceAfterDisplayLimit)
             } else {
-                EyeText("本字号第 ${s.trialIndex + 1}/${PresbyopiaProtocol.CURVE_TRIALS_PER_LEVEL} 题",
+                EyeText("第 ${s.trialIndex + 1}/${PresbyopiaProtocol.CURVE_TRIALS_PER_LEVEL} 封信 · 看信封上的 E 选邮筒",
                     LocalEyeTypography.current.bodySecondary, LocalEyeColors.current.textSecondary)
                 if (!s.trialVisible) EyeText("移到 ${target.toInt()} cm 并停稳", LocalEyeTypography.current.body, LocalEyeColors.current.textPrimary)
-                OptotypeAnswerPad(s.direction, size, s.trialVisible, gesture = s.gestureFeedback) { vm.answer(it) }
+                PostOfficeEnvelopePad(s.direction, size, s.trialVisible, gesture = s.gestureFeedback) { vm.answer(it) }
             }
             s.nearStopReason?.let { EyeText(it, LocalEyeTypography.current.bodySecondary, LocalEyeColors.current.textSecondary) }
         }
@@ -392,11 +392,11 @@ private fun CurveContent(s: ScreeningState, vm: ScreeningTestViewModel) {
 internal fun FlipperContent(s: ScreeningState, vm: ScreeningTestViewModel) {
     val size = with(LocalDensity.current) { s.trialOptotypePx.toDp() }
     val target = if (s.trialIndex % 2 == 0) PresbyopiaProtocol.FLIPPER_FAR_CM else PresbyopiaProtocol.FLIPPER_NEAR_CM
-    TestStageCard(title = if (s.flipperCheck) "先确认看得清 · ${target.toInt()} cm" else "${target.toInt()} cm · ${s.secondsLeft} 秒") {
+    TestStageCard(title = if (s.flipperCheck) "先确认看得清 · ${target.toInt()} cm" else "星空邮局 · ${target.toInt()} cm · ${s.secondsLeft} 秒") {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
             if (!s.trialVisible) EyeText(if (s.flipperCheck) "移到 ${target.toInt()} cm 停稳" else "停稳后开始",
                 LocalEyeTypography.current.subtitle, LocalEyeColors.current.textSecondary)
-            OptotypeAnswerPad(s.direction, size, s.trialVisible, gesture = s.gestureFeedback) { vm.answer(it) }
+            PostOfficeEnvelopePad(s.direction, size, s.trialVisible, gesture = s.gestureFeedback) { vm.answer(it) }
 
         }
     }
@@ -452,24 +452,27 @@ private fun StageCaption(text: String) {
 }
 
 /**
- * 原文：动态闪烁、高对比度的卡通注视点，1–2 Hz；直径 1.5–2 cm。
- * 用深蓝准星（同心环 + 十字 + 中心点）作目标，白底呈现、固定用浅色令牌保证对比；整体透明度交替变化让目标闪烁。
- * 目标放在画布顶部、尽量靠近顶部的映光点（专家建议：视标越靠近点光源，角膜映光越准）。
+ * 月夜森林凝望萤火虫舞台（注视 / 遮盖卡片态使用），目标位置与坐标上报不变。
  */
 @Composable
 private fun FixationTarget(diameterMm: Float, bright: Boolean, vm: ScreeningTestViewModel) {
-    val colors = LocalEyeColors.current
     val dpi = LocalContext.current.resources.displayMetrics.xdpi
     val sizePx = diameterMm / 25.4f * dpi
     var origin by remember { mutableStateOf(Offset.Zero) }
-    Canvas(Modifier.fillMaxWidth().height(240.dp + rememberStageExtra()).clip(EyeShapes.medium).background(colors.white)
+    var phase by remember { mutableStateOf(0f) }
+    LaunchedEffect(Unit) {
+        while (isActive) {
+            withInfiniteAnimationFrameNanos { nanos ->
+                phase = ((nanos / 1_000_000L) % 2400L) / 2400f
+            }
+        }
+    }
+    Canvas(Modifier.fillMaxWidth().height(240.dp + rememberStageExtra()).clip(EyeShapes.medium)
         .onGloballyPositioned { origin = it.positionInWindow() }) {
-        val s = sizePx.coerceAtMost(minOf(size.width, size.height) * 0.6f)
-        // 目标位置与改版前一致（上报的注视坐标不变）
-        val target = Offset(center.x, s * 0.6f + 12.dp.toPx())
-        drawContext.canvas.saveLayer(Rect(Offset.Zero, size), Paint().apply { alpha = if (bright) 1f else 0.3f })
-        drawFixationTarget(LightEyeColors, target, s)
-        drawContext.canvas.restore()
+        drawMoonlitForestBackdrop(phase)
+        val r = (sizePx * 0.5f).coerceIn(14.dp.toPx(), minOf(size.width, size.height) * 0.16f)
+        val target = Offset(center.x, r * 1.4f + 16.dp.toPx())
+        drawMoonlitFirefly(center = target, radius = r, wingPhase = (phase * 3f) % 1f, glowIntensity = if (bright) 1f else 0.45f)
         vm.reportGazeTarget(origin.x + target.x, origin.y + target.y)
     }
 }
@@ -530,32 +533,44 @@ private fun CoverSequenceStrip(done: Int) {
 
 @Composable
 internal fun PursuitContent(s: ScreeningState, vm: ScreeningTestViewModel) {
-    val colors = LocalEyeColors.current
     val metrics = LocalContext.current.resources.displayMetrics
     val pxPerMm = metrics.xdpi / 25.4f
     val distanceCm = StrabismusProtocol.pursuitDisplayDistance(s.distanceCm)
     var origin by remember { mutableStateOf(Offset.Zero) }
     var renderTime by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
+    val trail = remember { ArrayDeque<Offset>() }
     LaunchedEffect(vm) {
         while (isActive) withInfiniteAnimationFrameNanos { renderTime = SystemClock.elapsedRealtime() }
     }
     TestStageCard(expanded = true) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Canvas(Modifier.fillMaxWidth().height(gazeCanvasBaseHeight(LocalConfiguration.current.screenHeightDp.dp) + rememberStageExtra()).clip(EyeShapes.medium).background(colors.black)
+            Canvas(Modifier.fillMaxWidth().height(gazeCanvasBaseHeight(LocalConfiguration.current.screenHeightDp.dp) + rememberStageExtra()).clip(EyeShapes.medium)
                 .onGloballyPositioned { origin = it.positionInWindow() }) {
-                val haloRadius = 16.dp.toPx()
-                val maxX = StrabismusProtocol.pursuitDisplayLimit((size.width / 2f - haloRadius) / pxPerMm, distanceCm)
-                val maxY = StrabismusProtocol.pursuitDisplayLimit((size.height / 2f - haloRadius) / pxPerMm, distanceCm)
+                val bgPhase = (renderTime % 4800L) / 4800f
+                val wingPhase = (renderTime % 650L) / 650f
+                drawMoonlitForestBackdrop(bgPhase)
+                val fireflyRadius = 15.dp.toPx()
+                val margin = fireflyRadius * 1.8f
+                val maxX = StrabismusProtocol.pursuitDisplayLimit((size.width / 2f - margin) / pxPerMm, distanceCm)
+                val maxY = StrabismusProtocol.pursuitDisplayLimit((size.height / 2f - margin) / pxPerMm, distanceCm)
                 vm.reportPursuitCapacity(maxX, maxY)
                 val target = vm.engine.pursuitTargetAt(renderTime)
                 val offset = StrabismusProtocol.pursuitDisplayOffset(target, maxX, maxY, distanceCm)
                 val x = size.width / 2f + offset.x * pxPerMm
                 val y = size.height / 2f - offset.y * pxPerMm
-                drawCircle(colors.primary.copy(alpha = 0.18f), radius = haloRadius, center = Offset(x, y))
-                drawCircle(colors.primary, radius = 8.dp.toPx(), center = Offset(x, y))
+                val point = Offset(x, y)
+                if (trail.isEmpty() || (trail.last() - point).getDistance() > 3f) {
+                    trail.addLast(point)
+                    if (trail.size > 14) trail.removeFirst()
+                }
+                val tilt = if (trail.size >= 2) {
+                    ((point.x - trail.first().x) * 0.45f).coerceIn(-28f, 28f)
+                } else -16f
+                drawFireflyTrail(trail.toList(), fireflyRadius)
+                drawMoonlitFirefly(center = point, radius = fireflyRadius, wingPhase = wingPhase, glowIntensity = 1f, tiltDeg = tilt)
                 vm.reportGazeTarget(origin.x + x, origin.y + y)
             }
-            StageCaption("剩余 ${s.secondsLeft} 秒")
+            StageCaption("月夜追萤火虫 · 剩余 ${s.secondsLeft} 秒")
         }
     }
 }

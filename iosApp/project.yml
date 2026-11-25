@@ -41,7 +41,7 @@ targets:
     info:
       path: Info.plist
       properties:
-        CFBundleDisplayName: 眼健康助手
+        CFBundleDisplayName: 眼健康助手（游戏版）
         UIUserInterfaceStyle: Dark
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
@@ -65,7 +65,7 @@ targets:
         ITSAppUsesNonExemptEncryption: false
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.zkyjss.eyeproject.ios
+        PRODUCT_BUNDLE_IDENTIFIER: com.zkyjss.eyeproject.ios.game
         GENERATE_INFOPLIST_FILE: NO
         ENABLE_USER_SCRIPT_SANDBOXING: NO
         CODE_SIGN_STYLE: Automatic

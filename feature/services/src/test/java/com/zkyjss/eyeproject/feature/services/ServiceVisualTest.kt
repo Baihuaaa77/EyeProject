@@ -455,10 +455,9 @@ class ServiceVisualTest {
             EyeProjectTheme {
                 CompositionLocalProvider(LocalDensity provides Density(1f, 1.5f)) {
                     Box(Modifier.size(320.dp, 640.dp)) {
-                        TestSessionLayout("干眼自测", {}, {}, true, progress = TestProgress(0.9f, 12),
+                        TestSessionLayout("老视自测", {}, {}, true, progress = TestProgress(0.9f, 12),
                             status = { DistanceBanner(distanceStatus(25f, true, 40f, 5f), compact = true) }) {
-                            TrialContent(DryEyeTestUiState(phase = DryEyePhase.Open, trialVisible = true,
-                                optotypePx = 24f, remainingSeconds = 12)) {}
+                            PostOfficeEnvelopePad(0, 24.dp, true) {}
                         }
                     }
                 }
@@ -468,9 +467,46 @@ class ServiceVisualTest {
         compose.mainClock.advanceTimeBy(1_000)
         compose.onNodeWithText("把手机往远处移约 10 cm").assertIsDisplayed()
         compose.onNodeWithText("太近了").assertIsDisplayed()
-        compose.onNodeWithText("跳过").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("看不清 · 跳过").performScrollTo().assertIsDisplayed()
         compose.onNodeWithContentDescription("向下").assertIsDisplayed()
         capture("session-small-large-text")
+    }
+
+    @Test fun postOfficeEnvelopeMapsFourPostboxesAndSkip() {
+        val answers = mutableListOf<Int>()
+        compose.setContent {
+            EyeProjectTheme(darkTheme = true) {
+                Column(Modifier.fillMaxSize().background(LocalEyeColors.current.appBackground).padding(20.dp)) {
+                    PostOfficeEnvelopePad(0, 56.dp, true) { answers.add(it) }
+                }
+            }
+        }
+        compose.onNodeWithContentDescription("向上").performClick()
+        compose.onNodeWithContentDescription("向下").performClick()
+        compose.onNodeWithContentDescription("向左").performClick()
+        compose.onNodeWithContentDescription("向右").performClick()
+        compose.onNodeWithText("看不清 · 跳过").performClick()
+        assertEquals(listOf(3, 1, 2, 0, -1), answers)
+        capture("game-presbyopia-postoffice")
+    }
+
+    @Test fun strabismusMoonlitFireflySessionRenders() {
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val vm = ScreeningTestViewModel(context,
+            com.zkyjss.eyeproject.core.camera.CameraController(context),
+            com.zkyjss.eyeproject.core.camera.CameraIntrinsicsProvider(context), TestScreeningRecordRepository(context), TestSubjectRepository(), TestExplanationRepository())
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            EyeProjectTheme(darkTheme = true) {
+                StrabismusDarkSession(
+                    ScreeningState(kind = ScreeningKind.STRABISMUS, step = ScreeningStep.FIXATION, secondsLeft = 9, distanceCm = 33f, faceDetected = true),
+                    vm, onBack = {}, onSettings = {}, onHelp = {},
+                ) { DistanceBanner(distanceStatus(33f, true, 33f, 5f), compact = true, singleLine = true) }
+            }
+        }
+        compose.mainClock.advanceTimeBy(200)
+        compose.onNodeWithText("双眼注视萤火虫 · 9秒").assertIsDisplayed()
+        capture("game-strabismus-firefly")
     }
 
     @Test fun arrowsSurroundTheOptotypeAndKeepAnswerMapping() {
@@ -574,16 +610,16 @@ class ServiceVisualTest {
         val vm = ScreeningTestViewModel(context,
             com.zkyjss.eyeproject.core.camera.CameraController(context),
             com.zkyjss.eyeproject.core.camera.CameraIntrinsicsProvider(context), TestScreeningRecordRepository(context), TestSubjectRepository(), TestExplanationRepository())
-        var answered = -1
         var page by androidx.compose.runtime.mutableIntStateOf(0)
+        compose.mainClock.autoAdvance = false
         compose.setContent {
             EyeProjectTheme {
                 Column(Modifier.fillMaxSize().background(LocalEyeColors.current.appBackground).verticalScroll(rememberScrollState()).padding(20.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     if (page == 0) {
-                        TrialContent(DryEyeTestUiState(phase = DryEyePhase.Open, trialVisible = true, trialId = 1, direction = 3,
-                            optotypePx = 60f, remainingSeconds = 12, progressFraction = 0.4f, instruction = "现在尽量保持睁眼，继续看 E 选方向",
-                            phase2BlinkCount = 1, trialCount = 30)) { answered = it }
+                        TrialContent(DryEyeTestUiState(phase = DryEyePhase.Open, trialVisible = false,
+                            remainingSeconds = 12, progressFraction = 0.4f, instruction = "稳住水膜，尽量保持睁眼 20 秒",
+                            phase2BlinkCount = 1)) {}
                     } else {
                         CoverContent(ScreeningState(kind = ScreeningKind.STRABISMUS, step = ScreeningStep.COVER,
                             coverMarks = listOf(CoverMark("遮右眼", 0L, covered = VisionEye.RIGHT))), vm)
@@ -591,11 +627,13 @@ class ServiceVisualTest {
                 }
             }
         }
+        compose.mainClock.advanceTimeBy(200)
         compose.onNodeWithText("持续睁眼").assertExists()
-        compose.onNodeWithContentDescription("向上").performClick()
-        assertEquals(3, answered)
+        compose.onNodeWithText("已眨眼 1 次").assertExists()
+        compose.onNodeWithText("定格挑战 · 守护水膜").assertExists()
         capture("dry-eye-open")
         page = 1
+        compose.mainClock.advanceTimeBy(200)
         compose.onNodeWithText("下一步：移开遮盖，双眼注视").assertExists()
         capture("cover-coach")
     }

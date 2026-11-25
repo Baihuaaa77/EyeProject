@@ -191,10 +191,14 @@ object DryEyeAssessment {
         val fit = VisualStability.fit(answered.map { VisualStability.Response(it.onsetSec.toDouble(), it.level.toDouble(), it.correct) },
             session.naturalSeconds.toDouble())
 
+        // 观影测眨眼小剧场模式下不呈现 E 字视标，仅依据眨眼行为与症状问卷完成评估。
+        val blinkOnlyMode = session.trials.isEmpty()
         val reasons = buildList {
             if (!session.completed) add("测试未完整完成")
-            if (natural.size < 10) add("自然眨眼阶段有效视标题数不足（${natural.size} 题）")
-            if (open.size < 4) add("睁眼阶段有效视标题数不足（${open.size} 题）")
+            if (!blinkOnlyMode) {
+                if (natural.size < 10) add("自然眨眼阶段有效视标题数不足（${natural.size} 题）")
+                if (open.size < 4) add("睁眼阶段有效视标题数不足（${open.size} 题）")
+            }
             if (session.validFrameRatio < 0.8) add("双眼可见的有效帧不足 80%")
             if (session.distanceInRangeRatio < 0.7) add("约 40 cm 距离内的时间不足 70%")
             if (session.headTurnRatio > 0.3) add("头部明显偏转的时间超过 30%")
@@ -279,9 +283,9 @@ object DryEyeAssessment {
             },
             details = if (symptoms.isEmpty()) emptyList() else listOf("报告的不适：${symptoms.joinToString("、")}", "出现频率：${fields["症状频率"] ?: "—"}"),
         )
-        val evidence = listOf(blinkEvidence, visualEvidence, symptomEvidence)
+        val evidence = if (blinkOnlyMode) listOf(blinkEvidence, symptomEvidence) else listOf(blinkEvidence, visualEvidence, symptomEvidence)
 
-        val objective = listOf(blinkStatus, visualStatus)
+        val objective = if (blinkOnlyMode) listOf(blinkStatus) else listOf(blinkStatus, visualStatus)
         val abnormalFamilies = objective.count { it == EvidenceStatus.ABNORMAL }
         val risk = when {
             reasons.isNotEmpty() -> ScreeningRiskLevel.UNKNOWN
@@ -291,8 +295,9 @@ object DryEyeAssessment {
             objective.any { it != EvidenceStatus.NORMAL } -> ScreeningRiskLevel.UNCERTAIN
             else -> ScreeningRiskLevel.LOW
         }
-        val validity = if (reasons.isEmpty() && risk == ScreeningRiskLevel.UNKNOWN)
-            listOf(blinkEvidence.summary, visualEvidence.summary) else reasons
+        val validity = if (reasons.isEmpty() && risk == ScreeningRiskLevel.UNKNOWN) {
+            if (blinkOnlyMode) listOf(blinkEvidence.summary) else listOf(blinkEvidence.summary, visualEvidence.summary)
+        } else reasons
         val abnormal = evidence.filter { it.status == EvidenceStatus.ABNORMAL && it.key != "symptom" }.map { it.summary }
         val borderline = risk != ScreeningRiskLevel.UNKNOWN && objective.any { it == EvidenceStatus.UNCERTAIN }
         val advice = when (risk) {
@@ -306,16 +311,18 @@ object DryEyeAssessment {
         }
 
         val indicators = buildList {
-            add("练习结束视力（基线）：${session.baselineLevel}")
+            if (!blinkOnlyMode) add("练习结束视力（基线）：${session.baselineLevel}")
             add("自然眨眼：${naturalBlinks.size} 次（${fmt1(blinkRate)} 次/分钟，参考 10–16）")
             add("睁眼阶段眨眼 ${openBlinks.size} 次；最长持续睁眼 ${fmt1(longestOpen)} 秒（参考 ≥10 秒）")
-            add("视标正确率：自然眨眼 ${pct(accNatural)}（${natural.size} 题）· 持续睁眼 ${pct(accOpen)}（${open.size} 题）")
-            add("超时未答：${formal.count { it.timeout }} 题（其中连续未作答 ${unanswered.size} 题）；正确作答平均反应 ${meanRt?.let { "${it.toInt()} ms" } ?: "—"}")
-            add("功能性视力（时间加权平均）：${meanLogMar?.let { fmt2(10.0.pow(-it)) } ?: "—"}；视觉维持率（旧指标，仅供参考）：${vmr?.let(::fmt2) ?: "—"}")
-            add("视力下降时间（旧指标）：${declineSec?.let { "${fmt1(it)} 秒" } ?: "睁眼阶段未出现 2 档以上下降"}")
-            blinkRecovery?.let { (before, after) -> add("眨眼前 2 秒正确率 ${pct(before)} → 眨眼后 2 秒 ${pct(after)}") }
+            if (!blinkOnlyMode) {
+                add("视标正确率：自然眨眼 ${pct(accNatural)}（${natural.size} 题）· 持续睁眼 ${pct(accOpen)}（${open.size} 题）")
+                add("超时未答：${formal.count { it.timeout }} 题（其中连续未作答 ${unanswered.size} 题）；正确作答平均反应 ${meanRt?.let { "${it.toInt()} ms" } ?: "—"}")
+                add("功能性视力（时间加权平均）：${meanLogMar?.let { fmt2(10.0.pow(-it)) } ?: "—"}；视觉维持率（旧指标，仅供参考）：${vmr?.let(::fmt2) ?: "—"}")
+                add("视力下降时间（旧指标）：${declineSec?.let { "${fmt1(it)} 秒" } ?: "睁眼阶段未出现 2 档以上下降"}")
+                blinkRecovery?.let { (before, after) -> add("眨眼前 2 秒正确率 ${pct(before)} → 眨眼后 2 秒 ${pct(after)}") }
+            }
             add("数据质量：有效帧 ${pct(session.validFrameRatio)} · 距离达标 ${pct(session.distanceInRangeRatio)} · 头部偏转 ${pct(session.headTurnRatio)}${fps?.let { " · 分析帧率 ${fmt1(it)} 帧/秒" } ?: ""}")
-            if (session.resolutionLimited) add("部分小视标受屏幕像素限制，已封顶为本机可显示的最小档")
+            if (!blinkOnlyMode && session.resolutionLimited) add("部分小视标受屏幕像素限制，已封顶为本机可显示的最小档")
         }
         val features = linkedMapOf<String, Double?>(
             "natural_seconds" to session.naturalSeconds.toDouble(),

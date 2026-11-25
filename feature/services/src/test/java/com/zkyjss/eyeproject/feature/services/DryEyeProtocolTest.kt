@@ -75,6 +75,28 @@ class DryEyeProtocolTest {
         assertTrue(report.validityReasons.contains("测试未完整完成"))
     }
 
+    @Test fun blinkOnlyTheaterSessionProducesValidReportWithoutOptotypeTrials() {
+        val normalBlinks = (1..12).map { it * 5f - 2f } + listOf(75f)
+        val normalSession = DryEyeSession(
+            naturalSeconds = 60, baselineLevel = 0.3f, trials = emptyList(),
+            blinks = normalBlinks, validFrameRatio = 0.95, distanceInRangeRatio = 0.9,
+            headTurnRatio = 0.05, resolutionLimited = false, completed = true,
+        )
+        val low = DryEyeAssessment.evaluate(normalSession, emptyMap())
+        assertTrue(low.valid)
+        assertEquals(ScreeningRiskLevel.LOW, low.riskLevel)
+        assertEquals(2, low.evidence.size)
+        assertTrue(low.indicators.none { it.contains("视标正确率") })
+
+        val abnormalBlinks = (1..25).map { it * 2.4f } + listOf(63f, 67f, 71f, 75f)
+        val abnormalSession = normalSession.copy(blinks = abnormalBlinks)
+        val medium = DryEyeAssessment.evaluate(abnormalSession, emptyMap())
+        assertTrue(medium.valid)
+        assertEquals(ScreeningRiskLevel.MEDIUM, medium.riskLevel)
+        val high = DryEyeAssessment.evaluate(abnormalSession, mapOf("干眼症状" to "眼睛发干", "症状频率" to "经常"))
+        assertEquals(ScreeningRiskLevel.HIGH, high.riskLevel)
+    }
+
     /** 原文研究内容一（1）的问卷条目，现在都在「我的」资料里（年龄由出生年份换算）。 */
     @Test fun profileCoversDocumentItems() {
         // 长期资料在「我的」维护，症状、用眼、用药为测前快问

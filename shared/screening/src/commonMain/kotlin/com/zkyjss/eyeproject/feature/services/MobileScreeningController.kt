@@ -52,7 +52,7 @@ class MobileScreeningController(
         override suspend fun compareHistory(state: ScreeningState,assessment: ScreeningAssessment) = emptyList<String>()
     }
     private var screening = ScreeningEngine(platform,scope)
-    private var dry = DryEyeEngine(platform,scope)
+    private var dry = DryEyeEngine(platform,scope, theaterMode = true)
     private var color = ColorVisionEngine(platform,scope)
 
     fun configureDisplay(widthPixels: Int,heightPixels: Int,pixelsPerMm: Float) {
@@ -62,7 +62,7 @@ class MobileScreeningController(
     fun selectTest(name: String) {
         require(name in listOf("DRY_EYE","PRESBYOPIA","STRABISMUS","COLOR_VISION"))
         dry.close(); screening.close()
-        dry = DryEyeEngine(platform,scope); screening = ScreeningEngine(platform,scope); color = ColorVisionEngine(platform,scope)
+        dry = DryEyeEngine(platform,scope, theaterMode = true); screening = ScreeningEngine(platform,scope); color = ColorVisionEngine(platform,scope)
         kind = name
         if (kind == "PRESBYOPIA" || kind == "STRABISMUS") screening.configure(ScreeningKind.valueOf(kind))
     }

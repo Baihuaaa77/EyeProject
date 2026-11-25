@@ -30,7 +30,7 @@ class DryEyeTestViewModel @Inject constructor(
     private val explanations: ExplanationRepository,
 ) : ViewModel() {
     private val platform = AndroidScreeningPlatform(context, camera, intrinsics, records)
-    val engine = DryEyeEngine(platform, viewModelScope)
+    val engine = DryEyeEngine(platform, viewModelScope, theaterMode = true)
     val uiState get() = engine.uiState
     internal fun startGestureAnswers() {
         engine.resetGestureAnswers()

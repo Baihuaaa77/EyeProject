@@ -155,12 +155,12 @@ struct EyeTestView: View {
     }
     private var darkStageCaption: String {
         runtime.bool("stabilityInterrupted") ? "本段已中断" : phase == "COVER" ? runtime.string("coverPrompt")
-                     : phase == "FAR_FIXATION" ? "越过手机看6米外 · \(Int(runtime.number("secondsLeft")))秒"
-                     : "\(Int(runtime.number("secondsLeft")))秒"
+                     : phase == "FAR_FIXATION" ? "越过月夜萤火虫看 6 米外 · \(Int(runtime.number("secondsLeft")))秒"
+                     : "双眼注视萤火虫 · \(Int(runtime.number("secondsLeft")))秒"
     }
     private var darkGazeSession: some View {
         ZStack(alignment: .bottom) {
-            EyeStyle.reflectionBackground.ignoresSafeArea()
+            EyeStyle.Game.Firefly.skyTop.ignoresSafeArea()
             GazeTargetView(runtime: runtime, pixelsPerMm: pixelsPerMm)
                 .padding(.bottom, darkControlsHeight)
             VStack(alignment: .leading, spacing: 8) {
@@ -283,8 +283,8 @@ struct EyeTestView: View {
                 Text("休息结束，下面进行复测，流程与首次相同").font(EyeStyle.body).frame(maxWidth: .infinity, alignment: .leading)
                     .padding(14).background(EyeStyle.accentSoft, in: RoundedRectangle(cornerRadius: EyeStyle.radiusMedium))
             }
-            TestGuideView(motion: .fva, title: "正式测试 · \(seconds) 秒 + 20 秒",
-                cue: "全程看 E 选方向。前 \(seconds) 秒自然眨眼，看到屏幕提示后，尽量保持睁眼 20 秒", readyTitle: "开始正式测试") {
+            TestGuideView(motion: .blink, title: "护眼小剧场 · \(seconds) 秒 + 20 秒",
+                cue: "观看护眼科普小动画。前 \(seconds) 秒像平时一样自然眨眼，看到屏幕提示后，尽量保持睁眼 20 秒", readyTitle: "开始护眼小剧场") {
                 runtime.act("formal")
             }
         } else if runtime.bool("guidePending") && runtime.bool("glassesCheck") {
@@ -330,31 +330,33 @@ struct EyeTestView: View {
                 Text("\(Int(runtime.number("secondsLeft")))").font(.system(size: 56, weight: .semibold, design: .rounded))
                     .monospacedDigit().foregroundStyle(EyeStyle.readableText(EyeStyle.primary))
             }.frame(width: 184, height: 184).animation(.linear(duration: 0.25), value: runtime.number("progress"))
+        } else if phase == "Natural" || phase == "Open" {
+            DryEyeStoryTheaterView(runtime: runtime)
         } else {
-            if phase == "Natural" || phase == "Open" || phase == "Practice" {
+            if phase == "Practice" {
                 HStack {
-                    Text(phase == "Natural" ? "自然眨眼" : phase == "Open" ? "持续睁眼" : "练习")
+                    Text("练习")
                     Spacer(); Text("\(Int(runtime.number("secondsLeft"))) 秒").monospacedDigit()
                 }
             } else if phase == "NEAR_VISION" {
                 let eye = ["RIGHT": "右眼", "LEFT": "左眼", "BOTH": "双眼"][runtime.string("eye")] ?? ""
-                Text("第 \(Int(runtime.number("visionRound")))/3 轮 · \(eye)").font(EyeStyle.subtitle)
+                Text("星空邮局 · 第 \(Int(runtime.number("visionRound")))/3 轮 · \(eye)").font(EyeStyle.subtitle)
                 if runtime.bool("presbyopiaCoverReady"), !runtime.bool("resolutionAdvancePending") {
-                    StageCaption(text: "本字号第 \(min(4, Int(runtime.number("visionQuestion"))))/4 题")
+                    StageCaption(text: "第 \(min(4, Int(runtime.number("visionQuestion"))))/4 封信 · 看信封上的 E 选邮筒")
                 }
             } else if phase == "DISTANCE_CURVE" {
-                Text("第 \(Int(runtime.number("visionRound")))/3 轮 · \(Int(runtime.number("targetDistanceCm"))) cm").font(EyeStyle.subtitle)
+                Text("星空邮局 · 第 \(Int(runtime.number("visionRound")))/3 轮 · \(Int(runtime.number("targetDistanceCm"))) cm").font(EyeStyle.subtitle)
                 if !runtime.bool("resolutionAdvancePending") {
-                    StageCaption(text: "本字号第 \(Int(runtime.number("visionQuestion")))/3 题")
+                    StageCaption(text: "第 \(Int(runtime.number("visionQuestion")))/3 封信 · 看信封上的 E 选邮筒")
                 }
             } else if phase == "FLIPPER" {
                 HStack {
-                    Text((runtime.bool("flipperCheck") ? "先确认看得清 · " : "") + "\(Int(runtime.number("targetDistanceCm"))) cm")
+                    Text((runtime.bool("flipperCheck") ? "先确认看得清 · " : "星空邮局 · ") + "\(Int(runtime.number("targetDistanceCm"))) cm")
                     Spacer()
                     if phase == "FLIPPER" && !runtime.bool("flipperCheck") { Text("\(Int(runtime.number("secondsLeft"))) 秒").monospacedDigit() }
                 }
             } else if phase == "PUSH_UP" {
-                Text("第 \(Int(runtime.number("visionRound")))/2 轮 · \(runtime.string("pushEye"))").font(EyeStyle.subtitle)
+                Text("星空邮局 · 第 \(Int(runtime.number("visionRound")))/2 轮 · \(runtime.string("pushEye"))").font(EyeStyle.subtitle)
                 StageCaption(text: "本眼第 \(min(Int(runtime.number("pushDone")) + 1, 3))/3 次")
             }
             if runtime.bool("resolutionAdvancePending") {
@@ -373,15 +375,17 @@ struct EyeTestView: View {
                         runtime.number("distanceCm") < 45)
             } else {
                 if phase == "PUSH_UP" {
-                    Text("缓慢移近，每秒一两厘米")
-                    TumblingEView(runtime: runtime).stageHeight(max(180, ringDiameter(CGFloat(runtime.number("optotypePx")) / UIScreen.main.scale) + 24))
-                        .background(EyeStyle.optotypeSurround, in: RoundedRectangle(cornerRadius: EyeStyle.radiusLarge, style: .continuous))
+                    Text("缓慢移近信封，每秒一两厘米")
+                    PostOfficeEnvelopeView(runtime: runtime)
+                        .stageHeight(max(196, CGFloat(runtime.number("optotypePx")) / UIScreen.main.scale + 104))
                     Button("开始持续模糊了") { runtime.act("blur") }.buttonStyle(EyeButtonStyle())
                     if runtime.bool("pushStillClearAvailable") {
                         Button("仍看得清") { runtime.act("pushStillClear") }.buttonStyle(EyeButtonStyle(role: .secondary))
                     }
-                } else {
+                } else if phase == "Practice" {
                     OptotypeAnswerPad(runtime: runtime)
+                } else {
+                    PostOfficeAnswerPad(runtime: runtime)
                 }
             }
         }
@@ -635,18 +639,25 @@ private struct GazeTargetView: View {
         GeometryReader { geometry in
             let size = geometry.size
             let phase = runtime.string("phase")
-            TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: !["PURSUIT","FIXATION","FAR_FIXATION","COVER"].contains(phase) || runtime.bool("stabilityInterrupted"))) { _ in
+            TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: !["PURSUIT","FIXATION","FAR_FIXATION","COVER"].contains(phase) || runtime.bool("stabilityInterrupted"))) { timeline in
+                let t = timeline.date.timeIntervalSinceReferenceDate
+                let bgPhase = CGFloat((t.truncatingRemainder(dividingBy: 4.8)) / 4.8)
+                let wingPhase = CGFloat((t.truncatingRemainder(dividingBy: 0.68)) / 0.68)
                 let lightChip = runtime.controller.reflectionChip()
                 let lightOn = runtime.controller.reflectionLightOn(chip: lightChip)
                 let trajectory = runtime.controller.pursuitTargetNow()
                 let point = target(in: size, trajectory: trajectory)
                 ZStack(alignment: .topLeading) {
-                    EyeStyle.reflectionBackground
-                    if reflection {
-                        let diameter = CGFloat(runtime.number("targetDiameterMm") * Double(pixelsPerMm)) / UIScreen.main.scale
-                        Circle().fill(EyeStyle.reflectionTarget).frame(width: diameter, height: diameter).opacity(lightOn ? 1 : 0).position(point)
-                    } else {
-                        PursuitDot().position(point)
+                    Canvas { ctx, canvasSize in
+                        MoonlitFireflyRenderer.backdrop(ctx, size: canvasSize, phase: bgPhase)
+                        let radius: CGFloat = reflection
+                            ? min(max(CGFloat(runtime.number("targetDiameterMm") * Double(pixelsPerMm)) / UIScreen.main.scale * 0.42, 14), 24)
+                            : 15
+                        MoonlitFireflyRenderer.firefly(
+                            ctx, center: point, radius: radius,
+                            wingPhase: wingPhase,
+                            glowIntensity: reflection ? (lightOn ? 1 : 0.45) : 1
+                        )
                     }
                 }
                     .onAppear { report(geometry, point); runtime.controller.reportReflectionLight(chip: lightChip) }
@@ -835,4 +846,288 @@ struct ColorPlateCanvas: View {
 private struct DarkControlsHeight: PreferenceKey {
     static let defaultValue: CGFloat = 230
     static func reduce(value: inout CGFloat,nextValue: () -> CGFloat) { value = nextValue() }
+}
+
+// MARK: - 三项自测趣味小游戏场景（与安卓 ScreeningGameScenes.kt 同情景同配色）
+
+private struct DryEyeStoryTheaterView: View {
+    @ObservedObject var runtime: EyeRuntime
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    private let acts: [(badge: String, title: String, subtitle: String)] = [
+        ("第 1 幕 · 泪膜守护盾", "眨眼就是天然保湿刷", "每一次轻眨眼，都会给眼球铺上一层隐形的锁水保护膜。"),
+        ("第 2 幕 · 盯屏蒸发记", "专注看屏容易忘记眨眼", "长时间紧盯屏幕时，眨眼次数会悄悄减少，泪膜更容易变薄蒸发。"),
+        ("第 3 幕 · 远眺松口气", "20-20-20 护眼魔法", "每用眼 20 分钟，抬头看看远处风景 20 秒，让紧绷的眼肌舒展一下。"),
+        ("第 4 幕 · 暖雾润眼时", "温热与眨眼让眼睛水润", "规律眨眼搭配温和热敷，能帮睑板腺保持畅通，眼睛更清爽舒适。"),
+    ]
+    var body: some View {
+        let isOpen = runtime.string("phase") == "Open"
+        let remaining = max(0, Int(runtime.number("secondsLeft")))
+        let total = isOpen ? 20 : max(1, Int(runtime.number("naturalSeconds")))
+        let elapsed = max(0, total - remaining)
+        let actIdx = min(acts.count - 1, (elapsed / 15) % acts.count)
+        let act = acts[actIdx]
+        let blinks = Int(runtime.number(isOpen ? "phase2BlinkCount" : "phase1BlinkCount"))
+        VStack(spacing: 12) {
+            HStack {
+                Text(isOpen ? "持续睁眼" : "自然眨眼")
+                    .font(EyeStyle.chip)
+                    .foregroundStyle(isOpen ? EyeStyle.warning : EyeStyle.moodGold)
+                    .padding(.horizontal, 12).padding(.vertical, 5)
+                    .background(isOpen ? EyeStyle.warningSoft : EyeStyle.primarySoft, in: EyeStyle.chipShape)
+                Spacer()
+                Text("已眨眼 \(blinks) 次")
+                    .font(EyeStyle.chip)
+                    .foregroundStyle(EyeStyle.Game.Theater.tearHighlight)
+                    .padding(.horizontal, 10).padding(.vertical, 5)
+                    .background(EyeStyle.surfaceVariant, in: EyeStyle.chipShape)
+                Text("剩余 \(remaining) 秒").font(EyeStyle.subtitle).monospacedDigit()
+            }
+            TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: reduceMotion)) { timeline in
+                let phase = reduceMotion ? 0.25 : (timeline.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 4.2) / 4.2)
+                ZStack(alignment: .topLeading) {
+                    Canvas { ctx, size in
+                        let c = CGPoint(x: size.width * 0.5, y: size.height * 0.54)
+                        let unit = min(size.width, size.height)
+                        if isOpen {
+                            let shield = blinks > 0 ? EyeStyle.Game.Theater.warmLamp : EyeStyle.Game.Theater.tearCyan
+                            let r = unit * 0.36
+                            ctx.stroke(Path(ellipseIn: CGRect(x: c.x - r, y: c.y - r, width: r * 2, height: r * 2)),
+                                       with: .color(shield.opacity(0.24)), lineWidth: unit * 0.032)
+                            var arc = Path()
+                            arc.addArc(center: c, radius: r, startAngle: .degrees(-90),
+                                       endAngle: .degrees(-90 + 360 * Double(elapsed) / Double(max(1, total))), clockwise: false)
+                            ctx.stroke(arc, with: .color(shield), style: StrokeStyle(lineWidth: unit * 0.042, lineCap: .round))
+                            let dr = unit * 0.16
+                            ctx.fill(Path(ellipseIn: CGRect(x: c.x - dr * 0.85, y: c.y - dr * 0.6, width: dr * 1.7, height: dr * 1.5)),
+                                     with: .color(EyeStyle.Game.Theater.tearCyan))
+                        } else {
+                            let glowR = unit * 0.65
+                            ctx.fill(Path(ellipseIn: CGRect(x: c.x - glowR, y: c.y - glowR, width: glowR * 2, height: glowR * 2)),
+                                     with: .radialGradient(Gradient(colors: [EyeStyle.Game.Theater.stageGlow.opacity(0.72), .clear]),
+                                                           center: c, startRadius: 0, endRadius: glowR))
+                            let r = unit * 0.28
+                            ctx.fill(Path(ellipseIn: CGRect(x: c.x - r * 1.3, y: c.y - r * 0.72, width: r * 2.6, height: r * 1.44)),
+                                     with: .color(EyeStyle.Game.Theater.steam))
+                            ctx.stroke(Path(ellipseIn: CGRect(x: c.x - r * 1.3, y: c.y - r * 0.72, width: r * 2.6, height: r * 1.44)),
+                                       with: .color(EyeStyle.Game.Theater.tearCyan.opacity(0.7)), lineWidth: 3)
+                            let ir = r * 0.44
+                            ctx.fill(Path(ellipseIn: CGRect(x: c.x - ir, y: c.y - ir, width: ir * 2, height: ir * 2)),
+                                     with: .color(EyeStyle.Game.Theater.tearDeep))
+                            let pr = ir * 0.52
+                            ctx.fill(Path(ellipseIn: CGRect(x: c.x - pr, y: c.y - pr, width: pr * 2, height: pr * 2)),
+                                     with: .color(EyeStyle.Game.Firefly.bodyDark))
+                            var wave = Path()
+                            wave.addArc(center: c, radius: r * 1.45, startAngle: .degrees(-140 + phase * 360),
+                                        endAngle: .degrees(-45 + phase * 360), clockwise: false)
+                            ctx.stroke(wave, with: .color(EyeStyle.Game.Theater.tearCyan.opacity(0.6)), style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                        }
+                    }
+                    Text(isOpen ? "定格挑战 · 守护水膜" : act.badge)
+                        .font(EyeStyle.caption)
+                        .foregroundStyle(EyeStyle.Game.Theater.tearHighlight)
+                        .padding(.horizontal, 10).padding(.vertical, 4)
+                        .background(EyeStyle.background.opacity(0.72), in: EyeStyle.chipShape)
+                        .padding(12)
+                }
+                .stageHeight(228)
+                .background(EyeStyle.Game.Theater.stageBg, in: RoundedRectangle(cornerRadius: EyeStyle.radiusHero, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: EyeStyle.radiusHero, style: .continuous)
+                        .strokeBorder(EyeStyle.glassEdgeTop.opacity(0.45), lineWidth: 1)
+                }
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                Text(isOpen ? "稳住晶莹水膜，尽量不要眨眼" : act.title).font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text)
+                Text(isOpen ? (blinks == 0 ? "目前还没有眨眼，水膜护盾正在持续充能！" : "已经眨眼 \(blinks) 次，继续稳住视线坚持到倒计时结束。") : act.subtitle)
+                    .font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 16).padding(.vertical, 12)
+            .background(EyeStyle.surfaceVariant, in: RoundedRectangle(cornerRadius: EyeStyle.radiusMedium, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: EyeStyle.radiusMedium, style: .continuous)
+                    .strokeBorder(EyeStyle.borderSubtle, lineWidth: 1)
+            }
+        }
+    }
+}
+
+/// 老视自测：矢车菊蓝信封舞台 + 下方四方向复古墨绿邮筒作答台。
+private struct PostOfficeAnswerPad: View {
+    @ObservedObject var runtime: EyeRuntime
+    var body: some View {
+        let visible = runtime.bool("trialVisible")
+        VStack(spacing: 12) {
+            PostOfficeEnvelopeView(runtime: runtime)
+                .stageHeight(max(196, CGFloat(runtime.number("optotypePx")) / UIScreen.main.scale + 104))
+            HStack(spacing: 8) {
+                postbox("向上", 3)
+                postbox("向下", 1)
+                postbox("向左", 2)
+                postbox("向右", 0)
+            }
+            Button { runtime.answer(-1) } label: {
+                Text("看不清 · 跳过")
+                    .font(EyeStyle.bodySecondary.weight(.semibold))
+                    .foregroundStyle(visible ? EyeStyle.secondary : EyeStyle.tertiary)
+                    .padding(.horizontal, 24).frame(minHeight: 48)
+                    .background(EyeStyle.surfaceVariant.opacity(visible ? 1 : 0.45), in: EyeStyle.chipShape)
+                    .overlay { EyeStyle.chipShape.strokeBorder(EyeStyle.borderSubtle, lineWidth: 1) }
+            }
+            .buttonStyle(.plain)
+            .disabled(!visible)
+        }
+    }
+
+    private func postbox(_ label: String, _ direction: Int) -> some View {
+        let visible = runtime.bool("trialVisible")
+        let matched = visible && (runtime.state["gestureDirection"] as? NSNumber)?.intValue == direction
+        let holding = matched && !runtime.bool("gestureNeedsRelease")
+        return Button { runtime.answer(direction) } label: {
+            ZStack {
+                Canvas { ctx, size in
+                    let w = size.width, h = size.height
+                    ctx.fill(RoundedRectangle(cornerRadius: 16).path(in: CGRect(x: 0, y: 0, width: w, height: h * 0.42)),
+                             with: .color(EyeStyle.Game.PostOffice.boxTop))
+                    ctx.fill(RoundedRectangle(cornerRadius: 10).path(in: CGRect(x: 0, y: h * 0.24, width: w, height: h * 0.76)),
+                             with: .color(EyeStyle.Game.PostOffice.boxBody))
+                    ctx.fill(RoundedRectangle(cornerRadius: 4).path(in: CGRect(x: w * 0.18, y: h * 0.13, width: w * 0.64, height: h * 0.085)),
+                             with: .color(EyeStyle.Game.PostOffice.boxSlot))
+                    ctx.fill(RoundedRectangle(cornerRadius: 6).path(in: CGRect(x: w * 0.10, y: h * 0.34, width: w * 0.80, height: h * 0.56)),
+                             with: .color(EyeStyle.Game.PostOffice.boxSlot.opacity(0.45)))
+                    ctx.stroke(RoundedRectangle(cornerRadius: 12).path(in: CGRect(x: 1.5, y: 1.5, width: w - 3, height: h - 3)),
+                               with: .color(holding ? EyeStyle.primary : EyeStyle.Game.PostOffice.boxSlot), lineWidth: holding ? 2.5 : 1.5)
+                }
+                ArrowGlyph()
+                    .stroke(holding ? EyeStyle.moodGold : Color.white,
+                            style: StrokeStyle(lineWidth: 26 * 0.14, lineCap: .round, lineJoin: .round))
+                    .frame(width: 26, height: 26)
+                    .rotationEffect(.degrees(Double(direction) * 90))
+                    .padding(.top, 18)
+            }
+            .frame(maxWidth: .infinity).frame(height: 74)
+            .opacity(visible ? 1 : 0.4)
+        }
+        .buttonStyle(PressScale(scale: 0.93))
+        .disabled(!visible)
+        .accessibilityLabel(label)
+    }
+}
+
+private struct PostOfficeEnvelopeView: View {
+    @ObservedObject var runtime: EyeRuntime
+    var body: some View {
+        let visible = runtime.bool("trialVisible")
+        Canvas { ctx, size in
+            let w = size.width, h = size.height
+            ctx.fill(Path(CGRect(origin: .zero, size: size)),
+                     with: .linearGradient(Gradient(colors: [EyeStyle.Game.PostOffice.skyTop, EyeStyle.Game.PostOffice.skyMid, EyeStyle.Game.PostOffice.skyBottom]),
+                                           startPoint: .zero, endPoint: CGPoint(x: 0, y: h)))
+            let envW = min(w * 0.72, h * 1.48), envH = min(h * 0.70, envW * 0.68)
+            let envL = (w - envW) * 0.5, envT = (h - envH) * 0.5
+            let alpha: Double = visible ? 1 : 0.52
+            ctx.fill(RoundedRectangle(cornerRadius: 8).path(in: CGRect(x: envL, y: envT, width: envW, height: envH)),
+                     with: .linearGradient(Gradient(colors: [EyeStyle.Game.PostOffice.envelopeBase.opacity(alpha), EyeStyle.Game.PostOffice.envelopeDeep.opacity(alpha)]),
+                                           startPoint: CGPoint(x: envL, y: envT), endPoint: CGPoint(x: envL + envW, y: envT + envH)))
+            ctx.stroke(RoundedRectangle(cornerRadius: 4).path(in: CGRect(x: envL + 7, y: envT + 7, width: envW - 14, height: envH - 14)),
+                       with: .color(EyeStyle.Game.PostOffice.envelopeFiligree.opacity(0.52 * alpha)), lineWidth: 1.4)
+            let edge = max(0, CGFloat(runtime.number("optotypePx")) / UIScreen.main.scale)
+            guard visible, edge > 0 else { return }
+            Cartoon.tumblingE(ctx, color: EyeStyle.Game.PostOffice.optotypePinkWhite,
+                              center: CGPoint(x: w * 0.5, y: h * 0.5), edge: edge,
+                              direction: Int(runtime.number("direction")))
+        }
+        .clipShape(RoundedRectangle(cornerRadius: EyeStyle.radiusHero, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: EyeStyle.radiusHero, style: .continuous)
+                .strokeBorder(EyeStyle.glassEdgeTop.opacity(0.4), lineWidth: 1)
+        }
+        .onChange(of: runtime.number("trialId")) { id in runtime.schedulePresented(Int32(id)) }
+        .onAppear { runtime.schedulePresented(Int32(runtime.number("trialId"))) }
+    }
+}
+
+private enum MoonlitFireflyRenderer {
+    static func backdrop(_ ctx: GraphicsContext, size: CGSize, phase: CGFloat) {
+        let w = size.width, h = size.height
+        ctx.fill(Path(CGRect(origin: .zero, size: size)),
+                 with: .linearGradient(Gradient(colors: [EyeStyle.Game.Firefly.skyTop, EyeStyle.Game.Firefly.skyMid, EyeStyle.Game.Firefly.skyBottom]),
+                                       startPoint: .zero, endPoint: CGPoint(x: 0, y: h)))
+        let moonC = CGPoint(x: w * 0.78, y: h * 0.11)
+        let moonR = min(max(min(w, h) * 0.048, 14), 28)
+        let haloR = moonR * 3.8
+        ctx.fill(Path(ellipseIn: CGRect(x: moonC.x - haloR, y: moonC.y - haloR, width: haloR * 2, height: haloR * 2)),
+                 with: .radialGradient(Gradient(colors: [EyeStyle.Game.Firefly.moonHalo.opacity(0.42), .clear]),
+                                       center: moonC, startRadius: 0, endRadius: haloR))
+        var crescent = Path()
+        crescent.move(to: CGPoint(x: moonC.x + moonR * 0.25, y: moonC.y - moonR))
+        crescent.addCurve(to: CGPoint(x: moonC.x + moonR * 0.25, y: moonC.y + moonR),
+                          control1: CGPoint(x: moonC.x - moonR * 0.95, y: moonC.y - moonR * 0.72),
+                          control2: CGPoint(x: moonC.x - moonR * 0.95, y: moonC.y + moonR * 0.72))
+        crescent.addCurve(to: CGPoint(x: moonC.x + moonR * 0.25, y: moonC.y - moonR),
+                          control1: CGPoint(x: moonC.x - moonR * 0.28, y: moonC.y + moonR * 0.52),
+                          control2: CGPoint(x: moonC.x - moonR * 0.28, y: moonC.y - moonR * 0.52))
+        crescent.closeSubpath()
+        ctx.fill(crescent, with: .color(EyeStyle.Game.Firefly.moon))
+
+        var leftTree = Path()
+        leftTree.move(to: .zero)
+        leftTree.addLine(to: CGPoint(x: w * 0.22, y: 0))
+        leftTree.addQuadCurve(to: CGPoint(x: w * 0.12, y: h * 0.65), control: CGPoint(x: w * 0.15, y: h * 0.32))
+        leftTree.addQuadCurve(to: CGPoint(x: w * 0.36, y: h * 0.88), control: CGPoint(x: w * 0.18, y: h * 0.80))
+        leftTree.addLine(to: CGPoint(x: w * 0.32, y: h))
+        leftTree.addLine(to: CGPoint(x: 0, y: h))
+        leftTree.closeSubpath()
+        ctx.fill(leftTree, with: .color(EyeStyle.Game.Firefly.treeNear.opacity(0.88)))
+
+        var rightTree = Path()
+        rightTree.move(to: CGPoint(x: w, y: 0))
+        rightTree.addLine(to: CGPoint(x: w * 0.78, y: 0))
+        rightTree.addQuadCurve(to: CGPoint(x: w * 0.88, y: h * 0.64), control: CGPoint(x: w * 0.86, y: h * 0.30))
+        rightTree.addQuadCurve(to: CGPoint(x: w * 0.64, y: h * 0.89), control: CGPoint(x: w * 0.80, y: h * 0.80))
+        rightTree.addLine(to: CGPoint(x: w * 0.68, y: h))
+        rightTree.addLine(to: CGPoint(x: w, y: h))
+        rightTree.closeSubpath()
+        ctx.fill(rightTree, with: .color(EyeStyle.Game.Firefly.treeNear.opacity(0.88)))
+
+        var creek = Path()
+        creek.move(to: CGPoint(x: w * 0.44, y: h * 0.78))
+        creek.addQuadCurve(to: CGPoint(x: w * 0.38, y: h), control: CGPoint(x: w * 0.54, y: h * 0.86))
+        creek.addLine(to: CGPoint(x: w * 0.66, y: h))
+        creek.addQuadCurve(to: CGPoint(x: w * 0.50, y: h * 0.78), control: CGPoint(x: w * 0.58, y: h * 0.86))
+        creek.closeSubpath()
+        ctx.fill(creek, with: .color(EyeStyle.Game.Firefly.creek.opacity(0.65)))
+    }
+
+    static func firefly(_ ctx: GraphicsContext, center: CGPoint, radius: CGFloat, wingPhase: CGFloat, glowIntensity: Double) {
+        let glowAlpha = min(1, max(0.25, glowIntensity))
+        let glowR = radius * (2.6 + 0.25 * CGFloat(sin(Double(wingPhase) * 2 * .pi)))
+        ctx.fill(Path(ellipseIn: CGRect(x: center.x - glowR, y: center.y - glowR, width: glowR * 2, height: glowR * 2)),
+                 with: .radialGradient(Gradient(stops: [
+                    .init(color: EyeStyle.Game.Firefly.glowCore.opacity(0.92 * glowAlpha), location: 0),
+                    .init(color: EyeStyle.Game.Firefly.glowMid.opacity(0.58 * glowAlpha), location: 0.35),
+                    .init(color: EyeStyle.Game.Firefly.glowOuter.opacity(0.22 * glowAlpha), location: 0.70),
+                    .init(color: .clear, location: 1),
+                 ]), center: center, startRadius: 0, endRadius: glowR))
+        Cartoon.rotated(ctx, -18, around: center) { layer in
+            let flap = sin(Double(wingPhase) * 2 * .pi) * 14
+            for side: CGFloat in [-1, 1] {
+                Cartoon.rotated(layer, Double(side) * (34 + flap * 0.6), around: CGPoint(x: center.x, y: center.y - radius * 0.35)) { wl in
+                    let rect = CGRect(x: center.x + (side < 0 ? -radius * 1.15 : radius * 0.05),
+                                      y: center.y - radius * 1.05, width: radius * 1.10, height: radius * 0.56)
+                    wl.fill(Path(ellipseIn: rect), with: .color(EyeStyle.Game.Firefly.wing.opacity(0.78)))
+                }
+            }
+            let hr = radius * 0.34
+            layer.fill(Path(ellipseIn: CGRect(x: center.x - hr, y: center.y - radius * 0.62 - hr, width: hr * 2, height: hr * 2)),
+                       with: .color(EyeStyle.Game.Firefly.bodyDark))
+            layer.fill(Path(ellipseIn: CGRect(x: center.x - radius * 0.36, y: center.y - radius * 0.42, width: radius * 0.72, height: radius * 0.46)),
+                       with: .color(EyeStyle.Game.Firefly.bodyWarm))
+            for (scale, color) in [(0.52, EyeStyle.Game.Firefly.glowOuter), (0.38, EyeStyle.Game.Firefly.glowMid), (0.22, EyeStyle.Game.Firefly.glowCore)] {
+                let r = radius * CGFloat(scale)
+                layer.fill(Path(ellipseIn: CGRect(x: center.x - r, y: center.y - r, width: r * 2, height: r * 2)),
+                           with: .color(color.opacity(glowAlpha)))
+            }
+        }
+    }
 }

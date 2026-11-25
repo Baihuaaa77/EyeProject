@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
   pull_request:
   push:
-    branches: [master]
+    branches: [master, feat/gamified-screenings]
 permissions:
   contents: read
 concurrency:
@@ -79,7 +79,7 @@ jobs:
         run: chmod +x scripts/ios/unsigned-ipa.sh && ./scripts/ios/unsigned-ipa.sh
       - uses: actions/upload-artifact@v4
         with:
-          name: ios-unsigned-ipa
-          path: iosApp/build/unsigned/EyeProject-unsigned.ipa
+          name: ios-unsigned-ipa-game
+          path: iosApp/build/unsigned/EyeProject-Game-unsigned.ipa
           if-no-files-found: error
           retention-days: 14

@@ -13,7 +13,8 @@ import kotlinx.coroutines.flow.*
 /** 干眼共用流程。相机帧串行进入流程协程，眨眼仍按到达的逐帧序列判断。 */
 class DryEyeEngine(platform: ScreeningPlatform, private val scope: CoroutineScope,
     private val recordScope: CoroutineScope = ScreeningPersistence.scope,
-    private val recordDispatcher: CoroutineDispatcher = Dispatchers.IO) {
+    private val recordDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val theaterMode: Boolean = false) {
     internal val helpSession = TestHelpSession(platform)
     private val platform: ScreeningPlatform = helpSession
     fun setHelpPresented(presented: Boolean) = helpSession.setPresented(presented)
@@ -111,11 +112,12 @@ class DryEyeEngine(platform: ScreeningPlatform, private val scope: CoroutineScop
 
     // region 流程
 
-    /** 准备页门禁通过后进入练习说明。 */
+    /** 准备页门禁通过后进入下一步（小剧场模式直接进入正式说明，无需 E 字练习）。 */
     fun startTest() {
         if (!_uiState.value.gateReady || testJob != null) return
         platform.feedback(ScreeningFeedbackCue.START)
-        _uiState.update { it.copy(phase = DryEyePhase.PracticeGuide, error = null) }
+        val next = if (theaterMode) DryEyePhase.FormalGuide else DryEyePhase.PracticeGuide
+        _uiState.update { it.copy(phase = next, naturalSeconds = DryEyeProtocol.NATURAL_SECONDS, afterRest = false, error = null) }
     }
 
     fun confirmPracticeGuide() {
@@ -308,7 +310,8 @@ class DryEyeEngine(platform: ScreeningPlatform, private val scope: CoroutineScop
         blinkEvents.clear()
         _uiState.update {
             // 进入新阶段先清零阶段进度，避免沿用上一阶段的满值。
-            it.copy(phase = DryEyePhase.Natural, instruction = "看 E 选方向，同时像平时一样自然眨眼",
+            it.copy(phase = DryEyePhase.Natural,
+                instruction = if (theaterMode) "观看护眼小剧场，像平时一样自然眨眼" else "看 E 选方向，同时像平时一样自然眨眼",
                 progressFraction = 0f, remainingSeconds = naturalSeconds,
                 phase1Blinks = emptyList(), phase2Blinks = emptyList(), phase1BlinkCount = 0, phase2BlinkCount = 0,
                 trialCount = 0, distanceSamples = emptyList(), error = null)
@@ -321,7 +324,7 @@ class DryEyeEngine(platform: ScreeningPlatform, private val scope: CoroutineScop
         val activeSec: (Long) -> Float = { t -> (t - start - pausedTotal) / 1000f }
         coroutineScope {
             var openStarted = false
-            var loop = launch { trialLoop(DryEyeStage.NATURAL, activeSec, trials) }
+            var loop: Job? = if (theaterMode) null else launch { trialLoop(DryEyeStage.NATURAL, activeSec, trials) }
             while (isActive) {
                 val now = platform.nowMs()
                 if (pausedAt > 0L) {
@@ -331,7 +334,7 @@ class DryEyeEngine(platform: ScreeningPlatform, private val scope: CoroutineScop
                         pauses += activeSec(pausedAt) to (now - pausedAt) / 1000f
                         pausedTotal += now - pausedAt; pausedAt = 0L
                         val stage = if (openStarted) DryEyeStage.OPEN else DryEyeStage.NATURAL
-                        loop = launch { trialLoop(stage, activeSec, trials) }
+                        if (!theaterMode) loop = launch { trialLoop(stage, activeSec, trials) }
                     }
                     helpSession.delay(100); continue
                 }
@@ -342,7 +345,8 @@ class DryEyeEngine(platform: ScreeningPlatform, private val scope: CoroutineScop
                         blinks += activeSec(t)
                 }
                 if (!openStarted && elapsed >= naturalMs) {
-                    loop.cancelAndJoin()
+                    loop?.cancelAndJoin()
+                    loop = null
                     pendingAnswer?.cancel()
                     pendingPresentation = null
                     _uiState.update { it.copy(phase = DryEyePhase.OpenCue, trialVisible = false,
@@ -353,14 +357,14 @@ class DryEyeEngine(platform: ScreeningPlatform, private val scope: CoroutineScop
                     pausedTotal = platform.nowMs() - start - naturalMs
                     openStarted = true
                     _uiState.update { it.copy(phase = DryEyePhase.Open, remainingSeconds = DryEyeProtocol.OPEN_SECONDS,
-                        instruction = "尽量保持睁眼，继续看 E 选方向") }
-                    loop = launch { trialLoop(DryEyeStage.OPEN, activeSec, trials) }
+                        instruction = if (theaterMode) "稳住水膜，尽量保持睁眼 20 秒" else "尽量保持睁眼，继续看 E 选方向") }
+                    if (!theaterMode) loop = launch { trialLoop(DryEyeStage.OPEN, activeSec, trials) }
                     continue
                 }
                 if (elapsed >= totalMs) { completed = true; break }
                 val reason = anomalyPersisted()
                 if (reason != null) {
-                    pausedAt = now; loop.cancel(); pause(reason)
+                    pausedAt = now; loop?.cancel(); loop = null; pause(reason)
                     continue
                 }
                 frames++
@@ -389,7 +393,7 @@ class DryEyeEngine(platform: ScreeningPlatform, private val scope: CoroutineScop
                 }
                 helpSession.delay(100)
             }
-            loop.cancel()
+            loop?.cancel()
             if (completed) finishFormal(naturalSeconds, trials, blinks, distances, frames, validFrames, inRange, turned, true, afterRest, pauses)
         }
     }

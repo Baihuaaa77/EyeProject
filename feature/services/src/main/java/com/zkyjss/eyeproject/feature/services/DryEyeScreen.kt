@@ -166,8 +166,8 @@ fun DryEyeScreen(
         DryEyePhase.Profile -> ""
         DryEyePhase.Setup -> "建议佩戴最佳矫正视力眼镜。准备好后开始"
         DryEyePhase.PracticeGuide -> guideCueDryEyePractice
-        DryEyePhase.FormalGuide -> "正式测试。先自然眨眼，看到屏幕提示后尽量保持睁眼二十秒"
-        DryEyePhase.OpenCue, DryEyePhase.Open -> "现在尽量保持睁眼"
+        DryEyePhase.FormalGuide -> "护眼小剧场即将开始。前六十秒观看动画自然眨眼，看到提示后尽量保持睁眼二十秒"
+        DryEyePhase.OpenCue, DryEyePhase.Open -> "现在尽量保持睁眼，稳住水膜"
         DryEyePhase.Rest -> if (state.remainingSeconds <= 1) "请睁开眼睛" else "请闭上眼睛休息"
         DryEyePhase.Result -> "测试完成"
         else -> state.qualityWarning ?: state.instruction
@@ -283,18 +283,18 @@ private fun NoticeCard(text: String) {
     )
 }
 
-/** 正式说明：两段任务连续进行，先讲清楚再开始。 */
+/** 正式说明：两段观影与挑战连续进行，先讲清楚再开始。 */
 @Composable
 private fun FormalGuideContent(state: DryEyeTestUiState, onStart: () -> Unit) {
     val colors = LocalEyeColors.current
     if (state.afterRest) NoticeCard("休息结束，下面进行复测，流程与首次相同")
     DistanceBanner(distanceStatus(state.distanceCm, state.faceDetected, DryEyeProtocol.TARGET_DISTANCE_CM, DryEyeProtocol.DISTANCE_TOLERANCE_CM), compact = true)
     TestGuide(
-        GuideMotion.FVA,
-        "正式测试 · ${state.naturalSeconds} 秒 + 20 秒",
-        "全程看 E 选方向。前 ${state.naturalSeconds} 秒自然眨眼，看到屏幕提示后，尽量保持睁眼 20 秒",
+        GuideMotion.BLINK,
+        "护眼小剧场 · ${state.naturalSeconds} 秒 + 20 秒",
+        "观看护眼科普小动画。前 ${state.naturalSeconds} 秒像平时一样自然眨眼，看到屏幕提示后，尽量保持睁眼 20 秒",
     )
-    EyeButton("开始正式测试", EyeButtonRole.PRIMARY, onStart, Modifier.fillMaxWidth(), state.gateReady)
+    EyeButton("开始护眼小剧场", EyeButtonRole.PRIMARY, onStart, Modifier.fillMaxWidth(), state.gateReady)
     state.error?.let { EyeText(it, style = LocalEyeTypography.current.body, color = colors.danger) }
 }
 
@@ -344,26 +344,30 @@ private fun TimerRing(progress: () -> Float, modifier: Modifier = Modifier, cont
     }
 }
 
-/** 练习/正式测试中：阶段 + 剩余时间 + 2 秒限时视标 + 方向按键。 */
+/** 正式观影与睁眼挑战：护眼科普小剧场 + 实时眨眼监测；练习态仍保留兼容呈现。 */
 @Composable
 internal fun TrialContent(state: DryEyeTestUiState, onAnswer: (Int) -> Unit) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
-    val stageLabel = when (state.phase) {
-        DryEyePhase.Practice -> "练习"
-        DryEyePhase.Natural -> "自然眨眼"
-        else -> "持续睁眼"
+    if (state.phase == DryEyePhase.Practice) {
+        TestStageCard {
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    EyeText("练习", style = typography.subtitle, color = colors.primary)
+                    EyeText("剩余 ${state.remainingSeconds} 秒", style = typography.subtitle, color = colors.textPrimary)
+                }
+                val size = with(LocalDensity.current) { state.optotypePx.toDp() }
+                OptotypeAnswerPad(state.direction, size, state.trialVisible,
+                    gesture = state.gestureFeedback,
+                    belowStimulus = { TrialTimer(state.trialId, state.trialVisible) }, onAnswer = onAnswer)
+                TestNotice(state.qualityWarning)
+            }
+        }
+        return
     }
     TestStageCard {
         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                EyeText(stageLabel, style = typography.subtitle, color = if (state.phase == DryEyePhase.Open) colors.warning else colors.primary)
-                EyeText("剩余 ${state.remainingSeconds} 秒", style = typography.subtitle, color = colors.textPrimary)
-            }
-            val size = with(LocalDensity.current) { state.optotypePx.toDp() }
-            OptotypeAnswerPad(state.direction, size, state.trialVisible,
-                gesture = state.gestureFeedback,
-                belowStimulus = { TrialTimer(state.trialId, state.trialVisible) }, onAnswer = onAnswer)
+            DryEyeStoryTheater(state)
             TestNotice(state.qualityWarning)
         }
     }
