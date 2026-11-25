@@ -85,6 +85,7 @@ class CameraController @Inject constructor(
         onError: (Throwable) -> Unit,
         opticalPrecision: Boolean = false,
         measureOptics: Boolean = true,
+        screenGlintSearchRadius: Float = 0.60f,
     ): Int {
         val myGeneration = ++generation
         releaseCamera()
@@ -103,6 +104,7 @@ class CameraController @Inject constructor(
                         context = context,
                         opticalPrecision = opticalPrecision,
                         measureOptics = measureOptics,
+                        screenGlintSearchRadius = screenGlintSearchRadius,
                         onSourceImage = { bitmap, time -> imageObservers.forEach { observer -> runCatching { observer(bitmap,time) } } },
                         onResult = { frame ->
                             runCatching { onFrame(frame) }

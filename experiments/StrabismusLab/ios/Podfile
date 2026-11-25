@@ -1,0 +1,9 @@
+platform :ios, '16.0'
+use_frameworks! :linkage => :static
+
+target 'StrabismusLab' do
+  pod 'MediaPipeTasksVision', '1.0.0'
+  target 'StrabismusLabTests' do
+    inherit! :search_paths
+  end
+end

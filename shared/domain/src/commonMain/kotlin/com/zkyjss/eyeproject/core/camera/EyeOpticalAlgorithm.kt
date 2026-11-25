@@ -18,12 +18,22 @@ object EyeOpticalAlgorithm {
     /** 旧版光码实验的全虹膜基线；保留供历史回放比较，主 App 使用 measureScreenPoint。 */
     fun measureFullIris(bitmap: GrayImage, eye: EyeLandmarks?): OpticalEyeMeasurement? = measure(bitmap, eye, 1f)
 
-    /** 主 App 的黑屏白点分支：原像素局部峰，搜索范围为虹膜半径的 60%。 */
-    fun measureScreenPoint(bitmap: GrayImage, eye: EyeLandmarks?): OpticalEyeMeasurement? =
-        measure(bitmap,eye,screenPoint = true)
+    /** 主 App 的黑屏白点分支：原像素局部峰，默认搜索范围为虹膜半径的 60%；科研模式可放宽至 0.80f。 */
+    fun measureScreenPoint(
+        bitmap: GrayImage,
+        eye: EyeLandmarks?,
+        searchRadiusFraction: Float = ScreenGlintDetection.DEFAULT_SEARCH_RADIUS,
+        expectedDiameterPx: Float? = null,
+    ): OpticalEyeMeasurement? =
+        measure(bitmap, eye, searchRadiusFraction = searchRadiusFraction, screenPoint = true, expectedDiameterPx = expectedDiameterPx)
 
-    private fun measure(bitmap: GrayImage, eye: EyeLandmarks?, searchRadiusFraction: Float = 0.75f,
-                        screenPoint: Boolean = false): OpticalEyeMeasurement? {
+    private fun measure(
+        bitmap: GrayImage,
+        eye: EyeLandmarks?,
+        searchRadiusFraction: Float = 0.75f,
+        screenPoint: Boolean = false,
+        expectedDiameterPx: Float? = null,
+    ): OpticalEyeMeasurement? {
         eye ?: return null
         val iris = eye.irisPoints.firstOrNull() ?: return null
         val diameter = eye.irisDiameterPx
@@ -65,8 +75,16 @@ object EyeOpticalAlgorithm {
         val pupil = if (pupilContrast >= 12f && pupilWeight >= 8f) Point2f(pupilX / pupilWeight, pupilY / pupilWeight) else null
         val visibility = visibilityContrast(bitmap, eye, dark)
         if (screenPoint) {
-            val candidates = ScreenGlintDetection.find(gray, width, height, Point2f(iris.x - x0, iris.y - y0), radius,
-                eye.earPoints.map { Point2f(it.x - x0, it.y - y0) }).map {
+            val candidates = ScreenGlintDetection.find(
+                gray = gray,
+                width = width,
+                height = height,
+                center = Point2f(iris.x - x0, iris.y - y0),
+                radius = radius,
+                lid = eye.earPoints.map { Point2f(it.x - x0, it.y - y0) },
+                searchRadiusFraction = searchRadiusFraction,
+                expectedDiameterPx = expectedDiameterPx,
+            ).map {
                 it.copy(point = Point2f(it.point.x + x0, it.point.y + y0))
             }
             val best = candidates.firstOrNull()?.takeIf { it.quality >= 0.32f }

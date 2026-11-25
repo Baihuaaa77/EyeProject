@@ -4,17 +4,30 @@ import com.zkyjss.eyeproject.core.model.Point2f
 import com.zkyjss.eyeproject.core.model.ReflexCandidate
 import kotlin.math.abs
 import kotlin.math.ceil
+import kotlin.math.exp
 import kotlin.math.hypot
+import kotlin.math.ln
+import kotlin.math.max
 import kotlin.math.sqrt
 
 /** 沿用光码实验的多尺度中心－周边差分与局部噪声估计，在原像素上提取亮点。 */
 internal object ScreenGlintDetection {
-    private const val SEARCH_RADIUS = 0.60f
+    const val DEFAULT_SEARCH_RADIUS = 0.60f
+    /** 科研斜视自测默认放宽至 0.80 虹膜半径，避免中重度斜视映光被裁剪。 */
+    const val RESEARCH_SEARCH_RADIUS = 0.80f
 
-    fun find(gray: IntArray, width: Int, height: Int, center: Point2f, radius: Float,
-             lid: List<Point2f>): List<ReflexCandidate> {
+    fun find(
+        gray: IntArray,
+        width: Int,
+        height: Int,
+        center: Point2f,
+        radius: Float,
+        lid: List<Point2f>,
+        searchRadiusFraction: Float = DEFAULT_SEARCH_RADIUS,
+        expectedDiameterPx: Float? = null,
+    ): List<ReflexCandidate> {
         if (lid.size != 6) return emptyList()
-        val searchRadius = radius * SEARCH_RADIUS
+        val searchRadius = radius * searchRadiusFraction.coerceIn(0.3f, 1.0f)
         fun inside(x: Float, y: Float): Boolean {
             if (hypot(x - center.x, y - center.y) > searchRadius) return false
             var visible = false
@@ -120,16 +133,22 @@ internal object ScreenGlintDetection {
             var weight = 0f
             var weightedX = 0f
             var weightedY = 0f
+            var weightedX2 = 0f
+            var weightedY2 = 0f
+            var weightedXY = 0f
             var halfHeightArea = 0
             var clipped = false
             while (head < tail) {
                 val p = pending[head++]
                 val px = p % width
                 val py = p / width
-                val value = gray[p] - background
+                val value = (gray[p] - background).toFloat()
                 weight += value
                 weightedX += px * value
                 weightedY += py * value
+                weightedX2 += px * px * value
+                weightedY2 += py * py * value
+                weightedXY += px * py * value
                 if (value >= signal * 0.5f) {
                     halfHeightArea++
                     if (abs(px - x) == halfWindow || abs(py - y) == halfWindow ||
@@ -147,16 +166,36 @@ internal object ScreenGlintDetection {
                 }
             }
             val diameter = 2f * sqrt(halfHeightArea / kotlin.math.PI.toFloat())
-            if (clipped || diameter > maxOf(4f, radius * 0.19f)) continue
-            val point = Point2f(weightedX / weight, weightedY / weight)
+            val maxDiameter = if (expectedDiameterPx != null) max(5f, max(radius * 0.24f, expectedDiameterPx * 2.8f)) else maxOf(4f, radius * 0.19f)
+            if (clipped || weight <= 0f || diameter > maxDiameter) continue
+            val cx = weightedX / weight
+            val cy = weightedY / weight
+            val point = Point2f(cx, cy)
             if (!inside(point.x, point.y)) continue
+            // 对齐 CornealCodeLab v0.8 的二阶矩轴比与预计斑径软形态评分。
+            val vx = (weightedX2 / weight - cx * cx + 1f / 12f).coerceAtLeast(1e-6f)
+            val vy = (weightedY2 / weight - cy * cy + 1f / 12f).coerceAtLeast(1e-6f)
+            val vxy = weightedXY / weight - cx * cy
+            val delta = sqrt((vx - vy) * (vx - vy) + 4f * vxy * vxy)
+            val axisRatio = sqrt(((vx + vy - delta) / max(1e-6f, vx + vy + delta)).coerceAtLeast(0f))
+            val expected = expectedDiameterPx ?: maxOf(2f, radius * 0.09f)
+            val sizeQuality = exp(-0.35f * abs(ln(max(0.5f, diameter) / max(1f, expected))))
+            val shapeScore = (axisRatio / 0.6f).coerceIn(0f, 1f) * sizeQuality
             // 优先紧凑、局部对比强且信噪比高的峰；中心位置仅给弱先验。
             val sizeWeight = 1f / (1f + diameter / maxOf(2f, radius * 0.09f))
             val centerWeight = 1f - 0.3f * hypot(point.x - center.x, point.y - center.y) / searchRadius
             val quality = ((signal / 65f).coerceAtMost(1f) * 0.6f + (snr / 20f).coerceAtMost(1f) * 0.4f) *
                 sizeWeight * centerWeight
-            candidates += ReflexCandidate(point, signal.toFloat(), gray[peak].toFloat(), quality)
+            candidates += ReflexCandidate(
+                point = point,
+                contrast = signal.toFloat(),
+                brightness = gray[peak].toFloat(),
+                quality = quality,
+                snr = snr,
+                diameterPx = diameter,
+                shapeScore = shapeScore,
+            )
         }
-        return candidates.sortedByDescending { it.quality }.take(8)
+        return candidates.sortedByDescending { it.quality }.take(12)
     }
 }

@@ -1,0 +1,63 @@
+name: StrabismusLab
+options:
+  deploymentTarget:
+    iOS: "16.0"
+  xcodeVersion: "26.4"
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.8.0"
+    CURRENT_PROJECT_VERSION: "1"
+    CODE_SIGN_STYLE: Automatic
+    TARGETED_DEVICE_FAMILY: "1"
+    FRAMEWORK_SEARCH_PATHS: "$(inherited) $(SRCROOT)/../../../shared/screening/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)"
+    OTHER_LDFLAGS: "$(inherited) -framework EyeScreening -lc++"
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+targets:
+  StrabismusLab:
+    type: application
+    platform: iOS
+    sources:
+      - Sources
+      - path: ../../../core/camera/src/main/assets/face_landmarker.task
+        buildPhase: resources
+    info:
+      path: Info.plist
+      properties:
+        CFBundleDisplayName: StrabismusLab
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        NSCameraUsageDescription: 使用前置摄像头进行 4K 眼部关键点检测、0.80R 角膜光码映光定位与斜视科研采集，数据仅存本机不上传。
+        UIUserInterfaceStyle: Dark
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UILaunchScreen: {}
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
+        ITSAppUsesNonExemptEncryption: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.zkyjss.strabismuslab
+        GENERATE_INFOPLIST_FILE: NO
+    preBuildScripts:
+      - name: 构建双端共用 KMP 科研引擎
+        script: |
+          set -eu
+          cd "$SRCROOT/../../.."
+          ./gradlew -p shared :screening:embedAndSignAppleFrameworkForXcode
+        basedOnDependencyAnalysis: false
+    scheme:
+      testTargets:
+        - StrabismusLabTests
+  StrabismusLabTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - Tests
+    dependencies:
+      - target: StrabismusLab
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.zkyjss.strabismuslab.tests
+        OTHER_LDFLAGS: ""
+        GENERATE_INFOPLIST_FILE: YES

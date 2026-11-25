@@ -23,8 +23,16 @@ data class OpticalEyeMeasurement(
         get() = if (usable && irisDiameterPx > 0f) (pupilCenter!!.y - cornealReflex!!.y) / irisDiameterPx else null
 }
 
-/** 候选点保留原图像素和局部对比度，供随设备移动的眼区光码解码。 */
-data class ReflexCandidate(val point: Point2f, val contrast: Float, val brightness: Float, val quality: Float = 0.5f)
+/** 候选点保留原图像素、局部对比度、信噪比与斑径形态，供跨帧与光码解调。 */
+data class ReflexCandidate(
+    val point: Point2f,
+    val contrast: Float,
+    val brightness: Float,
+    val quality: Float = 0.5f,
+    val snr: Float = 0f,
+    val diameterPx: Float = 0f,
+    val shapeScore: Float = 0f,
+)
 
  /** MediaPipe 面部变换矩阵估计的相对头姿；角度只用于采集质量检查。 */
 data class HeadPoseEstimate(val yawDeg: Float, val pitchDeg: Float, val rollDeg: Float)
