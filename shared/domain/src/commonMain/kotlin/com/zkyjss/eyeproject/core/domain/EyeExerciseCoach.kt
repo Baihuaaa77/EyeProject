@@ -41,6 +41,17 @@ class EyeExerciseCoach(private val moves: List<Move>) {
         /** 到目前为止真正看到眼球转过去的步数 */
         val detectedCount: Int,
         val progress: Float,
+        /** 屏幕方向实时注视偏移（左 -1..+1 右，上 -1..+1 下；无相机或校准前为 0） */
+        val gazeX: Float = 0f,
+        val gazeY: Float = 0f,
+        /** 当前目标方向的眼动蓄力/锁定进度（0..1，用于互动小游戏实时充能反馈） */
+        val holdProgress: Float = 0f,
+        /** 已完成各步是否被相机亲眼检测到（与 stepIndex 对应，用于星盘点亮展示） */
+        val stepResults: List<Boolean> = emptyList(),
+        /** 当前连续亲眼点亮的步数 */
+        val streak: Int = 0,
+        /** 本次最高连续点亮步数 */
+        val bestStreak: Int = 0,
     )
 
     private val lock = DomainLock()
@@ -49,12 +60,16 @@ class EyeExerciseCoach(private val moves: List<Move>) {
     private var stageStartMs = -1L
     private var baselineX = 0f
     private var baselineY = 0f
+    private var calibrated = false
     private val calibration = mutableListOf<Pair<Float, Float>>()
     private var latest: Pair<Float, Float>? = null
     private var latestMs = -1L
     private var holdSinceMs = -1L
     private var everSawFace = false
     private var detectedCount = 0
+    private var currentStreak = 0
+    private var bestStreak = 0
+    private val results = mutableListOf<Boolean>()
     /** 闭眼休息时最近一次报过的剩余秒数 */
     private var restSecond = 0
 
@@ -75,6 +90,7 @@ class EyeExerciseCoach(private val moves: List<Move>) {
             Stage.CALIBRATE -> if (elapsed >= CALIBRATE_MS) {
                 if (calibration.isNotEmpty()) {
                     baselineX = median(calibration.map { it.first }); baselineY = median(calibration.map { it.second })
+                    calibrated = true
                 }
                 enter(Stage.MOVE, timeMs); Event.NEXT
             } else null
@@ -88,11 +104,27 @@ class EyeExerciseCoach(private val moves: List<Move>) {
                 } else holdSinceMs = -1L
                 val faceRecently = latest != null && timeMs - latestMs <= FRESH_MS
                 when {
-                    holdSinceMs >= 0 && timeMs - holdSinceMs >= HOLD_MS -> { detectedCount++; enter(Stage.BACK, timeMs); Event.DETECTED }
+                    holdSinceMs >= 0 && timeMs - holdSinceMs >= HOLD_MS -> {
+                        detectedCount++
+                        currentStreak++
+                        if (currentStreak > bestStreak) bestStreak = currentStreak
+                        results += true
+                        enter(Stage.BACK, timeMs)
+                        Event.DETECTED
+                    }
                     // 看得到脸却一直没转过去：到点也往下走，不卡住
-                    faceRecently && elapsed >= MOVE_TIMEOUT_MS -> { enter(Stage.BACK, timeMs); Event.MISSED }
+                    faceRecently && elapsed >= MOVE_TIMEOUT_MS -> {
+                        currentStreak = 0
+                        results += false
+                        enter(Stage.BACK, timeMs)
+                        Event.MISSED
+                    }
                     // 没有相机或看不到脸：按时间带着做
-                    !faceRecently && elapsed >= GUIDED_MS -> { enter(Stage.BACK, timeMs); Event.NEXT }
+                    !faceRecently && elapsed >= GUIDED_MS -> {
+                        results += false
+                        enter(Stage.BACK, timeMs)
+                        Event.NEXT
+                    }
                     else -> null
                 }
             }
@@ -114,9 +146,10 @@ class EyeExerciseCoach(private val moves: List<Move>) {
 
     fun state(timeMs: Long): State = lock.withLock {
         val elapsed = if (stageStartMs < 0) 0L else timeMs - stageStartMs
+        val faceRecently = latest != null && timeMs - latestMs <= FRESH_MS
         val limit = when (stage) {
             Stage.CALIBRATE -> CALIBRATE_MS
-            Stage.MOVE -> if (latest != null && timeMs - latestMs <= FRESH_MS) MOVE_TIMEOUT_MS else GUIDED_MS
+            Stage.MOVE -> if (faceRecently) MOVE_TIMEOUT_MS else GUIDED_MS
             Stage.BACK -> RETURN_MS
             Stage.REST -> REST_MS
             Stage.DONE -> 0L
@@ -129,9 +162,51 @@ class EyeExerciseCoach(private val moves: List<Move>) {
             Stage.REST -> (moves.size + (elapsed.toFloat() / REST_MS).coerceIn(0f, 1f)) / steps
             Stage.DONE -> 1f
         }
-        State(stage, stepIndex, moves.size, moves.getOrNull(stepIndex).takeIf { stage == Stage.MOVE || stage == Stage.BACK },
-            secondsLeft(limit, elapsed),
-            latest != null && timeMs - latestMs <= 1_000L, detectedCount, progress)
+        val fresh = latest?.takeIf { timeMs - latestMs <= FRESH_MS }
+        val gazeX = if (fresh != null && calibrated) {
+            (-(fresh.first - baselineX) / (HORIZONTAL_THRESHOLD * 1.6f)).coerceIn(-1f, 1f)
+        } else 0f
+        val gazeY = if (fresh != null && calibrated) {
+            ((fresh.second - baselineY) / (VERTICAL_THRESHOLD * 1.6f)).coerceIn(-1f, 1f)
+        } else 0f
+        val currentMove = moves.getOrNull(stepIndex).takeIf { stage == Stage.MOVE || stage == Stage.BACK }
+        val holdProgress = when (stage) {
+            Stage.CALIBRATE -> (elapsed.toFloat() / CALIBRATE_MS).coerceIn(0f, 1f)
+            Stage.MOVE -> {
+                val move = moves.getOrNull(stepIndex)
+                if (move == null) 0f
+                else if (faceRecently && fresh != null) {
+                    if (holdSinceMs >= 0) {
+                        (0.3f + 0.7f * ((timeMs - holdSinceMs).toFloat() / HOLD_MS).coerceIn(0f, 1f)).coerceIn(0f, 1f)
+                    } else {
+                        val along = -move.dx * (fresh.first - baselineX) + move.dy * (fresh.second - baselineY)
+                        val threshold = if (move.dx != 0) HORIZONTAL_THRESHOLD else VERTICAL_THRESHOLD
+                        ((along / threshold).coerceIn(0f, 1f) * 0.3f)
+                    }
+                } else {
+                    (elapsed.toFloat() / GUIDED_MS).coerceIn(0f, 1f)
+                }
+            }
+            Stage.BACK -> 1f
+            Stage.REST -> (elapsed.toFloat() / REST_MS).coerceIn(0f, 1f)
+            Stage.DONE -> 1f
+        }
+        State(
+            stage = stage,
+            stepIndex = stepIndex,
+            stepCount = moves.size,
+            move = currentMove,
+            secondsLeft = secondsLeft(limit, elapsed),
+            faceVisible = latest != null && timeMs - latestMs <= 1_000L,
+            detectedCount = detectedCount,
+            progress = progress,
+            gazeX = gazeX,
+            gazeY = gazeY,
+            holdProgress = holdProgress,
+            stepResults = results.toList(),
+            streak = currentStreak,
+            bestStreak = bestStreak,
+        )
     }
 
     /** 这次一共做了几步、真正看到了几步（结束页用）。 */

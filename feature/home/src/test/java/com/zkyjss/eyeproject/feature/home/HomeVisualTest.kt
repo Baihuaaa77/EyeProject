@@ -96,16 +96,109 @@ class HomeVisualTest {
 
     @Test fun exerciseCompletionKeepsTheActionVisible() {
         var closed = false
+        var replayed = false
         compose.setContent { EyeProjectTheme(darkTheme = true) {
             Box(Modifier.fillMaxSize().background(LocalEyeColors.current.appBackground).padding(20.dp)) {
-                ExerciseCompletion(8, 7, true, { closed = true }, Modifier.fillMaxSize())
+                ExerciseCompletion(
+                    total = 8,
+                    seen = 7,
+                    usedCamera = true,
+                    onClose = { closed = true },
+                    modifier = Modifier.fillMaxSize(),
+                    bestStreak = 5,
+                    stepResults = listOf(true, true, true, true, true, false, true, true),
+                    onReplay = { replayed = true },
+                )
             }
         } }
+        compose.onNodeWithText("星夜向导").assertIsDisplayed()
         compose.onNodeWithText("完成啦！").assertIsDisplayed()
         compose.onNodeWithText("共 8 步，检测到你做到了 7 步").assertIsDisplayed()
         capture("exercise-complete")
+        compose.onNodeWithText("再寻一次").assertIsDisplayed().performClick()
+        assertTrue(replayed)
         compose.onNodeWithText("完成").assertIsDisplayed().performClick()
         assertTrue(closed)
+    }
+
+    @Test fun exerciseStarOwlGameShowsIntroMoveRestAndHandlesActions() {
+        var started = false
+        var closed = false
+        var stage by mutableStateOf(0)
+        compose.mainClock.autoAdvance = false
+        compose.setContent { EyeProjectTheme(darkTheme = true) {
+            val state = when (stage) {
+                0 -> com.zkyjss.eyeproject.core.domain.EyeExerciseCoach.State(
+                    stage = com.zkyjss.eyeproject.core.domain.EyeExerciseCoach.Stage.CALIBRATE,
+                    stepIndex = 0, stepCount = 8, move = null, secondsLeft = 2,
+                    faceVisible = false, detectedCount = 0, progress = 0f,
+                )
+                1 -> com.zkyjss.eyeproject.core.domain.EyeExerciseCoach.State(
+                    stage = com.zkyjss.eyeproject.core.domain.EyeExerciseCoach.Stage.MOVE,
+                    stepIndex = 2, stepCount = 8, move = com.zkyjss.eyeproject.core.domain.EyeExerciseCoach.Move.UP,
+                    secondsLeft = 4, faceVisible = true, detectedCount = 2, progress = 2f / 9f,
+                    gazeX = 0f, gazeY = -0.8f, holdProgress = 0.65f,
+                    stepResults = listOf(true, true), streak = 2, bestStreak = 2,
+                )
+                else -> com.zkyjss.eyeproject.core.domain.EyeExerciseCoach.State(
+                    stage = com.zkyjss.eyeproject.core.domain.EyeExerciseCoach.Stage.REST,
+                    stepIndex = 7, stepCount = 8, move = null, secondsLeft = 4,
+                    faceVisible = true, detectedCount = 7, progress = 8.2f / 9f,
+                    stepResults = listOf(true, true, true, true, true, false, true, true),
+                    streak = 2, bestStreak = 5,
+                )
+            }
+            EyeExerciseContent(
+                started = stage > 0,
+                state = state,
+                usedCamera = true,
+                restPulse = 0.45f,
+                onStart = { started = true; stage = 1 },
+                onClose = { closed = true },
+            )
+        } }
+        compose.onNodeWithText("暖夜寻星").assertIsDisplayed()
+        compose.onNodeWithText("帮小猫头鹰寻回 8 颗星").assertIsDisplayed()
+        capture("exercise-intro", advance = false)
+        compose.onNodeWithText("出发寻星").performClick()
+        assertTrue(started)
+        compose.mainClock.advanceTimeBy(300)
+        compose.onNodeWithText("向上看 · 寻北极星").assertIsDisplayed()
+        compose.onNodeWithText("连星 ×2").assertIsDisplayed()
+        capture("exercise-move-up", advance = false)
+        stage = 2
+        compose.mainClock.advanceTimeBy(300)
+        compose.onNodeWithText("闭上眼睛休息").assertIsDisplayed()
+        compose.onNodeWithText("秒后轻轻睁眼").assertIsDisplayed()
+        capture("exercise-rest", advance = false)
+        compose.onNodeWithText("结束").performClick()
+        assertTrue(closed)
+    }
+
+    @Test @Config(qualifiers = "zh-rCN-w375dp-h812dp-mdpi")
+    fun exerciseIntroRemainsUsableOnSmallScreenLargeText() {
+        var started = false
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            EyeProjectTheme(darkTheme = true) {
+                androidx.compose.runtime.CompositionLocalProvider(
+                    androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(1f, 1.5f),
+                ) {
+                    EyeExerciseContent(
+                        started = false,
+                        state = com.zkyjss.eyeproject.core.domain.EyeExerciseCoach.State(
+                            stage = com.zkyjss.eyeproject.core.domain.EyeExerciseCoach.Stage.CALIBRATE,
+                            stepIndex = 0, stepCount = 8, move = null, secondsLeft = 2,
+                            faceVisible = false, detectedCount = 0, progress = 0f,
+                        ),
+                        usedCamera = false,
+                        onStart = { started = true },
+                    )
+                }
+            }
+        }
+        compose.onNodeWithText("出发寻星").performScrollTo().assertIsDisplayed().performClick()
+        assertTrue(started)
     }
 
     private val today = "2026-10-23"

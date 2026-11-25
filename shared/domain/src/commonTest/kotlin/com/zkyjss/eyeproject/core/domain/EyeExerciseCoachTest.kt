@@ -50,5 +50,44 @@ class EyeExerciseCoachTest {
             EyeExerciseCoach.Event.REST) + countdown + EyeExerciseCoach.Event.DONE, events)
         assertEquals(1 to 0, coach.summary)
         assertEquals(1f, coach.state(t).progress)
+        assertEquals(listOf(false), coach.state(t).stepResults)
+    }
+
+    @Test fun exposesGazeHoldProgressAndStreaksForGameFeedback() {
+        val coach = EyeExerciseCoach(listOf(EyeExerciseCoach.Move.LEFT, EyeExerciseCoach.Move.RIGHT, EyeExerciseCoach.Move.UP))
+        var t = 0L
+        fun step(ms: Long, dx: Float, dy: Float): List<EyeExerciseCoach.Event> = buildList {
+            val end = t + ms
+            while (t < end) {
+                coach.onFace(face(dx, dy), t)
+                coach.tick(t)?.let(::add)
+                t += 33
+            }
+        }
+        // 校准期：凝视中心
+        step(1_600, 0f, 0f)
+        // 向左看一半时间：能读到负向 gazeX 与蓄力进度 > 0
+        step(120, 10f, 0f)
+        val aiming = coach.state(t)
+        assertTrue(aiming.gazeX < -0.5f, "向左看时屏幕方向 gazeX 应为负")
+        assertTrue(aiming.holdProgress > 0.3f, "到达阈值保持期间 holdProgress 应明显推进")
+        // 继续保持触发第 1 步捕获
+        assertTrue(EyeExerciseCoach.Event.DETECTED in step(300, 10f, 0f))
+        assertEquals(1, coach.state(t).streak)
+        assertEquals(listOf(true), coach.state(t).stepResults)
+        step(1_300, 0f, 0f)
+        // 第 2 步一直不转眼，触发超时（连击归零，但 bestStreak 仍为 1）
+        assertTrue(EyeExerciseCoach.Event.MISSED in step(6_200, 0f, 0f))
+        val missed = coach.state(t)
+        assertEquals(0, missed.streak)
+        assertEquals(1, missed.bestStreak)
+        assertEquals(listOf(true, false), missed.stepResults)
+        // 第 3 步向上看捕获成功
+        step(1_300, 0f, 0f)
+        assertTrue(EyeExerciseCoach.Event.DETECTED in step(500, 0f, -6f))
+        val finalState = coach.state(t)
+        assertEquals(1, finalState.streak)
+        assertEquals(1, finalState.bestStreak)
+        assertEquals(listOf(true, false, true), finalState.stepResults)
     }
 }

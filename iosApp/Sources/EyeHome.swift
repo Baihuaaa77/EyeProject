@@ -620,83 +620,307 @@ extension RestBreakView {
 }
 #endif
 
-/// 「护眼操」完整页面（与安卓 EyeExercisePage 同一流程与文案）：深色底，顶部进度条；上方大箭头 +「向左看」，
-/// 注视点（准星）在屏幕正中，下方倒计时。眼睛转到位时提示朝那个方向翻过去、手机振动，注视点顺着滑出画面再回来；最后闭眼休息 5 秒，每秒轻响一下。
-/// 判断与计时在共用 EyeExerciseCoach；没有相机权限时按时间带着做。
+/// 「护眼操」互动小游戏完整页面（暖夜寻星，与安卓 EyeExercisePage 同一情景、流程与文案）：
+/// 小猫头鹰在深咖啡星空中央实时跟随眼球转动；屏幕左/右/上/下方位轮流亮起迷路暖星，
+/// 转动眼球看过去即可充能并收进星盘，最后和小猫头鹰一起闭眼听提示音休息 5 秒。
+/// 判断与计时在共用 EyeExerciseCoach；没有相机权限时按节奏引导完成。
 struct EyeExerciseView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var coach = EyeExerciseCoach()
     @State private var started = false
     @State private var state: EyeExerciseCoach.State?
-    @State private var flipMove: EyeExerciseCoach.Move?
-    @State private var flyMove: EyeExerciseCoach.Move?
-    @State private var fly: CGFloat = 0
+    @State private var feedbackBanner: String?
+    @State private var caughtMove: EyeExerciseCoach.Move?
+    @State private var owlHappy = false
+    @State private var cometProgress: CGFloat = 1
+    @State private var restPulse: CGFloat = 0
+    @State private var pulsePhase: CGFloat = 0
+    @State private var smoothGazeX: CGFloat = 0
+    @State private var smoothGazeY: CGFloat = 0
     private let ticker = Timer.publish(every: 0.05, on: .main, in: .common).autoconnect()
 
     var body: some View {
         GeometryReader { geo in
             ZStack {
-                EyeStyle.background.ignoresSafeArea()
+                Canvas { ctx, size in
+                    StarOwlScene.backdrop(ctx, size: size, twinkle: pulsePhase, resting: started && isStage(.rest))
+                }
+                .ignoresSafeArea()
+                .accessibilityHidden(true)
+
                 VStack(spacing: 0) {
-                    HStack(spacing: 8) {
-                        Button("结束") { dismiss() }.font(EyeStyle.body).foregroundStyle(.white).frame(minWidth: 44, minHeight: 44)
-                        ZStack(alignment: .leading) {
-                            EyeStyle.chipShape.fill(Color.white.opacity(0.25))
-                            EyeStyle.chipShape.fill(EyeStyle.flowGradient).frame(width: max(0, (geo.size.width - 100) * CGFloat(state?.progress ?? 0)))
-                        }.frame(height: 6)
-                    }
+                    topBar(width: geo.size.width)
                     if !started {
-                        ScrollView {
-                            VStack(spacing: 16) {
-                                Canvas { ctx, size in
-                                    Cartoon.fixationTarget(ctx, center: CGPoint(x: size.width / 2, y: size.height / 2),
-                                                           size: min(size.width, size.height) * 0.68)
-                                }.frame(width: 104, height: 104).accessibilityHidden(true)
-                                WarmCard {
-                                    Text("跟着光点转转眼").font(EyeStyle.title).foregroundStyle(EyeStyle.text)
-                                    Text("头保持不动，只转眼睛。").font(EyeStyle.body).foregroundStyle(EyeStyle.text)
-                                    Button("开始护眼操", action: startExercise).buttonStyle(EyeButtonStyle())
-                                }
-                            }.padding(.vertical, 32).frame(minHeight: max(0, geo.size.height - 80))
-                        }
+                        introStage(height: geo.size.height)
                     } else if isStage(.done) {
-                        ExerciseCompletionView(total: Int(state?.stepCount ?? 0), seen: Int(state?.detectedCount ?? 0), usedCamera: coach.usedCamera) { dismiss() }
+                        ExerciseCompletionView(
+                            total: Int(state?.stepCount ?? 0),
+                            seen: Int(state?.detectedCount ?? 0),
+                            usedCamera: coach.usedCamera,
+                            bestStreak: Int(state?.bestStreak ?? 0),
+                            stepResults: currentStepResults,
+                            onReplay: startExercise,
+                            onClose: { dismiss() }
+                        )
                     } else {
-                    // 上半区：动作提示；中间：注视点；下半区：倒计时与提示语。上下等高，注视点正好在屏幕中央
-                    VStack(spacing: 20) {
-                        Spacer(minLength: 0)
-                        instruction.id(pageKey).transition(flipTransition).animation(.easeInOut(duration: 0.38), value: pageKey)
-                    }.frame(maxHeight: .infinity)
-                    if !isStage(.done) {
-                        Canvas { ctx, size in
-                            Cartoon.fixationTarget(ctx, center: CGPoint(x: size.width / 2, y: size.height / 2), size: min(size.width, size.height) * 0.62)
-                        }
-                        .frame(width: 150, height: 150)
-                        .opacity(isStage(.rest) ? 0.35 : 1)
-                        .offset(x: CGFloat(flyMove?.dx ?? 0) * fly * geo.size.width * 0.8,
-                                y: CGFloat(flyMove?.dy ?? 0) * fly * geo.size.height * 0.45)
-                    }
-                    VStack(spacing: 0) {
-                        if !isStage(.done) {
-                            Text(isStage(.move) || isStage(.rest) ? "\(state?.secondsLeft ?? 0)" : " ")
-                                .font(.system(size: 88, weight: .bold, design: .rounded)).foregroundStyle(.white).padding(.top, 8)
-                            Spacer(minLength: 0)
-                            Text(state?.faceVisible == true || coach.usedCamera ? "头保持不动，只转眼睛" : "跟着提示转动眼睛就好")
-                                .font(EyeStyle.bodySecondary).foregroundStyle(Color.white.opacity(0.7))
-                        }
-                    }.frame(maxHeight: .infinity)
+                        playStage
                     }
                 }
-                .padding(.horizontal, 20).padding(.vertical, 12)
+                .padding(.horizontal, EyeSpacing.gutter)
+                .padding(.vertical, EyeSpacing.sm)
             }
-            .onReceive(ticker) { _ in if started { tick(size: geo.size) } }
+            .onReceive(ticker) { _ in
+                if !reduceMotion {
+                    pulsePhase = (pulsePhase + 0.018).truncatingRemainder(dividingBy: 1)
+                }
+                if started { tick() }
+            }
         }
         .onDisappear { EyeLiveModel.shared.stopExercise() }
-        // 护眼操固定深色页：令牌按深色取值
         .environment(\.colorScheme, .dark)
     }
 
+    private var currentStepResults: [Bool] {
+        (state?.stepResults ?? []).map(\.boolValue)
+    }
+
+    private func topBar(width: CGFloat) -> some View {
+        let streak = Int(state?.streak ?? 0)
+        return HStack(spacing: EyeSpacing.xs) {
+            Button("结束") { dismiss() }
+                .font(EyeStyle.body)
+                .foregroundStyle(EyeStyle.text)
+                .frame(minWidth: 48, minHeight: 48)
+            ZStack(alignment: .leading) {
+                EyeStyle.chipShape.fill(EyeStyle.surfaceVariant)
+                GeometryReader { bar in
+                    EyeStyle.chipShape
+                        .fill(EyeStyle.flowGradient)
+                        .frame(width: max(0, bar.size.width * CGFloat(started ? (state?.progress ?? 0) : 0)))
+                }
+            }
+            .frame(height: 8)
+            if started && !isStage(.done) {
+                let badgeText = streak >= 2 ? "连星 ×\(streak)" : (state?.faceVisible == true || coach.usedCamera ? "眼动追踪" : "节奏引导")
+                let highlight = streak >= 2
+                Text(badgeText)
+                    .font(EyeStyle.chip)
+                    .foregroundStyle(highlight ? EyeStyle.moodGold : EyeStyle.secondary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(highlight ? EyeStyle.primarySoft : EyeStyle.panel, in: EyeStyle.chipShape)
+                    .overlay {
+                        EyeStyle.chipShape.strokeBorder(highlight ? EyeStyle.primary : EyeStyle.borderSubtle, lineWidth: 1)
+                    }
+            }
+        }
+    }
+
+    private func introStage(height: CGFloat) -> some View {
+        ScrollView {
+            VStack(spacing: EyeSpacing.md) {
+                Text("暖夜寻星")
+                    .font(EyeStyle.chip)
+                    .foregroundStyle(EyeStyle.moodGold)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 6)
+                    .background(EyeStyle.primarySoft, in: EyeStyle.chipShape)
+                    .overlay { EyeStyle.chipShape.strokeBorder(EyeStyle.glassEdgeTop.opacity(0.6), lineWidth: 1) }
+
+                Canvas { ctx, size in
+                    let c = CGPoint(x: size.width / 2, y: size.height / 2)
+                    let minSide = min(size.width, size.height)
+                    StarOwlScene.constellationRing(
+                        ctx, center: c, radius: minSide * 0.42, totalSteps: 8,
+                        stepResults: [true, true, true], usedCamera: true,
+                        calibrateProgress: 0.3, showCalibrateRing: false, resting: false, restPulse: 0
+                    )
+                    StarOwlScene.owl(ctx, center: c, size: minSide * 0.50, gazeX: 0, gazeY: -0.15)
+                }
+                .frame(width: 188, height: 188)
+                .accessibilityLabel("等待出发的观星小猫头鹰与星盘")
+
+                WarmCard(padding: 20, spacing: 14) {
+                    Text("帮小猫头鹰寻回 8 颗星").font(EyeStyle.title).foregroundStyle(EyeStyle.text)
+                    Text("头保持不动，只转眼睛看发光的星星；集齐星图后一起闭眼小憩。")
+                        .font(EyeStyle.body).foregroundStyle(EyeStyle.secondary)
+                    HStack(spacing: 8) {
+                        introChip("1", "眼看星星")
+                        introChip("2", "收进星盘")
+                        introChip("3", "闭眼小憩")
+                    }
+                    Button("出发寻星", action: startExercise).buttonStyle(EyeButtonStyle())
+                }
+                .frame(maxWidth: 520)
+            }
+            .padding(.vertical, EyeSpacing.md)
+            .frame(minHeight: max(0, height - 88))
+        }
+    }
+
+    private func introChip(_ index: String, _ label: String) -> some View {
+        VStack(spacing: 4) {
+            Text(index)
+                .font(EyeStyle.caption)
+                .foregroundStyle(EyeStyle.moodGold)
+                .frame(width: 22, height: 22)
+                .background(EyeStyle.primarySoft, in: Circle())
+            Text(label)
+                .font(EyeStyle.caption)
+                .foregroundStyle(EyeStyle.text)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 10)
+        .background(EyeStyle.surfaceVariant, in: RoundedRectangle(cornerRadius: EyeStyle.radiusMedium, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: EyeStyle.radiusMedium, style: .continuous)
+                .strokeBorder(EyeStyle.borderSubtle, lineWidth: 1)
+        }
+    }
+
+    private var playStage: some View {
+        let resting = isStage(.rest)
+        let round = Int(state?.stepIndex ?? 0) / 4
+        let total = Int(state?.stepCount ?? 8)
+        let litCount = coach.usedCamera ? currentStepResults.filter { $0 }.count : currentStepResults.count
+        let stagePulse = reduceMotion ? 0.5 : (0.5 - 0.5 * cos(pulsePhase * .pi * 2))
+
+        return VStack(spacing: 0) {
+            ZStack(alignment: .bottom) {
+                Canvas { ctx, size in
+                    let center = CGPoint(x: size.width * 0.5, y: size.height * 0.5)
+                    let minSide = min(size.width, size.height)
+                    let ringRadius = min(max(minSide * 0.25, 58), 132)
+                    let owlSize = ringRadius * 1.16
+                    let starRadius = min(max(minSide * 0.068, 18), 34)
+                    let edgePad = starRadius * 2.15
+
+                    func anchor(_ move: EyeExerciseCoach.Move) -> CGPoint {
+                        if move.dx < 0 { return CGPoint(x: edgePad, y: center.y) }
+                        if move.dx > 0 { return CGPoint(x: size.width - edgePad, y: center.y) }
+                        if move.dy < 0 { return CGPoint(x: center.x, y: edgePad) }
+                        return CGPoint(x: center.x, y: size.height - edgePad)
+                    }
+
+                    StarOwlScene.constellationRing(
+                        ctx, center: center, radius: ringRadius, totalSteps: max(1, total),
+                        stepResults: currentStepResults, usedCamera: coach.usedCamera,
+                        calibrateProgress: CGFloat(state?.holdProgress ?? 0),
+                        showCalibrateRing: isStage(.calibrate) || state == nil,
+                        resting: resting, restPulse: restPulse
+                    )
+                    StarOwlScene.owl(
+                        ctx, center: center, size: owlSize,
+                        gazeX: smoothGazeX, gazeY: smoothGazeY,
+                        sleeping: resting,
+                        happy: owlHappy && isStage(.back),
+                        excited: isStage(.move) && (state?.holdProgress ?? 0) > 0.3
+                    )
+                    if isStage(.move), let move = state?.move {
+                        StarOwlScene.targetStar(
+                            ctx, origin: center, target: anchor(move), move: move,
+                            ringRadius: ringRadius, starRadius: starRadius,
+                            holdProgress: CGFloat(state?.holdProgress ?? 0),
+                            pulse: stagePulse
+                        )
+                    }
+                    if let caughtMove, cometProgress < 1 {
+                        StarOwlScene.comet(
+                            ctx, from: anchor(caughtMove), to: center,
+                            progress: cometProgress, starRadius: starRadius
+                        )
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .accessibilityLabel(stageAccessibilityLabel)
+
+                if resting {
+                    VStack(spacing: 2) {
+                        Text("\(state?.secondsLeft ?? 0)")
+                            .font(EyeStyle.display)
+                            .monospacedDigit()
+                            .foregroundStyle(EyeStyle.moodGold)
+                        Text("秒后轻轻睁眼")
+                            .font(EyeStyle.bodySecondary)
+                            .foregroundStyle(EyeStyle.secondary)
+                    }
+                    .padding(.bottom, EyeSpacing.md)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            let title = instructionTitle(round: round)
+            let subtitle = instructionSub(litCount: litCount, total: total)
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title).font(EyeStyle.subtitle).foregroundStyle(EyeStyle.text)
+                    Text(subtitle)
+                        .font(EyeStyle.bodySecondary)
+                        .foregroundStyle(feedbackBanner != nil && owlHappy ? EyeStyle.moodGold : EyeStyle.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                if isStage(.move) {
+                    Text("\(state?.secondsLeft ?? 0)")
+                        .font(EyeStyle.metricValue)
+                        .monospacedDigit()
+                        .foregroundStyle(EyeStyle.primary)
+                        .frame(width: 52, height: 52)
+                        .background(EyeStyle.surfaceVariant, in: Circle())
+                        .overlay { Circle().strokeBorder(EyeStyle.glassEdgeTop.opacity(0.6), lineWidth: 1) }
+                }
+            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 14)
+            .frame(maxWidth: 520)
+            .background(EyeStyle.panel, in: RoundedRectangle(cornerRadius: EyeStyle.radius, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: EyeStyle.radius, style: .continuous)
+                    .strokeBorder(EyeStyle.borderSubtle, lineWidth: 1)
+            }
+            .padding(.bottom, EyeSpacing.xs)
+        }
+    }
+
+    private var stageAccessibilityLabel: String {
+        if isStage(.calibrate) || state == nil { return "正在唤醒小猫头鹰，请看着中央" }
+        if isStage(.move), let move = state?.move { return "\(move.label)，点亮发光的星星" }
+        if isStage(.back) { return "请看回屏幕中央的小猫头鹰" }
+        if isStage(.rest) { return "闭上眼睛休息，还剩 \(state?.secondsLeft ?? 0) 秒" }
+        return "护眼操已完成"
+    }
+
+    private func instructionTitle(round: Int) -> String {
+        if isStage(.calibrate) || state == nil { return "看着小猫头鹰" }
+        if isStage(.move), let move = state?.move { return StarOwlScene.moveTitle(move, round: round) }
+        if isStage(.back) { return "看回中间" }
+        if isStage(.rest) { return "闭上眼睛休息" }
+        return "完成啦！"
+    }
+
+    private func instructionSub(litCount: Int, total: Int) -> String {
+        if let feedbackBanner { return feedbackBanner }
+        if isStage(.calibrate) || state == nil { return "正在校准视线，准备出发寻星" }
+        if isStage(.move) {
+            return state?.faceVisible == true || coach.usedCamera ? "头保持不动，只转眼睛看发光的星星" : "跟着发光星星转动眼睛就好"
+        }
+        if isStage(.back) { return "把星光收进星盘（已点亮 \(litCount) / \(total)）" }
+        if isStage(.rest) { return "听着每秒轻响，让眼睛安心小憩" }
+        return ""
+    }
+
     private func startExercise() {
+        EyeLiveModel.shared.stopExercise()
+        coach = EyeExerciseCoach()
+        state = coach.state(timeMs: 0)
+        feedbackBanner = nil
+        caughtMove = nil
+        owlHappy = false
+        cometProgress = 1
+        restPulse = 0
         started = true
 #if !SCREENSHOT_CAPTURE
         let model = coach
@@ -706,86 +930,567 @@ struct EyeExerciseView: View {
 
     private var now: Int64 { Int64(ProcessInfo.processInfo.systemUptime * 1000) }
     private func isStage(_ stage: EyeExerciseCoach.Stage) -> Bool { state?.stage == stage }
-    private var pageKey: String { "\(state?.stage.name ?? "")-\(state?.stepIndex ?? 0)" }
 
-    private func tick(size: CGSize) {
+    private func tick() {
         let t = now
-        if let event = coach.tick(timeMs: t) { handle(event, move: coach.state(timeMs: t).move) }
-        state = coach.state(timeMs: t)
-    }
-
-    private func handle(_ event: EyeExerciseCoach.Event, move: EyeExerciseCoach.Move?) {
-        if event == .detected {
-            flipMove = move; flyMove = move
-            EyeHaptics.success(); EyeCueSound.shared.play(.phase)
-            // 注视点顺着方向滑出去，再从另一边滑回来
-            withAnimation(.easeIn(duration: 0.45)) { fly = 1 }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
-                fly = -1
-                withAnimation(.easeOut(duration: 0.45)) { fly = 0 }
-            }
-        } else if event == .missed {
-            flipMove = nil; EyeHaptics.tap()
-        } else if event == .rest {
-            flipMove = nil; EyeHaptics.tap(); EyeCueSound.shared.play(.phase)
-        } else if event == .countdown {
-            // 闭着眼看不到数字：每过一秒轻响一下
-            EyeCueSound.shared.play(.count)
-        } else if event == .done {
-            EyeHaptics.success(); EyeCueSound.shared.play(.complete)
+        let previousMove = state?.move
+        if let event = coach.tick(timeMs: t) {
+            let nextState = coach.state(timeMs: t)
+            handle(event, state: nextState, previousMove: previousMove)
+            state = nextState
         } else {
-            flipMove = nil
+            state = coach.state(timeMs: t)
+        }
+        // 平滑更新猫头鹰视线
+        let targetX: CGFloat
+        let targetY: CGFloat
+        if isStage(.move), let s = state {
+            if s.faceVisible {
+                targetX = CGFloat(s.gazeX)
+                targetY = CGFloat(s.gazeY)
+            } else {
+                targetX = CGFloat(s.move?.dx ?? 0) * 0.72
+                targetY = CGFloat(s.move?.dy ?? 0) * 0.72
+            }
+        } else {
+            targetX = 0; targetY = 0
+        }
+        let blend: CGFloat = reduceMotion ? 1 : 0.35
+        smoothGazeX += (targetX - smoothGazeX) * blend
+        smoothGazeY += (targetY - smoothGazeY) * blend
+        if cometProgress < 1 {
+            cometProgress = min(1, cometProgress + (reduceMotion ? 1 : 0.075))
+        }
+        if isStage(.rest) && restPulse < 1 {
+            restPulse = min(1, restPulse + (reduceMotion ? 1 : 0.055))
         }
     }
 
-    /// 看到了就整页朝那个方向翻走、新的一页从另一边进来；其余淡入淡出。
-    private var flipTransition: AnyTransition {
-        guard let move = flipMove else { return .opacity }
-        let out: Edge = move.dx < 0 ? .leading : move.dx > 0 ? .trailing : move.dy < 0 ? .top : .bottom
-        let into: Edge = out == .leading ? .trailing : out == .trailing ? .leading : out == .top ? .bottom : .top
-        return .asymmetric(insertion: .move(edge: into).combined(with: .opacity), removal: .move(edge: out).combined(with: .opacity))
-    }
-
-    @ViewBuilder private var instruction: some View {
-        VStack(spacing: 14) {
-            if isStage(.calibrate) || state == nil {
-                Text("看着中间的圆点").font(EyeStyle.headline).foregroundStyle(.white)
-                Text("准备开始").font(EyeStyle.body).foregroundStyle(Color.white.opacity(0.7))
-            } else if isStage(.move), let move = state?.move {
-                Image(systemName: arrowName(move)).font(.system(size: 56, weight: .bold)).foregroundStyle(Color.white.opacity(0.6))
-                    .accessibilityLabel(move.label)
-                Text(move.label).font(EyeStyle.title).foregroundStyle(.white)
-            } else if isStage(.back) {
-                Text("看回中间").font(EyeStyle.title).foregroundStyle(.white)
-            } else if isStage(.rest) {
-                Text("闭上眼睛休息").font(EyeStyle.title).foregroundStyle(.white)
-            } else {
-                Text("完成啦！").font(EyeStyle.headline).foregroundStyle(.white)
+    private func handle(_ event: EyeExerciseCoach.Event, state nextState: EyeExerciseCoach.State, previousMove: EyeExerciseCoach.Move?) {
+        if event == .started {
+            EyeCueSound.shared.play(.start)
+        } else if event == .detected {
+            let move = nextState.move ?? previousMove
+            caughtMove = move
+            owlHappy = true
+            feedbackBanner = StarOwlScene.caughtFeedback(move, streak: Int(nextState.streak))
+            EyeHaptics.success()
+            EyeCueSound.shared.play(.phase)
+            cometProgress = reduceMotion ? 1 : 0
+        } else if event == .missed {
+            caughtMove = nil
+            owlHappy = false
+            feedbackBanner = "这颗星溜走啦，看看下一颗"
+            EyeHaptics.tap()
+        } else if event == .next {
+            if nextState.stage == .back && !coach.usedCamera {
+                caughtMove = nextState.move ?? previousMove
+                owlHappy = true
+                feedbackBanner = "收下一颗星光，看回中间"
+                EyeCueSound.shared.play(.phase)
+                cometProgress = reduceMotion ? 1 : 0
+            } else if nextState.stage == .move {
+                owlHappy = false
+                feedbackBanner = nil
             }
-        }.frame(maxWidth: .infinity)
-    }
-
-    private func arrowName(_ move: EyeExerciseCoach.Move) -> String {
-        move.dx < 0 ? "arrow.left" : move.dx > 0 ? "arrow.right" : move.dy < 0 ? "arrow.up" : "arrow.down"
+        } else if event == .rest {
+            caughtMove = nil
+            owlHappy = false
+            feedbackBanner = nil
+            restPulse = 0
+            EyeHaptics.tap()
+            EyeCueSound.shared.play(.phase)
+        } else if event == .countdown {
+            restPulse = 0
+            EyeCueSound.shared.play(.count)
+        } else if event == .done {
+            EyeHaptics.success()
+            EyeCueSound.shared.play(.complete)
+        }
     }
 }
 
-/// 与安卓共用的完成页结构；专门留出圆环与标题的间距。
+/// 护眼操互动小游戏「暖夜寻星」的纯矢量场景绘制与文案（与安卓 EyeExerciseGameScene.kt 逐项对应）。
+private enum StarOwlScene {
+    private static let bgStars: [(CGFloat, CGFloat, CGFloat)] = [
+        (0.11, 0.10, 1.4), (0.24, 0.07, 1.0), (0.38, 0.13, 1.2),
+        (0.66, 0.08, 1.3), (0.84, 0.12, 1.5), (0.91, 0.24, 1.0),
+        (0.08, 0.30, 1.1), (0.19, 0.44, 0.9), (0.87, 0.42, 1.2),
+        (0.14, 0.68, 1.1), (0.81, 0.65, 1.0), (0.29, 0.76, 1.3),
+        (0.72, 0.74, 1.2), (0.51, 0.05, 1.0),
+    ]
+
+    static func moveTitle(_ move: EyeExerciseCoach.Move, round: Int) -> String {
+        if move.dx < 0 { return round == 0 ? "向左看 · 寻西边星" : "向左看 · 续亮西星" }
+        if move.dx > 0 { return round == 0 ? "向右看 · 寻东边星" : "向右看 · 续亮东星" }
+        if move.dy < 0 { return round == 0 ? "向上看 · 寻北极星" : "向上看 · 续亮北星" }
+        return round == 0 ? "向下看 · 寻山谷星" : "向下看 · 续亮南星"
+    }
+
+    static func caughtFeedback(_ move: EyeExerciseCoach.Move?, streak: Int) -> String {
+        if streak >= 3 { return "连亮 \(streak) 颗星，目光真灵巧！" }
+        guard let move else { return "星光已收入星盘" }
+        if move.dx < 0 { return "收下西边的星光啦" }
+        if move.dx > 0 { return "收下东边的星光啦" }
+        if move.dy < 0 { return "摘下高空的北极星啦" }
+        return "捡起山谷里的星光啦"
+    }
+
+    static func rankTitle(total: Int, seen: Int, usedCamera: Bool) -> String {
+        if !usedCamera { return "星夜漫步者" }
+        if total > 0 && seen >= total { return "观星大师" }
+        if seen >= (total * 3) / 4 { return "星夜向导" }
+        if seen >= total / 2 { return "追星旅人" }
+        return "悠闲赏星人"
+    }
+
+    static func rankSummary(total: Int, seen: Int, bestStreak: Int, usedCamera: Bool) -> String {
+        if !usedCamera { return "跟着星光活动了一整圈，眼睛轻松多了" }
+        if total > 0 && seen >= total { return "8 颗星全部亲眼点亮，眼部活动非常充分" }
+        if bestStreak >= 3 { return "最高连亮 \(bestStreak) 颗星，眼肌舒展得很顺畅" }
+        return "眼睛已经跟着星光热身放松啦"
+    }
+
+    static func backdrop(_ ctx: GraphicsContext, size: CGSize, twinkle: CGFloat, resting: Bool) {
+        let w = size.width, h = size.height
+        let rect = CGRect(origin: .zero, size: size)
+        ctx.fill(
+            Path(rect),
+            with: .linearGradient(
+                Gradient(stops: [
+                    .init(color: EyeStyle.background, location: 0),
+                    .init(color: EyeStyle.background, location: 0.72),
+                    .init(color: EyeStyle.panel.opacity(resting ? 0.45 : 0.72), location: 1),
+                ]),
+                startPoint: CGPoint(x: w * 0.5, y: 0),
+                endPoint: CGPoint(x: w * 0.5, y: h)
+            )
+        )
+        let glowCenter = CGPoint(x: w * 0.5, y: h * 0.48)
+        let glowR = min(w, h) * 0.52
+        let glowAlpha = resting ? 0.08 : 0.16
+        ctx.fill(
+            Path(ellipseIn: CGRect(x: glowCenter.x - glowR, y: glowCenter.y - glowR, width: glowR * 2, height: glowR * 2)),
+            with: .radialGradient(
+                Gradient(stops: [
+                    .init(color: EyeStyle.glow.opacity(glowAlpha), location: 0),
+                    .init(color: EyeStyle.panel.opacity(glowAlpha * 0.4), location: 0.65),
+                    .init(color: .clear, location: 1),
+                ]),
+                center: glowCenter, startRadius: 0, endRadius: glowR
+            )
+        )
+        let baseR = min(max(min(w, h) * 0.0042, 1.5), 3.6)
+        for (idx, item) in bgStars.enumerated() {
+            let phase = (Double(idx) * 0.37 + Double(twinkle)) * 2 * .pi
+            let a = (resting ? 0.18 : 0.32) + 0.14 * ((sin(phase) + 1) * 0.5)
+            let r = item.2 * baseR
+            let pt = CGPoint(x: w * item.0, y: h * item.1)
+            let color = (idx % 3 == 0 ? EyeStyle.moodGold : EyeStyle.glassEdgeTop).opacity(a)
+            ctx.fill(Path(ellipseIn: CGRect(x: pt.x - r, y: pt.y - r, width: r * 2, height: r * 2)), with: .color(color))
+        }
+        var backHill = Path()
+        backHill.move(to: CGPoint(x: 0, y: h))
+        backHill.addLine(to: CGPoint(x: 0, y: h * 0.87))
+        backHill.addQuadCurve(to: CGPoint(x: w * 0.56, y: h * 0.86), control: CGPoint(x: w * 0.28, y: h * 0.78))
+        backHill.addQuadCurve(to: CGPoint(x: w, y: h * 0.83), control: CGPoint(x: w * 0.80, y: h * 0.92))
+        backHill.addLine(to: CGPoint(x: w, y: h))
+        backHill.closeSubpath()
+        ctx.fill(backHill, with: .color(EyeStyle.panel.opacity(resting ? 0.42 : 0.65)))
+
+        var frontHill = Path()
+        frontHill.move(to: CGPoint(x: 0, y: h))
+        frontHill.addLine(to: CGPoint(x: 0, y: h * 0.92))
+        frontHill.addQuadCurve(to: CGPoint(x: w * 0.64, y: h * 0.93), control: CGPoint(x: w * 0.32, y: h * 0.86))
+        frontHill.addQuadCurve(to: CGPoint(x: w, y: h * 0.90), control: CGPoint(x: w * 0.85, y: h * 0.97))
+        frontHill.addLine(to: CGPoint(x: w, y: h))
+        frontHill.closeSubpath()
+        ctx.fill(frontHill, with: .color(EyeStyle.surfaceVariant.opacity(resting ? 0.35 : 0.52)))
+    }
+
+    static func constellationRing(
+        _ ctx: GraphicsContext,
+        center: CGPoint,
+        radius: CGFloat,
+        totalSteps: Int,
+        stepResults: [Bool],
+        usedCamera: Bool,
+        calibrateProgress: CGFloat,
+        showCalibrateRing: Bool,
+        resting: Bool,
+        restPulse: CGFloat
+    ) {
+        let count = max(1, totalSteps)
+        let ringRect = CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2)
+        ctx.stroke(
+            Path(ellipseIn: ringRect),
+            with: .color(EyeStyle.borderSubtle.opacity(resting ? 0.25 : 0.48)),
+            style: StrokeStyle(lineWidth: max(1.5, radius * 0.022), dash: [radius * 0.08, radius * 0.07])
+        )
+        if showCalibrateRing {
+            var arc = Path()
+            arc.addArc(
+                center: center, radius: radius,
+                startAngle: .degrees(-90),
+                endAngle: .degrees(-90 + 360 * Double(min(1, max(0, calibrateProgress)))),
+                clockwise: false
+            )
+            ctx.stroke(arc, with: .color(EyeStyle.primary), style: StrokeStyle(lineWidth: max(3.5, radius * 0.055), lineCap: .round))
+        }
+        if resting {
+            let rippleR = radius * (1 + restPulse * 0.42)
+            ctx.stroke(
+                Path(ellipseIn: CGRect(x: center.x - rippleR, y: center.y - rippleR, width: rippleR * 2, height: rippleR * 2)),
+                with: .color(EyeStyle.moodGold.opacity(Double(max(0, 1 - restPulse)) * 0.38)),
+                lineWidth: max(2, radius * 0.032)
+            )
+        }
+        let positions: [CGPoint] = (0..<count).map { i in
+            let angle = -.pi / 2 + (2 * .pi * Double(i) / Double(count))
+            return CGPoint(x: center.x + radius * CGFloat(cos(angle)), y: center.y + radius * CGFloat(sin(angle)))
+        }
+        if stepResults.count > 1 {
+            for i in 0..<(min(stepResults.count, count) - 1) {
+                let litA = stepResults[i] || !usedCamera
+                let litB = stepResults[i + 1] || !usedCamera
+                if litA && litB {
+                    ctx.stroke(
+                        Cartoon.segment(positions[i], positions[i + 1]),
+                        with: .color(EyeStyle.glassEdgeTop.opacity(resting ? 0.28 : 0.45)),
+                        style: StrokeStyle(lineWidth: max(1.5, radius * 0.02), lineCap: .round)
+                    )
+                }
+            }
+        }
+        for (idx, pt) in positions.enumerated() {
+            let done = idx < stepResults.count
+            let caught = done && stepResults[idx]
+            let guidedLit = done && !usedCamera
+            if caught {
+                let hr = radius * 0.13
+                ctx.fill(Path(ellipseIn: CGRect(x: pt.x - hr, y: pt.y - hr, width: hr * 2, height: hr * 2)),
+                         with: .color(EyeStyle.primary.opacity(resting ? 0.14 : 0.28)))
+                fourPointStar(ctx, center: pt, radius: radius * 0.105, color: EyeStyle.moodGold.opacity(resting ? 0.6 : 1))
+            } else if guidedLit {
+                let hr = radius * 0.11
+                ctx.fill(Path(ellipseIn: CGRect(x: pt.x - hr, y: pt.y - hr, width: hr * 2, height: hr * 2)),
+                         with: .color(EyeStyle.glassEdgeTop.opacity(resting ? 0.12 : 0.22)))
+                fourPointStar(ctx, center: pt, radius: radius * 0.09, color: EyeStyle.moodWarm.opacity(resting ? 0.55 : 0.92))
+            } else if done {
+                let sr = radius * 0.055
+                ctx.stroke(Path(ellipseIn: CGRect(x: pt.x - sr, y: pt.y - sr, width: sr * 2, height: sr * 2)),
+                           with: .color(EyeStyle.borderSubtle.opacity(0.7)), lineWidth: max(1.5, radius * 0.02))
+            } else {
+                let dr = radius * 0.036
+                ctx.fill(Path(ellipseIn: CGRect(x: pt.x - dr, y: pt.y - dr, width: dr * 2, height: dr * 2)),
+                         with: .color(EyeStyle.borderSubtle.opacity(0.5)))
+            }
+        }
+    }
+
+    static func owl(
+        _ ctx: GraphicsContext,
+        center: CGPoint,
+        size: CGFloat,
+        gazeX: CGFloat = 0,
+        gazeY: CGFloat = 0,
+        sleeping: Bool = false,
+        happy: Bool = false,
+        excited: Bool = false
+    ) {
+        let r = size * 0.5
+        ctx.fill(
+            Path(ellipseIn: CGRect(x: center.x - r * 0.62, y: center.y + r * 0.64, width: r * 1.24, height: r * 0.22)),
+            with: .color(EyeStyle.panel.opacity(0.85))
+        )
+        let wingSpread: CGFloat = happy ? 0.24 : (excited ? 0.12 : 0)
+        for side: CGFloat in [-1, 1] {
+            var wing = Path()
+            wing.move(to: CGPoint(x: center.x + side * r * 0.62, y: center.y - r * 0.06))
+            wing.addCurve(
+                to: CGPoint(x: center.x + side * r * 0.52, y: center.y + r * 0.56),
+                control1: CGPoint(x: center.x + side * r * (0.98 + wingSpread), y: center.y + r * (0.04 - wingSpread * 0.7)),
+                control2: CGPoint(x: center.x + side * r * (0.94 + wingSpread * 0.7), y: center.y + r * 0.50)
+            )
+            wing.closeSubpath()
+            ctx.fill(wing, with: .color(EyeStyle.surfaceVariant))
+            ctx.stroke(wing, with: .color(EyeStyle.glassEdgeTop.opacity(0.55)), style: StrokeStyle(lineWidth: r * 0.045, lineJoin: .round))
+        }
+        let bodyRect = CGRect(x: center.x - r * 0.72, y: center.y - r * 0.68, width: r * 1.44, height: r * 1.40)
+        ctx.fill(Path(ellipseIn: bodyRect), with: .color(EyeStyle.panel))
+        ctx.stroke(Path(ellipseIn: bodyRect), with: .color(EyeStyle.glassEdgeTop.opacity(0.72)), lineWidth: r * 0.045)
+
+        for side: CGFloat in [-1, 1] {
+            var ear = Path()
+            ear.move(to: CGPoint(x: center.x + side * r * 0.26, y: center.y - r * 0.56))
+            ear.addLine(to: CGPoint(x: center.x + side * r * 0.62, y: center.y - r * 0.88))
+            ear.addLine(to: CGPoint(x: center.x + side * r * 0.60, y: center.y - r * 0.34))
+            ear.closeSubpath()
+            ctx.fill(ear, with: .color(EyeStyle.surfaceVariant))
+            ctx.stroke(ear, with: .color(EyeStyle.glassEdgeTop.opacity(0.72)), style: StrokeStyle(lineWidth: r * 0.04, lineJoin: .round))
+        }
+        ctx.fill(
+            Path(ellipseIn: CGRect(x: center.x - r * 0.44, y: center.y + r * 0.04, width: r * 0.88, height: r * 0.60)),
+            with: .color(EyeStyle.surfaceVariant.opacity(0.9))
+        )
+        fourPointStar(ctx, center: CGPoint(x: center.x, y: center.y - r * 0.44), radius: r * 0.09,
+                      color: EyeStyle.moodGold.opacity(sleeping ? 0.45 : 0.9))
+
+        let eyeR = r * 0.27
+        let eyeY = center.y - r * 0.10
+        for side: CGFloat in [-1, 1] {
+            let eyeC = CGPoint(x: center.x + side * r * 0.30, y: eyeY)
+            let outerR = eyeR * 1.18
+            ctx.fill(Path(ellipseIn: CGRect(x: eyeC.x - outerR, y: eyeC.y - outerR, width: outerR * 2, height: outerR * 2)),
+                     with: .color(EyeStyle.glassEdgeTop.opacity(0.28)))
+            let eyeRect = CGRect(x: eyeC.x - eyeR, y: eyeC.y - eyeR, width: eyeR * 2, height: eyeR * 2)
+            ctx.fill(Path(ellipseIn: eyeRect), with: .color(EyeStyle.background))
+            ctx.stroke(Path(ellipseIn: eyeRect), with: .color(EyeStyle.glassEdgeTop.opacity(0.8)), lineWidth: r * 0.036)
+            if sleeping {
+                var closed = Path()
+                closed.move(to: CGPoint(x: eyeC.x - eyeR * 0.56, y: eyeC.y + eyeR * 0.04))
+                closed.addQuadCurve(to: CGPoint(x: eyeC.x + eyeR * 0.56, y: eyeC.y + eyeR * 0.04),
+                                    control: CGPoint(x: eyeC.x, y: eyeC.y + eyeR * 0.46))
+                ctx.stroke(closed, with: .color(EyeStyle.moodWarm), style: StrokeStyle(lineWidth: r * 0.055, lineCap: .round))
+            } else if happy {
+                var smile = Path()
+                smile.move(to: CGPoint(x: eyeC.x - eyeR * 0.54, y: eyeC.y + eyeR * 0.12))
+                smile.addQuadCurve(to: CGPoint(x: eyeC.x + eyeR * 0.54, y: eyeC.y + eyeR * 0.12),
+                                   control: CGPoint(x: eyeC.x, y: eyeC.y - eyeR * 0.44))
+                ctx.stroke(smile, with: .color(EyeStyle.moodGold), style: StrokeStyle(lineWidth: r * 0.06, lineCap: .round))
+            } else {
+                let scleraR = eyeR * 0.86
+                ctx.fill(Path(ellipseIn: CGRect(x: eyeC.x - scleraR, y: eyeC.y - scleraR, width: scleraR * 2, height: scleraR * 2)),
+                         with: .color(Color.white.opacity(0.94)))
+                let shift = eyeR * 0.34
+                let pupilC = CGPoint(x: eyeC.x + min(1, max(-1, gazeX)) * shift, y: eyeC.y + min(1, max(-1, gazeY)) * shift)
+                let irisR = eyeR * (excited ? 0.58 : 0.52)
+                ctx.fill(Path(ellipseIn: CGRect(x: pupilC.x - irisR, y: pupilC.y - irisR, width: irisR * 2, height: irisR * 2)),
+                         with: .color(EyeStyle.primary))
+                let pr = irisR * 0.62
+                ctx.fill(Path(ellipseIn: CGRect(x: pupilC.x - pr, y: pupilC.y - pr, width: pr * 2, height: pr * 2)),
+                         with: .color(EyeStyle.ink))
+                let hl = irisR * 0.24
+                ctx.fill(Path(ellipseIn: CGRect(x: pupilC.x - irisR * 0.22 - hl, y: pupilC.y - irisR * 0.22 - hl, width: hl * 2, height: hl * 2)),
+                         with: .color(.white))
+            }
+        }
+        var beak = Path()
+        beak.move(to: CGPoint(x: center.x, y: center.y - r * 0.02))
+        beak.addLine(to: CGPoint(x: center.x + r * 0.11, y: center.y + r * 0.10))
+        beak.addLine(to: CGPoint(x: center.x, y: center.y + r * 0.22))
+        beak.addLine(to: CGPoint(x: center.x - r * 0.11, y: center.y + r * 0.10))
+        beak.closeSubpath()
+        ctx.fill(beak, with: .color(EyeStyle.primary))
+
+        if sleeping {
+            crescentMoon(ctx, center: CGPoint(x: center.x + r * 0.94, y: center.y - r * 0.96), radius: r * 0.22)
+        }
+    }
+
+    static func targetStar(
+        _ ctx: GraphicsContext,
+        origin: CGPoint,
+        target: CGPoint,
+        move: EyeExerciseCoach.Move,
+        ringRadius: CGFloat,
+        starRadius: CGFloat,
+        holdProgress: CGFloat,
+        pulse: CGFloat
+    ) {
+        let active = min(1, max(0, holdProgress))
+        let dx = CGFloat(move.dx), dy = CGFloat(move.dy)
+        let lineStart = CGPoint(x: origin.x + dx * (ringRadius + starRadius * 0.6), y: origin.y + dy * (ringRadius + starRadius * 0.6))
+        let lineEnd = CGPoint(x: target.x - dx * starRadius * 1.65, y: target.y - dy * starRadius * 1.65)
+        let dist = hypot(lineEnd.x - lineStart.x, lineEnd.y - lineStart.y)
+        if dist > starRadius * 0.5 {
+            let lineColor = (active > 0.25 ? EyeStyle.primary : EyeStyle.glassEdgeTop).opacity(Double(0.28 + active * 0.45))
+            ctx.stroke(
+                Cartoon.segment(lineStart, lineEnd),
+                with: .color(lineColor),
+                style: StrokeStyle(lineWidth: max(2, starRadius * 0.10), lineCap: .round, dash: [starRadius * 0.36, starRadius * 0.30])
+            )
+            let perpX = -dy, perpY = dx
+            let back = starRadius * 0.34, side = starRadius * 0.24
+            var arrow = Path()
+            arrow.move(to: CGPoint(x: lineEnd.x - dx * back + perpX * side, y: lineEnd.y - dy * back + perpY * side))
+            arrow.addLine(to: lineEnd)
+            arrow.addLine(to: CGPoint(x: lineEnd.x - dx * back - perpX * side, y: lineEnd.y - dy * back - perpY * side))
+            ctx.stroke(
+                arrow,
+                with: .color((active > 0.25 ? EyeStyle.moodGold : EyeStyle.glassEdgeTop).opacity(Double(0.55 + active * 0.4))),
+                style: StrokeStyle(lineWidth: max(2.2, starRadius * 0.11), lineCap: .round, lineJoin: .round)
+            )
+        }
+        let auraR = starRadius * (1.75 + pulse * 0.24 + active * 0.32)
+        ctx.fill(
+            Path(ellipseIn: CGRect(x: target.x - auraR, y: target.y - auraR, width: auraR * 2, height: auraR * 2)),
+            with: .radialGradient(
+                Gradient(stops: [
+                    .init(color: EyeStyle.primary.opacity(Double(0.36 + active * 0.28)), location: 0),
+                    .init(color: EyeStyle.moodGold.opacity(Double(0.14 + active * 0.14)), location: 0.55),
+                    .init(color: .clear, location: 1),
+                ]),
+                center: target, startRadius: 0, endRadius: auraR
+            )
+        )
+        let ringR = starRadius * 1.24
+        ctx.stroke(
+            Path(ellipseIn: CGRect(x: target.x - ringR, y: target.y - ringR, width: ringR * 2, height: ringR * 2)),
+            with: .color(EyeStyle.glassEdgeTop.opacity(0.28)),
+            lineWidth: max(2.5, starRadius * 0.12)
+        )
+        if active > 0.02 {
+            var arc = Path()
+            arc.addArc(center: target, radius: ringR, startAngle: .degrees(-90),
+                       endAngle: .degrees(-90 + 360 * Double(active)), clockwise: false)
+            ctx.stroke(arc, with: .color(EyeStyle.primary), style: StrokeStyle(lineWidth: max(3.5, starRadius * 0.16), lineCap: .round))
+        }
+        let scale = 1 + pulse * 0.07 + active * 0.14
+        fourPointStar(ctx, center: target, radius: starRadius * scale, color: EyeStyle.moodGold)
+        let coreR = starRadius * 0.24 * scale
+        ctx.fill(Path(ellipseIn: CGRect(x: target.x - coreR, y: target.y - coreR, width: coreR * 2, height: coreR * 2)),
+                 with: .color(Color.white.opacity(0.92)))
+    }
+
+    static func comet(_ ctx: GraphicsContext, from: CGPoint, to: CGPoint, progress: CGFloat, starRadius: CGFloat) {
+        let t = min(1, max(0, progress))
+        if t < 0.72 {
+            let u = t / 0.72
+            let eased = 1 - (1 - u) * (1 - u)
+            let mid = CGPoint(x: (from.x + to.x) * 0.5, y: (from.y + to.y) * 0.5 - starRadius * 1.4)
+            let inv = 1 - eased
+            let pos = CGPoint(
+                x: inv * inv * from.x + 2 * inv * eased * mid.x + eased * eased * to.x,
+                y: inv * inv * from.y + 2 * inv * eased * mid.y + eased * eased * to.y
+            )
+            for i in 1...4 {
+                let tu = max(0, eased - CGFloat(i) * 0.06)
+                let ti = 1 - tu
+                let tail = CGPoint(
+                    x: ti * ti * from.x + 2 * ti * tu * mid.x + tu * tu * to.x,
+                    y: ti * ti * from.y + 2 * ti * tu * mid.y + tu * tu * to.y
+                )
+                let tr = starRadius * (0.42 - CGFloat(i) * 0.07)
+                ctx.fill(Path(ellipseIn: CGRect(x: tail.x - tr, y: tail.y - tr, width: tr * 2, height: tr * 2)),
+                         with: .color(EyeStyle.primary.opacity(Double(max(0.08, 0.55 - CGFloat(i) * 0.11)))))
+            }
+            fourPointStar(ctx, center: pos, radius: starRadius * 0.95, color: EyeStyle.moodGold)
+        } else {
+            let burst = (t - 0.72) / 0.28
+            let alpha = Double(max(0, 1 - burst))
+            let spread = starRadius * (1.2 + burst * 2.4)
+            for i in 0..<8 {
+                let a = Double(i) * (.pi / 4) + Double(burst) * 0.35
+                let pt = CGPoint(x: to.x + CGFloat(cos(a)) * spread, y: to.y + CGFloat(sin(a)) * spread)
+                fourPointStar(ctx, center: pt, radius: starRadius * 0.36 * (1 - burst * 0.4),
+                              color: (i % 2 == 0 ? EyeStyle.moodGold : EyeStyle.primary).opacity(alpha))
+            }
+        }
+    }
+
+    static func fourPointStar(_ ctx: GraphicsContext, center: CGPoint, radius: CGFloat, color: Color) {
+        let inner = radius * 0.32
+        var path = Path()
+        path.move(to: CGPoint(x: center.x, y: center.y - radius))
+        path.addQuadCurve(to: CGPoint(x: center.x + radius, y: center.y), control: CGPoint(x: center.x + inner * 0.25, y: center.y - inner * 0.25))
+        path.addQuadCurve(to: CGPoint(x: center.x, y: center.y + radius), control: CGPoint(x: center.x + inner * 0.25, y: center.y + inner * 0.25))
+        path.addQuadCurve(to: CGPoint(x: center.x - radius, y: center.y), control: CGPoint(x: center.x - inner * 0.25, y: center.y + inner * 0.25))
+        path.addQuadCurve(to: CGPoint(x: center.x, y: center.y - radius), control: CGPoint(x: center.x - inner * 0.25, y: center.y - inner * 0.25))
+        path.closeSubpath()
+        ctx.fill(path, with: .color(color))
+    }
+
+    private static func crescentMoon(_ ctx: GraphicsContext, center: CGPoint, radius: CGFloat) {
+        var moon = Path()
+        moon.move(to: CGPoint(x: center.x + radius * 0.2, y: center.y - radius))
+        moon.addCurve(
+            to: CGPoint(x: center.x + radius * 0.2, y: center.y + radius),
+            control1: CGPoint(x: center.x - radius * 0.95, y: center.y - radius * 0.75),
+            control2: CGPoint(x: center.x - radius * 0.95, y: center.y + radius * 0.75)
+        )
+        moon.addCurve(
+            to: CGPoint(x: center.x + radius * 0.2, y: center.y - radius),
+            control1: CGPoint(x: center.x - radius * 0.32, y: center.y + radius * 0.55),
+            control2: CGPoint(x: center.x - radius * 0.32, y: center.y - radius * 0.55)
+        )
+        moon.closeSubpath()
+        ctx.fill(moon, with: .color(EyeStyle.moodGold.opacity(0.88)))
+    }
+}
+
+/// 与安卓共用的护眼操完成页：点亮的八星星盘、欢呼小猫头鹰、趣味称号、客观统计与底部操作按钮。
 struct ExerciseCompletionView: View {
     let total: Int
     let seen: Int
     let usedCamera: Bool
+    var bestStreak: Int = 0
+    var stepResults: [Bool] = []
+    var onReplay: (() -> Void)? = nil
     let onClose: () -> Void
+
+    private var displayResults: [Bool] {
+        if !stepResults.isEmpty { return stepResults }
+        return (0..<max(0, total)).map { idx in !usedCamera || idx < seen }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
-            Spacer(minLength: 24)
-            ProgressRing(fraction: 1, lineWidth: 8).frame(width: 170, height: 170)
-            Text("完成啦！").font(EyeStyle.displayCompact).foregroundStyle(.white).padding(.top, 40)
-            Text(usedCamera ? "共 \(total) 步，检测到你做到了 \(seen) 步" : "共 \(total) 步，做完啦")
-                .font(EyeStyle.body).foregroundStyle(Color.white.opacity(0.7))
-                .multilineTextAlignment(.center).padding(.top, 16)
-            Spacer(minLength: 24)
-            Button("完成", action: onClose).buttonStyle(EyeButtonStyle())
-        }.frame(maxHeight: .infinity)
+            ScrollView {
+                VStack(spacing: 0) {
+                    Spacer(minLength: 16)
+                    Canvas { ctx, size in
+                        let c = CGPoint(x: size.width / 2, y: size.height / 2)
+                        let s = min(size.width, size.height)
+                        StarOwlScene.constellationRing(
+                            ctx, center: c, radius: s * 0.42, totalSteps: max(1, total),
+                            stepResults: displayResults, usedCamera: usedCamera,
+                            calibrateProgress: 1, showCalibrateRing: false, resting: false, restPulse: 0
+                        )
+                        StarOwlScene.owl(ctx, center: c, size: s * 0.48, happy: true)
+                    }
+                    .frame(width: 184, height: 184)
+                    .accessibilityLabel("已完成点亮的八星星盘与欢呼的小猫头鹰")
+
+                    Text(StarOwlScene.rankTitle(total: total, seen: seen, usedCamera: usedCamera))
+                        .font(EyeStyle.chip)
+                        .foregroundStyle(EyeStyle.moodGold)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 6)
+                        .background(EyeStyle.primarySoft, in: EyeStyle.chipShape)
+                        .overlay { EyeStyle.chipShape.strokeBorder(EyeStyle.glassEdgeTop.opacity(0.7), lineWidth: 1) }
+                        .padding(.top, EyeSpacing.lg)
+
+                    Text("完成啦！")
+                        .font(EyeStyle.displayCompact)
+                        .foregroundStyle(EyeStyle.text)
+                        .padding(.top, EyeSpacing.sm)
+
+                    Text(usedCamera ? "共 \(total) 步，检测到你做到了 \(seen) 步" : "共 \(total) 步，做完啦")
+                        .font(EyeStyle.body)
+                        .foregroundStyle(EyeStyle.text.opacity(0.88))
+                        .multilineTextAlignment(.center)
+                        .padding(.top, EyeSpacing.xs)
+
+                    Text(StarOwlScene.rankSummary(total: total, seen: seen, bestStreak: bestStreak, usedCamera: usedCamera))
+                        .font(EyeStyle.bodySecondary)
+                        .foregroundStyle(EyeStyle.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.top, 6)
+
+                    Spacer(minLength: 16)
+                }
+                .frame(maxWidth: .infinity)
+            }
+            VStack(spacing: EyeSpacing.xs) {
+                Button("完成", action: onClose).buttonStyle(EyeButtonStyle())
+                if let onReplay {
+                    Button("再寻一次", action: onReplay).buttonStyle(EyeButtonStyle(role: .secondary))
+                }
+            }
+            .frame(maxWidth: 520)
+            .padding(.top, EyeSpacing.sm)
+        }
+        .frame(maxHeight: .infinity)
     }
 }

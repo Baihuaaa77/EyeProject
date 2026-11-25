@@ -55,9 +55,11 @@
 - 二级完整页面（`EyeCarePages.kt`）：`EyeTrendScreen`（页面标题「用眼趋势」：本周要点卡 → 用屏时长、眼健康指数、眨眼频率三张图表卡——类别标签与对比 / 等级、小字说明 + 大号读数、凹槽渐变柱图→ 今天的主要原因（拉低眼健康指数的分值，显示为「−18」）→ 身体感受）、
   `EyeAdviceScreen`（规则建议、就医建议与建议做的自测）、`EyeBrightnessScreen`（当前亮度与环境光、做法，一键打开系统显示设置）。
 - `RestBreakPage`：「休息一下」20-20-20 全屏引导，渐变圆环倒计时、中间大号秒数，可提前结束。
-- `EyeExercisePage` / `EyeExerciseViewModel`：「护眼操」全屏页（首页入口卡）。提示向左 / 右 / 上 / 下看（两遍），
-  前置相机看虹膜在眼裂里的偏移（共用 `EyeExerciseCoach`，先看中间的圆点 1.5 秒取基线），转到位即整页朝该方向翻页、振动，注视点（准星）滑出画面再回来；
-  最后闭眼休息 5 秒，每过一秒响一声 `eye_count`（教练的 `COUNTDOWN` 事件）。布局：固定深色页，上方箭头 + 动作，注视点在屏幕正中，下方倒计时与提示语。实时检测开着时借用其相机帧，否则自己开相机、做完即关；没有相机权限时按时间带着做。
+- `EyeExercisePage` / `EyeExerciseViewModel` / `EyeExerciseGameScene`：「护眼操」互动小游戏全屏页（暖夜寻星情景，首页「日常护眼」入口）。
+  深咖啡星空与暖棕远山舞台中央是观星小猫头鹰与八星星盘，前置相机实时追踪虹膜偏移（共用 `EyeExerciseCoach` 新增 `gazeX/gazeY`、`holdProgress`、`stepResults`、`streak/bestStreak`），小猫头鹰双眼瞳孔随真实视线转动；
+  左 / 右 / 上 / 下四个方位边缘轮流亮起迷路暖星，转眼看过去即实时充能、捕获后化作流星飞回星盘并点亮对应星位、触发振动与提示音；
+  最后与小猫头鹰一同闭眼休息 5 秒（每过一秒响一声 `eye_count` 并轻柔扩散呼吸光环），结算页呈现点亮的八星星盘、趣味观星称号、客观统计与「再寻一次」入口。
+  实时检测开着时借用其相机帧，否则自己开相机、做完即关；没有相机权限时按节奏引导并同样完成收星仪式。双端一致（苹果端 `EyeExerciseView` / `ExerciseCompletionView`）。
 - navigation/HomeNavigation：`HomeRoute` / `EyeTrendRoute` / `EyeAdviceRoute` / `EyeBrightnessRoute`，`homeScreen(navigation)`、`eyeCareScreens(onBack, onOpenTest)`。
 
 依赖 core:common、core:domain、core:model、core:camera、core:data、core:notifications（常驻通知渠道）、core:designsystem、core:ui；
