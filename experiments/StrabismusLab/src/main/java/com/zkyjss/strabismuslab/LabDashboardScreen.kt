@@ -222,22 +222,26 @@ private fun OverviewTab(report: LabSessionReport) {
             }
         }
 
-        // 核心量化指标 2×2
+        // 核心量化指标 2×2（优先展示 3D 球面光学主指标，保留线性 175.5 消融对照）
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            val nearH = report.nearMetrics?.hde3dPrism ?: report.nearMetrics?.hdePrism
+            val nearV = report.nearMetrics?.vde3dPrism ?: report.nearMetrics?.vdePrism
             MetricTile(
-                title = "看近 HDE / VDE",
-                primary = report.nearMetrics?.hdePrism?.let { String.format("%+.1fΔ", it) } ?: "—",
+                title = "看近 3D HDE",
+                primary = nearH?.let { String.format("%+.1fΔ", it) } ?: "—",
                 sub = report.nearMetrics?.let {
-                    "V ${it.vdePrism?.let { v -> String.format("%+.1fΔ", v) } ?: "—"} · CI ±${String.format("%.1f", it.hdeCi95HalfPrism ?: 0.0)}"
+                    "V ${nearV?.let { v -> String.format("%+.1fΔ", v) } ?: "—"} · 线性 ${it.hdePrism?.let { h -> String.format("%+.1f", h) } ?: "—"}"
                 } ?: "未测",
                 accent = LabColors.accent,
                 modifier = Modifier.weight(1f),
             )
+            val farH = report.farMetrics?.hde3dPrism ?: report.farMetrics?.hdePrism
+            val farV = report.farMetrics?.vde3dPrism ?: report.farMetrics?.vdePrism
             MetricTile(
-                title = "看远 HDE / VDE",
-                primary = report.farMetrics?.hdePrism?.let { String.format("%+.1fΔ", it) } ?: "—",
+                title = "看远 3D HDE",
+                primary = farH?.let { String.format("%+.1fΔ", it) } ?: "—",
                 sub = report.farMetrics?.let {
-                    "V ${it.vdePrism?.let { v -> String.format("%+.1fΔ", v) } ?: "—"} · ${it.validBinocularFrames} 帧"
+                    "V ${farV?.let { v -> String.format("%+.1fΔ", v) } ?: "—"} · ${it.validBinocularFrames} 帧"
                 } ?: "未测",
                 accent = LabColors.rightEye,
                 modifier = Modifier.weight(1f),
@@ -245,14 +249,14 @@ private fun OverviewTab(report: LabSessionReport) {
         }
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             MetricTile(
-                title = "去遮盖再注视",
-                primary = report.coverMedianPrism?.let { String.format("%.1fΔ", it) } ?: "—",
-                sub = "${report.coverRefixations.size} 事件 · 噪声底 ${report.coverNoiseFloorPrism?.let { String.format("%.1fΔ", it) } ?: "—"}",
+                title = "遮盖 显斜/隐斜",
+                primary = (report.coverPhoriaMedianPrism ?: report.coverTropiaMedianPrism)?.let { String.format("%.1fΔ", it) } ?: "—",
+                sub = "对侧 ${report.coverTropiaMedianPrism?.let { String.format("%.1fΔ", it) } ?: "—"} · 噪声 ${report.coverNoiseFloorPrism?.let { String.format("%.1fΔ", it) } ?: "—"}",
                 accent = LabColors.verified,
                 modifier = Modifier.weight(1f),
             )
             MetricTile(
-                title = "追踪协调 BSI",
+                title = "追踪 BSI (400ms)",
                 primary = report.pursuitMetrics?.bsi?.let { String.format("%.2f", it) } ?: "—",
                 sub = report.pursuitMetrics?.let {
                     "rH ${it.rHorizontal?.let { r -> String.format("%.2f", r) } ?: "—"} · rV ${it.rVertical?.let { r -> String.format("%.2f", r) } ?: "—"}"

@@ -7,6 +7,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.zkyjss.eyeproject.core.camera.CameraIntrinsicsProvider
 import com.zkyjss.eyeproject.core.model.FaceLandmarkFrame
+import com.zkyjss.eyeproject.strabismuslab.LabCameraIntrinsics
 import com.zkyjss.eyeproject.strabismuslab.LabCodingScheme
 import com.zkyjss.eyeproject.strabismuslab.LabLiveState
 import com.zkyjss.eyeproject.strabismuslab.LabProtocolConfig
@@ -56,15 +57,15 @@ class LabViewModel(application: Application) : AndroidViewModel(application) {
     private val frameChannel = Channel<FaceLandmarkFrame>(capacity = Channel.CONFLATED)
     private var cachedFocalW = 0
     private var cachedFocalH = 0
-    private var cachedFocalPx = 0f
+    private var cachedIntrinsics = LabCameraIntrinsics()
 
     init {
         refreshHistory()
         viewModelScope.launch(Dispatchers.Default) {
             for (frame in frameChannel) {
-                val focal = resolveFocalPx(frame.sourceWidth, frame.sourceHeight)
+                val camIntrinsics = resolveIntrinsics(frame.sourceWidth, frame.sourceHeight)
                 val nowMs = frame.analysisElapsedRealtimeMs?.takeIf { it > 0L } ?: SystemClock.elapsedRealtime()
-                val completed = engine.onFrame(frame, focal, nowMs)
+                val completed = engine.onFrameWithIntrinsics(frame, camIntrinsics, nowMs)
                 if (completed != null) {
                     handleCompleted(completed)
                 }
@@ -180,13 +181,25 @@ class LabViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun resolveFocalPx(width: Int, height: Int): Float {
-        if (width <= 0 || height <= 0) return cachedFocalPx
-        if (width != cachedFocalW || height != cachedFocalH || cachedFocalPx <= 0f) {
+    private fun resolveIntrinsics(width: Int, height: Int): LabCameraIntrinsics {
+        if (width <= 0 || height <= 0) return cachedIntrinsics
+        if (width != cachedFocalW || height != cachedFocalH || !cachedIntrinsics.isValid) {
             cachedFocalW = width
             cachedFocalH = height
-            cachedFocalPx = intrinsics.focalLengthPx(width, height)
+            val g = intrinsics.geometry(width, height)
+            cachedIntrinsics = if (g != null) {
+                LabCameraIntrinsics(
+                    fx = g.focalLengthPx.toDouble(),
+                    fy = g.focalLengthPx.toDouble(),
+                    cx = g.principalX.toDouble(),
+                    cy = g.principalY.toDouble(),
+                    lightOffsetXMm = _ui.value.config.lightOffsetXMm,
+                    lightOffsetYMm = _ui.value.config.lightOffsetYMm,
+                )
+            } else {
+                LabCameraIntrinsics()
+            }
         }
-        return cachedFocalPx
+        return cachedIntrinsics
     }
 }

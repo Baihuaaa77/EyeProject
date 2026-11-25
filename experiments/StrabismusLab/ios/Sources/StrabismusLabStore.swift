@@ -1,6 +1,7 @@
 import AVFoundation
 import EyeScreening
 import Foundation
+import Photos
 import SwiftUI
 import UIKit
 
@@ -9,10 +10,12 @@ enum LabDestination {
 }
 
 enum LabExportFormat: String, CaseIterable, Identifiable {
-    case summaryJson, framesJsonl, framesCsv
+    case annotatedVideo, originalVideo, summaryJson, framesJsonl, framesCsv
     var id: String { rawValue }
     var label: String {
         switch self {
+        case .annotatedVideo: return "叠加可视化诊断视频 (MP4)"
+        case .originalVideo: return "原始高清录制视频 (MP4)"
         case .summaryJson: return "完整科研报告 (JSON)"
         case .framesJsonl: return "逐帧明细日志 (JSONL)"
         case .framesCsv: return "逐帧科研表格 (CSV)"
@@ -20,6 +23,8 @@ enum LabExportFormat: String, CaseIterable, Identifiable {
     }
     var fileName: String {
         switch self {
+        case .annotatedVideo: return "annotated.mp4"
+        case .originalVideo: return "original.mp4"
         case .summaryJson: return "session_summary.json"
         case .framesJsonl: return "frames.jsonl"
         case .framesCsv: return "frames.csv"
@@ -31,6 +36,8 @@ struct StoredSession: Identifiable {
     let id: String
     let directory: URL
     let report: LabSessionReport
+    let hasAnnotatedVideo: Bool
+    let hasOriginalVideo: Bool
 }
 
 @MainActor
@@ -51,7 +58,9 @@ final class StrabismusLabStore: ObservableObject {
         includeNear: true,
         includeFar: true,
         includeCover: true,
-        includePursuit: true
+        includePursuit: true,
+        lightOffsetXMm: 0.0,
+        lightOffsetYMm: 22.0
     )
     @Published var live: LabLiveState = LabLiveState(
         stage: .idle, stageIndex: 0, totalStages: 4, remainingSec: 0, stageProgress: 0,
@@ -62,28 +71,36 @@ final class StrabismusLabStore: ObservableObject {
         leftVisibilityContrast: nil, rightVisibilityContrast: nil,
         leftCandidates: [], rightCandidates: [],
         stimulusIntensity: 1, stimulusCode: 1, pursuitTargetX: 0.5, pursuitTargetY: 0.5,
-        coverStepIndex: 0, coverStepTotal: 6, coverInstruction: "", coverHolding: false,
+        coverStepIndex: 0, coverStepTotal: 7, coverInstruction: "", coverHolding: false,
         capturedFrames: 0, validFrames: 0, searchRadiusFraction: 0.80
     )
     @Published var showPreviewOverlay = true
+    @Published var recordVideo = true
     @Published var cameraAuthorized = false
     @Published var cameraError: String?
     @Published var analyzing = false
+    @Published var renderingVideo = false
+    @Published var videoRenderProgress: Double = 0.0
+    @Published var annotatedVideoURL: URL?
+    @Published var originalVideoURL: URL?
+    @Published var photoSaveBanner: String?
     @Published var activeReport: LabSessionReport?
     @Published var history: [StoredSession] = []
     @Published var renderedIntensity: Float = 1.0
 
     let camera = StrabismusLabCamera()
+    private let videoRecorder = StrabismusLabVideoRecorder()
     private let engine: StrabismusLabEngine
     private var savedBrightness: CGFloat?
+    private var activeSessionDir: URL?
 
     init() {
         let model = UIDevice.current.model
         let ver = UIDevice.current.systemVersion
         self.engine = StrabismusLabEngine(platformName: "iOS \(ver)", deviceModel: model)
-        self.camera.onFrame = { [weak self] frame, focal, nowMs in
+        self.camera.onFrame = { [weak self] frame, intrinsics, nowMs, pixelBuffer in
             Task { @MainActor in
-                self?.handleCameraFrame(frame, focal: focal, nowMs: nowMs)
+                self?.handleCameraFrame(frame, intrinsics: intrinsics, nowMs: nowMs, pixelBuffer: pixelBuffer)
             }
         }
         self.camera.onError = { [weak self] msg in
@@ -122,7 +139,15 @@ final class StrabismusLabStore: ObservableObject {
         savedBrightness = UIScreen.main.brightness
         UIScreen.main.brightness = 1.0
         UIApplication.shared.isIdleTimerDisabled = true
-        _ = engine.startSession(newConfig: config, nowMs: uptimeMs())
+        let sessionId = engine.startSession(newConfig: config, nowMs: uptimeMs())
+        let dir = sessionsRoot().appendingPathComponent(sanitize(sessionId), isDirectory: true)
+        activeSessionDir = dir
+        annotatedVideoURL = nil
+        originalVideoURL = nil
+        photoSaveBanner = nil
+        if recordVideo {
+            videoRecorder.startSession(sessionId: sessionId, directory: dir)
+        }
         live = engine.live.value as! LabLiveState
         destination = .capture
     }
@@ -157,6 +182,7 @@ final class StrabismusLabStore: ObservableObject {
 
     func cancelCapture() {
         restoreBrightness()
+        videoRecorder.cancelSession()
         engine.resetToIdle()
         live = engine.live.value as! LabLiveState
         destination = .console
@@ -175,6 +201,12 @@ final class StrabismusLabStore: ObservableObject {
     }
 
     func openReport(_ report: LabSessionReport) {
+        let dir = sessionsRoot().appendingPathComponent(sanitize(report.sessionId), isDirectory: true)
+        let ann = dir.appendingPathComponent("annotated.mp4")
+        let orig = dir.appendingPathComponent("original.mp4")
+        annotatedVideoURL = FileManager.default.fileExists(atPath: ann.path) ? ann : nil
+        originalVideoURL = FileManager.default.fileExists(atPath: orig.path) ? orig : nil
+        photoSaveBanner = nil
         activeReport = report
         destination = .dashboard
     }
@@ -185,13 +217,41 @@ final class StrabismusLabStore: ObservableObject {
         refreshHistory()
     }
 
-    func exportURL(for report: LabSessionReport, format: LabExportFormat) -> URL {
+    func exportURL(for report: LabSessionReport, format: LabExportFormat) -> URL? {
         let dir = ensureSaved(report)
-        return dir.appendingPathComponent(format.fileName)
+        let url = dir.appendingPathComponent(format.fileName)
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
     }
 
-    private func handleCameraFrame(_ frame: FaceLandmarkFrame, focal: Float, nowMs: Int64) {
-        if let completed = engine.onFrame(frame: frame, focalLengthPx: focal, nowMs: nowMs) {
+    func saveVideoToPhotos(_ url: URL) {
+        PHPhotoLibrary.requestAuthorization(for: .addOnly) { [weak self] status in
+            guard status == .authorized || status == .limited else {
+                Task { @MainActor in self?.photoSaveBanner = "请在系统设置中允许写入相册权限" }
+                return
+            }
+            PHPhotoLibrary.shared().performChanges({
+                PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: url)
+            }) { success, error in
+                Task { @MainActor in
+                    self?.photoSaveBanner = success ? "已保存诊断视频到系统相册" : "保存失败：\(error?.localizedDescription ?? "未知错误")"
+                }
+            }
+        }
+    }
+
+    private func handleCameraFrame(
+        _ frame: FaceLandmarkFrame,
+        intrinsics: LabCameraIntrinsics,
+        nowMs: Int64,
+        pixelBuffer: CVPixelBuffer
+    ) {
+        let prevIndex = engine.lastLoggedFrameIndex
+        let completed = engine.onFrameWithIntrinsics(frame: frame, intrinsics: intrinsics, nowMs: nowMs)
+        let newIndex = engine.lastLoggedFrameIndex
+        if recordVideo && destination == .capture && newIndex > prevIndex {
+            videoRecorder.appendFrame(pixelBuffer, frameIndex: newIndex, timeMs: nowMs)
+        }
+        if let completed = completed {
             finishWithReport(completed)
         } else if let state = engine.live.value as? LabLiveState {
             live = state
@@ -200,11 +260,33 @@ final class StrabismusLabStore: ObservableObject {
 
     private func finishWithReport(_ report: LabSessionReport) {
         restoreBrightness()
-        _ = ensureSaved(report)
-        refreshHistory()
+        let dir = ensureSaved(report)
         activeReport = report
         analyzing = false
         destination = .dashboard
+
+        if recordVideo {
+            renderingVideo = true
+            videoRenderProgress = 0.0
+            videoRecorder.finishAndRenderAnnotated(
+                report: report,
+                directory: dir,
+                onProgress: { [weak self] p in
+                    Task { @MainActor in self?.videoRenderProgress = p }
+                },
+                completion: { [weak self] origURL, annURL in
+                    Task { @MainActor in
+                        self?.originalVideoURL = origURL
+                        self?.annotatedVideoURL = annURL
+                        self?.renderingVideo = false
+                        self?.videoRenderProgress = 1.0
+                        self?.refreshHistory()
+                    }
+                }
+            )
+        } else {
+            refreshHistory()
+        }
     }
 
     private func restoreBrightness() {
@@ -240,7 +322,15 @@ final class StrabismusLabStore: ObservableObject {
             let file = dir.appendingPathComponent("session_summary.json")
             guard let text = try? String(contentsOf: file, encoding: .utf8) else { continue }
             let report = LabSessionReport.companion.fromJson(json: text)
-            items.append(StoredSession(id: report.sessionId, directory: dir, report: report))
+            let hasAnn = FileManager.default.fileExists(atPath: dir.appendingPathComponent("annotated.mp4").path)
+            let hasOrig = FileManager.default.fileExists(atPath: dir.appendingPathComponent("original.mp4").path)
+            items.append(StoredSession(
+                id: report.sessionId,
+                directory: dir,
+                report: report,
+                hasAnnotatedVideo: hasAnn,
+                hasOriginalVideo: hasOrig
+            ))
         }
         history = items.sorted { $0.report.createdAtMs > $1.report.createdAtMs }
     }

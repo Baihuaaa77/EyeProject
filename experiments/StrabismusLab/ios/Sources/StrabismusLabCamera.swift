@@ -4,6 +4,7 @@ import CoreMedia
 import CoreVideo
 import EyeScreening
 import MediaPipeTasksVision
+import simd
 import SwiftUI
 import UIKit
 
@@ -39,10 +40,11 @@ final class LabGrayFrame: NSObject, GrayImage {
     }
 }
 
-/// 独立 4K 前置相机采集管线：MediaPipe 478 关键点 + KMP ScreenPointOptics（默认 0.80f 虹膜搜索半径）。
+/// 独立 4K 前置相机采集管线：MediaPipe 478 关键点 + KMP ScreenPointOptics（0.80R）+ 完整相机内参矩阵提取。
 final class StrabismusLabCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
     let captureSession = AVCaptureSession()
-    var onFrame: ((FaceLandmarkFrame, Float, Int64) -> Void)?
+    /// 回调参数：关键点帧、完整相机内参 (fx,fy,cx,cy)、单调时钟 ms、原始视频帧缓冲（供无阻塞视频录制）。
+    var onFrame: ((FaceLandmarkFrame, LabCameraIntrinsics, Int64, CVPixelBuffer) -> Void)?
     var onError: ((String) -> Void)?
 
     private let queue = DispatchQueue(label: "com.zkyjss.strabismuslab.camera", autoreleaseFrequency: .workItem)
@@ -109,7 +111,6 @@ final class StrabismusLabCamera: NSObject, AVCaptureVideoDataOutputSampleBufferD
         output.setSampleBufferDelegate(self, queue: queue)
         if captureSession.canAddOutput(output) { captureSession.addOutput(output) }
 
-        // 优先 4K 前置输出，逐级回退 1080p / 720p，避免手动锁定不兼容的 HDR/binned 格式
         if captureSession.canSetSessionPreset(.hd4K3840x2160) {
             captureSession.sessionPreset = .hd4K3840x2160
         } else if captureSession.canSetSessionPreset(.hd1920x1080) {
@@ -167,6 +168,37 @@ final class StrabismusLabCamera: NSObject, AVCaptureVideoDataOutputSampleBufferD
         return out
     }
 
+    private func resolveIntrinsics(_ sampleBuffer: CMSampleBuffer, width: Int32, height: Int32) -> LabCameraIntrinsics {
+        var fx = 0.0
+        var fy = 0.0
+        var cx = Double(width) * 0.5
+        var cy = Double(height) * 0.5
+        if let data = CMGetAttachment(sampleBuffer, key: kCMSampleBufferAttachmentKey_CameraIntrinsicMatrix, attachmentModeOut: nil) as? Data,
+           data.count >= MemoryLayout<simd_float3x3>.size {
+            let mat = data.withUnsafeBytes { $0.load(as: simd_float3x3.self) }
+            let mFx = Double(mat.columns.0.x)
+            let mFy = Double(mat.columns.1.y)
+            let mCx = Double(mat.columns.2.x)
+            let mCy = Double(mat.columns.2.y)
+            if mFx > 10 && mFy > 10 {
+                fx = mFx
+                fy = mFy
+                // 若主点与当前竖屏图像尺寸相符则采用实测主点，否则居中兜底
+                if mCx > 10 && mCx < Double(width) && mCy > 10 && mCy < Double(height) {
+                    cx = mCx
+                    cy = mCy
+                }
+            }
+        }
+        if fx <= 10, let dev = device {
+            let fovRad = Double(dev.activeFormat.videoFieldOfView) * Double.pi / 180.0
+            let f = Double(max(width, height)) / (2.0 * tan(fovRad / 2.0))
+            fx = f
+            fy = f
+        }
+        return LabCameraIntrinsics(fx: fx, fy: fy, cx: cx, cy: cy, lightOffsetXMm: 0.0, lightOffsetYMm: 22.0)
+    }
+
     private func process(_ sampleBuffer: CMSampleBuffer) {
         guard active, let detector = detector, let buffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         let nowMs = Int64(ProcessInfo.processInfo.systemUptime * 1000)
@@ -216,17 +248,7 @@ final class StrabismusLabCamera: NSObject, AVCaptureVideoDataOutputSampleBufferD
             let gray = LabGrayFrame(buffer)
             defer { gray.release() }
 
-            var focal: Float = 0
-            if let data = CMGetAttachment(sampleBuffer, key: kCMSampleBufferAttachmentKey_CameraIntrinsicMatrix, attachmentModeOut: nil) as? Data,
-               data.count >= 48 {
-                let vals = data.withUnsafeBytes { Array($0.bindMemory(to: Float.self)) }
-                if vals.count >= 12 { focal = max(vals[0], vals[5]) }
-            }
-            if focal <= 0, let dev = device {
-                let fovRad = dev.activeFormat.videoFieldOfView * Float.pi / 180
-                focal = Float(max(gray.width, gray.height)) / (2 * tan(fovRad / 2))
-            }
-
+            let intrinsics = resolveIntrinsics(sampleBuffer, width: gray.width, height: gray.height)
             let face: FaceMetrics? = points.isEmpty ? nil : ScreenPointOptics.shared.face(
                 points: ktPoints,
                 matrix: ktTransform,
@@ -245,7 +267,7 @@ final class StrabismusLabCamera: NSObject, AVCaptureVideoDataOutputSampleBufferD
                 analysisElapsedRealtimeMs: KotlinLong(value: nowMs),
                 sourceElapsedRealtimeMs: KotlinLong(value: nowMs)
             )
-            onFrame?(frame, focal, nowMs)
+            onFrame?(frame, intrinsics, nowMs, buffer)
         } catch {
             DispatchQueue.main.async { self.onError?("帧分析异常：\(error.localizedDescription)") }
         }

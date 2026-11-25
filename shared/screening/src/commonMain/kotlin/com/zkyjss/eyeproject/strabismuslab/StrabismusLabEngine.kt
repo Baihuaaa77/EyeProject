@@ -4,8 +4,6 @@ import com.zkyjss.eyeproject.core.domain.BlinkDetector
 import com.zkyjss.eyeproject.core.domain.DepthFromIris
 import com.zkyjss.eyeproject.core.model.EyeLandmarks
 import com.zkyjss.eyeproject.core.model.FaceLandmarkFrame
-import com.zkyjss.eyeproject.core.model.FaceMetrics
-import com.zkyjss.eyeproject.core.model.OpticalEyeMeasurement
 import com.zkyjss.eyeproject.core.model.Point2f
 import com.zkyjss.eyeproject.feature.services.CoverDetector
 import com.zkyjss.eyeproject.feature.services.ScreeningDistanceTracker
@@ -54,7 +52,7 @@ data class LabLiveState(
     val pursuitTargetX: Float = 0.5f,
     val pursuitTargetY: Float = 0.5f,
     val coverStepIndex: Int = 0,
-    val coverStepTotal: Int = 6,
+    val coverStepTotal: Int = 7,
     val coverInstruction: String = "",
     val coverHolding: Boolean = false,
     val capturedFrames: Int = 0,
@@ -63,8 +61,12 @@ data class LabLiveState(
 )
 
 /**
- * StrabismusLab 双端共用科研采集与分析引擎。
- * 剥离主 App 繁杂的账号、文案、游戏化外壳，专注高精度光学数据采集、v0.8 光码解调与 Debug 可视化输出。
+ * StrabismusLab 双端共用科研采集与分析引擎（v0.9）。
+ * 集成：
+ * - v0.8 双向主动光码解调 + 双眼/跨阶段硬件延迟共享先验 + 稳定 ON 帧门控过滤；
+ * - 3D 球面角膜镜光学反演（离轴光源物理偏置补偿 + 大角度球面非线性 + 虹膜连线 Roll 旋正）；
+ * - 遮盖/去遮盖双向毫秒级拐点回溯 + 显斜（遮盖对侧眼）/ 隐斜·IXT（去遮盖同侧眼）动力学曲线；
+ * - 400ms 窗口平滑追踪速度相关（抗关键点 33ms 帧间抖动）。
  */
 class StrabismusLabEngine(
     private val platformName: String = "Android",
@@ -88,6 +90,7 @@ class StrabismusLabEngine(
     private var nasalSign = 1f
     private var lastSourceW = 0
     private var lastSourceH = 0
+    private var lastIntrinsics: LabCameraIntrinsics? = null
     private val fpsSamples = mutableListOf<Double>()
 
     private data class CoverActionSpec(
@@ -97,13 +100,15 @@ class StrabismusLabEngine(
         val holdMs: Long,
     )
 
+    /** 完整临床遮盖序列：单眼 Cover-Uncover（区分显斜/隐斜）+ 快速交替遮盖（打破融合测总偏斜与 IXT 恢复）。 */
     private val coverSteps = listOf(
         CoverActionSpec("请遮住右眼", VisionEye.RIGHT, null, 2_000L),
         CoverActionSpec("请移开遮盖（双眼注视）", null, VisionEye.RIGHT, 1_800L),
         CoverActionSpec("请遮住左眼", VisionEye.LEFT, null, 2_000L),
         CoverActionSpec("请移开遮盖（双眼注视）", null, VisionEye.LEFT, 1_800L),
-        CoverActionSpec("请再次遮住右眼", VisionEye.RIGHT, null, 1_500L),
-        CoverActionSpec("请移开遮盖（完成遮盖）", null, VisionEye.RIGHT, 1_500L),
+        CoverActionSpec("交替遮盖：请遮住右眼", VisionEye.RIGHT, null, 1_500L),
+        CoverActionSpec("立即换遮左眼", VisionEye.LEFT, VisionEye.RIGHT, 1_500L),
+        CoverActionSpec("完全移开遮盖（完成）", null, VisionEye.LEFT, 1_500L),
     )
 
     private data class RecordedCoverMark(
@@ -112,6 +117,7 @@ class StrabismusLabEngine(
         val covered: VisionEye?,
         val uncovered: VisionEye?,
         val eventTimeMs: Long,
+        val confirmedAtMs: Long,
         val source: String,
     )
 
@@ -141,6 +147,9 @@ class StrabismusLabEngine(
         val rightY: Double,
     )
 
+    /** 最近一次写入帧日志的帧号（供视频录制器把视频帧与 report.frames 精确一一对应）。 */
+    val lastLoggedFrameIndex: Int get() = frameCounter
+
     fun updatePreviewConfig(newConfig: LabProtocolConfig) {
         if (_live.value.stage != LabStage.IDLE) return
         config = newConfig
@@ -158,6 +167,7 @@ class StrabismusLabEngine(
         currentStageIdx = 0
         frameCounter = 0
         validFrameCounter = 0
+        lastIntrinsics = null
         fpsSamples.clear()
         stageDisplayEvents.clear()
         stageLeftObs.clear()
@@ -191,7 +201,7 @@ class StrabismusLabEngine(
         if (_live.value.stage != LabStage.COVER_TEST) return
         if (coverIndex >= coverSteps.size) return
         val spec = coverSteps[coverIndex]
-        coverMarks += RecordedCoverMark(coverIndex, spec.label, spec.covered, spec.uncovered, nowMs, "MANUAL")
+        coverMarks += RecordedCoverMark(coverIndex, spec.label, spec.covered, spec.uncovered, nowMs, nowMs, "MANUAL")
         coverIndex++
         coverHolding = false
         coverActionWaitStartMs = nowMs
@@ -235,6 +245,9 @@ class StrabismusLabEngine(
         _live.value = LabLiveState(searchRadiusFraction = config.searchRadiusFraction)
     }
 
+    private fun activeCodingScheme(stage: LabStage): LabCodingScheme =
+        if (stage.forcesSteadyStimulus) LabCodingScheme.STEADY else config.codingScheme
+
     /** 显示刷新帧回调（由 Compose / SwiftUI 60Hz 帧时钟触发），写入真实绘制时间戳供 v0.8 解调。 */
     fun recordDisplayTick(hostTimeMs: Long, screenBrightness: Double = 1.0): Pair<Float, Double> {
         val stage = _live.value.stage
@@ -244,8 +257,9 @@ class StrabismusLabEngine(
         val elapsedSec = max(0.0, (hostTimeMs - stageStartMs) / 1000.0)
         val chipSec = config.chipDurationMs / 1000.0
         val chip = (elapsedSec / chipSec).toInt()
-        val code = StimulusCodeV8.codeValue(elapsedSec, chipSec, config.codingScheme)
-        val intensity = StimulusCodeV8.intensity(elapsedSec, chipSec, config.codingScheme)
+        val scheme = activeCodingScheme(stage)
+        val code = StimulusCodeV8.codeValue(elapsedSec, chipSec, scheme)
+        val intensity = StimulusCodeV8.intensity(elapsedSec, chipSec, scheme)
         val events = stageDisplayEvents.getOrPut(stage) { mutableListOf() }
         val hostSec = hostTimeMs / 1000.0
         if (events.isEmpty() || events.last().hostTimeSec < hostSec - 0.004) {
@@ -262,8 +276,31 @@ class StrabismusLabEngine(
         return intensity.toFloat() to code
     }
 
-    /** 每帧相机关键点+光学候选输入（可在主线程或串行调度器调用）。返回若阶段自动完成则给出完整报告。 */
+    /** 兼容旧单焦距签名：自动构造主点在图像中心的近似内参，并叠加配置中的光源物理偏置。 */
     fun onFrame(frame: FaceLandmarkFrame, focalLengthPx: Float, nowMs: Long): LabSessionReport? {
+        val f = focalLengthPx.toDouble()
+        val intrinsics = LabCameraIntrinsics(
+            fx = f,
+            fy = f,
+            cx = frame.sourceWidth * 0.5,
+            cy = frame.sourceHeight * 0.5,
+            lightOffsetXMm = config.lightOffsetXMm,
+            lightOffsetYMm = config.lightOffsetYMm,
+        )
+        return onFrameWithIntrinsics(frame, intrinsics, nowMs)
+    }
+
+    /** 完整内参入口：传入 (fx, fy, cx, cy) 与光源相对前摄物理偏置，供 3D 球面光学反演使用。 */
+    fun onFrameWithIntrinsics(frame: FaceLandmarkFrame, intrinsics: LabCameraIntrinsics, nowMs: Long): LabSessionReport? {
+        val mergedIntrinsics = intrinsics.copy(
+            lightOffsetXMm = config.lightOffsetXMm,
+            lightOffsetYMm = config.lightOffsetYMm,
+        )
+        if (mergedIntrinsics.isValid) lastIntrinsics = mergedIntrinsics
+        val focalLengthPx = if (mergedIntrinsics.isValid) {
+            ((mergedIntrinsics.fx + mergedIntrinsics.fy) * 0.5).toFloat()
+        } else 0f
+
         val face = frame.faces.singleOrNull()
         lastSourceW = frame.sourceWidth
         lastSourceH = frame.sourceHeight
@@ -325,7 +362,6 @@ class StrabismusLabEngine(
             return null
         }
 
-        // 等待看远确认期间只更新距离与姿态 HUD，不采样也不推进计时。
         if (stage == LabStage.FAR_FIXATION && farWaiting) {
             _live.value = _live.value.copy(
                 faceDetected = leftEye != null && rightEye != null,
@@ -344,10 +380,11 @@ class StrabismusLabEngine(
         }
 
         val elapsedStageSec = max(0.0, (nowMs - stageStartMs) / 1000.0)
+        val stageScheme = activeCodingScheme(stage)
         val (stimIntensity, stimCode) = if (stage.usesOpticalStimulus) {
             val chipSec = config.chipDurationMs / 1000.0
-            StimulusCodeV8.intensity(elapsedStageSec, chipSec, config.codingScheme) to
-                StimulusCodeV8.codeValue(elapsedStageSec, chipSec, config.codingScheme)
+            StimulusCodeV8.intensity(elapsedStageSec, chipSec, stageScheme) to
+                StimulusCodeV8.codeValue(elapsedStageSec, chipSec, stageScheme)
         } else {
             0.0 to 0.0
         }
@@ -405,7 +442,7 @@ class StrabismusLabEngine(
             }
         }
 
-        // 遮盖阶段：复用主核心 CoverDetector 实时判定遮盖/去遮盖动作并记录精确事件时间
+        // 遮盖阶段：CoverDetector 负责实时稳健状态机；精确毫秒级拐点在 buildReport() 双向回溯锁定
         var stageFinished = false
         if (stage == LabStage.COVER_TEST) {
             val coverQuality = face != null && poseOk
@@ -425,13 +462,24 @@ class StrabismusLabEngine(
                 val spec = coverSteps[coverIndex]
                 if (obs.covered == spec.covered) {
                     val exactTime = spec.uncovered?.let { obs.releasedAtMs[it] } ?: obs.sinceMs
-                    coverMarks += RecordedCoverMark(coverIndex, spec.label, spec.covered, spec.uncovered, exactTime, "CAMERA")
+                    coverMarks += RecordedCoverMark(
+                        index = coverIndex,
+                        label = spec.label,
+                        covered = spec.covered,
+                        uncovered = spec.uncovered,
+                        eventTimeMs = exactTime,
+                        confirmedAtMs = obs.confirmedAtMs,
+                        source = "CAMERA",
+                    )
                     coverIndex++
                     coverHolding = true
                     coverHoldStartMs = exactTime
                 }
             }
         }
+
+        val leftNorm = leftEye?.toNormalized()
+        val rightNorm = rightEye?.toNormalized()
 
         // 追踪阶段：计算 60Hz 平滑轨迹与双眼相对虹膜坐标
         var targetX = 0.5f
@@ -440,23 +488,20 @@ class StrabismusLabEngine(
             val (tx, ty, seg) = pursuitTargetNorm(elapsedStageSec, config.pursuitDurationSec.toDouble())
             targetX = tx
             targetY = ty
-            val ln = leftEye?.toNormalized()
-            val rn = rightEye?.toNormalized()
-            if (frameValid && ln != null && rn != null && (leftEar ?: 1f) >= 0.16f && (rightEar ?: 1f) >= 0.16f) {
+            if (frameValid && leftNorm != null && rightNorm != null && (leftEar ?: 1f) >= 0.16f && (rightEar ?: 1f) >= 0.16f) {
                 pursuitSamples += PursuitSample(
                     timeMs = nowMs,
                     segment = seg,
                     targetX = tx.toDouble(),
                     targetY = ty.toDouble(),
-                    leftX = (ln.first * nasalSign).toDouble(),
-                    leftY = ln.second.toDouble(),
-                    rightX = (rn.first * nasalSign).toDouble(),
-                    rightY = rn.second.toDouble(),
+                    leftX = (leftNorm.first * nasalSign).toDouble(),
+                    leftY = leftNorm.second.toDouble(),
+                    rightX = (rightNorm.first * nasalSign).toDouble(),
+                    rightY = rightNorm.second.toDouble(),
                 )
             }
         }
 
-        // 写入实时帧日志（后续 v0.8 双向解调完成后会回填精准的 glint 坐标、相位与 HDE/VDE）
         val lBest = leftOpt?.cornealReflex
         val rBest = rightOpt?.cornealReflex
         val lRelX = if (lBest != null && leftCenter != null && (leftOpt?.irisDiameterPx ?: 0f) > 0f) {
@@ -510,6 +555,10 @@ class StrabismusLabEngine(
             rightGlintSource = if (rBest != null) LabGlintSource.OBSERVED else LabGlintSource.UNAVAILABLE,
             rightRelX = rRelX,
             rightRelY = rRelY,
+            leftNormX = leftNorm?.first,
+            leftNormY = leftNorm?.second,
+            rightNormX = rightNorm?.first,
+            rightNormY = rightNorm?.second,
             coveredEye = coverDetector.coveredEye?.name,
             leftCandidateCount = leftCands.size,
             rightCandidateCount = rightCands.size,
@@ -584,7 +633,7 @@ class StrabismusLabEngine(
         if (stage == LabStage.COVER_TEST) coverDetector.clear()
 
         val prompt = when (stage) {
-            LabStage.NEAR_FIXATION -> "注视顶部编码白点，保持头与手机稳定"
+            LabStage.NEAR_FIXATION -> "注视顶部编码白点中心，保持头与手机约 33 cm"
             LabStage.FAR_FIXATION -> "准备好后点「开始看远」，越过手机看 6 m 远目标"
             LabStage.COVER_TEST -> coverSteps.first().label
             LabStage.PURSUIT -> "头部不动，双眼平滑跟随移动圆点"
@@ -632,43 +681,61 @@ class StrabismusLabEngine(
         val fpsInt = medFps.toInt().coerceIn(15, 60)
         val chipSec = config.chipDurationMs / 1000.0
 
-        fun analyzeStageCode(stage: LabStage): Pair<CornealCodeV8Result?, CornealCodeV8Result?> {
+        fun analyzeEye(stage: LabStage, eye: String, obs: List<GlintObservationFrame>, lagPriorSec: Double?): CornealCodeV8Result? {
+            if (obs.isEmpty()) return null
+            val startSec = stageStartTimesSec[stage] ?: obs.first().hostTimeSec
+            val durSec = stageDurationsSec[stage] ?: max(2.0, obs.last().hostTimeSec - startSec)
+            val events = stageDisplayEvents[stage].orEmpty()
+            return CornealCodeV8Analyzer.analyze(
+                eye = eye,
+                frames = obs,
+                displayEvents = events,
+                startHostTimeSec = startSec,
+                durationSec = durSec,
+                chipSec = chipSec,
+                scheme = activeCodingScheme(stage),
+                stimulusDiameterMm = config.stimulusDiameterMm,
+                searchRadiusFraction = config.searchRadiusFraction,
+                fps = fpsInt,
+                lagPriorSec = lagPriorSec,
+            )
+        }
+
+        fun highConfLag(res: CornealCodeV8Result?): Double? {
+            if (res == null || !res.codeVerified) return null
+            if ((res.trainCorrelation ?: 0.0) < 0.55 || (res.heldOutCorrelation ?: 0.0) < 0.45) return null
+            return res.lagMs?.div(1000.0)?.takeIf { it in -0.05..0.22 }
+        }
+
+        /** 同阶段双眼共享硬件延迟先验：单眼被强环境反光拉偏延迟时，以高置信眼（或前阶段）硬件延迟重跑校正。 */
+        fun analyzeStagePair(stage: LabStage, priorLagSec: Double?): Pair<CornealCodeV8Result?, CornealCodeV8Result?> {
             val lObs = stageLeftObs[stage].orEmpty()
             val rObs = stageRightObs[stage].orEmpty()
             if (lObs.isEmpty() && rObs.isEmpty()) return null to null
-            val startSec = stageStartTimesSec[stage] ?: (lObs.firstOrNull()?.hostTimeSec ?: 0.0)
-            val durSec = stageDurationsSec[stage] ?: max(2.0, ((lObs.lastOrNull()?.hostTimeSec ?: startSec) - startSec))
-            val events = stageDisplayEvents[stage].orEmpty()
-            val lRes = CornealCodeV8Analyzer.analyze(
-                eye = "LEFT",
-                frames = lObs,
-                displayEvents = events,
-                startHostTimeSec = startSec,
-                durationSec = durSec,
-                chipSec = chipSec,
-                scheme = config.codingScheme,
-                stimulusDiameterMm = config.stimulusDiameterMm,
-                searchRadiusFraction = config.searchRadiusFraction,
-                fps = fpsInt,
-            )
-            val rRes = CornealCodeV8Analyzer.analyze(
-                eye = "RIGHT",
-                frames = rObs,
-                displayEvents = events,
-                startHostTimeSec = startSec,
-                durationSec = durSec,
-                chipSec = chipSec,
-                scheme = config.codingScheme,
-                stimulusDiameterMm = config.stimulusDiameterMm,
-                searchRadiusFraction = config.searchRadiusFraction,
-                fps = fpsInt,
-            )
+            var lRes = analyzeEye(stage, "LEFT", lObs, priorLagSec)
+            var rRes = analyzeEye(stage, "RIGHT", rObs, priorLagSec)
+            val stageLag = highConfLag(lRes) ?: highConfLag(rRes) ?: priorLagSec
+            if (stageLag != null) {
+                if (lRes != null && !lRes.codeVerified) {
+                    val retried = analyzeEye(stage, "LEFT", lObs, stageLag)
+                    if (retried != null && (retried.codeVerified || (retried.heldOutCorrelation ?: -1.0) > (lRes.heldOutCorrelation ?: -1.0))) {
+                        lRes = retried
+                    }
+                }
+                if (rRes != null && !rRes.codeVerified) {
+                    val retried = analyzeEye(stage, "RIGHT", rObs, stageLag)
+                    if (retried != null && (retried.codeVerified || (retried.heldOutCorrelation ?: -1.0) > (rRes.heldOutCorrelation ?: -1.0))) {
+                        rRes = retried
+                    }
+                }
+            }
             return lRes to rRes
         }
 
-        val (nearL, nearR) = analyzeStageCode(LabStage.NEAR_FIXATION)
-        val (farL, farR) = analyzeStageCode(LabStage.FAR_FIXATION)
-        val (coverL, coverR) = analyzeStageCode(LabStage.COVER_TEST)
+        val (nearL, nearR) = analyzeStagePair(LabStage.NEAR_FIXATION, priorLagSec = null)
+        val hardwareLagPrior = listOfNotNull(highConfLag(nearL), highConfLag(nearR)).takeIf { it.isNotEmpty() }?.average()
+        val (farL, farR) = analyzeStagePair(LabStage.FAR_FIXATION, priorLagSec = hardwareLagPrior)
+        val (coverL, coverR) = analyzeStagePair(LabStage.COVER_TEST, priorLagSec = hardwareLagPrior)
 
         val leftEstimateByFrame = buildMap<Int, LabGlintFrameEstimate> {
             listOfNotNull(nearL, farL, coverL).forEach { r -> r.frames.forEach { put(it.frameIndex, it) } }
@@ -677,8 +744,8 @@ class StrabismusLabEngine(
             listOfNotNull(nearR, farR, coverR).forEach { r -> r.frames.forEach { put(it.frameIndex, it) } }
         }
 
-        // 用 v0.8 双向解调后的精确坐标回填逐帧日志，并计算每帧 HDE / VDE（Δ）
-        val kPrismPerRadius = StrabismusProtocol.PRISM_PER_IRIS_UNIT * 0.5 // irisRel 基于半径归一化，1 直径 = 2 半径
+        val intrinsics = lastIntrinsics?.takeIf { it.isValid }
+        val kPrismPerRadius = StrabismusProtocol.PRISM_PER_IRIS_UNIT * 0.5
         val enrichedFrames = frameLogs.map { f ->
             val le = leftEstimateByFrame[f.index]
             val re = rightEstimateByFrame[f.index]
@@ -686,31 +753,67 @@ class StrabismusLabEngine(
             val lRelY = le?.takeIf { it.source.measured }?.irisRelY?.toFloat()
             val rRelX = re?.takeIf { it.source.measured }?.irisRelX?.toFloat()
             val rRelY = re?.takeIf { it.source.measured }?.irisRelY?.toFloat()
-            val hde = if (f.valid && lRelX != null && rRelX != null) {
+            val lGx = le?.measurementX ?: le?.imageX
+            val lGy = le?.measurementY ?: le?.imageY
+            val rGx = re?.measurementX ?: re?.imageX
+            val rGy = re?.measurementY ?: re?.imageY
+
+            // 1) 旧版线性 175.5 估算（保留作论文消融对照）
+            val hdeLinear = if (f.valid && lRelX != null && rRelX != null) {
                 val leftNasal = lRelX * nasalSign
                 val rightNasal = rRelX * (-nasalSign)
                 (leftNasal - rightNasal) * kPrismPerRadius
             } else null
-            val vde = if (f.valid && lRelY != null && rRelY != null) {
+            val vdeLinear = if (f.valid && lRelY != null && rRelY != null) {
                 (lRelY - rRelY) * kPrismPerRadius
             } else null
+
+            // 2) v0.9 球面角膜镜 3D 光学反演 + 虹膜连线 Roll 旋正
+            val optics3d = if (
+                f.valid && intrinsics != null &&
+                le?.source?.measured == true && re?.source?.measured == true &&
+                lGx != null && lGy != null && rGx != null && rGy != null &&
+                f.leftIrisX != null && f.leftIrisY != null && f.leftIrisDiameterPx != null &&
+                f.rightIrisX != null && f.rightIrisY != null && f.rightIrisDiameterPx != null
+            ) {
+                CornealOptics3D.solveBinocular(
+                    leftIrisX = f.leftIrisX.toDouble(),
+                    leftIrisY = f.leftIrisY.toDouble(),
+                    leftGlintX = lGx,
+                    leftGlintY = lGy,
+                    leftIrisDiameterPx = f.leftIrisDiameterPx.toDouble(),
+                    rightIrisX = f.rightIrisX.toDouble(),
+                    rightIrisY = f.rightIrisY.toDouble(),
+                    rightGlintX = rGx,
+                    rightGlintY = rGy,
+                    rightIrisDiameterPx = f.rightIrisDiameterPx.toDouble(),
+                    intrinsics = intrinsics,
+                    nasalSign = nasalSign.toDouble(),
+                    farFixation = f.stage == LabStage.FAR_FIXATION,
+                )
+            } else null
+
             f.copy(
-                leftGlintX = le?.measurementX?.toFloat() ?: le?.imageX?.toFloat(),
-                leftGlintY = le?.measurementY?.toFloat() ?: le?.imageY?.toFloat(),
+                leftGlintX = lGx?.toFloat(),
+                leftGlintY = lGy?.toFloat(),
                 leftGlintConfidence = le?.confidence?.toFloat(),
                 leftGlintSource = le?.source ?: f.leftGlintSource,
                 leftEmissionPhase = le?.emissionPhase ?: f.leftEmissionPhase,
                 leftRelX = lRelX,
                 leftRelY = lRelY,
-                rightGlintX = re?.measurementX?.toFloat() ?: re?.imageX?.toFloat(),
-                rightGlintY = re?.measurementY?.toFloat() ?: re?.imageY?.toFloat(),
+                rightGlintX = rGx?.toFloat(),
+                rightGlintY = rGy?.toFloat(),
                 rightGlintConfidence = re?.confidence?.toFloat(),
                 rightGlintSource = re?.source ?: f.rightGlintSource,
                 rightEmissionPhase = re?.emissionPhase ?: f.rightEmissionPhase,
                 rightRelX = rRelX,
                 rightRelY = rRelY,
-                hdePrism = hde,
-                vdePrism = vde,
+                hdePrism = hdeLinear,
+                vdePrism = vdeLinear,
+                hde3dPrism = optics3d?.hdeAsymmetryPrism,
+                vde3dPrism = optics3d?.vdePrism,
+                hdeVergence3dPrism = optics3d?.hdeVergencePrism,
+                rollCorrectionDeg = optics3d?.rollCorrectionDeg,
             )
         }
 
@@ -719,25 +822,42 @@ class StrabismusLabEngine(
             if (stageRows.isEmpty()) return null
             val settleMs = if (stage == LabStage.FAR_FIXATION) StrabismusProtocol.FAR_SETTLE_MS else 0L
             val firstMs = stageRows.first().timestampMs
-            val usable = stageRows.filter { it.timestampMs >= firstMs + settleMs && it.hdePrism != null && it.vdePrism != null }
+            val allMeasured = stageRows.filter { it.timestampMs >= firstMs + settleMs && it.hdePrism != null && it.vdePrism != null }
+            // 优先仅保留稳定 ON 且 OBSERVED 的双目帧，剔除 TRANSITION 过渡帧与弱观测噪点
+            val stableOnObserved = allMeasured.filter {
+                it.leftEmissionPhase == LabEmissionPhase.ON && it.rightEmissionPhase == LabEmissionPhase.ON &&
+                    it.leftGlintSource == LabGlintSource.OBSERVED && it.rightGlintSource == LabGlintSource.OBSERVED
+            }
+            val stableOnOnly = stableOnObserved.size >= 12
+            val usable = if (stableOnOnly) stableOnObserved else allMeasured
+
             val hVals = usable.map { it.hdePrism!! }
             val vVals = usable.map { it.vdePrism!! }
-            val hMed = median(hVals)
-            val vMed = median(vVals)
+            val h3dVals = usable.mapNotNull { it.hde3dPrism }
+            val v3dVals = usable.mapNotNull { it.vde3dPrism }
+            val verg3dVals = usable.mapNotNull { it.hdeVergence3dPrism }
+
+            val effN = max(1.0, usable.size / max(1.0, medFps * 0.2))
             val hSd = stdDev(hVals)
             val vSd = stdDev(vVals)
-            // 按 200ms 自相关时间折算有效独立样本数，计算 95% 置信区间半宽
-            val effN = max(1.0, usable.size / max(1.0, medFps * 0.2))
-            val hCi = hSd?.let { 1.96 * it / sqrt(effN) }
-            val vCi = vSd?.let { 1.96 * it / sqrt(effN) }
+            val h3dSd = stdDev(h3dVals)
+            val v3dSd = stdDev(v3dVals)
             return LabAlignmentMetrics(
                 stage = stage,
-                hdePrism = hMed,
-                vdePrism = vMed,
+                hdePrism = median(hVals),
+                vdePrism = median(vVals),
                 hdeSdPrism = hSd,
                 vdeSdPrism = vSd,
-                hdeCi95HalfPrism = hCi,
-                vdeCi95HalfPrism = vCi,
+                hdeCi95HalfPrism = hSd?.let { 1.96 * it / sqrt(effN) },
+                vdeCi95HalfPrism = vSd?.let { 1.96 * it / sqrt(effN) },
+                hde3dPrism = median(h3dVals),
+                vde3dPrism = median(v3dVals),
+                hde3dSdPrism = h3dSd,
+                vde3dSdPrism = v3dSd,
+                hde3dCi95HalfPrism = h3dSd?.let { 1.96 * it / sqrt(effN) },
+                vde3dCi95HalfPrism = v3dSd?.let { 1.96 * it / sqrt(effN) },
+                hdeVergence3dPrism = median(verg3dVals),
+                stableOnOnly = stableOnOnly,
                 validBinocularFrames = usable.size,
                 totalStageFrames = stageRows.size,
                 leftCodeVerified = lCode?.codeVerified == true,
@@ -747,23 +867,24 @@ class StrabismusLabEngine(
 
         val nearMetrics = computeAlignment(LabStage.NEAR_FIXATION, nearL, nearR)
         val farMetrics = computeAlignment(LabStage.FAR_FIXATION, farL, farR)
-        val (coverEvents, coverNoise) = computeCoverRefixations(
+        val coverSummary = computeCoverKinematics(
             enrichedFrames = enrichedFrames,
             kPrismPerRadius = kPrismPerRadius,
-            codeConfirmed = (coverL?.codeVerified == true || coverR?.codeVerified == true),
+            codeConfirmed = (nearL?.codeVerified == true && nearR?.codeVerified == true),
         )
-        val coverMedian = median(coverEvents.map { it.amplitudePrism })
         val pursuitMetrics = computePursuit()
 
         val leftScatter = buildScatter(enrichedFrames, isLeft = true)
         val rightScatter = buildScatter(enrichedFrames, isLeft = false)
 
-        // 综合分级与科研摘要
-        val nearH = abs(nearMetrics?.hdePrism ?: 0.0)
-        val nearV = abs(nearMetrics?.vdePrism ?: 0.0)
+        // 综合分级：优先使用 3D 球面光学主指标（若无内参回退线性）
+        val nearH = abs(nearMetrics?.hde3dPrism ?: nearMetrics?.hdePrism ?: 0.0)
+        val nearV = abs(nearMetrics?.vde3dPrism ?: nearMetrics?.vdePrism ?: 0.0)
         val nearReady = (nearMetrics?.validBinocularFrames ?: 0) >= 12
         val nearVerified = nearMetrics?.let { it.leftCodeVerified && it.rightCodeVerified } == true
         val nearAbnormal = nearReady && (nearH >= StrabismusProtocol.HIGH_H_PRISM || nearV >= StrabismusProtocol.HIGH_V_PRISM)
+        val coverMedian = coverSummary.overallMedianPrism
+        val coverNoise = coverSummary.noiseFloorPrism
         val coverAbnormal = coverMedian != null && coverMedian >= StrabismusProtocol.REFIX_PRISM &&
             (coverNoise == null || coverMedian > coverNoise)
         val bsiAbnormal = (pursuitMetrics?.bsi ?: 1.0) < StrabismusProtocol.BSI_ABNORMAL
@@ -782,19 +903,26 @@ class StrabismusLabEngine(
         val confidenceScore = (0.45 * validRatio + 0.40 * codeScore + 0.15 * (if (nearReady) 1.0 else 0.0)).coerceIn(0.0, 1.0)
 
         val notes = buildList {
-            add("搜索半径：${fmt2(config.searchRadiusFraction.toDouble())} R；光码方案：${config.codingScheme.label}（码元 ${config.chipDurationMs} ms）")
-            nearMetrics?.hdePrism?.let {
-                val ver = if (nearVerified) "双眼光码验证通过" else "光码未完全通过"
-                add("看近眼位：HDE ${fmt1(it)}Δ (±${fmt1(nearMetrics.hdeCi95HalfPrism ?: 0.0)}) / VDE ${fmt1(nearMetrics.vdePrism ?: 0.0)}Δ，有效 ${nearMetrics.validBinocularFrames} 帧（$ver）")
+            add("搜索半径：${fmt2(config.searchRadiusFraction.toDouble())} R；光码方案：${config.codingScheme.label}（码元 ${config.chipDurationMs} ms，遮盖阶段常亮）")
+            nearMetrics?.let { nm ->
+                val ver = if (nearVerified) "双眼光码通过" else "光码未全过"
+                val onTag = if (nm.stableOnOnly) "稳定ON帧" else "全测帧"
+                val h3d = nm.hde3dPrism?.let { "3D HDE ${fmt1(it)}Δ / VDE ${fmt1(nm.vde3dPrism ?: 0.0)}Δ" }
+                val hLin = nm.hdePrism?.let { "线性 ${fmt1(it)}Δ" }
+                add("看近眼位：${listOfNotNull(h3d, hLin).joinToString("（对照 ") + if (h3d != null && hLin != null) "）" else ""}，有效 ${nm.validBinocularFrames} 帧（$onTag · $ver）")
             }
-            farMetrics?.hdePrism?.let {
-                add("看远眼位：HDE ${fmt1(it)}Δ / VDE ${fmt1(farMetrics.vdePrism ?: 0.0)}Δ，有效 ${farMetrics.validBinocularFrames} 帧")
+            farMetrics?.let { fm ->
+                val h3d = fm.hde3dPrism?.let { "3D HDE ${fmt1(it)}Δ / VDE ${fmt1(fm.vde3dPrism ?: 0.0)}Δ" }
+                val hLin = fm.hdePrism?.let { "线性 ${fmt1(it)}Δ" }
+                add("看远眼位：${listOfNotNull(h3d, hLin).joinToString(" / ")}，有效 ${fm.validBinocularFrames} 帧")
             }
-            if (coverEvents.isNotEmpty()) {
-                add("去遮盖再注视：中位 ${fmt1(coverMedian ?: 0.0)}Δ（${coverEvents.size} 次事件，噪声底 ${coverNoise?.let { fmt1(it) } ?: "—"}Δ）")
+            if (coverSummary.events.isNotEmpty()) {
+                val tropiaTxt = coverSummary.tropiaMedianPrism?.let { "显斜对侧 ${fmt1(it)}Δ" } ?: "显斜 —"
+                val phoriaTxt = coverSummary.phoriaMedianPrism?.let { "隐斜/IXT 同侧 ${fmt1(it)}Δ" } ?: "隐斜 —"
+                add("遮盖动力学：${coverSummary.classification}（$tropiaTxt · $phoriaTxt · 噪声底 ${coverNoise?.let(::fmt1) ?: "—"}Δ）")
             }
             pursuitMetrics?.bsi?.let {
-                add("平滑追踪 BSI：${fmt2(it)}（r_h ${pursuitMetrics.rHorizontal?.let(::fmt2) ?: "—"}，r_v ${pursuitMetrics.rVertical?.let(::fmt2) ?: "—"}）")
+                add("平滑追踪 BSI（400ms 窗）：${fmt2(it)}（r_h ${pursuitMetrics.rHorizontal?.let(::fmt2) ?: "—"}，r_v ${pursuitMetrics.rVertical?.let(::fmt2) ?: "—"}）")
             }
         }
 
@@ -805,22 +933,26 @@ class StrabismusLabEngine(
             deviceModel = deviceModel,
             sourceWidth = lastSourceW,
             sourceHeight = lastSourceH,
+            cameraIntrinsics = intrinsics,
             medianFps = medFps,
             durationSec = max(0.0, (endMs - sessionStartMs) / 1000.0),
             config = config,
             riskGrade = riskGrade,
             confidenceScore = confidenceScore,
             headline = when (riskGrade) {
-                LabRiskGrade.HIGH_RISK -> "检测到持续性眼位不对称（看近 HDE ${fmt1(nearH)}Δ）"
-                LabRiskGrade.SUSPECT -> "存在可疑眼位或去遮盖再注视信号，建议复测与对照"
+                LabRiskGrade.HIGH_RISK -> "检测到持续性眼位不对称（看近 3D HDE ${fmt1(nearH)}Δ）"
+                LabRiskGrade.SUSPECT -> "存在可疑眼位或遮盖再注视信号（${coverSummary.classification ?: "建议复测对照"}）"
                 LabRiskGrade.NORMAL -> "本次科研采集未见显著眼位偏斜"
                 LabRiskGrade.INCONCLUSIVE -> "有效光码或双眼帧不足，请在 Debug 页核查拒判原因"
             },
             summaryNotes = notes,
             nearMetrics = nearMetrics,
             farMetrics = farMetrics,
-            coverRefixations = coverEvents,
+            coverRefixations = coverSummary.events,
             coverMedianPrism = coverMedian,
+            coverTropiaMedianPrism = coverSummary.tropiaMedianPrism,
+            coverPhoriaMedianPrism = coverSummary.phoriaMedianPrism,
+            coverClassification = coverSummary.classification,
             coverNoiseFloorPrism = coverNoise,
             pursuitMetrics = pursuitMetrics,
             nearLeftCode = nearL,
@@ -836,81 +968,336 @@ class StrabismusLabEngine(
         )
     }
 
-    private fun computeCoverRefixations(
+    private data class CoverKinematicsSummary(
+        val events: List<LabCoverRefixation>,
+        val overallMedianPrism: Double?,
+        val tropiaMedianPrism: Double?,
+        val phoriaMedianPrism: Double?,
+        val classification: String?,
+        val noiseFloorPrism: Double?,
+    )
+
+    /**
+     * 瓶颈 4 核心实现：
+     * 1. 仅用看近稳定 ON + OBSERVED 帧计算 500ms 稳态窗位移 95% 分位噪声底（剔除 TRANSITION 污染）；
+     * 2. 对每次 COVER（遮盖）和 UNCOVER（去遮盖）动作，沿逐帧 visibilityContrast 缓存向前回溯 1200ms 锁定精确拐点；
+     * 3. COVER 动作观测对侧未遮眼（显斜 Tropia 标志），UNCOVER 动作观测刚露出同侧眼（隐斜 Phoria / IXT 标志）；
+     * 4. 融合稳定角膜映光与连续归一化虹膜轨迹，提取稳态前后净幅度、峰值速度、潜伏期、90% 复位耗时与毫秒级轨迹曲线。
+     */
+    private fun computeCoverKinematics(
         enrichedFrames: List<LabFrameLog>,
         kPrismPerRadius: Double,
         codeConfirmed: Boolean,
-    ): Pair<List<LabCoverRefixation>, Double?> {
+    ): CoverKinematicsSummary {
         val coverFrames = enrichedFrames.filter { it.stage == LabStage.COVER_TEST }
-        val nearFrames = enrichedFrames.filter { it.stage == LabStage.NEAR_FIXATION && it.valid }
-        // 从看近稳定段抽样 550ms 窗口的位移 95% 分位作为测量噪声底
+        val nearAll = enrichedFrames.filter { it.stage == LabStage.NEAR_FIXATION && it.valid }
+        val nearStable = nearAll.filter {
+            it.leftEmissionPhase == LabEmissionPhase.ON && it.leftGlintSource == LabGlintSource.OBSERVED &&
+                it.rightEmissionPhase == LabEmissionPhase.ON && it.rightGlintSource == LabGlintSource.OBSERVED
+        }.ifEmpty { nearAll }
+
+        // 使用「前 100ms 稳态中位 → 500ms 后 150ms 稳态中位」的差值算噪声底，与去遮盖口径一致
         val noiseSamples = mutableListOf<Double>()
-        for (i in nearFrames.indices) {
-            val a = nearFrames[i]
-            val b = nearFrames.firstOrNull { it.timestampMs >= a.timestampMs + 500L } ?: break
-            val alx = a.leftRelX; val aly = a.leftRelY; val blx = b.leftRelX; val bly = b.leftRelY
-            if (alx != null && aly != null && blx != null && bly != null) {
-                noiseSamples += hypot((blx - alx).toDouble(), (bly - aly).toDouble()) * kPrismPerRadius
+        for (i in nearStable.indices) {
+            val t0 = nearStable[i].timestampMs
+            val early = nearStable.filter { it.timestampMs in t0..(t0 + 120L) && it.leftRelX != null && it.leftRelY != null }
+            val late = nearStable.filter { it.timestampMs in (t0 + 450L)..(t0 + 620L) && it.leftRelX != null && it.leftRelY != null }
+            if (early.size >= 2 && late.size >= 2) {
+                val dx = median(late.map { it.leftRelX!!.toDouble() })!! - median(early.map { it.leftRelX!!.toDouble() })!!
+                val dy = median(late.map { it.leftRelY!!.toDouble() })!! - median(early.map { it.leftRelY!!.toDouble() })!!
+                noiseSamples += hypot(dx, dy) * kPrismPerRadius
             }
         }
         val noiseFloor = noiseSamples.sorted().takeIf { it.size >= 5 }?.let { it[(it.size * 0.95).toInt().coerceAtMost(it.lastIndex)] }
 
-        val events = mutableListOf<LabCoverRefixation>()
-        val nearLeftBaseX = median(nearFrames.mapNotNull { it.leftRelX?.toDouble() })
-        val nearRightBaseX = median(nearFrames.mapNotNull { it.rightRelX?.toDouble() })
-        for (mark in coverMarks) {
-            val eye = mark.uncovered ?: continue
-            val window = coverFrames.filter {
-                it.timestampMs in mark.eventTimeMs..(mark.eventTimeMs + 750L) &&
-                    if (eye == VisionEye.LEFT) (it.leftRelX != null && it.leftRelY != null)
-                    else (it.rightRelX != null && it.rightRelY != null)
+        val nearLeftBaseX = median(nearStable.mapNotNull { it.leftRelX?.toDouble() })
+        val nearRightBaseX = median(nearStable.mapNotNull { it.rightRelX?.toDouble() })
+        val baseLeftVis = median(nearAll.mapNotNull { it.leftVisibilityContrast?.toDouble() })
+            ?: median(coverFrames.mapNotNull { it.leftVisibilityContrast?.toDouble()?.takeIf { v -> v >= 20.0 } }) ?: 50.0
+        val baseRightVis = median(nearAll.mapNotNull { it.rightVisibilityContrast?.toDouble() })
+            ?: median(coverFrames.mapNotNull { it.rightVisibilityContrast?.toDouble()?.takeIf { v -> v >= 20.0 } }) ?: 50.0
+
+        fun visOf(f: LabFrameLog, eye: VisionEye): Double? =
+            if (eye == VisionEye.LEFT) f.leftVisibilityContrast?.toDouble() else f.rightVisibilityContrast?.toDouble()
+
+        fun baseVisOf(eye: VisionEye): Double = if (eye == VisionEye.LEFT) baseLeftVis else baseRightVis
+
+        /** 向前回溯精确去遮盖拐点（对比度从遮盖低谷首次跨过 35% 阶跃并持续上升的毫秒首帧）。 */
+        fun refineUncoverOnsetMs(eye: VisionEye, markTimeMs: Long, confirmedMs: Long): Long {
+            val searchEnd = max(markTimeMs, confirmedMs)
+            val searchStart = markTimeMs - 1_200L
+            val seg = coverFrames.filter { it.timestampMs in searchStart..searchEnd }
+            if (seg.size < 4) return markTimeMs
+            val visVals = seg.mapNotNull { visOf(it, eye) }
+            if (visVals.isEmpty()) return markTimeMs
+            val vMin = visVals.min()
+            val vHigh = max(baseVisOf(eye), visVals.max())
+            if (vHigh - vMin < 10.0) return markTimeMs
+            val thresh = vMin + (vHigh - vMin) * 0.35
+            // 从确认点向前回扫，找到最后一个仍处于低谷（< thresh）的帧，其紧邻下一帧即为精确去遮盖首帧
+            var lastLowIdx = -1
+            for (i in seg.indices.reversed()) {
+                val v = visOf(seg[i], eye) ?: continue
+                if (v < thresh) {
+                    lastLowIdx = i
+                    break
+                }
             }
-            if (window.size < 3) continue
-            val first = window.first()
-            val last = window.last()
-            val dx = if (eye == VisionEye.LEFT) (last.leftRelX!! - first.leftRelX!!).toDouble() else (last.rightRelX!! - first.rightRelX!!).toDouble()
-            val dy = if (eye == VisionEye.LEFT) (last.leftRelY!! - first.leftRelY!!).toDouble() else (last.rightRelY!! - first.rightRelY!!).toDouble()
-            val ampPrism = hypot(dx, dy) * kPrismPerRadius
-            val dtSec = max(0.05, (last.timestampMs - first.timestampMs) / 1000.0)
-            val speedDeg = (ampPrism * 0.57) / dtSec
-            val baseX = if (eye == VisionEye.LEFT) nearLeftBaseX else nearRightBaseX
-            val endX = if (eye == VisionEye.LEFT) last.leftRelX!!.toDouble() else last.rightRelX!!.toDouble()
-            val residual = baseX?.let { abs(endX - it) * kPrismPerRadius } ?: 0.0
-            events += LabCoverRefixation(
+            return if (lastLowIdx in 0 until seg.lastIndex) seg[lastLowIdx + 1].timestampMs else markTimeMs
+        }
+
+        /** 向前回溯精确遮盖生效拐点（被遮眼对比度首次跌破 65% 基线的下降沿首帧）。 */
+        fun refineCoverOnsetMs(coveredEye: VisionEye, markTimeMs: Long, confirmedMs: Long): Long {
+            val searchEnd = max(markTimeMs, confirmedMs)
+            val searchStart = markTimeMs - 1_200L
+            val seg = coverFrames.filter { it.timestampMs in searchStart..searchEnd }
+            if (seg.size < 4) return markTimeMs
+            val vBase = baseVisOf(coveredEye)
+            val thresh = vBase * 0.65
+            var lastHighIdx = -1
+            for (i in seg.indices.reversed()) {
+                val v = visOf(seg[i], coveredEye) ?: continue
+                if (v >= thresh) {
+                    lastHighIdx = i
+                    break
+                }
+            }
+            return if (lastHighIdx in 0 until seg.lastIndex) seg[lastHighIdx + 1].timestampMs else markTimeMs
+        }
+
+        data class RawSample(val timeMs: Long, val x: Double, val y: Double, val fromGlint: Boolean)
+
+        fun analyzeEyeWindow(
+            mark: RecordedCoverMark,
+            observedEye: VisionEye,
+            eventType: String,
+            onsetMs: Long,
+        ): LabCoverRefixation? {
+            val window = coverFrames.filter { it.timestampMs in (onsetMs - 120L)..(onsetMs + 820L) }
+            if (window.size < 5) return null
+
+            // 提取稳定角膜映光（排除 OFF 与极低置信噪点），并与归一化虹膜轨迹做偏移对齐融合
+            val glintPoints = mutableListOf<Triple<Long, Double, Double>>()
+            val irisPoints = mutableListOf<Triple<Long, Double, Double>>()
+            // 归一化眼裂坐标到虹膜半径单位的经验换算（眼裂宽约 2.6× 虹膜直径 ≈ 5.2× 虹膜半径）
+            val normToRelScale = 5.2
+            for (f in window) {
+                val gx = if (observedEye == VisionEye.LEFT) f.leftRelX?.toDouble() else f.rightRelX?.toDouble()
+                val gy = if (observedEye == VisionEye.LEFT) f.leftRelY?.toDouble() else f.rightRelY?.toDouble()
+                val src = if (observedEye == VisionEye.LEFT) f.leftGlintSource else f.rightGlintSource
+                val ph = if (observedEye == VisionEye.LEFT) f.leftEmissionPhase else f.rightEmissionPhase
+                val conf = (if (observedEye == VisionEye.LEFT) f.leftGlintConfidence else f.rightGlintConfidence)?.toDouble() ?: 0.0
+                if (gx != null && gy != null && src.measured && ph != LabEmissionPhase.OFF &&
+                    (src == LabGlintSource.OBSERVED || (ph != LabEmissionPhase.TRANSITION && conf >= 0.35))
+                ) {
+                    glintPoints += Triple(f.timestampMs, gx, gy)
+                }
+                val nx = if (observedEye == VisionEye.LEFT) f.leftNormX?.toDouble() else f.rightNormX?.toDouble()
+                val ny = if (observedEye == VisionEye.LEFT) f.leftNormY?.toDouble() else f.rightNormY?.toDouble()
+                val ear = (if (observedEye == VisionEye.LEFT) f.leftEar else f.rightEar)?.toDouble() ?: 1.0
+                val vis = visOf(f, observedEye) ?: 0.0
+                if (nx != null && ny != null && ear >= 0.14 && vis >= 15.0) {
+                    // 虹膜向右移相当于映光相对虹膜向左移，取负号保持与 glintRel 方向一致
+                    irisPoints += Triple(f.timestampMs, -nx * normToRelScale, -ny * normToRelScale)
+                }
+            }
+
+            // 用重合帧对齐虹膜轨迹与角膜映光的零点偏置
+            val glintByT = glintPoints.associateBy { it.first }
+            val offsetXs = mutableListOf<Double>()
+            val offsetYs = mutableListOf<Double>()
+            for ((t, ix, iy) in irisPoints) {
+                val g = glintByT[t] ?: continue
+                offsetXs += g.second - ix
+                offsetYs += g.third - iy
+            }
+            val offX = median(offsetXs) ?: 0.0
+            val offY = median(offsetYs) ?: 0.0
+
+            val irisByT = irisPoints.associateBy { it.first }
+            val merged = window.mapNotNull { f ->
+                val t = f.timestampMs
+                val g = glintByT[t]
+                if (g != null) {
+                    RawSample(t, g.second, g.third, fromGlint = true)
+                } else {
+                    val ir = irisByT[t]
+                    if (ir != null && (glintPoints.isEmpty() || offsetXs.size >= 2)) {
+                        RawSample(t, ir.second + offX, ir.third + offY, fromGlint = false)
+                    } else null
+                }
+            }
+            if (merged.size < 4) return null
+
+            // 3 帧滑动中值滤波消除单帧跳点
+            val smoothed = merged.indices.map { i ->
+                val lo = max(0, i - 1)
+                val hi = min(merged.lastIndex, i + 1)
+                val sx = median((lo..hi).map { merged[it].x })!!
+                val sy = median((lo..hi).map { merged[it].y })!!
+                RawSample(merged[i].timeMs, sx, sy, merged[i].fromGlint)
+            }
+
+            val postOnset = smoothed.filter { it.timeMs >= onsetMs }
+            if (postOnset.size < 3) return null
+
+            // 起始参考点：COVER 动作取遮盖前 [-120, +40]ms 稳态中位；UNCOVER 动作取露出后前 100ms 稳态中位
+            val earlyWindow = if (eventType == "COVER_CONTRALATERAL") {
+                smoothed.filter { it.timeMs in (onsetMs - 120L)..(onsetMs + 40L) }.ifEmpty { postOnset.take(3) }
+            } else {
+                val tFirst = postOnset.first().timeMs
+                postOnset.filter { it.timeMs <= tFirst + 100L }.ifEmpty { postOnset.take(2) }
+            }
+            val lateWindow = postOnset.filter { it.timeMs >= onsetMs + 420L }.ifEmpty { postOnset.takeLast(min(4, postOnset.size)) }
+            if (earlyWindow.isEmpty() || lateWindow.isEmpty()) return null
+
+            val x0 = median(earlyWindow.map { it.x })!!
+            val y0 = median(earlyWindow.map { it.y })!!
+            val x1 = median(lateWindow.map { it.x })!!
+            val y1 = median(lateWindow.map { it.y })!!
+            val ampPrism = hypot(x1 - x0, y1 - y0) * kPrismPerRadius
+
+            // 构建毫秒级位移与瞬时速度曲线
+            val dispSeries = smoothed.map { s ->
+                val d = hypot(s.x - x0, s.y - y0) * kPrismPerRadius
+                Triple(s.timeMs - onsetMs, d, s.fromGlint)
+            }
+            val trace = mutableListOf<LabRefixationTracePoint>()
+            var peakVelDeg = 0.0
+            for (i in dispSeries.indices) {
+                val (dtMs, dPrism, fromGlint) = dispSeries[i]
+                val vel = if (i > 0) {
+                    val prev = dispSeries[i - 1]
+                    val dtSec = (dtMs - prev.first) / 1000.0
+                    if (dtSec in 0.015..0.15) abs(dPrism - prev.second) * StrabismusProtocol.DEG_PER_PRISM / dtSec else 0.0
+                } else 0.0
+                if (dtMs in 0L..700L && vel > peakVelDeg) peakVelDeg = vel
+                trace += LabRefixationTracePoint(
+                    dtMs = dtMs,
+                    displacementPrism = dPrism,
+                    velocityDegPerSec = vel,
+                    fromGlint = fromGlint,
+                )
+            }
+
+            val startThresh = max(2.0, ampPrism * 0.15)
+            val endThresh = ampPrism * 0.90
+            val latencyMs = if (ampPrism >= 3.0) {
+                trace.firstOrNull { it.dtMs >= 0L && it.displacementPrism >= startThresh }?.dtMs
+            } else null
+            val recoveryMs = if (ampPrism >= 3.0 && latencyMs != null) {
+                trace.firstOrNull { it.dtMs >= latencyMs && it.displacementPrism >= endThresh }?.let { it.dtMs - latencyMs }
+            } else null
+
+            val baseX = if (observedEye == VisionEye.LEFT) nearLeftBaseX else nearRightBaseX
+            val residual = baseX?.let { abs(x1 - it) * kPrismPerRadius } ?: 0.0
+            val shiftMs = mark.eventTimeMs - onsetMs
+
+            return LabCoverRefixation(
                 index = mark.index,
-                eye = eye.name,
+                eye = observedEye.name,
                 label = mark.label,
                 source = mark.source,
-                uncoveredAtSec = max(0.0, (mark.eventTimeMs - sessionStartMs) / 1000.0),
+                eventType = eventType,
+                uncoveredAtSec = max(0.0, (onsetMs - sessionStartMs) / 1000.0),
+                onsetShiftMs = shiftMs,
                 amplitudePrism = ampPrism,
-                speedDegPerSec = speedDeg,
+                speedDegPerSec = peakVelDeg,
+                latencyMs = latencyMs,
+                recoveryDurationMs = recoveryMs,
                 residualPrism = residual,
                 codeConfirmed = codeConfirmed,
+                trace = trace,
             )
         }
-        return events to noiseFloor
+
+        val events = mutableListOf<LabCoverRefixation>()
+        for (mark in coverMarks) {
+            // 1) 遮盖瞬间 → 观察对侧未遮眼（显斜 Tropia 关键信号）
+            val coveredEye = mark.covered
+            if (coveredEye != null) {
+                val contralateral = if (coveredEye == VisionEye.LEFT) VisionEye.RIGHT else VisionEye.LEFT
+                val coverOnset = refineCoverOnsetMs(coveredEye, mark.eventTimeMs, mark.confirmedAtMs)
+                analyzeEyeWindow(mark, contralateral, "COVER_CONTRALATERAL", coverOnset)?.let { events += it }
+            }
+            // 2) 去遮盖瞬间 → 观察被解除遮盖的同侧眼（隐斜 Phoria / IXT 关键信号）
+            val uncoveredEye = mark.uncovered
+            if (uncoveredEye != null) {
+                val uncoverOnset = refineUncoverOnsetMs(uncoveredEye, mark.eventTimeMs, mark.confirmedAtMs)
+                analyzeEyeWindow(mark, uncoveredEye, "UNCOVER_IPSILATERAL", uncoverOnset)?.let { events += it }
+            }
+        }
+
+        val tropiaAmps = events.filter { it.eventType == "COVER_CONTRALATERAL" }.map { it.amplitudePrism }
+        val phoriaAmps = events.filter { it.eventType == "UNCOVER_IPSILATERAL" }.map { it.amplitudePrism }
+        val tropiaMed = median(tropiaAmps)
+        val phoriaMed = median(phoriaAmps)
+        val overallMed = phoriaMed ?: tropiaMed
+        val sigThresh = max(StrabismusProtocol.REFIX_PRISM, (noiseFloor ?: 0.0))
+        val classification = when {
+            events.isEmpty() -> null
+            tropiaMed != null && tropiaMed >= sigThresh -> "显斜倾向（Tropia：遮盖瞬间对侧眼明显复位）"
+            phoriaMed != null && phoriaMed >= sigThresh -> "隐斜 / 间歇性斜视倾向（Phoria / IXT：去遮盖同侧眼复位）"
+            else -> "未见显著遮盖复位"
+        }
+
+        return CoverKinematicsSummary(
+            events = events,
+            overallMedianPrism = overallMed,
+            tropiaMedianPrism = tropiaMed,
+            phoriaMedianPrism = phoriaMed,
+            classification = classification,
+            noiseFloorPrism = noiseFloor,
+        )
     }
 
+    /**
+     * 平滑追踪 BSI：改用 400 ms 滑动窗口（350–500 ms 配对）计算速度相关，
+     * 并先做 3 帧中值滤波抑制 MediaPipe 逐帧关键点抖动（修复 v0.8 1 帧 33ms 差分导致 r_h 崩溃的问题）。
+     */
     private fun computePursuit(): LabPursuitMetrics? {
         if (pursuitSamples.size < 12) return null
-        fun velCorr(rows: List<PursuitSample>, axisX: Boolean): Double? {
-            if (rows.size < 8) return null
+
+        fun smoothSegment(rows: List<PursuitSample>): List<PursuitSample> {
+            if (rows.size < 3) return rows
+            return rows.indices.map { i ->
+                val lo = max(0, i - 1)
+                val hi = min(rows.lastIndex, i + 1)
+                rows[i].copy(
+                    leftX = median((lo..hi).map { rows[it].leftX })!!,
+                    leftY = median((lo..hi).map { rows[it].leftY })!!,
+                    rightX = median((lo..hi).map { rows[it].rightX })!!,
+                    rightY = median((lo..hi).map { rows[it].rightY })!!,
+                )
+            }
+        }
+
+        fun velCorr400ms(segments: Set<Int>, axisX: Boolean): Double? {
             val lv = mutableListOf<Double>()
             val rv = mutableListOf<Double>()
-            for (i in 1 until rows.size) {
-                val dt = (rows[i].timeMs - rows[i - 1].timeMs) / 1000.0
-                if (dt !in 0.015..0.25) continue
-                lv += ((if (axisX) rows[i].leftX - rows[i - 1].leftX else rows[i].leftY - rows[i - 1].leftY) / dt)
-                rv += ((if (axisX) rows[i].rightX - rows[i - 1].rightX else rows[i].rightY - rows[i - 1].rightY) / dt)
+            for (seg in segments) {
+                val frames = smoothSegment(pursuitSamples.filter { it.segment == seg })
+                var start = 0
+                for (end in frames.indices) {
+                    if (end > 0 && frames[end].timeMs - frames[end - 1].timeMs !in 1L..200L) start = end
+                    while (start < end && frames[end].timeMs - frames[start].timeMs > 500L) start++
+                    val dtMs = frames[end].timeMs - frames[start].timeMs
+                    if (dtMs in 350L..500L) {
+                        val dtSec = dtMs / 1000.0
+                        lv += (if (axisX) frames[end].leftX - frames[start].leftX else frames[end].leftY - frames[start].leftY) / dtSec
+                        rv += (if (axisX) frames[end].rightX - frames[start].rightX else frames[end].rightY - frames[start].rightY) / dtSec
+                    }
+                }
             }
+            if (lv.size < 10) return null
             return CornealCodeV8Analyzer.pearson(lv, rv)
         }
+
+        val rH = velCorr400ms(setOf(0, 2), axisX = true)
+        val rV = velCorr400ms(setOf(1, 2), axisX = false)
         val horiz = pursuitSamples.filter { it.segment == 0 || it.segment == 2 }
-        val vert = pursuitSamples.filter { it.segment == 1 || it.segment == 2 }
-        val rH = velCorr(horiz, axisX = true)
-        val rV = velCorr(vert, axisX = false)
         val diffs = horiz.map { it.leftX - it.rightX }
-        val diffMean = diffs.average()
+        val diffMean = if (diffs.isNotEmpty()) diffs.average() else 0.0
         val rms = if (diffs.size >= 4) sqrt(diffs.map { (it - diffMean) * (it - diffMean) }.average()) else null
         val span = horiz.map { (it.leftX + it.rightX) * 0.5 }.let { xs ->
             if (xs.size >= 4) (xs.max() - xs.min()).coerceAtLeast(1e-4) else null

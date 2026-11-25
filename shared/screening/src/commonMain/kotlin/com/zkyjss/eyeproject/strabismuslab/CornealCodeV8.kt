@@ -329,6 +329,7 @@ object CornealCodeV8Analyzer {
         searchRadiusFraction: Float = 0.80f,
         fps: Int = 30,
         cornealRadiusMm: Double = 7.8,
+        lagPriorSec: Double? = null,
     ): CornealCodeV8Result {
         val sorted = frames.sortedBy { it.hostTimeSec }
         if (sorted.isEmpty()) {
@@ -355,6 +356,7 @@ object CornealCodeV8Analyzer {
             scheme = scheme,
             stimulusDiameterMm = stimulusDiameterMm,
             cornealRadiusMm = cornealRadiusMm,
+            seedLagSec = lagPriorSec ?: (1.0 / 30.0),
         )
 
         fun runBidirectional(phasesByFrame: Map<Int, LabEmissionPhase>): List<LabGlintFrameEstimate> {
@@ -386,13 +388,14 @@ object CornealCodeV8Analyzer {
             durationSec = durationSec,
             chipSec = chipSec,
             scheme = scheme,
+            lagPriorSec = lagPriorSec,
         )
 
-        // 2) 建立曝光-延迟时间线；前半段相关 >= 0.6 且延迟在 0..150ms 才启用拟合延迟，否则走保守范围。
+        // 2) 建立曝光-延迟时间线；前半段相关 >= 0.6 且延迟在 0..150ms 才启用拟合延迟，否则回退硬件共享先验或保守范围。
         val timeline = EmissionTimelineV8(sortedEvents)
         val lagForTimeline = validation.lagSec?.takeIf {
             (validation.trainR ?: 0.0) >= 0.6 && it in 0.0..0.15
-        }
+        } ?: lagPriorSec?.takeIf { it in 0.0..0.15 }
         val phaseMap = sorted.associate { row ->
             row.frameIndex to timeline.phaseAt(
                 timeSec = row.hostTimeSec,
@@ -512,6 +515,7 @@ object CornealCodeV8Analyzer {
         scheme: LabCodingScheme,
         stimulusDiameterMm: Double,
         cornealRadiusMm: Double,
+        seedLagSec: Double = 1.0 / 30.0,
     ): Point2f? {
         val trainEnd = min(8.0, durationSec * 0.5).coerceAtLeast(2.0)
         val seedRows = sorted.filterIndexed { idx, row ->
@@ -524,7 +528,7 @@ object CornealCodeV8Analyzer {
         var negativeCount = 0
         if (scheme.usesTemporalCode) {
             for (row in seedRows) {
-                val c = events.lastOrNull { it.hostTimeSec <= row.hostTimeSec - 1.0 / 30.0 }?.code ?: 0.0
+                val c = events.lastOrNull { it.hostTimeSec <= row.hostTimeSec - seedLagSec }?.code ?: 0.0
                 if (c > 0.0) positiveCount++ else if (c < 0.0) negativeCount++
             }
             if (positiveCount == 0 || negativeCount == 0) return null
@@ -538,7 +542,7 @@ object CornealCodeV8Analyzer {
                 sourceMm = stimulusDiameterMm,
                 radiusMm = cornealRadiusMm,
             ) ?: 3.0
-            val code = events.lastOrNull { it.hostTimeSec <= row.hostTimeSec - 1.0 / 30.0 }?.code ?: 0.0
+            val code = events.lastOrNull { it.hostTimeSec <= row.hostTimeSec - seedLagSec }?.code ?: 0.0
             for (cand in row.candidates) {
                 val snr = if (cand.snr > 0f) cand.snr.toDouble() else (cand.contrast / 3.0)
                 val shape = if (cand.shapeScore > 0f) cand.shapeScore.toDouble() else cand.quality.toDouble().coerceIn(0.2, 1.0)
@@ -883,6 +887,7 @@ object CornealCodeV8Analyzer {
         durationSec: Double,
         chipSec: Double,
         scheme: LabCodingScheme,
+        lagPriorSec: Double? = null,
     ): CodeValidation {
         if (!scheme.usesTemporalCode || events.isEmpty()) return CodeValidation()
         fun lookupCode(timeSec: Double, shift: Int = 0): Double {
@@ -902,10 +907,15 @@ object CornealCodeV8Analyzer {
         val test = estimates.filter { (it.hostTimeSec - startSec) >= half && it.signal != null }
         if (train.size < 16 || test.size < 16) return CodeValidation()
 
+        val candidateDelays: List<Double> = if (lagPriorSec != null && lagPriorSec.isFinite()) {
+            // 双眼共享同一屏幕-相机硬件延迟管线：在先验 ±33ms 物理容差窗内精调，防止单眼环境反光把延迟拉偏
+            listOf(-1, 0, 1).map { step -> (lagPriorSec + step / 30.0).coerceIn(-0.05, 0.25) }
+        } else {
+            (-3..9).map { it / 30.0 }
+        }
         var bestR = Double.NEGATIVE_INFINITY
-        var bestLag = 0.0
-        for (step in -3..9) {
-            val delay = step / 30.0
+        var bestLag = lagPriorSec ?: 0.0
+        for (delay in candidateDelays) {
             val r = pearson(train.map { it.signal!! }, train.map { lookupCode(it.hostTimeSec - delay, 0) })
             if (r != null && r > bestR) {
                 bestR = r

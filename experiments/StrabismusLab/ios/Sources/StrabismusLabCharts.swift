@@ -335,3 +335,77 @@ private func legendDot(_ title: String, _ color: Color) -> some View {
         Text(title).font(LabFont.microMono).foregroundColor(LabPalette.inkSecondary)
     }
 }
+
+/// 遮盖/去遮盖毫秒级再注视动力学曲线（区分显斜对侧眼 vs 隐斜/IXT 同侧眼）。
+struct LabCoverKinematicsChart: View {
+    let event: LabCoverRefixation
+
+    var body: some View {
+        let isTropia = event.eventType == "COVER_CONTRALATERAL"
+        let tint = isTropia ? LabPalette.rightEye : LabPalette.accent
+        let pts = event.trace
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(isTropia ? "遮盖瞬间 · 对侧眼(\(event.eye)) [显斜 Tropia]" : "去遮盖瞬间 · 同侧眼(\(event.eye)) [隐斜/IXT]")
+                    .font(LabFont.caption)
+                    .foregroundColor(tint)
+                Spacer()
+                Text(String(format: "%.1fΔ · %.0f°/s", event.amplitudePrism, event.speedDegPerSec))
+                    .font(LabFont.microMono)
+                    .foregroundColor(LabPalette.inkPrimary)
+            }
+            HStack(spacing: 12) {
+                Text("拐点修正 \(event.onsetShiftMs >= 0 ? "-\(event.onsetShiftMs)" : "+\(-event.onsetShiftMs)")ms")
+                    .font(LabFont.microMono).foregroundColor(LabPalette.inkSecondary)
+                if let lat = event.latencyMs {
+                    Text("潜伏 \(lat.int64Value)ms").font(LabFont.microMono).foregroundColor(LabPalette.inkSecondary)
+                }
+                if let rec = event.recoveryDurationMs {
+                    Text("复位 \(rec.int64Value)ms").font(LabFont.microMono).foregroundColor(LabPalette.inkSecondary)
+                }
+            }
+            if pts.count < 3 {
+                Text("有效轨迹采样不足").font(LabFont.caption).foregroundColor(LabPalette.inkTertiary)
+                    .frame(maxWidth: .infinity, minHeight: 70)
+            } else {
+                let tMin = Double(pts.first!.dtMs)
+                let tMax = max(tMin + 200.0, Double(pts.last!.dtMs))
+                let yMax = max(12.0, (pts.map(\.displacementPrism).max() ?? 10.0) * 1.15)
+                Canvas { ctx, size in
+                    let top: CGFloat = 6
+                    let h = size.height - 12
+                    func mx(_ t: Double) -> CGFloat { CGFloat(min(1, max(0, (t - tMin) / (tMax - tMin)))) * size.width }
+                    func my(_ d: Double) -> CGFloat { top + h * CGFloat(1 - min(1, max(0, d / yMax))) }
+
+                    // 网格与 6Δ 判定线
+                    let y6 = my(6.0)
+                    var ref6 = Path(); ref6.move(to: CGPoint(x: 0, y: y6)); ref6.addLine(to: CGPoint(x: size.width, y: y6))
+                    ctx.stroke(ref6, with: .color(LabPalette.danger.opacity(0.5)), style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
+
+                    // 精确回溯拐点 t = 0 竖虚线
+                    let x0 = mx(0.0)
+                    var onsetLine = Path(); onsetLine.move(to: CGPoint(x: x0, y: top)); onsetLine.addLine(to: CGPoint(x: x0, y: top + h))
+                    ctx.stroke(onsetLine, with: .color(LabPalette.verified.opacity(0.8)), style: StrokeStyle(lineWidth: 1.5, dash: [5, 4]))
+
+                    var curve = Path()
+                    for (idx, p) in pts.enumerated() {
+                        let cg = CGPoint(x: mx(Double(p.dtMs)), y: my(p.displacementPrism))
+                        if idx == 0 { curve.move(to: cg) } else { curve.addLine(to: cg) }
+                    }
+                    ctx.stroke(curve, with: .color(tint), style: StrokeStyle(lineWidth: 2.2, lineCap: .round))
+
+                    for p in pts {
+                        let cg = CGPoint(x: mx(Double(p.dtMs)), y: my(p.displacementPrism))
+                        let col = p.fromGlint ? tint : LabPalette.caution
+                        ctx.fill(Path(ellipseIn: CGRect(x: cg.x - 2.3, y: cg.y - 2.3, width: 4.6, height: 4.6)), with: .color(col))
+                    }
+                }
+                .frame(height: 110)
+            }
+        }
+        .padding(12)
+        .background(LabPalette.surfaceElevated)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(LabPalette.hairline, lineWidth: 1))
+    }
+}

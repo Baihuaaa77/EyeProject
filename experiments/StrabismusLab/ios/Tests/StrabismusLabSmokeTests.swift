@@ -19,7 +19,9 @@ final class StrabismusLabSmokeTests: XCTestCase {
             includeNear: true,
             includeFar: true,
             includeCover: true,
-            includePursuit: true
+            includePursuit: true,
+            lightOffsetXMm: 0.0,
+            lightOffsetYMm: 22.0
         )
         XCTAssertEqual(cfg.searchRadiusFraction, 0.80, accuracy: 0.0001)
         XCTAssertEqual(cfg.activeStages.count, 4)

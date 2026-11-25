@@ -10,12 +10,16 @@ enum class LabStage(val title: String, val subtitle: String) {
     IDLE("就绪", "调整距离与光照，确认双眼追踪稳定"),
     NEAR_FIXATION("看近光码映光", "距离 33 cm，注视顶部编码白点"),
     FAR_FIXATION("看远光码映光", "手机保持 33 cm，越过屏幕注视 6 m 远目标"),
-    COVER_TEST("动态交替遮盖", "按节拍遮盖并移开，记录去遮盖再注视"),
-    PURSUIT("平滑追踪", "头部不动，双眼跟随目标轨迹"),
-    COMPLETED("采集完成", "已完成 v0.8 双向光码解调与量化分析");
+    COVER_TEST("动态交替遮盖", "白点常亮防盲区，按节拍遮盖并记录显斜/隐斜再注视"),
+    PURSUIT("平滑追踪", "头部不动，双眼平滑跟随目标轨迹"),
+    COMPLETED("采集完成", "已完成 v0.9 3D 球面光学反演与遮盖动力学分析");
 
     val usesOpticalStimulus: Boolean
         get() = this == NEAR_FIXATION || this == FAR_FIXATION || this == COVER_TEST
+
+    /** 遮盖阶段强制白点常亮，避免 250ms 暗码元吞掉 150–400ms 的去遮盖再注视扫视。 */
+    val forcesSteadyStimulus: Boolean
+        get() = this == COVER_TEST
 }
 
 @Serializable
@@ -24,6 +28,19 @@ enum class LabRiskGrade(val label: String) {
     SUSPECT("可疑眼位异常"),
     HIGH_RISK("高度疑似斜视"),
     INCONCLUSIVE("证据不足 / 建议复测");
+}
+
+@Serializable
+data class LabCameraIntrinsics(
+    val fx: Double = 0.0,
+    val fy: Double = 0.0,
+    val cx: Double = 0.0,
+    val cy: Double = 0.0,
+    /** 屏幕白点中心相对前置相机光学中心的物理偏移（mm，相机坐标系：+x 向右，+y 向下）。 */
+    val lightOffsetXMm: Double = 0.0,
+    val lightOffsetYMm: Double = 22.0,
+) {
+    val isValid: Boolean get() = fx > 10.0 && fy > 10.0
 }
 
 @Serializable
@@ -44,6 +61,9 @@ data class LabProtocolConfig(
     val includeFar: Boolean = true,
     val includeCover: Boolean = true,
     val includePursuit: Boolean = true,
+    /** 屏幕白点中心相对前摄镜头中心的物理偏移（mm），用于 3D 球面光学离轴补偿。 */
+    val lightOffsetXMm: Double = 0.0,
+    val lightOffsetYMm: Double = 22.0,
 ) {
     val activeStages: List<LabStage>
         get() = buildList {
@@ -105,8 +125,20 @@ data class LabFrameLog(
     val rightEmissionPhase: LabEmissionPhase = LabEmissionPhase.UNKNOWN,
     val rightRelX: Float? = null,
     val rightRelY: Float? = null,
+    /** 旧版线性 175.5Δ/D 估算（保留作消融基线）。 */
     val hdePrism: Double? = null,
     val vdePrism: Double? = null,
+    /** v0.9 球面角膜镜 3D 光学反演 + Roll 旋正后的不对称水平/垂直偏斜（Δ）。 */
+    val hde3dPrism: Double? = null,
+    val vde3dPrism: Double? = null,
+    /** v0.9 3D 聚散偏斜分量（Δ，对共轭偏视与横向离轴免疫）。 */
+    val hdeVergence3dPrism: Double? = null,
+    val rollCorrectionDeg: Double? = null,
+    /** 归一化虹膜相对眼角坐标（遮盖阶段辅助轨迹与平滑追踪共用）。 */
+    val leftNormX: Float? = null,
+    val leftNormY: Float? = null,
+    val rightNormX: Float? = null,
+    val rightNormY: Float? = null,
     val coveredEye: String? = null,
     val leftCandidateCount: Int = 0,
     val rightCandidateCount: Int = 0,
@@ -115,16 +147,38 @@ data class LabFrameLog(
 @Serializable
 data class LabAlignmentMetrics(
     val stage: LabStage,
+    /** 旧版线性 175.5 估算（Δ，作消融对照）。 */
     val hdePrism: Double? = null,
     val vdePrism: Double? = null,
     val hdeSdPrism: Double? = null,
     val vdeSdPrism: Double? = null,
     val hdeCi95HalfPrism: Double? = null,
     val vdeCi95HalfPrism: Double? = null,
+    /** v0.9 3D 球面角膜镜光学反演主指标（Δ）。 */
+    val hde3dPrism: Double? = null,
+    val vde3dPrism: Double? = null,
+    val hde3dSdPrism: Double? = null,
+    val vde3dSdPrism: Double? = null,
+    val hde3dCi95HalfPrism: Double? = null,
+    val vde3dCi95HalfPrism: Double? = null,
+    val hdeVergence3dPrism: Double? = null,
+    val stableOnOnly: Boolean = false,
     val validBinocularFrames: Int = 0,
     val totalStageFrames: Int = 0,
     val leftCodeVerified: Boolean = false,
     val rightCodeVerified: Boolean = false,
+)
+
+@Serializable
+data class LabRefixationTracePoint(
+    /** 相对精确回溯拐点的时间偏移（ms，包含少量负值前基线）。 */
+    val dtMs: Long,
+    /** 相对起始位置的位移幅度（Δ）。 */
+    val displacementPrism: Double,
+    /** 瞬时角速度（°/s）。 */
+    val velocityDegPerSec: Double,
+    /** 该点是否来自角膜映光（false 表示由虹膜相对眼角轨迹补齐）。 */
+    val fromGlint: Boolean = true,
 )
 
 @Serializable
@@ -133,11 +187,22 @@ data class LabCoverRefixation(
     val eye: String,
     val label: String,
     val source: String,
+    /** 事件类型："COVER_CONTRALATERAL"（遮盖瞬间对侧眼，判显斜 Tropia）或 "UNCOVER_IPSILATERAL"（去遮盖同侧眼，判隐斜/IXT）。 */
+    val eventType: String = "UNCOVER_IPSILATERAL",
+    /** 精确回溯后的事件起始时刻（秒，相对会话起点）。 */
     val uncoveredAtSec: Double,
+    /** 相对 CoverDetector 实时时间戳向前回溯修正的毫秒数（正值表示提前锁定首帧）。 */
+    val onsetShiftMs: Long = 0L,
     val amplitudePrism: Double,
+    /** 峰值角速度（°/s，30Hz 采样带宽下表观峰值）。 */
     val speedDegPerSec: Double,
+    /** 扫视潜伏期（ms，从拐点到超过 15% 幅度）。 */
+    val latencyMs: Long? = null,
+    /** 复位耗时（ms，从移动开始到达到 90% 稳态）。 */
+    val recoveryDurationMs: Long? = null,
     val residualPrism: Double,
     val codeConfirmed: Boolean,
+    val trace: List<LabRefixationTracePoint> = emptyList(),
 )
 
 @Serializable
@@ -163,11 +228,12 @@ data class LabGlintScatterPoint(
 data class LabSessionReport(
     val sessionId: String,
     val createdAtMs: Long,
-    val algorithmVersion: String = "strabismus-lab-v0.8-r080",
+    val algorithmVersion: String = "strabismus-lab-v0.9-optics3d",
     val platform: String = "Android",
     val deviceModel: String = "",
     val sourceWidth: Int = 0,
     val sourceHeight: Int = 0,
+    val cameraIntrinsics: LabCameraIntrinsics? = null,
     val medianFps: Double = 0.0,
     val durationSec: Double = 0.0,
     val config: LabProtocolConfig,
@@ -179,6 +245,9 @@ data class LabSessionReport(
     val farMetrics: LabAlignmentMetrics? = null,
     val coverRefixations: List<LabCoverRefixation> = emptyList(),
     val coverMedianPrism: Double? = null,
+    val coverTropiaMedianPrism: Double? = null,
+    val coverPhoriaMedianPrism: Double? = null,
+    val coverClassification: String? = null,
     val coverNoiseFloorPrism: Double? = null,
     val pursuitMetrics: LabPursuitMetrics? = null,
     val nearLeftCode: CornealCodeV8Result? = null,
@@ -213,7 +282,7 @@ data class LabSessionReport(
                 "stim_intensity,stim_code,target_x,target_y," +
                 "l_iris_px,l_ear,l_vis_contrast,l_glint_x,l_glint_y,l_rel_x,l_rel_y,l_conf,l_source,l_phase," +
                 "r_iris_px,r_ear,r_vis_contrast,r_glint_x,r_glint_y,r_rel_x,r_rel_y,r_conf,r_source,r_phase," +
-                "hde_prism,vde_prism,covered_eye,l_cands,r_cands",
+                "hde_prism,vde_prism,hde_3d_prism,vde_3d_prism,hde_verg_3d_prism,roll_corr_deg,covered_eye,l_cands,r_cands",
         )
         for (f in frames) {
             append(f.index).append(',')
@@ -253,6 +322,10 @@ data class LabSessionReport(
             append(f.rightEmissionPhase.name).append(',')
             append(f.hdePrism?.let { fmt2(it) } ?: "").append(',')
             append(f.vdePrism?.let { fmt2(it) } ?: "").append(',')
+            append(f.hde3dPrism?.let { fmt2(it) } ?: "").append(',')
+            append(f.vde3dPrism?.let { fmt2(it) } ?: "").append(',')
+            append(f.hdeVergence3dPrism?.let { fmt2(it) } ?: "").append(',')
+            append(f.rollCorrectionDeg?.let { fmt2(it) } ?: "").append(',')
             append(f.coveredEye ?: "").append(',')
             append(f.leftCandidateCount).append(',')
             append(f.rightCandidateCount).append('\n')

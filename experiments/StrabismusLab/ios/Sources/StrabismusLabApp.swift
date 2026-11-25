@@ -1,3 +1,4 @@
+import AVKit
 import EyeScreening
 import SwiftUI
 import UIKit
@@ -36,7 +37,7 @@ struct LabRootView: View {
     }
 }
 
-/// 控制台：实时 0.80R 光学取景仪 + 受试者标签 + 光码与四阶段参数。
+/// 控制台：实时 0.80R 光学取景仪 + 受试者标签 + 光码/3D 离轴参数 + 诊断视频录制开关。
 struct LabConsoleView: View {
     @EnvironmentObject var store: StrabismusLabStore
 
@@ -51,7 +52,7 @@ struct LabConsoleView: View {
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("StrabismusLab").font(LabFont.title).foregroundColor(LabPalette.inkPrimary)
-                            Text("ACTIVE CODED CORNEAL LAB · v0.8").font(LabFont.microMono).foregroundColor(LabPalette.accent)
+                            Text("3D CODED CORNEAL LAB · v0.9").font(LabFont.microMono).foregroundColor(LabPalette.accent)
                         }
                         Spacer()
                         Button(action: store.openHistory) {
@@ -125,9 +126,17 @@ struct LabConsoleView: View {
                     }
                     .labCard()
 
-                    // 受试者与临床备注
+                    // 受试者与录制选项
                     VStack(alignment: .leading, spacing: 10) {
-                        Text("受试者与条件标签").font(LabFont.section).foregroundColor(LabPalette.inkPrimary)
+                        HStack {
+                            Text("受试者与条件标签").font(LabFont.section).foregroundColor(LabPalette.inkPrimary)
+                            Spacer()
+                            Toggle("录制叠加诊断视频", isOn: $store.recordVideo)
+                                .font(LabFont.caption)
+                                .foregroundColor(LabPalette.inkSecondary)
+                                .tint(LabPalette.verified)
+                                .fixedSize()
+                        }
                         HStack(spacing: 10) {
                             TextField("匿名编号", text: Binding(
                                 get: { store.config.subjectId },
@@ -161,9 +170,9 @@ struct LabConsoleView: View {
                     }
                     .labCard()
 
-                    // 光码与搜索半径参数
+                    // 光码、搜索半径与 3D 离轴光源参数
                     VStack(alignment: .leading, spacing: 10) {
-                        Text("光码协议与光学参数").font(LabFont.section).foregroundColor(LabPalette.inkPrimary)
+                        Text("光码协议与 3D 光学参数").font(LabFont.section).foregroundColor(LabPalette.inkPrimary)
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 8) {
                                 ForEach(schemes, id: \.name) { s in
@@ -186,6 +195,22 @@ struct LabConsoleView: View {
                             ),
                             in: 0.60...0.90,
                             step: 0.05
+                        )
+                        .tint(LabPalette.accent)
+
+                        HStack {
+                            Text("白点-前摄垂直离轴 Δy").font(LabFont.caption).foregroundColor(LabPalette.inkSecondary)
+                            Spacer()
+                            Text(String(format: "%.0f mm", store.config.lightOffsetYMm))
+                                .font(LabFont.microMono).foregroundColor(LabPalette.accent)
+                        }
+                        Slider(
+                            value: Binding(
+                                get: { store.config.lightOffsetYMm },
+                                set: { v in store.updateConfig { copyConfig($0, lightOffsetYMm: v.rounded()) } }
+                            ),
+                            in: 8.0...40.0,
+                            step: 1.0
                         )
                         .tint(LabPalette.accent)
 
@@ -226,8 +251,8 @@ struct LabConsoleView: View {
                 Divider().background(LabPalette.hairline)
                 Button(action: store.startCapture) {
                     HStack(spacing: 8) {
-                        Image(systemName: "play.fill")
-                        Text("开始斜视光码采集（\(store.config.activeStages.count) 阶段）").font(LabFont.section)
+                        Image(systemName: store.recordVideo ? "record.circle.fill" : "play.fill")
+                        Text("开始采集（\(store.config.activeStages.count) 阶段\(store.recordVideo ? " · 录视频" : "")）").font(LabFont.section)
                     }
                     .frame(maxWidth: .infinity, minHeight: 50)
                     .background(store.cameraAuthorized && !store.config.activeStages.isEmpty ? LabPalette.accent : LabPalette.surfaceElevated)
@@ -242,7 +267,7 @@ struct LabConsoleView: View {
     }
 }
 
-/// 纯黑 #000000 光学采集舞台（60Hz TimelineView 同步更新光码白点）。
+/// 纯黑 #000000 光学采集舞台（60Hz TimelineView 同步更新光码白点；遮盖阶段强制白点常亮消除暗码盲区）。
 struct LabCaptureStageView: View {
     @EnvironmentObject var store: StrabismusLabStore
 
@@ -253,9 +278,9 @@ struct LabCaptureStageView: View {
                     .onAppear { store.onDisplayTick() }
                     .onChange(of: context.date) { _ in store.onDisplayTick() }
 
-                // 顶部贴近前摄的编码白点
+                // 顶部贴近前摄的编码白点（中央精密注视十字，减少看近共轭偏视）
                 if store.live.stage.usesOpticalStimulus && !store.live.farWaitingConfirm {
-                    let lum = Double(min(1, max(0, store.renderedIntensity)))
+                    let lum = store.live.stage.forcesSteadyStimulus ? 1.0 : Double(min(1, max(0, store.renderedIntensity)))
                     let dotPt = CGFloat(min(140, max(28, store.config.stimulusDiameterMm * 6.3)))
                     VStack {
                         ZStack {
@@ -263,7 +288,11 @@ struct LabCaptureStageView: View {
                                 .fill(Color(white: lum))
                                 .frame(width: dotPt, height: dotPt)
                             if lum > 0.5 && store.live.stage != .farFixation {
-                                Circle().fill(LabPalette.accent.opacity(0.65)).frame(width: 6, height: 6)
+                                ZStack {
+                                    Rectangle().fill(LabPalette.danger.opacity(0.85)).frame(width: 14, height: 2)
+                                    Rectangle().fill(LabPalette.danger.opacity(0.85)).frame(width: 2, height: 14)
+                                    Circle().fill(LabPalette.accent).frame(width: 4, height: 4)
+                                }
                             }
                         }
                         .padding(.top, 4)
@@ -289,7 +318,7 @@ struct LabCaptureStageView: View {
                 VStack(spacing: 14) {
                     if store.analyzing {
                         ProgressView().tint(LabPalette.accent)
-                        Text("正在执行 v0.8 双向光码解调与 63 错码核验…").font(LabFont.body).foregroundColor(LabPalette.inkSecondary)
+                        Text("正在执行 v0.9 3D 光学反演与遮盖拐点回溯…").font(LabFont.body).foregroundColor(LabPalette.inkSecondary)
                     } else if store.live.farWaitingConfirm {
                         Text("看远光码映光").font(LabFont.section).foregroundColor(LabPalette.inkPrimary)
                         Text("保持手机 33 cm，越过屏幕注视 6 m 远目标").font(LabFont.body).foregroundColor(LabPalette.inkSecondary)
@@ -302,7 +331,7 @@ struct LabCaptureStageView: View {
                         Text(store.live.coverInstruction)
                             .font(LabFont.title)
                             .foregroundColor(store.live.coverHolding ? LabPalette.verified : LabPalette.inkPrimary)
-                        Text("遮盖动作 \(store.live.coverStepIndex)/\(store.live.coverStepTotal)")
+                        Text("遮盖动作 \(store.live.coverStepIndex)/\(store.live.coverStepTotal) · 白点常亮防盲区")
                             .font(LabFont.microMono).foregroundColor(LabPalette.inkSecondary)
                         Button("手动确认本步遮盖", action: store.manualAdvanceCover)
                             .font(LabFont.caption)
@@ -318,8 +347,13 @@ struct LabCaptureStageView: View {
                     VStack(spacing: 8) {
                         HStack {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("\(store.live.stageIndex)/\(store.live.totalStages) \(store.live.stage.title)")
-                                    .font(LabFont.section).foregroundColor(LabPalette.inkPrimary)
+                                HStack(spacing: 6) {
+                                    if store.recordVideo {
+                                        Circle().fill(LabPalette.danger).frame(width: 7, height: 7)
+                                    }
+                                    Text("\(store.live.stageIndex)/\(store.live.totalStages) \(store.live.stage.title)")
+                                        .font(LabFont.section).foregroundColor(LabPalette.inkPrimary)
+                                }
                                 Text(store.live.warning ?? store.live.prompt)
                                     .font(LabFont.caption)
                                     .foregroundColor(store.live.warning != nil ? LabPalette.caution : LabPalette.inkSecondary)
@@ -358,7 +392,7 @@ struct LabCaptureStageView: View {
     }
 }
 
-/// 4-Tab 全景数据可视化与 Debug 工作台。
+/// 5-Tab 全景数据可视化、叠加视频回放与 Debug 工作台。
 struct LabDashboardView: View {
     @EnvironmentObject var store: StrabismusLabStore
     let report: LabSessionReport
@@ -366,12 +400,17 @@ struct LabDashboardView: View {
     @State private var tab = 0
     @State private var stageChoice = 0
     @State private var eyeChoice = 0
+    @State private var videoMode = 0 // 0 = 叠加可视化 annotated.mp4, 1 = 原始 original.mp4
+    @State private var player: AVPlayer?
     @State private var shareItem: URL?
 
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Button(action: store.backToConsole) {
+                Button(action: {
+                    player?.pause()
+                    store.backToConsole()
+                }) {
                     Image(systemName: "chevron.left").foregroundColor(LabPalette.inkPrimary).frame(width: 44, height: 44)
                 }
                 VStack(alignment: .leading, spacing: 2) {
@@ -382,8 +421,8 @@ struct LabDashboardView: View {
                 Spacer()
                 Menu {
                     ForEach(LabExportFormat.allCases) { fmt in
-                        Button(fmt.label) {
-                            shareItem = store.exportURL(for: report, format: fmt)
+                        if let url = store.exportURL(for: report, format: fmt) {
+                            Button(fmt.label) { shareItem = url }
                         }
                     }
                 } label: {
@@ -399,14 +438,24 @@ struct LabDashboardView: View {
             }
             .padding(.horizontal, 12).padding(.vertical, 6)
 
+            if store.renderingVideo {
+                HStack(spacing: 8) {
+                    ProgressView(value: store.videoRenderProgress).tint(LabPalette.accent)
+                    Text("合成叠加视频 \(Int(store.videoRenderProgress * 100))%")
+                        .font(LabFont.microMono).foregroundColor(LabPalette.accent)
+                }
+                .padding(.horizontal, 16).padding(.bottom, 6)
+            }
+
             Picker("Tab", selection: $tab) {
                 Text("总览").tag(0)
-                Text("光码 v0.8").tag(1)
-                Text("时序 Debug").tag(2)
-                Text("逐帧导出").tag(3)
+                Text("光码").tag(1)
+                Text("时序").tag(2)
+                Text("视频").tag(3)
+                Text("逐帧").tag(4)
             }
             .pickerStyle(.segmented)
-            .padding(.horizontal, 16).padding(.bottom, 8)
+            .padding(.horizontal, 14).padding(.bottom, 8)
 
             ScrollView {
                 VStack(spacing: 14) {
@@ -416,6 +465,8 @@ struct LabDashboardView: View {
                         codedContent
                     } else if tab == 2 {
                         debugContent
+                    } else if tab == 3 {
+                        videoContent
                     } else {
                         framesContent
                     }
@@ -424,10 +475,26 @@ struct LabDashboardView: View {
             }
         }
         .background(LabPalette.canvas.ignoresSafeArea())
+        .onChange(of: tab) { newTab in
+            if newTab == 3 { reloadPlayer() } else { player?.pause() }
+        }
+        .onChange(of: videoMode) { _ in reloadPlayer() }
+        .onChange(of: store.annotatedVideoURL) { _ in if tab == 3 { reloadPlayer() } }
         .sheet(isPresented: Binding(get: { shareItem != nil }, set: { if !$0 { shareItem = nil } })) {
             if let url = shareItem {
                 LabShareSheet(items: [url])
             }
+        }
+    }
+
+    private func reloadPlayer() {
+        let targetURL = (videoMode == 0 ? store.annotatedVideoURL : store.originalVideoURL)
+            ?? store.annotatedVideoURL ?? store.originalVideoURL
+        player?.pause()
+        if let url = targetURL {
+            player = AVPlayer(url: url)
+        } else {
+            player = nil
         }
     }
 
@@ -445,6 +512,9 @@ struct LabDashboardView: View {
                     Text("置信 \(Int(report.confidenceScore * 100))%").font(LabFont.microMono).foregroundColor(LabPalette.inkSecondary)
                 }
                 Text(report.headline).font(LabFont.section).foregroundColor(LabPalette.inkPrimary)
+                if let cls = report.coverClassification {
+                    Text("遮盖分型：\(cls)").font(LabFont.caption).foregroundColor(LabPalette.verified)
+                }
                 ForEach(report.summaryNotes, id: \.self) { note in
                     Text("· \(note)").font(LabFont.caption).foregroundColor(LabPalette.inkSecondary)
                 }
@@ -452,32 +522,48 @@ struct LabDashboardView: View {
             .labCard()
 
             HStack(spacing: 10) {
+                let nearH3d = report.nearMetrics?.hde3dPrism ?? report.nearMetrics?.hdePrism
+                let nearV3d = report.nearMetrics?.vde3dPrism ?? report.nearMetrics?.vdePrism
+                let nearLin = report.nearMetrics?.hdePrism
                 metricBox(
-                    "看近 HDE",
-                    report.nearMetrics?.hdePrism.map { String(format: "%+.1fΔ", $0.doubleValue) } ?? "—",
-                    "V \(report.nearMetrics?.vdePrism.map { String(format: "%+.1fΔ", $0.doubleValue) } ?? "—")",
+                    "看近 3D HDE",
+                    nearH3d.map { String(format: "%+.1fΔ", $0.doubleValue) } ?? "—",
+                    "V \(nearV3d.map { String(format: "%+.1fΔ", $0.doubleValue) } ?? "—") · 线性 \(nearLin.map { String(format: "%+.1f", $0.doubleValue) } ?? "—")",
                     LabPalette.accent
                 )
+                let farH3d = report.farMetrics?.hde3dPrism ?? report.farMetrics?.hdePrism
                 metricBox(
-                    "看远 HDE",
-                    report.farMetrics?.hdePrism.map { String(format: "%+.1fΔ", $0.doubleValue) } ?? "—",
-                    "\(report.farMetrics?.validBinocularFrames ?? 0) 帧",
+                    "看远 3D HDE",
+                    farH3d.map { String(format: "%+.1fΔ", $0.doubleValue) } ?? "—",
+                    "\(report.farMetrics?.validBinocularFrames ?? 0) 帧\(report.farMetrics?.stableOnOnly == true ? " · ON" : "")",
                     LabPalette.rightEye
                 )
             }
             HStack(spacing: 10) {
                 metricBox(
-                    "去遮盖再注视",
-                    report.coverMedianPrism.map { String(format: "%.1fΔ", $0.doubleValue) } ?? "—",
-                    "噪声底 \(report.coverNoiseFloorPrism.map { String(format: "%.1fΔ", $0.doubleValue) } ?? "—")",
+                    "遮盖 显斜/隐斜",
+                    report.coverPhoriaMedianPrism.map { String(format: "%.1fΔ", $0.doubleValue) } ?? (report.coverTropiaMedianPrism.map { String(format: "%.1fΔ", $0.doubleValue) } ?? "—"),
+                    "对侧 \(report.coverTropiaMedianPrism.map { String(format: "%.1fΔ", $0.doubleValue) } ?? "—") · 噪声 \(report.coverNoiseFloorPrism.map { String(format: "%.1fΔ", $0.doubleValue) } ?? "—")",
                     LabPalette.verified
                 )
                 metricBox(
-                    "追踪 BSI",
+                    "追踪 BSI (400ms)",
                     report.pursuitMetrics?.bsi.map { String(format: "%.2f", $0.doubleValue) } ?? "—",
-                    "\(report.pursuitMetrics?.sampleCount ?? 0) 样本",
+                    "rH \(report.pursuitMetrics?.rHorizontal.map { String(format: "%.2f", $0.doubleValue) } ?? "—") · rV \(report.pursuitMetrics?.rVertical.map { String(format: "%.2f", $0.doubleValue) } ?? "—")",
                     LabPalette.caution
                 )
+            }
+
+            if let nm = report.nearMetrics, nm.hdeVergence3dPrism != nil {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("3D 球面光学消融对照（vs 线性 175.5）").font(LabFont.section).foregroundColor(LabPalette.inkPrimary)
+                    auditRow("3D 不对称 HDE / 3D 聚散 HDE", "\(nm.hde3dPrism.map { String(format: "%+.1fΔ", $0.doubleValue) } ?? "—") / \(nm.hdeVergence3dPrism.map { String(format: "%+.1fΔ", $0.doubleValue) } ?? "—")")
+                    auditRow("线性 175.5 HDE / 3D SD", "\(nm.hdePrism.map { String(format: "%+.1fΔ", $0.doubleValue) } ?? "—") / ±\(nm.hde3dSdPrism.map { String(format: "%.1fΔ", $0.doubleValue) } ?? "—")")
+                    if let intr = report.cameraIntrinsics {
+                        auditRow("相机内参 fx/fy · 离轴 Δy", "\(String(format: "%.0f/%.0f px", intr.fx, intr.fy)) · \(String(format: "%.0f mm", intr.lightOffsetYMm))")
+                    }
+                }
+                .labCard()
             }
 
             VStack(alignment: .leading, spacing: 10) {
@@ -546,8 +632,9 @@ struct LabDashboardView: View {
 
     private var debugContent: some View {
         let frames = report.frames
-        let hde = frames.compactMap { f in f.hdePrism.map { (f.elapsedSec, $0.doubleValue) } }
-        let vde = frames.compactMap { f in f.vdePrism.map { (f.elapsedSec, $0.doubleValue) } }
+        let hde3d = frames.compactMap { f in f.hde3dPrism.map { (f.elapsedSec, $0.doubleValue) } }
+        let hdeLin = frames.compactMap { f in f.hdePrism.map { (f.elapsedSec, $0.doubleValue) } }
+        let vde3d = frames.compactMap { f in (f.vde3dPrism ?? f.vdePrism).map { (f.elapsedSec, $0.doubleValue) } }
         let dist = frames.filter { $0.distanceCm > 0 }.map { ($0.elapsedSec, Double($0.distanceCm)) }
         let lVis = frames.compactMap { f in f.leftVisibilityContrast.map { (f.elapsedSec, Double($0.floatValue)) } }
         let rVis = frames.compactMap { f in f.rightVisibilityContrast.map { (f.elapsedSec, Double($0.floatValue)) } }
@@ -555,15 +642,28 @@ struct LabDashboardView: View {
 
         return VStack(spacing: 14) {
             LabTimeSeriesChart(
-                title: "双目眼位 HDE / VDE 时序",
+                title: "双目眼位 3D HDE vs 线性 HDE / 3D VDE 时序",
                 unit: "Δ",
                 series: [
-                    LabLineSeries(name: "水平 HDE", color: LabPalette.accent, points: hde),
-                    LabLineSeries(name: "垂直 VDE", color: LabPalette.rightEye, points: vde),
+                    LabLineSeries(name: "3D HDE", color: LabPalette.accent, points: hde3d.isEmpty ? hdeLin : hde3d),
+                    LabLineSeries(name: "线性 HDE", color: LabPalette.inkSecondary, points: hdeLin),
+                    LabLineSeries(name: "3D VDE", color: LabPalette.rightEye, points: vde3d),
                 ],
                 referenceLines: [(10, LabPalette.danger), (-10, LabPalette.danger), (0, LabPalette.hairlineStrong)],
                 eventMarkersSec: markers
             )
+
+            if !report.coverRefixations.isEmpty {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("遮盖/去遮盖毫秒级再注视动力学曲线（共 \(report.coverRefixations.count) 次）")
+                        .font(LabFont.section).foregroundColor(LabPalette.inkPrimary)
+                    ForEach(Array(report.coverRefixations.enumerated()), id: \.offset) { _, ev in
+                        LabCoverKinematicsChart(event: ev)
+                    }
+                }
+                .labCard()
+            }
+
             LabTimeSeriesChart(
                 title: "虹膜测距稳定性（33 ± 5 cm）",
                 unit: "cm",
@@ -571,7 +671,7 @@ struct LabDashboardView: View {
                 referenceLines: [(28, LabPalette.caution), (33, LabPalette.accent), (38, LabPalette.caution)]
             )
             LabTimeSeriesChart(
-                title: "左右眼像素可见性对比度（遮盖信号）",
+                title: "左右眼像素可见性对比度（遮盖拐点信号）",
                 unit: "gray",
                 series: [
                     LabLineSeries(name: "左眼", color: LabPalette.accent, points: lVis),
@@ -582,21 +682,100 @@ struct LabDashboardView: View {
         }
     }
 
+    private var videoContent: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 8) {
+                pillButton("叠加可视化视频 (4× 眼区)", active: videoMode == 0) { videoMode = 0 }
+                pillButton("原始高清视频", active: videoMode == 1) { videoMode = 1 }
+            }
+
+            if store.renderingVideo {
+                VStack(spacing: 10) {
+                    ProgressView(value: store.videoRenderProgress).tint(LabPalette.accent)
+                    Text("正在用 v0.9 最终解调结果渲染叠加可视化视频（\(Int(store.videoRenderProgress * 100))%）…")
+                        .font(LabFont.caption).foregroundColor(LabPalette.inkSecondary)
+                }
+                .labCard()
+            } else if let activePlayer = player {
+                VideoPlayer(player: activePlayer)
+                    .aspectRatio(9.0 / 16.0, contentMode: .fit)
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                    .overlay(RoundedRectangle(cornerRadius: 14).stroke(LabPalette.hairline, lineWidth: 1))
+
+                let currentURL = (videoMode == 0 ? store.annotatedVideoURL : store.originalVideoURL)
+                    ?? store.annotatedVideoURL ?? store.originalVideoURL
+                if let url = currentURL {
+                    HStack(spacing: 10) {
+                        Button {
+                            store.saveVideoToPhotos(url)
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "photo.on.rectangle.angled")
+                                Text("保存到相册").font(LabFont.caption)
+                            }
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                            .background(LabPalette.accent)
+                            .foregroundColor(LabPalette.onAccent)
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                        }
+                        Button {
+                            shareItem = url
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "square.and.arrow.up")
+                                Text("分享 MP4").font(LabFont.caption)
+                            }
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                            .background(LabPalette.surfaceElevated)
+                            .foregroundColor(LabPalette.inkPrimary)
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(LabPalette.hairline, lineWidth: 1))
+                        }
+                    }
+                }
+                if let banner = store.photoSaveBanner {
+                    Text(banner).font(LabFont.caption).foregroundColor(LabPalette.verified)
+                }
+            } else {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("本次记录暂无可回放的视频文件").font(LabFont.section).foregroundColor(LabPalette.inkPrimary)
+                    Text("请在控制台开启「录制叠加诊断视频」开关后再开始采集。").font(LabFont.caption).foregroundColor(LabPalette.inkSecondary)
+                }
+                .labCard()
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("叠加图层图例").font(LabFont.section).foregroundColor(LabPalette.inkPrimary)
+                auditRow("顶部左右角画中画", "双眼 4× 实时放大特写")
+                auditRow("灰白圆 / 青·琥珀虚线圈", "虹膜外缘 / \(Int(report.config.searchRadiusFraction * 100))%R 搜索区")
+                auditRow("绿十字 / 琥珀虚圈", "亮灯实测映光 / 灭灯门控预测")
+                auditRow("顶部状态灯 / 底部横幅", "光码相位 ON·OFF / 遮盖复位窗")
+            }
+            .labCard()
+        }
+    }
+
     private var framesContent: some View {
         VStack(alignment: .leading, spacing: 10) {
             VStack(alignment: .leading, spacing: 8) {
-                Text("导出科研文件").font(LabFont.section).foregroundColor(LabPalette.inkPrimary)
-                HStack(spacing: 8) {
+                Text("导出科研文件与视频").font(LabFont.section).foregroundColor(LabPalette.inkPrimary)
+                VStack(spacing: 8) {
                     ForEach(LabExportFormat.allCases) { fmt in
-                        Button(fmt.label) {
-                            shareItem = store.exportURL(for: report, format: fmt)
+                        if let url = store.exportURL(for: report, format: fmt) {
+                            Button {
+                                shareItem = url
+                            } label: {
+                                HStack {
+                                    Text(fmt.label).font(LabFont.caption).foregroundColor(LabPalette.inkPrimary)
+                                    Spacer()
+                                    Image(systemName: "square.and.arrow.up").foregroundColor(LabPalette.accent)
+                                }
+                                .padding(10)
+                                .background(LabPalette.surfaceElevated)
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                                .overlay(RoundedRectangle(cornerRadius: 8).stroke(LabPalette.hairline, lineWidth: 1))
+                            }
                         }
-                        .font(LabFont.microMono)
-                        .padding(.horizontal, 10).padding(.vertical, 8)
-                        .background(LabPalette.surfaceElevated)
-                        .foregroundColor(LabPalette.accent)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(LabPalette.hairline, lineWidth: 1))
                     }
                 }
             }
@@ -608,8 +787,9 @@ struct LabDashboardView: View {
                         Text("#\(f.index) · \(String(format: "%.2fs", f.elapsedSec)) · \(f.stage.title)")
                             .font(LabFont.microMono).foregroundColor(LabPalette.inkPrimary)
                         Spacer()
-                        Text(f.hdePrism.map { String(format: "HDE %+.1fΔ", $0.doubleValue) } ?? (f.rejectionReason ?? f.leftEmissionPhase.label))
-                            .font(LabFont.microMono).foregroundColor(f.hdePrism != nil ? LabPalette.accent : LabPalette.inkSecondary)
+                        let dispHde = f.hde3dPrism ?? f.hdePrism
+                        Text(dispHde.map { String(format: "3D %+.1fΔ", $0.doubleValue) } ?? (f.rejectionReason ?? f.leftEmissionPhase.label))
+                            .font(LabFont.microMono).foregroundColor(dispHde != nil ? LabPalette.accent : LabPalette.inkSecondary)
                     }
                     Text("d=\(String(format: "%.1f", f.distanceCm))cm · L:\(f.leftGlintSource.label) R:\(f.rightGlintSource.label) · 候选:\(f.leftCandidateCount)/\(f.rightCandidateCount)")
                         .font(LabFont.microMono).foregroundColor(LabPalette.inkTertiary)
@@ -651,6 +831,12 @@ struct LabHistoryView: View {
                             VStack(alignment: .leading, spacing: 4) {
                                 HStack {
                                     Text(item.report.config.subjectId).font(LabFont.section).foregroundColor(LabPalette.inkPrimary)
+                                    if item.hasAnnotatedVideo {
+                                        Text("MP4").font(LabFont.microMono).foregroundColor(LabPalette.verified)
+                                            .padding(.horizontal, 6).padding(.vertical, 2)
+                                            .background(LabPalette.verified.opacity(0.15))
+                                            .clipShape(Capsule())
+                                    }
                                     Spacer()
                                     Text(item.report.riskGrade.label).font(LabFont.microMono).foregroundColor(gradeColor(item.report.riskGrade))
                                 }
@@ -769,7 +955,9 @@ private func copyConfig(
     includeNear: Bool? = nil,
     includeFar: Bool? = nil,
     includeCover: Bool? = nil,
-    includePursuit: Bool? = nil
+    includePursuit: Bool? = nil,
+    lightOffsetXMm: Double? = nil,
+    lightOffsetYMm: Double? = nil
 ) -> LabProtocolConfig {
     LabProtocolConfig(
         subjectId: subjectId ?? base.subjectId,
@@ -786,6 +974,8 @@ private func copyConfig(
         includeNear: includeNear ?? base.includeNear,
         includeFar: includeFar ?? base.includeFar,
         includeCover: includeCover ?? base.includeCover,
-        includePursuit: includePursuit ?? base.includePursuit
+        includePursuit: includePursuit ?? base.includePursuit,
+        lightOffsetXMm: lightOffsetXMm ?? base.lightOffsetXMm,
+        lightOffsetYMm: lightOffsetYMm ?? base.lightOffsetYMm
     )
 }
