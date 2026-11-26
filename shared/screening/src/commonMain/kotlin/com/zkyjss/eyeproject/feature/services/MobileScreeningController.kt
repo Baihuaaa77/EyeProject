@@ -52,7 +52,7 @@ class MobileScreeningController(
         override suspend fun compareHistory(state: ScreeningState,assessment: ScreeningAssessment) = emptyList<String>()
     }
     private var screening = ScreeningEngine(platform,scope)
-    private var dry = DryEyeEngine(platform,scope, theaterMode = true)
+    private var dry = DryEyeEngine(platform,scope, theaterMode = false)
     private var color = ColorVisionEngine(platform,scope)
 
     fun configureDisplay(widthPixels: Int,heightPixels: Int,pixelsPerMm: Float) {
@@ -62,7 +62,7 @@ class MobileScreeningController(
     fun selectTest(name: String) {
         require(name in listOf("DRY_EYE","PRESBYOPIA","STRABISMUS","COLOR_VISION"))
         dry.close(); screening.close()
-        dry = DryEyeEngine(platform,scope, theaterMode = true); screening = ScreeningEngine(platform,scope); color = ColorVisionEngine(platform,scope)
+        dry = DryEyeEngine(platform,scope, theaterMode = false); screening = ScreeningEngine(platform,scope); color = ColorVisionEngine(platform,scope)
         kind = name
         if (kind == "PRESBYOPIA" || kind == "STRABISMUS") screening.configure(ScreeningKind.valueOf(kind))
     }
@@ -303,14 +303,17 @@ class MobileScreeningController(
                 put("direction",s.direction); put("optotypePx",s.optotypePx); put("savedFile",s.savedFile); put("saveError",s.saveError)
                 put("risk",s.report?.riskLevel?.name); put("findings",RecordArray(s.report?.indicators.orEmpty() + s.report?.abnormal.orEmpty()))
                 put("advice",s.report?.advice)
-                // 干眼小剧场观影测眨眼模式下不需要语音收听与手势识别，避免干扰中文科普讲解
-                put("voiceActive",false)
-                put("gestureActive",false)
+                put("voiceActive", s.trialVisible)
+                put("gestureActive", !s.paused && s.phase in setOf(DryEyePhase.Practice, DryEyePhase.Natural, DryEyePhase.Open))
                 put("gestureDirection",s.gestureFeedback.direction)
                 put("gestureProgress",s.gestureFeedback.progress.toDouble())
                 put("gestureNeedsRelease",s.gestureFeedback.needsRelease)
                 put("phase1BlinkCount", s.phase1BlinkCount)
                 put("phase2BlinkCount", s.phase2BlinkCount)
+                put("trialCount", s.trialCount)
+                put("correctCount", s.correctCount)
+                put("wrongCount", s.wrongCount)
+                put("lastAnswerCorrect", s.lastAnswerCorrect)
                 put("naturalSeconds",s.naturalSeconds); put("afterRest",s.afterRest); put("canExtend",s.canExtend); put("canRest",s.canRestRetest); put("progress",s.progressFraction)
                 dryEyeProgress(s).let { p -> put("overallProgress",p?.fraction); put("remainingText",p?.remainingText) }
                 ResultReports.dryEye(s)?.let { put("report",it.toRecordObject()) }
@@ -350,6 +353,11 @@ class MobileScreeningController(
                 put("visionQuestion", s.trialIndex + 1)
                 put("pushStillClearAvailable", s.step == ScreeningStep.PUSH_UP && s.pushStage == PushStage.APPROACH &&
                     s.distanceCm in 1f..PresbyopiaProtocol.PUSH_MIN_CM)
+                put("pushSpeedCmPerSec", s.pushSpeedCmPerSec?.toDouble())
+                put("pushStartCm", s.pushStartCm?.toDouble())
+                put("correctCount", s.answers.count { it.correct })
+                put("wrongCount", s.answers.count { !it.correct })
+                put("lastAnswerCorrect", s.answers.lastOrNull()?.correct)
                 put("targetX",s.targetX); put("targetY",s.targetY); put("savedFile",s.savedFile); put("saveError",s.saveError)
                 put("targetDiameterMm",StrabismusProtocol.targetDiameterMm(s.fields["年龄"]?.toIntOrNull()))
                 put("farTargetM",StrabismusProtocol.FAR_TARGET_M); put("farWaiting",s.farWaiting)

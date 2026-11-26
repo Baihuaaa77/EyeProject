@@ -53,6 +53,38 @@ object EyeGamePalette {
         val boxRivet = Color(0xFFC2D4CC)
     }
 
+    object Sprout {
+        val skyCleanTop = Color(0xFFD6ECFF)
+        val skyCleanMid = Color(0xFFEEF7FF)
+        val skySceneTop = Color(0xFF4F9ED6)
+        val skySceneMid = Color(0xFF9AD2F2)
+        val cloudWhite = Color(0xFFFFFFFF)
+        val mountainFar = Color(0xFF6B9BB3)
+        val mountainNear = Color(0xFF4D8B6D)
+        val lakeTop = Color(0xFF5FAAC2)
+        val lakeDeep = Color(0xFF2E728F)
+        val lakeRipple = Color(0xFFD8F3FA)
+        val grassLight = Color(0xFF7BC152)
+        val grassDeep = Color(0xFF448633)
+        val potRim = Color(0xFFCA7744)
+        val potBody = Color(0xFFA7562A)
+        val soilDark = Color(0xFF4E3222)
+        val leafBright = Color(0xFF96DC54)
+        val leafMid = Color(0xFF56AF3C)
+        val leafWilt = Color(0xFFC8B65C)
+        val dropLight = Color(0xFFA6ECFF)
+        val dropBlue = Color(0xFF39A8F4)
+        val dropDeep = Color(0xFF1C72C2)
+        val daisyPetal = Color(0xFFFFFDF7)
+        val daisyCenter = Color(0xFFFFC53D)
+        val badgeStable = Color(0xFF3FBF63)
+        val arrowDark = Color(0xFF1A3550)
+        val arrowSurface = Color(0xFFFFFFFF)
+        val cardCream = Color(0xFFFFF8EA)
+        val cardSoilBase = Color(0xFF432F22)
+        val optotypeInk = Color(0xFF14181F)
+    }
+
     object Firefly {
         val skyTop = Color(0xFF071326)
         val skyMid = Color(0xFF0E2549)

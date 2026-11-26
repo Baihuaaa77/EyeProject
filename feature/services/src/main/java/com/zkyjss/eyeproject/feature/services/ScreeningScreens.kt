@@ -303,8 +303,18 @@ internal fun ProfileContent(kind: ScreeningKind, s: ScreeningState, vm: Screenin
 
 @Composable
 private fun EnvironmentContent(kind: ScreeningKind, s: ScreeningState, vm: ScreeningTestViewModel, onRetryCamera: () -> Unit) {
-    TestGuide(if (kind == ScreeningKind.STRABISMUS) GuideMotion.FIXATE else GuideMotion.POSTURE,
-        "准备测试", "正对屏幕，露出双眼。")
+    if (kind == ScreeningKind.PRESBYOPIA) {
+        SproutSetupCard(
+            title = "老视自测 · 40cm 近视力浇水挑战",
+            subtitle = "覆盖 40–67–33 cm 看清 E 字与慢慢靠近",
+            distanceCm = s.distanceCm,
+            targetCm = PresbyopiaProtocol.NEAR_DISTANCE_CM,
+            toleranceCm = PresbyopiaProtocol.DISTANCE_TOLERANCE_CM,
+            faceDetected = s.faceDetected,
+        )
+    } else {
+        TestGuide(GuideMotion.FIXATE, "准备测试", "正对屏幕，露出双眼。")
+    }
     if (s.cameraFrames == 0 || !s.faceDetected || s.distanceCm <= 0f) {
         EyeButton("重试相机", EyeButtonRole.SECONDARY, onRetryCamera, Modifier.fillMaxWidth())
     }
@@ -314,8 +324,10 @@ private fun EnvironmentContent(kind: ScreeningKind, s: ScreeningState, vm: Scree
 @Composable
 internal fun VisionContent(s: ScreeningState, vm: ScreeningTestViewModel) {
     val size = with(LocalDensity.current) { s.trialOptotypePx.toDp() }
-    TestStageCard(title = "星空邮局 · 第 ${s.visionEye.ordinal + 1}/3 轮 · ${s.visionEye.label}") {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+    val correctCount = s.answers.count { it.correct }
+    val wrongCount = s.answers.count { !it.correct }
+    TestStageCard(title = "第一关 | 40cm 看清 E 字 · ${s.visionEye.label} (${s.visionEye.ordinal + 1}/3)") {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
             if (s.resolutionAdvancePending) {
                 EyeText(s.nearStopReason.orEmpty(), LocalEyeTypography.current.body, LocalEyeColors.current.textPrimary)
                 EyeButton("继续下一轮", EyeButtonRole.PRIMARY, vm::advanceAfterDisplayLimit)
@@ -325,10 +337,19 @@ internal fun VisionContent(s: ScreeningState, vm: ScreeningTestViewModel) {
             } else if (s.nearRetryRequired) {
                 EyeButton("重做本题", EyeButtonRole.PRIMARY, vm::retryNearQuestion)
             } else {
-                EyeText("第 ${(s.trialIndex + 1).coerceAtMost(4)}/4 封信 · 看信封上的 E 选邮筒",
-                    LocalEyeTypography.current.bodySecondary, LocalEyeColors.current.textSecondary)
-                if (!s.trialVisible) EyeText("停稳后信封上的 E 会自动出现", LocalEyeTypography.current.subtitle, LocalEyeColors.current.textSecondary)
-                PostOfficeEnvelopePad(s.direction, size, s.trialVisible, gesture = s.gestureFeedback) { vm.answer(it) }
+                if (!s.trialVisible) EyeText("停稳至 40 cm 后 E 字会自动出现", LocalEyeTypography.current.bodySecondary, LocalEyeColors.current.textSecondary)
+                SproutWateringAnswerPad(
+                    direction = s.direction,
+                    size = size,
+                    visible = s.trialVisible,
+                    stageBadge = "40cm · 第 ${(s.trialIndex + 1).coerceAtMost(4)}/4 题",
+                    stageHeadline = "手机放眼前或放立桌上，看清方向就作答",
+                    correctCount = correctCount,
+                    wrongCount = wrongCount,
+                    lastAnswerCorrect = s.answers.lastOrNull()?.correct,
+                    gesture = s.gestureFeedback,
+                    onAnswer = { vm.answer(it) },
+                )
             }
             if (!s.resolutionAdvancePending) s.nearStopReason?.let {
                 EyeText(it, LocalEyeTypography.current.bodySecondary, LocalEyeColors.current.textSecondary)
@@ -343,24 +364,28 @@ internal fun PushUpContent(s: ScreeningState, vm: ScreeningTestViewModel) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
     val done = s.nearPoints.count { it.eye == s.visionEye }
-    TestStageCard(title = "星空邮局 · 第 ${s.visionEye.ordinal + 1}/2 轮 · ${s.visionEye.label}") {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-            EyeText("本眼第 ${(done + 1).coerceAtMost(PresbyopiaProtocol.PUSH_REPEATS)}/${PresbyopiaProtocol.PUSH_REPEATS} 次",
-                typography.bodySecondary, colors.textSecondary)
+    TestStageCard(title = "第二关 | 慢慢靠近 · ${s.visionEye.label} (${s.visionEye.ordinal + 1}/2)") {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
             if (s.pushStage == PushStage.READY) {
+                EyeText("本眼第 ${(done + 1).coerceAtMost(PresbyopiaProtocol.PUSH_REPEATS)}/${PresbyopiaProtocol.PUSH_REPEATS} 次",
+                    typography.bodySecondary, colors.textSecondary)
                 EyeText(s.presbyopiaCoverHint ?: "${pushEyeCue(s.visionEye)}；先把手机移到 45 cm 以外，再点开始",
                     typography.body, colors.textPrimary)
                 EyeButton("开始第 ${done + 1} 次", EyeButtonRole.PRIMARY, vm::startPushTrial,
                     enabled = s.presbyopiaCoverReady && s.distanceCm >= PresbyopiaProtocol.PUSH_START_MIN_CM)
             } else {
-                EyeText("缓慢移近信封，每秒一两厘米", typography.body, colors.textPrimary)
-                if (s.trialVisible) PostOfficeEnvelopeSurface(0, size)
-                EyeButton("开始持续模糊", EyeButtonRole.PRIMARY, vm::markPushBlur, Modifier.fillMaxWidth())
-                if (s.distanceCm in 1f..PresbyopiaProtocol.PUSH_MIN_CM) {
-                    EyeButton("仍看得清", EyeButtonRole.SECONDARY, vm::markPushStillClear, Modifier.fillMaxWidth())
-                }
+                SproutPushUpStage(
+                    size = size,
+                    visible = s.trialVisible,
+                    startCm = s.pushStartCm ?: 67f,
+                    currentCm = s.distanceCm,
+                    speedCmPerSec = s.pushSpeedCmPerSec,
+                    roundLabel = "${s.visionEye.label} 第 ${(done + 1).coerceAtMost(PresbyopiaProtocol.PUSH_REPEATS)}/${PresbyopiaProtocol.PUSH_REPEATS} 次",
+                    canStillClear = s.distanceCm in 1f..PresbyopiaProtocol.PUSH_MIN_CM,
+                    onBlur = vm::markPushBlur,
+                    onStillClear = vm::markPushStillClear,
+                )
             }
-
         }
     }
 }
@@ -368,20 +393,31 @@ internal fun PushUpContent(s: ScreeningState, vm: ScreeningTestViewModel) {
 /** 单眼移近法遮哪只眼（界面与语音共用）。 */
 internal fun pushEyeCue(eye: VisionEye) = if (eye == VisionEye.LEFT) "遮住右眼，用左眼看" else "遮住左眼，用右眼看"
 
-/** 距离—视觉表现：在 67 / 50 / 33 cm 依次停稳，信封视标自动出现。 */
+/** 距离—视觉表现：在 67 / 50 / 33 cm 依次停稳，小芽浇水视标自动出现。 */
 @Composable
 private fun CurveContent(s: ScreeningState, vm: ScreeningTestViewModel) {
     val size = with(LocalDensity.current) { s.trialOptotypePx.toDp() }
     val target = PresbyopiaProtocol.CURVE_DISTANCES.getOrElse(s.curveIndex) { 40f }
-    TestStageCard(title = "星空邮局 · 第 ${s.curveIndex + 1}/${PresbyopiaProtocol.CURVE_DISTANCES.size} 轮 · ${target.toInt()} cm") {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+    val correctCount = s.answers.count { it.correct }
+    val wrongCount = s.answers.count { !it.correct }
+    TestStageCard(title = "多距离浇水 · ${target.toInt()} cm (${s.curveIndex + 1}/${PresbyopiaProtocol.CURVE_DISTANCES.size})") {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
             if (s.resolutionAdvancePending) {
                 EyeButton("继续", EyeButtonRole.PRIMARY, vm::advanceAfterDisplayLimit)
             } else {
-                EyeText("第 ${s.trialIndex + 1}/${PresbyopiaProtocol.CURVE_TRIALS_PER_LEVEL} 封信 · 看信封上的 E 选邮筒",
-                    LocalEyeTypography.current.bodySecondary, LocalEyeColors.current.textSecondary)
                 if (!s.trialVisible) EyeText("移到 ${target.toInt()} cm 并停稳", LocalEyeTypography.current.body, LocalEyeColors.current.textPrimary)
-                PostOfficeEnvelopePad(s.direction, size, s.trialVisible, gesture = s.gestureFeedback) { vm.answer(it) }
+                SproutWateringAnswerPad(
+                    direction = s.direction,
+                    size = size,
+                    visible = s.trialVisible,
+                    stageBadge = "${target.toInt()}cm · 第 ${s.trialIndex + 1}/${PresbyopiaProtocol.CURVE_TRIALS_PER_LEVEL} 题",
+                    stageHeadline = "测 40–67–33 cm · ${target.toInt()}cm 看清 E 字",
+                    correctCount = correctCount,
+                    wrongCount = wrongCount,
+                    lastAnswerCorrect = s.answers.lastOrNull()?.correct,
+                    gesture = s.gestureFeedback,
+                    onAnswer = { vm.answer(it) },
+                )
             }
             s.nearStopReason?.let { EyeText(it, LocalEyeTypography.current.bodySecondary, LocalEyeColors.current.textSecondary) }
         }
@@ -392,12 +428,24 @@ private fun CurveContent(s: ScreeningState, vm: ScreeningTestViewModel) {
 internal fun FlipperContent(s: ScreeningState, vm: ScreeningTestViewModel) {
     val size = with(LocalDensity.current) { s.trialOptotypePx.toDp() }
     val target = if (s.trialIndex % 2 == 0) PresbyopiaProtocol.FLIPPER_FAR_CM else PresbyopiaProtocol.FLIPPER_NEAR_CM
-    TestStageCard(title = if (s.flipperCheck) "先确认看得清 · ${target.toInt()} cm" else "星空邮局 · ${target.toInt()} cm · ${s.secondsLeft} 秒") {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+    val correctCount = s.answers.count { it.correct }
+    val wrongCount = s.answers.count { !it.correct }
+    TestStageCard(title = if (s.flipperCheck) "先确认看得清 · ${target.toInt()} cm" else "远近浇水 · ${target.toInt()} cm · ${s.secondsLeft} 秒") {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
             if (!s.trialVisible) EyeText(if (s.flipperCheck) "移到 ${target.toInt()} cm 停稳" else "停稳后开始",
                 LocalEyeTypography.current.subtitle, LocalEyeColors.current.textSecondary)
-            PostOfficeEnvelopePad(s.direction, size, s.trialVisible, gesture = s.gestureFeedback) { vm.answer(it) }
-
+            SproutWateringAnswerPad(
+                direction = s.direction,
+                size = size,
+                visible = s.trialVisible,
+                stageBadge = "${target.toInt()}cm 切换",
+                stageHeadline = if (s.flipperCheck) "先确认 ${target.toInt()}cm 能看清" else "剩余 ${s.secondsLeft} 秒",
+                correctCount = correctCount,
+                wrongCount = wrongCount,
+                lastAnswerCorrect = s.answers.lastOrNull()?.correct,
+                gesture = s.gestureFeedback,
+                onAnswer = { vm.answer(it) },
+            )
         }
     }
 }
@@ -580,7 +628,10 @@ internal fun ScreeningResultContent(s: ScreeningState, vm: ScreeningTestViewMode
     val report = ResultReports.screening(s) ?: return
     val export = rememberRecordExport(s.savedFile) { vm.engine.lastRecordJson }
     val aiCard by vm.explanation.collectAsStateWithLifecycle()
-    ResultReportView(report, export, aiCard = aiCard, onExplain = vm::explain, saveError = s.saveError, actions = {
+    ResultReportView(
+        report, export, aiCard = aiCard, onExplain = vm::explain, saveError = s.saveError,
+        topBanner = if (s.kind == ScreeningKind.PRESBYOPIA) { { SproutBloomResultCard("老视自测完成", report) } } else null,
+        actions = {
         EyeButton("重新测试", if (report.level == ScreeningRiskLevel.UNCERTAIN || !report.valid) EyeButtonRole.PRIMARY else EyeButtonRole.SECONDARY,
             vm::restart, Modifier.fillMaxWidth())
         // 老视：允许换一种戴镜状态重复检查，各次独立记录、分别解释

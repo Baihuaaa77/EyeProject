@@ -144,15 +144,16 @@ fun DryEyeScreen(
     // 与共用反馈门控一致：倒计时期间同样要求固定距离，光边和语音不能缺席。
     val distanceMatters = state.phase in setOf(DryEyePhase.Setup, DryEyePhase.FormalGuide, DryEyePhase.Countdown,
         DryEyePhase.Practice, DryEyePhase.Natural, DryEyePhase.Open)
-    // 干眼小剧场观影模式不启动手势与麦克风作答，避免与中文科普语音讲解冲突
+    // 干眼 40cm 浇水挑战：练习、自然眨眼与持续睁眼全阶段兼容点击、语音与手势三种作答方式
     val gestureActive = settings.gestureAnswersEnabled && !settingsOpen && !helpOpen && !exitConfirmationOpen && !state.paused &&
-        state.phase == DryEyePhase.Practice
+        state.phase in setOf(DryEyePhase.Practice, DryEyePhase.Natural, DryEyePhase.Open)
     DisposableEffect(viewModel, gestureActive) {
         if (gestureActive) viewModel.startGestureAnswers()
         onDispose { if (gestureActive) viewModel.stopGestureAnswers() }
     }
     val voiceAnswer = rememberVoiceAnswer(
-        active = !settingsOpen && !helpOpen && state.phase == DryEyePhase.Practice,
+        active = !settingsOpen && !helpOpen && !state.paused &&
+            state.phase in setOf(DryEyePhase.Practice, DryEyePhase.Natural, DryEyePhase.Open),
         voice = voice,
         enabled = settings.answersEnabled,
     ) { command ->
@@ -165,12 +166,12 @@ fun DryEyeScreen(
     val basePrompt = when (state.phase) {
         // 选人页不播报：页面标题已写明
         DryEyePhase.Profile -> ""
-        DryEyePhase.Setup -> "建议佩戴最佳矫正视力眼镜。准备好后开始"
+        DryEyePhase.Setup -> "建议佩戴平时看得清的眼镜，正对屏幕保持四十厘米，可手持也可放立桌上。"
         DryEyePhase.PracticeGuide -> guideCueDryEyePractice
-        DryEyePhase.FormalGuide -> "护眼科普小剧场即将开始。前六十秒观看动画自然眨眼，看到提示后尽量保持睁眼二十秒"
-        DryEyePhase.OpenCue -> "现在尽量保持睁眼，稳住水膜"
+        DryEyePhase.FormalGuide -> "干眼浇水挑战即将开始。前六十秒看 E 浇水并自然眨眼，看到提示后尽量保持睁眼二十秒继续答题。"
+        DryEyePhase.OpenCue -> "现在尽量保持睁眼，继续看 E 给小芽浇水"
         DryEyePhase.Rest -> if (state.remainingSeconds <= 1) "请睁开眼睛" else "请闭上眼睛休息"
-        DryEyePhase.Result -> "测试完成"
+        DryEyePhase.Result -> "干眼自测完成，快看看你的小芽吧"
         else -> state.qualityWarning ?: state.instruction
     }
     SpeakTestPrompts(voice, voiceEnabled && !settingsOpen && !helpOpen, basePrompt, distance.takeIf { distanceMatters && it.clearlyOff() })
@@ -261,7 +262,7 @@ fun DryEyeScreen(
 
 internal const val guideCueDryEyePractice = "先练习一下：2 秒内点选 E 的开口方向；练习不计入结果"
 
-/** 准备页：最佳矫正提示 + 姿势示范 + 40 cm 门禁 + 开始按钮。 */
+/** 准备页：小芽浇水挑战视觉 + 40 cm 实时距离校准 + 开始测试门禁。 */
 @Composable
 internal fun SetupGate(
     state: DryEyeTestUiState,
@@ -269,8 +270,15 @@ internal fun SetupGate(
 ) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
-    TestGuide(GuideMotion.POSTURE, "准备测试", "戴平时看得清的眼镜，正对屏幕。")
-    DistanceBanner(distanceStatus(state.distanceCm, state.faceDetected, DryEyeProtocol.TARGET_DISTANCE_CM, DryEyeProtocol.DISTANCE_TOLERANCE_CM))
+    SproutSetupCard(
+        title = "干眼自测 · 40cm 浇水挑战",
+        subtitle = "答对给小芽浇水，距离持续偏离自动暂停复位",
+        distanceCm = state.distanceCm,
+        targetCm = DryEyeProtocol.TARGET_DISTANCE_CM,
+        toleranceCm = DryEyeProtocol.DISTANCE_TOLERANCE_CM,
+        faceDetected = state.faceDetected,
+    )
+    DistanceBanner(distanceStatus(state.distanceCm, state.faceDetected, DryEyeProtocol.TARGET_DISTANCE_CM, DryEyeProtocol.DISTANCE_TOLERANCE_CM), compact = true)
     EyeButton("开始测试", EyeButtonRole.PRIMARY, onStart, Modifier.fillMaxWidth(), state.gateReady)
     state.error?.let { EyeText(it, style = typography.body, color = colors.danger) }
 }
@@ -284,7 +292,7 @@ private fun NoticeCard(text: String) {
     )
 }
 
-/** 正式说明：两段观影与挑战连续进行，先讲清楚再开始。 */
+/** 正式说明：两段 40 cm 浇水挑战连续进行，先讲清楚再开始。 */
 @Composable
 private fun FormalGuideContent(state: DryEyeTestUiState, onStart: () -> Unit) {
     val colors = LocalEyeColors.current
@@ -292,10 +300,10 @@ private fun FormalGuideContent(state: DryEyeTestUiState, onStart: () -> Unit) {
     DistanceBanner(distanceStatus(state.distanceCm, state.faceDetected, DryEyeProtocol.TARGET_DISTANCE_CM, DryEyeProtocol.DISTANCE_TOLERANCE_CM), compact = true)
     TestGuide(
         GuideMotion.BLINK,
-        "护眼科普动画 · ${state.naturalSeconds} 秒 + 20 秒",
-        "观看多幕护眼科普动画并收听中文讲解。前 ${state.naturalSeconds} 秒像平时一样自然眨眼，看到提示后尽量保持睁眼 20 秒",
+        "40cm 浇水挑战 · ${state.naturalSeconds} 秒 + 20 秒",
+        "看清 E 字方向给小芽浇水。前 ${state.naturalSeconds} 秒自然眨眼，看到提示后尽量保持睁眼 20 秒；距离持续偏离将弹窗暂停",
     )
-    EyeButton("开始观看护眼动画", EyeButtonRole.PRIMARY, onStart, Modifier.fillMaxWidth(), state.gateReady)
+    EyeButton("开始浇水挑战", EyeButtonRole.PRIMARY, onStart, Modifier.fillMaxWidth(), state.gateReady)
     state.error?.let { EyeText(it, style = LocalEyeTypography.current.body, color = colors.danger) }
 }
 
@@ -345,30 +353,51 @@ private fun TimerRing(progress: () -> Float, modifier: Modifier = Modifier, cont
     }
 }
 
-/** 正式观影与睁眼挑战：多幕电影级护眼科普动画 + 中文语音讲解；练习态仍保留兼容呈现。 */
+/** 干眼练习与正式两阶段：统一采用小芽浇水挑战舞台（E 字周围环绕四向箭头，答对浇水成长 / 答错水滴蒸发）。 */
 @Composable
 internal fun TrialContent(state: DryEyeTestUiState, voiceEnabled: Boolean = true, onAnswer: (Int) -> Unit) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
-    if (state.phase == DryEyePhase.Practice) {
-        TestStageCard {
-            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    EyeText("练习", style = typography.subtitle, color = colors.primary)
+    val phaseLabel = when (state.phase) {
+        DryEyePhase.Practice -> "热身浇水"
+        DryEyePhase.Open -> "持续睁眼"
+        else -> "自然眨眼"
+    }
+    val headline = when (state.phase) {
+        DryEyePhase.Practice -> "热身练习 · 40cm 看清 E 字"
+        DryEyePhase.Open -> "稳住睁眼 · 40cm 看清 E 字"
+        else -> "第一关 | 40cm 看清 E 字"
+    }
+    val blinkCount = if (state.phase == DryEyePhase.Open) state.phase2BlinkCount else state.phase1BlinkCount
+    val size = with(LocalDensity.current) { state.optotypePx.toDp() }
+    TestStageCard {
+        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                EyeText(
+                    phaseLabel,
+                    style = typography.subtitle,
+                    color = if (state.phase == DryEyePhase.Open) colors.warning else colors.primary,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (state.phase != DryEyePhase.Practice) {
+                        EyeText("已眨眼 $blinkCount 次", style = typography.caption, color = colors.textSecondary)
+                    }
                     EyeText("剩余 ${state.remainingSeconds} 秒", style = typography.subtitle, color = colors.textPrimary)
                 }
-                val size = with(LocalDensity.current) { state.optotypePx.toDp() }
-                OptotypeAnswerPad(state.direction, size, state.trialVisible,
-                    gesture = state.gestureFeedback,
-                    belowStimulus = { TrialTimer(state.trialId, state.trialVisible) }, onAnswer = onAnswer)
-                TestNotice(state.qualityWarning)
             }
-        }
-        return
-    }
-    TestStageCard {
-        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            DryEyeCinemaTheater(state, voiceEnabled = voiceEnabled)
+            SproutWateringAnswerPad(
+                direction = state.direction,
+                size = size,
+                visible = state.trialVisible,
+                stageBadge = if (state.gateReady) "40cm 保持稳定" else "40cm 校准中",
+                stageHeadline = headline,
+                correctCount = state.correctCount,
+                wrongCount = state.wrongCount,
+                lastAnswerCorrect = state.lastAnswerCorrect,
+                gesture = state.gestureFeedback,
+                belowStimulus = { TrialTimer(state.trialId, state.trialVisible) },
+                onAnswer = onAnswer,
+            )
             TestNotice(state.qualityWarning)
         }
     }
@@ -418,7 +447,10 @@ private fun ResultContent(
 ) {
     val colors = LocalEyeColors.current
     val report = ResultReports.dryEye(state) ?: return
-    ResultReportView(report, onExport, aiCard = aiCard, onExplain = onExplain, saveError = state.saveError, actions = {
+    ResultReportView(
+        report, onExport, aiCard = aiCard, onExplain = onExplain, saveError = state.saveError,
+        topBanner = { SproutBloomResultCard("干眼自测完成", report) },
+        actions = {
         if (state.canExtend) {
             EyeButton("延长测试（3 分钟）", EyeButtonRole.PRIMARY, onExtend, Modifier.fillMaxWidth())
         }

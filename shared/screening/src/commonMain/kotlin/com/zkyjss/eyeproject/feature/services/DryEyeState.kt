@@ -46,6 +46,8 @@ data class DryEyeTestUiState(
     val phase1BlinkCount: Int = 0,
     val phase2BlinkCount: Int = 0,
     val trialCount: Int = 0,
+    val correctCount: Int = 0,
+    val wrongCount: Int = 0,
     val distanceSamples: List<DryEyeDistanceSample> = emptyList(),
     val naturalSeconds: Int = DryEyeProtocol.NATURAL_SECONDS,
     val afterRest: Boolean = false,

@@ -457,7 +457,7 @@ class ServiceVisualTest {
                     Box(Modifier.size(320.dp, 640.dp)) {
                         TestSessionLayout("老视自测", {}, {}, true, progress = TestProgress(0.9f, 12),
                             status = { DistanceBanner(distanceStatus(25f, true, 40f, 5f), compact = true) }) {
-                            PostOfficeEnvelopePad(0, 24.dp, true) {}
+                            SproutWateringAnswerPad(0, 24.dp, true, stageBadge = "40cm 保持稳定") {}
                         }
                     }
                 }
@@ -472,29 +472,9 @@ class ServiceVisualTest {
         capture("session-small-large-text")
     }
 
-    @Test fun postOfficeEnvelopeMapsFourPostboxesAndSkip() {
+    @Test fun sproutWateringMapsSurroundingArrowsAndRendersFullFlow() {
         val answers = mutableListOf<Int>()
-        compose.setContent {
-            EyeProjectTheme(darkTheme = true) {
-                Column(Modifier.fillMaxSize().background(LocalEyeColors.current.appBackground).padding(20.dp)) {
-                    PostOfficeEnvelopePad(0, 56.dp, true) { answers.add(it) }
-                }
-            }
-        }
-        compose.onNodeWithContentDescription("向上").performClick()
-        compose.onNodeWithContentDescription("向下").performClick()
-        compose.onNodeWithContentDescription("向左").performClick()
-        compose.onNodeWithContentDescription("向右").performClick()
-        compose.onNodeWithText("看不清 · 跳过").performClick()
-        assertEquals(listOf(3, 1, 2, 0, -1), answers)
-        capture("game-presbyopia-postoffice")
-    }
-
-    @Test fun dryEyeCinemaStoryActsRenderCleanly() {
-        var progress by androidx.compose.runtime.mutableFloatStateOf(0.24f) // 第 2 幕：三层泪膜解剖
-        var phase by androidx.compose.runtime.mutableStateOf(DryEyePhase.Natural)
-        var voiceOn by androidx.compose.runtime.mutableStateOf(true)
-        var remaining by androidx.compose.runtime.mutableIntStateOf(46)
+        var page by androidx.compose.runtime.mutableIntStateOf(0)
         compose.mainClock.autoAdvance = false
         compose.setContent {
             EyeProjectTheme(darkTheme = true) {
@@ -502,58 +482,97 @@ class ServiceVisualTest {
                     Modifier
                         .fillMaxSize()
                         .background(LocalEyeColors.current.appBackground)
-                        .padding(20.dp),
+                        .verticalScroll(rememberScrollState())
+                        .padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    DryEyeCinemaTheater(
-                        DryEyeTestUiState(
-                            phase = phase,
-                            naturalSeconds = 60,
-                            remainingSeconds = remaining,
-                            progressFraction = progress,
-                            phase1BlinkCount = 7,
-                            phase2BlinkCount = 0,
-                        ),
-                        voiceEnabled = voiceOn,
-                    )
+                    when (page) {
+                        0 -> SproutSetupCard(
+                            title = "干眼自测 · 40cm 浇水挑战",
+                            subtitle = "答对给小芽浇水，距离持续偏离自动暂停复位",
+                            distanceCm = 41f,
+                            faceDetected = true,
+                        )
+                        1 -> SproutWateringAnswerPad(
+                            direction = 0,
+                            size = 56.dp,
+                            visible = true,
+                            stageBadge = "40cm 保持稳定",
+                            stageHeadline = "第一关 | 40cm 看清 E 字",
+                            correctCount = 5,
+                            wrongCount = 1,
+                            lastAnswerCorrect = true,
+                            onAnswer = { answers.add(it) },
+                        )
+                        2 -> SproutPushUpStage(
+                            size = 64.dp,
+                            visible = true,
+                            startCm = 67f,
+                            currentCm = 54f,
+                            speedCmPerSec = 1.9f,
+                            roundLabel = "右眼 第 1/3 次",
+                            canStillClear = false,
+                            onBlur = {},
+                            onStillClear = {},
+                        )
+                        else -> {
+                            val okReport = ResultReport(
+                                kind = "DRY_EYE",
+                                level = ScreeningRiskLevel.LOW,
+                                badge = "低风险",
+                                title = "眼表状态稳定",
+                                advice = "继续保持规律眨眼与定时远眺。",
+                                mood = ResultMood.HAPPY,
+                                metrics = emptyList(),
+                                evidence = emptyList(),
+                                problems = emptyList(),
+                                sections = emptyList(),
+                                version = "test",
+                            )
+                            val dryReport = okReport.copy(
+                                level = ScreeningRiskLevel.HIGH,
+                                badge = "高风险",
+                                title = "建议眼科检查",
+                                mood = ResultMood.CONCERNED,
+                            )
+                            SproutBloomResultCard("干眼自测完成", okReport)
+                            SproutBloomResultCard("老视自测完成", dryReport)
+                        }
+                    }
                 }
             }
         }
         compose.mainClock.advanceTimeBy(300)
-        compose.onNodeWithText("神奇的三层泪膜护盾").assertExists()
-        compose.onNodeWithText("中文讲解中").assertExists()
-        capture("game-dryeye-act2-layers")
+        compose.onNodeWithText("可手持，也可放立桌上").assertExists()
+        capture("ppt-1-setup")
 
-        // 第 3 幕：聊天 vs 盯屏对比
-        progress = 0.42f; remaining = 35
+        page = 1
         compose.mainClock.advanceTimeBy(300)
-        compose.onNodeWithText("盯屏幕时的眨眼危机").assertExists()
-        capture("game-dryeye-act3-screen")
+        compose.onNodeWithContentDescription("向上").performClick()
+        compose.onNodeWithContentDescription("向下").performClick()
+        compose.onNodeWithContentDescription("向左").performClick()
+        compose.onNodeWithContentDescription("向右").performClick()
+        compose.onNodeWithText("看不清 · 跳过").performClick()
+        assertEquals(listOf(3, 1, 2, 0, -1), answers)
+        capture("ppt-2-clean-watering")
 
-        // 第 4 幕：微距泪膜破裂与雨刷修复
-        progress = 0.59f; remaining = 25
+        // 切换为湖景草地背景并截图验收
+        compose.onNodeWithText("切湖景背景").performClick()
         compose.mainClock.advanceTimeBy(300)
-        compose.onNodeWithText("眼睑就像温柔的小雨刷").assertExists()
-        capture("game-dryeye-act4-breakup")
+        compose.onNodeWithText("切清爽背景").assertExists()
+        capture("ppt-3-scenic-watering")
 
-        // 第 5 幕：20-20-20 远眺窗外
-        progress = 0.74f; remaining = 16
+        page = 2
         compose.mainClock.advanceTimeBy(300)
-        compose.onNodeWithText("20-20-20 远眺放松法").assertExists()
-        capture("game-dryeye-act5-rule202020")
+        compose.onNodeWithText("持续模糊，点这里").assertExists()
+        compose.onNodeWithText("速度正常：约 1.9 cm/s").assertExists()
+        capture("ppt-4-pushup")
 
-        // 第 6 幕：40°C 热敷融化睑板腺油脂（并验证静音字幕态）
-        progress = 0.91f; remaining = 5; voiceOn = false
+        page = 3
         compose.mainClock.advanceTimeBy(300)
-        compose.onNodeWithText("40°C 暖雾热敷魔法").assertExists()
-        compose.onNodeWithText("静音字幕").assertExists()
-        capture("game-dryeye-act6-warm")
-
-        // 持续睁眼满级星盾
-        phase = DryEyePhase.Open; progress = 0.80f; remaining = 4; voiceOn = true
-        compose.mainClock.advanceTimeBy(300)
-        compose.onNodeWithText("满级星盾").assertExists()
-        capture("game-dryeye-open-shield")
+        compose.onNodeWithText("干眼自测完成").assertExists()
+        compose.onNodeWithText("我完成了干眼自测，你也来试试？").assertExists()
+        capture("ppt-5-result-bloom")
     }
 
     @Test fun strabismusMoonlitFireflySessionRenders() {
@@ -696,7 +715,7 @@ class ServiceVisualTest {
         compose.mainClock.advanceTimeBy(200)
         compose.onNodeWithText("持续睁眼").assertExists()
         compose.onNodeWithText("已眨眼 1 次").assertExists()
-        compose.onNodeWithText("定格挑战 · 守护水膜").assertExists()
+        compose.onNodeWithText("稳住睁眼 · 40cm 看清 E 字").assertExists()
         capture("dry-eye-open")
         page = 1
         compose.mainClock.advanceTimeBy(200)

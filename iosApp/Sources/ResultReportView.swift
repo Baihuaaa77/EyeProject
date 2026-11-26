@@ -10,6 +10,12 @@ struct ResultReportView: View {
     var body: some View {
         if let report = ReportModel(runtime.state["report"] as? [String: Any]) {
             VStack(alignment: .leading, spacing: 12) {
+                if runtime.kind == "DRY_EYE" || runtime.kind == "PRESBYOPIA" {
+                    SproutBloomResultCardView(
+                        testTitle: runtime.kind == "DRY_EYE" ? "干眼自测完成" : "老视自测完成",
+                        report: report
+                    )
+                }
                 ResultHero(report: report)
                 if !report.valid {
                     ProblemCard(problems: report.problems)

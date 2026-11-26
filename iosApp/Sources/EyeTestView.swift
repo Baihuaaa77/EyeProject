@@ -258,9 +258,18 @@ struct EyeTestView: View {
     }
     @ViewBuilder private var testContent: some View {
         if phase == "Setup" || phase == "ENVIRONMENT" {
-            TestGuideView(motion: runtime.kind == "STRABISMUS" ? .fixate : .posture, title: "准备测试",
-                cue: runtime.kind == "DRY_EYE" ? "戴平时看得清的眼镜，正对屏幕，距离约 40 cm。"
-                    : runtime.kind == "STRABISMUS" ? "正对屏幕，约 33 厘米" : "正对屏幕，约 40 厘米")
+            if runtime.kind == "DRY_EYE" || runtime.kind == "PRESBYOPIA" {
+                SproutSetupCardView(
+                    title: runtime.kind == "DRY_EYE" ? "干眼自测 · 40cm 浇水挑战" : "老视自测 · 40cm 近视力浇水挑战",
+                    subtitle: runtime.kind == "DRY_EYE" ? "答对给小芽浇水，距离持续偏离自动暂停复位" : "覆盖 40–67–33 cm 看清 E 字与慢慢靠近",
+                    distanceCm: runtime.number("distanceCm"),
+                    targetCm: 40,
+                    toleranceCm: 5,
+                    faceDetected: runtime.bool("faceDetected")
+                )
+            } else {
+                TestGuideView(motion: .fixate, title: "准备测试", cue: "正对屏幕，约 33 厘米")
+            }
             Button("开始测试") { runtime.act("begin") }.buttonStyle(EyeButtonStyle())
             Button("重试相机") { runtime.act("retryCamera") }.buttonStyle(EyeButtonStyle(role: .secondary))
             DisclosureGroup("测距校准") {
@@ -274,7 +283,7 @@ struct EyeTestView: View {
                 }.disabled(runtime.number("distanceCm") <= 0)
             }
         } else if phase == "PracticeGuide" {
-            TestGuideView(motion: .acuity, title: "视标练习 · 约 12 秒", cue: "先练习一下：2 秒内点选 E 的开口方向；练习不计入结果") {
+            TestGuideView(motion: .acuity, title: "热身浇水练习 · 约 12 秒", cue: "先练习一下：2 秒内看清 E 字方向点击四周箭头给小芽浇水；练习不计入结果") {
                 runtime.act("practice")
             }
         } else if phase == "FormalGuide" {
@@ -283,8 +292,8 @@ struct EyeTestView: View {
                 Text("休息结束，下面进行复测，流程与首次相同").font(EyeStyle.body).frame(maxWidth: .infinity, alignment: .leading)
                     .padding(14).background(EyeStyle.accentSoft, in: RoundedRectangle(cornerRadius: EyeStyle.radiusMedium))
             }
-            TestGuideView(motion: .blink, title: "护眼科普动画 · \(seconds) 秒 + 20 秒",
-                cue: "观看多幕护眼科普动画并收听中文讲解。前 \(seconds) 秒像平时一样自然眨眼，看到提示后尽量保持睁眼 20 秒", readyTitle: "开始观看护眼动画") {
+            TestGuideView(motion: .blink, title: "40cm 浇水挑战 · \(seconds) 秒 + 20 秒",
+                cue: "看清 E 字方向给小芽浇水。前 \(seconds) 秒自然眨眼，看到提示后尽量保持睁眼 20 秒；距离持续偏离将弹窗暂停", readyTitle: "开始浇水挑战") {
                 runtime.act("formal")
             }
         } else if runtime.bool("guidePending") && runtime.bool("glassesCheck") {
@@ -330,34 +339,37 @@ struct EyeTestView: View {
                 Text("\(Int(runtime.number("secondsLeft")))").font(.system(size: 56, weight: .semibold, design: .rounded))
                     .monospacedDigit().foregroundStyle(EyeStyle.readableText(EyeStyle.primary))
             }.frame(width: 184, height: 184).animation(.linear(duration: 0.25), value: runtime.number("progress"))
-        } else if phase == "Natural" || phase == "Open" {
-            DryEyeStoryTheaterView(runtime: runtime)
+        } else if phase == "Natural" || phase == "Open" || phase == "Practice" {
+            let blinks = Int(runtime.number(phase == "Open" ? "phase2BlinkCount" : "phase1BlinkCount"))
+            let label = phase == "Practice" ? "热身浇水" : phase == "Open" ? "持续睁眼" : "自然眨眼"
+            let headline = phase == "Practice" ? "热身练习 · 40cm 看清 E 字" : phase == "Open" ? "稳住睁眼 · 40cm 看清 E 字" : "第一关 | 40cm 看清 E 字"
+            HStack {
+                Text(label).font(EyeStyle.subtitle).foregroundStyle(phase == "Open" ? EyeStyle.warning : EyeStyle.primary)
+                Spacer()
+                if phase != "Practice" {
+                    Text("已眨眼 \(blinks) 次").font(EyeStyle.caption).foregroundStyle(EyeStyle.secondary)
+                }
+                Text("剩余 \(Int(runtime.number("secondsLeft"))) 秒").font(EyeStyle.subtitle).monospacedDigit()
+            }
+            SproutWateringAnswerPadView(
+                runtime: runtime,
+                stageBadge: runtime.bool("gateReady") ? "40cm 保持稳定" : "40cm 校准中",
+                stageHeadline: headline
+            )
         } else {
-            if phase == "Practice" {
-                HStack {
-                    Text("练习")
-                    Spacer(); Text("\(Int(runtime.number("secondsLeft"))) 秒").monospacedDigit()
-                }
-            } else if phase == "NEAR_VISION" {
+            if phase == "NEAR_VISION" {
                 let eye = ["RIGHT": "右眼", "LEFT": "左眼", "BOTH": "双眼"][runtime.string("eye")] ?? ""
-                Text("星空邮局 · 第 \(Int(runtime.number("visionRound")))/3 轮 · \(eye)").font(EyeStyle.subtitle)
-                if runtime.bool("presbyopiaCoverReady"), !runtime.bool("resolutionAdvancePending") {
-                    StageCaption(text: "第 \(min(4, Int(runtime.number("visionQuestion"))))/4 封信 · 看信封上的 E 选邮筒")
-                }
+                Text("第一关 | 40cm 看清 E 字 · \(eye) (\(Int(runtime.number("visionRound")))/3)").font(EyeStyle.subtitle)
             } else if phase == "DISTANCE_CURVE" {
-                Text("星空邮局 · 第 \(Int(runtime.number("visionRound")))/3 轮 · \(Int(runtime.number("targetDistanceCm"))) cm").font(EyeStyle.subtitle)
-                if !runtime.bool("resolutionAdvancePending") {
-                    StageCaption(text: "第 \(Int(runtime.number("visionQuestion")))/3 封信 · 看信封上的 E 选邮筒")
-                }
+                Text("多距离浇水 · \(Int(runtime.number("targetDistanceCm"))) cm (\(Int(runtime.number("visionRound")))/3)").font(EyeStyle.subtitle)
             } else if phase == "FLIPPER" {
                 HStack {
-                    Text((runtime.bool("flipperCheck") ? "先确认看得清 · " : "星空邮局 · ") + "\(Int(runtime.number("targetDistanceCm"))) cm")
+                    Text((runtime.bool("flipperCheck") ? "先确认看得清 · " : "远近浇水 · ") + "\(Int(runtime.number("targetDistanceCm"))) cm")
                     Spacer()
-                    if phase == "FLIPPER" && !runtime.bool("flipperCheck") { Text("\(Int(runtime.number("secondsLeft"))) 秒").monospacedDigit() }
+                    if !runtime.bool("flipperCheck") { Text("\(Int(runtime.number("secondsLeft"))) 秒").monospacedDigit() }
                 }
             } else if phase == "PUSH_UP" {
-                Text("星空邮局 · 第 \(Int(runtime.number("visionRound")))/2 轮 · \(runtime.string("pushEye"))").font(EyeStyle.subtitle)
-                StageCaption(text: "本眼第 \(min(Int(runtime.number("pushDone")) + 1, 3))/3 次")
+                Text("第二关 | 慢慢靠近 · \(runtime.string("pushEye")) (\(Int(runtime.number("visionRound")))/2)").font(EyeStyle.subtitle)
             }
             if runtime.bool("resolutionAdvancePending") {
                 Text(runtime.string("resolutionLimitMessage"))
@@ -369,23 +381,26 @@ struct EyeTestView: View {
                 Button("重做本题") { runtime.act("retryNearQuestion") }.buttonStyle(EyeButtonStyle())
             } else if phase == "PUSH_UP" && runtime.string("pushStage") == "READY" {
                 let hint = runtime.string("presbyopiaCoverHint")
+                Text("本眼第 \(min(Int(runtime.number("pushDone")) + 1, 3))/3 次").font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.secondary)
                 Text(hint.isEmpty ? (runtime.string("pushEye") == "左眼" ? "遮住右眼，用左眼看" : "遮住左眼，用右眼看") + "；先移到 45 cm 以外" : hint)
                 Button("开始第 \(Int(runtime.number("pushDone")) + 1) 次") { runtime.act("pushStart") }
                     .buttonStyle(EyeButtonStyle()).disabled(!runtime.bool("presbyopiaCoverReady") ||
                         runtime.number("distanceCm") < 45)
             } else {
                 if phase == "PUSH_UP" {
-                    Text("缓慢移近信封，每秒一两厘米")
-                    PostOfficeEnvelopeView(runtime: runtime)
-                        .stageHeight(max(196, CGFloat(runtime.number("optotypePx")) / UIScreen.main.scale + 104))
-                    Button("开始持续模糊了") { runtime.act("blur") }.buttonStyle(EyeButtonStyle())
-                    if runtime.bool("pushStillClearAvailable") {
-                        Button("仍看得清") { runtime.act("pushStillClear") }.buttonStyle(EyeButtonStyle(role: .secondary))
-                    }
-                } else if phase == "Practice" {
-                    OptotypeAnswerPad(runtime: runtime)
+                    SproutPushUpStageView(runtime: runtime)
                 } else {
-                    PostOfficeAnswerPad(runtime: runtime)
+                    let badge: String = phase == "NEAR_VISION"
+                        ? "40cm · 第 \(min(4, Int(runtime.number("visionQuestion"))))/4 题"
+                        : phase == "DISTANCE_CURVE"
+                            ? "\(Int(runtime.number("targetDistanceCm")))cm · 第 \(Int(runtime.number("visionQuestion")))/3 题"
+                            : "\(Int(runtime.number("targetDistanceCm")))cm 切换"
+                    let head: String = phase == "NEAR_VISION"
+                        ? "手机放眼前或放立桌上，看清方向就作答"
+                        : phase == "DISTANCE_CURVE"
+                            ? "测 40–67–33 cm · \(Int(runtime.number("targetDistanceCm")))cm 看清 E 字"
+                            : (runtime.bool("flipperCheck") ? "先确认 \(Int(runtime.number("targetDistanceCm")))cm 能看清" : "剩余 \(Int(runtime.number("secondsLeft"))) 秒")
+                    SproutWateringAnswerPadView(runtime: runtime, stageBadge: badge, stageHeadline: head)
                 }
             }
         }
@@ -848,703 +863,203 @@ private struct DarkControlsHeight: PreferenceKey {
     static func reduce(value: inout CGFloat,nextValue: () -> CGFloat) { value = nextValue() }
 }
 
-// MARK: - 三项自测趣味小游戏场景（与安卓 DryEyeCinemaTheater / ScreeningGameScenes 同情景同配色）
+// MARK: - 三项自测趣味小游戏场景（干眼与老视：小芽浇水挑战；斜视：月夜森林萤火虫）
 
-/// 干眼自测电影级护眼科普动画剧场（与安卓 DryEyeCinemaTheater 对齐，直接共享 KMP DryEyeStoryScript）。
-private struct DryEyeStoryTheaterView: View {
-    @ObservedObject var runtime: EyeRuntime
+private enum SproutBackdropMode { case clean, scenic }
+
+/// 准备与 40 cm 校准卡（对齐安卓 SproutSetupCard 与甲方参考图 1 & 图 2）。
+private struct SproutSetupCardView: View {
+    let title: String
+    let subtitle: String
+    let distanceCm: Double
+    let targetCm: Double
+    let toleranceCm: Double
+    let faceDetected: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
-        let isOpen = runtime.string("phase") == "Open"
-        let paused = runtime.bool("paused")
-        let voiceEnabled = runtime.voice.enabled
-        let remaining = max(0, Int(runtime.number("secondsLeft")))
-        let naturalTotal = max(1, Int(runtime.number("naturalSeconds")))
-        let total = isOpen ? 20 : naturalTotal
-        let progress = min(max(runtime.number("progress"), 0), 1)
-        let elapsedFloat = progress * Double(total)
-        let elapsed = max(0, min(total, Int(elapsedFloat)))
-        let scene = DryEyeStoryScript.shared.sceneAt(elapsedSeconds: Int32(elapsed))
-        let totalActs = Int(DryEyeStoryScript.shared.totalScenesFor(totalSeconds: Int32(naturalTotal)))
-        let currentActNumber = min(Int(scene.index) + 1, max(1, totalActs))
-        let blinks = Int(runtime.number(isOpen ? "phase2BlinkCount" : "phase1BlinkCount"))
-        let subtitleHeader: String = isOpen
-            ? (blinks == 0 ? "稳住晶莹水膜，尽量不要眨眼" : "已眨眼 \(blinks) 次，继续稳住视线坚持")
-            : "护眼小课堂 · \(scene.title)"
-        let subtitleText: String = isOpen
-            ? DryEyeStoryScript.shared.openNarration(elapsedSeconds: Int32(elapsed))
-            : scene.narration
+        let inRange = faceDetected && distanceCm > 0 && abs(distanceCm - targetCm) <= toleranceCm
+        let distanceLabel: String = (!faceDetected || distanceCm <= 0)
+            ? "等待相机识别距离"
+            : inRange
+                ? "当前距离：\(Int(distanceCm)) cm · 保持稳定"
+                : distanceCm < targetCm - toleranceCm
+                    ? "当前距离：\(Int(distanceCm)) cm · 请微调远一点至 \(Int(targetCm)) cm"
+                    : "当前距离：\(Int(distanceCm)) cm · 请微调近一点至 \(Int(targetCm)) cm"
+        let ratio = (faceDetected && distanceCm > 0) ? min(max((distanceCm - 20) / 40, 0.04), 0.96) : 0.5
 
-        VStack(spacing: 10) {
-            HStack {
-                HStack(spacing: 6) {
-                    Text(isOpen ? "持续睁眼" : "自然眨眼")
-                        .font(EyeStyle.chip)
-                        .foregroundStyle(isOpen ? EyeStyle.warning : EyeStyle.moodGold)
-                        .padding(.horizontal, 11).padding(.vertical, 4)
-                        .background(isOpen ? EyeStyle.warningSoft : EyeStyle.primarySoft, in: EyeStyle.chipShape)
-                    if !isOpen {
-                        Text("\(currentActNumber) / \(totalActs) 幕")
-                            .font(EyeStyle.caption)
-                            .foregroundStyle(EyeStyle.secondary)
-                    }
-                }
-                Spacer()
-                Text("已眨眼 \(blinks) 次")
-                    .font(EyeStyle.chip)
-                    .foregroundStyle(EyeStyle.Game.Theater.tearHighlight)
-                    .padding(.horizontal, 10).padding(.vertical, 4)
-                    .background(EyeStyle.surfaceVariant, in: EyeStyle.chipShape)
-                    .overlay {
-                        EyeStyle.chipShape.strokeBorder(EyeStyle.Game.Theater.tearCyan.opacity(0.35), lineWidth: 1)
-                    }
-                Text("剩余 \(remaining) 秒").font(EyeStyle.subtitle).monospacedDigit()
-            }
-
-            TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: reduceMotion || paused)) { timeline in
-                let t = timeline.date.timeIntervalSinceReferenceDate
-                let sceneSec = Double(DryEyeStoryScript.shared.SCENE_DURATION_SEC)
-                let baseActT = (elapsedFloat.truncatingRemainder(dividingBy: sceneSec)) / sceneSec
-                let actT: CGFloat = reduceMotion ? 0.58 : CGFloat(min(max(progress > 0 ? baseActT : (t.truncatingRemainder(dividingBy: sceneSec) / sceneSec), 0), 1))
-                let wave: CGFloat = reduceMotion ? 0.35 : CGFloat((t.truncatingRemainder(dividingBy: 2.4)) / 2.4)
-                let eqPhase: CGFloat = (reduceMotion || paused || !voiceEnabled) ? 0.4 : CGFloat((t.truncatingRemainder(dividingBy: 0.9)) / 0.9)
-                let segCount = isOpen ? 3 : min(max(totalActs, 1), 12)
-                let activeSeg = isOpen ? min(max(elapsed / 7, 0), 2) : (Int(scene.index) % segCount)
-                let activeFill: CGFloat = isOpen ? CGFloat(min(max((elapsedFloat.truncatingRemainder(dividingBy: 7.0)) / 7.0, 0), 1)) : actT
-                let factBadge: String = isOpen
-                    ? (elapsed >= 14 ? "满级星盾" : elapsed >= 7 ? "暖金护盾" : "青露护盾")
-                    : scene.factTag
-
-                ZStack {
+        VStack(spacing: 0) {
+            TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: reduceMotion)) { timeline in
+                let wave: CGFloat = reduceMotion ? 0.5 : CGFloat(timeline.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 2.6) / 2.6)
+                ZStack(alignment: .top) {
                     Canvas { ctx, size in
-                        if isOpen {
-                            DryEyeCinemaRenderer.drawOpenShield(ctx, size: size, progress: CGFloat(progress), elapsedSec: elapsed, wave: wave, blinkCount: blinks)
-                        } else {
-                            DryEyeCinemaRenderer.drawStoryScene(ctx, size: size, sceneKey: scene.sceneKey, actT: actT, wave: wave)
-                        }
+                        SproutSceneRenderer.drawBackdrop(ctx, size: size, mode: .scenic, wave: wave)
+                        let sc = min(size.width, size.height) / 170
+                        SproutSceneRenderer.drawPottedSprout(ctx, center: CGPoint(x: size.width * 0.44, y: size.height * 0.78), scale: sc, growthStage: 1, wilted: false, wave: wave)
+                        SproutSceneRenderer.drawDropletMascot(ctx, center: CGPoint(x: size.width * 0.74, y: size.height * 0.72 + sin(wave * 2 * .pi) * 4), radius: min(size.width, size.height) * 0.14)
+                        SproutSceneRenderer.drawWaterDrop(ctx, center: CGPoint(x: size.width * 0.63, y: size.height * 0.38 + sin(wave * 2 * .pi) * 5), radius: 8)
+                        SproutSceneRenderer.drawWaterDrop(ctx, center: CGPoint(x: size.width * 0.70, y: size.height * 0.50 - sin(wave * 2 * .pi) * 4), radius: 6)
                     }
-
-                    VStack(spacing: 0) {
-                        // 顶部分段电影时间轴
-                        HStack(spacing: 4) {
-                            ForEach(0..<segCount, id: \.self) { idx in
-                                let fill: CGFloat = idx < activeSeg ? 1 : (idx == activeSeg ? activeFill : 0)
-                                GeometryReader { geo in
-                                    ZStack(alignment: .leading) {
-                                        Capsule().fill(Color.white.opacity(0.2))
-                                        if fill > 0 {
-                                            Capsule()
-                                                .fill(isOpen ? EyeStyle.Game.Theater.tearCyan : EyeStyle.primary)
-                                                .frame(width: geo.size.width * fill)
-                                        }
-                                    }
-                                }
-                                .frame(height: 3)
-                            }
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.top, 8)
-
-                        // 左上剧目名 + 右上科普要点标签
-                        HStack {
-                            Text(isOpen ? "定格挑战 · 守护水膜" : scene.title)
-                                .font(EyeStyle.caption)
-                                .foregroundStyle(EyeStyle.text)
-                                .padding(.horizontal, 10).padding(.vertical, 4)
-                                .background(EyeStyle.Game.Theater.stageDeep.opacity(0.78), in: EyeStyle.chipShape)
-                            Spacer()
-                            Text(factBadge)
-                                .font(EyeStyle.caption)
-                                .foregroundStyle(EyeStyle.Game.Theater.tearHighlight)
-                                .padding(.horizontal, 9).padding(.vertical, 4)
-                                .background(EyeStyle.Game.Theater.stageDeep.opacity(0.78), in: EyeStyle.chipShape)
-                                .overlay {
-                                    EyeStyle.chipShape.strokeBorder(EyeStyle.Game.Theater.tearCyan.opacity(0.4), lineWidth: 1)
-                                }
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.top, 7)
-
-                        Spacer()
-
-                        // 右下角中文语音讲解动态声波指示
-                        HStack {
-                            Spacer()
-                            HStack(spacing: 5) {
-                                Canvas { ctx, size in
-                                    let barW = size.width / 7
-                                    for i in 0..<4 {
-                                        let amp: CGFloat = (voiceEnabled && !paused)
-                                            ? 0.32 + 0.68 * ((sin((eqPhase + CGFloat(i) * 0.24) * 2 * .pi) + 1) * 0.5)
-                                            : 0.25
-                                        let bh = size.height * amp
-                                        let rect = CGRect(x: CGFloat(i) * barW * 1.9, y: (size.height - bh) * 0.5, width: barW, height: bh)
-                                        ctx.fill(RoundedRectangle(cornerRadius: barW * 0.5).path(in: rect),
-                                                 with: .color(voiceEnabled ? EyeStyle.Game.Theater.lipidGold : EyeStyle.tertiary))
-                                    }
-                                }
-                                .frame(width: 16, height: 12)
-                                Text(voiceEnabled ? "中文讲解中" : "静音字幕")
-                                    .font(EyeStyle.caption)
-                                    .foregroundStyle(voiceEnabled ? EyeStyle.Game.Theater.lipidGold : EyeStyle.secondary)
-                            }
-                            .padding(.horizontal, 9).padding(.vertical, 4)
-                            .background(EyeStyle.Game.Theater.stageDeep.opacity(0.76), in: EyeStyle.chipShape)
-                        }
-                        .padding(10)
+                    VStack(spacing: 2) {
+                        Text(title).font(EyeStyle.title).foregroundStyle(EyeStyle.Game.Sprout.cloudWhite)
+                        Text(subtitle).font(EyeStyle.caption).foregroundStyle(EyeStyle.Game.Sprout.cloudWhite.opacity(0.92))
+                    }
+                    .multilineTextAlignment(.center)
+                    .padding(.top, 12).padding(.horizontal, 14)
+                }
+                .frame(height: 172)
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("标准测试距离：\(Int(targetCm)) cm").font(EyeStyle.chip).foregroundStyle(EyeStyle.Game.Sprout.cloudWhite)
+                    Spacer()
+                    Text("可手持，也可放立桌上").font(EyeStyle.caption).foregroundStyle(EyeStyle.Game.Sprout.dropLight)
+                }
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(EyeStyle.Game.Sprout.cloudWhite.opacity(0.22))
+                        Capsule()
+                            .fill(inRange ? EyeStyle.Game.Sprout.badgeStable : EyeStyle.Game.Sprout.dropBlue)
+                            .frame(width: geo.size.width * CGFloat(ratio))
                     }
                 }
-                .stageHeight(250)
-                .background(EyeStyle.Game.Theater.stageBg, in: RoundedRectangle(cornerRadius: EyeStyle.radiusHero, style: .continuous))
-                .clipShape(RoundedRectangle(cornerRadius: EyeStyle.radiusHero, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: EyeStyle.radiusHero, style: .continuous)
-                        .strokeBorder(EyeStyle.glassEdgeTop.opacity(0.45), lineWidth: 1)
-                }
+                .frame(height: 8)
+                Text(distanceLabel)
+                    .font(EyeStyle.bodySecondary)
+                    .foregroundStyle(inRange ? EyeStyle.Game.Sprout.leafBright : EyeStyle.Game.Sprout.cloudWhite)
             }
-
-            // 底部同步电影中文字幕栏
-            VStack(alignment: .leading, spacing: 4) {
-                Text(subtitleHeader).font(EyeStyle.caption).foregroundStyle(EyeStyle.moodGold)
-                Text(subtitleText).font(EyeStyle.body).foregroundStyle(EyeStyle.text)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 16).padding(.vertical, 12)
-            .background(EyeStyle.surfaceVariant, in: RoundedRectangle(cornerRadius: EyeStyle.radiusMedium, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: EyeStyle.radiusMedium, style: .continuous)
-                    .strokeBorder(EyeStyle.borderSubtle, lineWidth: 1)
-            }
-            .animation(.easeInOut(duration: 0.24), value: subtitleText)
+            .background(EyeStyle.Game.Sprout.cardSoilBase.opacity(0.92))
+        }
+        .clipShape(RoundedRectangle(cornerRadius: EyeStyle.radiusHero, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: EyeStyle.radiusHero, style: .continuous)
+                .strokeBorder(EyeStyle.glassEdgeTop.opacity(0.45), lineWidth: 1)
         }
     }
 }
 
-/// 干眼科普 12 幕代码渲染矢量分镜 + 三阶进化睁眼护盾（与 Android DryEyeCinemaTheater 同源同绘）。
-private enum DryEyeCinemaRenderer {
-    static func drawStoryScene(_ ctx: GraphicsContext, size: CGSize, sceneKey: String, actT: CGFloat, wave: CGFloat) {
-        let c = CGPoint(x: size.width * 0.5, y: size.height * 0.56)
-        let u = min(size.width, size.height)
-        let topColor: Color = switch sceneKey {
-        case "RULE_20_20_20", "HYDRATION_NUTRITION": EyeStyle.Game.Theater.skyDay
-        case "NIGHT_LIGHT", "AC_WIND": EyeStyle.Game.Theater.skyNight
-        default: EyeStyle.Game.Theater.stageBg
-        }
-        ctx.fill(Path(CGRect(origin: .zero, size: size)),
-                 with: .linearGradient(Gradient(colors: [topColor, EyeStyle.Game.Theater.stageBg, EyeStyle.Game.Theater.stageDeep]),
-                                       startPoint: CGPoint(x: size.width * 0.5, y: 0),
-                                       endPoint: CGPoint(x: size.width * 0.5, y: size.height)))
-        let glowR = u * 0.72
-        ctx.fill(Path(ellipseIn: CGRect(x: c.x - glowR, y: c.y - glowR, width: glowR * 2, height: glowR * 2)),
-                 with: .radialGradient(Gradient(colors: [EyeStyle.Game.Theater.stageGlow.opacity(0.65), .clear]),
-                                       center: c, startRadius: 0, endRadius: glowR))
-
-        switch sceneKey {
-        case "WATER_WORLD": drawWaterWorld(ctx, size: size, c: c, u: u, actT: actT, wave: wave)
-        case "TEAR_LAYERS": drawTearLayers(ctx, size: size, c: c, u: u, actT: actT, wave: wave)
-        case "SCREEN_VS_TALK": drawScreenVsTalk(ctx, size: size, c: c, u: u, actT: actT, wave: wave)
-        case "TEAR_BREAKUP": drawTearBreakup(ctx, c: c, u: u, actT: actT)
-        case "RULE_20_20_20": drawRule202020(ctx, size: size, u: u, actT: actT, wave: wave)
-        case "WARM_COMPRESS": drawWarmCompress(ctx, size: size, u: u, actT: actT, wave: wave)
-        case "AC_WIND": drawAcWind(ctx, size: size, c: c, u: u, actT: actT, wave: wave)
-        case "SCREEN_ANGLE": drawScreenAngle(ctx, size: size, u: u, actT: actT)
-        case "NIGHT_LIGHT": drawNightLight(ctx, size: size, u: u, actT: actT)
-        case "COMPLETE_BLINK": drawCompleteBlink(ctx, c: c, u: u, actT: actT, wave: wave)
-        case "CONTACT_LENS": drawContactLens(ctx, c: c, u: u, actT: actT, wave: wave)
-        default: drawHydrationNutrition(ctx, size: size, c: c, u: u, actT: actT, wave: wave)
-        }
-    }
-
-    static func drawOpenShield(_ ctx: GraphicsContext, size: CGSize, progress: CGFloat, elapsedSec: Int, wave: CGFloat, blinkCount: Int) {
-        let c = CGPoint(x: size.width * 0.5, y: size.height * 0.55)
-        let u = min(size.width, size.height)
-        let ringR = u * 0.34
-        let pulse = 0.5 + 0.5 * sin(wave * 2 * .pi)
-        let shieldColor: Color = blinkCount > 0 ? EyeStyle.Game.Theater.dryCoral
-            : elapsedSec >= 14 ? EyeStyle.Game.Theater.lipidGold
-            : elapsedSec >= 7 ? EyeStyle.Game.Theater.warmLamp
-            : EyeStyle.Game.Theater.tearCyan
-
-        ctx.fill(Path(CGRect(origin: .zero, size: size)),
-                 with: .linearGradient(Gradient(colors: [EyeStyle.Game.Theater.skyNight, EyeStyle.Game.Theater.stageDeep]),
-                                       startPoint: .zero, endPoint: CGPoint(x: 0, y: size.height)))
-        let haloR = ringR * 1.85
-        ctx.fill(Path(ellipseIn: CGRect(x: c.x - haloR, y: c.y - haloR, width: haloR * 2, height: haloR * 2)),
-                 with: .radialGradient(Gradient(colors: [shieldColor.opacity(0.35 + pulse * 0.14), .clear]),
-                                       center: c, startRadius: 0, endRadius: haloR))
-        for i in 0..<8 {
-            let a = wave * 2 * .pi + CGFloat(i) * (.pi / 4)
-            let pt = CGPoint(x: c.x + cos(a) * ringR * 1.24, y: c.y + sin(a) * ringR * 1.24)
-            let pr = u * 0.016
-            ctx.fill(Path(ellipseIn: CGRect(x: pt.x - pr, y: pt.y - pr, width: pr * 2, height: pr * 2)),
-                     with: .color(shieldColor.opacity(0.55 + 0.35 * CGFloat(i % 2))))
-        }
-        ctx.stroke(Path(ellipseIn: CGRect(x: c.x - ringR, y: c.y - ringR, width: ringR * 2, height: ringR * 2)),
-                   with: .color(shieldColor.opacity(0.22)), lineWidth: u * 0.032)
-        var arc = Path()
-        arc.addArc(center: c, radius: ringR, startAngle: .degrees(-90),
-                   endAngle: .degrees(-90 + 360 * Double(min(max(progress, 0), 1))), clockwise: false)
-        ctx.stroke(arc, with: .color(shieldColor), style: StrokeStyle(lineWidth: u * 0.044, lineCap: .round))
-        drawSmilingDrop(ctx, center: c, radius: u * (0.15 + pulse * 0.012))
-    }
-
-    private static func drawWaterWorld(_ ctx: GraphicsContext, size: CGSize, c: CGPoint, u: CGFloat, actT: CGFloat, wave: CGFloat) {
-        let blink1: CGFloat = (actT >= 0.30 && actT <= 0.42) ? sin(((actT - 0.30) / 0.12) * .pi) : 0
-        let blink2: CGFloat = (actT >= 0.72 && actT <= 0.84) ? sin(((actT - 0.72) / 0.12) * .pi) : 0
-        drawDetailedEye(ctx, center: c, radius: u * 0.34, lidClose: max(blink1, blink2), gazeX: sin(wave * 2 * .pi) * 0.25, dryRatio: 0)
-        for i in 0..<3 {
-            let r = u * (0.37 + CGFloat(i) * 0.065)
-            let startDeg = -145 + Double(actT) * 360 * (i % 2 == 0 ? 1.0 : -0.7)
-            var arc = Path()
-            arc.addArc(center: c, radius: r, startAngle: .degrees(startDeg), endAngle: .degrees(startDeg + 82), clockwise: false)
-            ctx.stroke(arc, with: .color(EyeStyle.Game.Theater.tearCyan.opacity(0.55 - Double(i) * 0.15)),
-                       style: StrokeStyle(lineWidth: 3.2, lineCap: .round))
-        }
-        let arcAngle = -CGFloat.pi * (0.82 - actT * 0.64)
-        let dropPos = CGPoint(x: c.x + cos(arcAngle) * u * 0.42, y: c.y + sin(arcAngle) * u * 0.30)
-        drawSmilingDrop(ctx, center: dropPos, radius: u * 0.082)
-        for i in 0..<6 {
-            let px = size.width * (0.14 + CGFloat(i) * 0.145)
-            let py = size.height * (0.32 + (CGFloat(i) * 0.23 + wave).truncatingRemainder(dividingBy: 0.5))
-            let pr = u * 0.014
-            ctx.fill(Path(ellipseIn: CGRect(x: px - pr, y: py - pr, width: pr * 2, height: pr * 2)),
-                     with: .color(EyeStyle.Game.Theater.tearHighlight.opacity(0.32)))
-        }
-    }
-
-    private static func drawTearLayers(_ ctx: GraphicsContext, size: CGSize, c: CGPoint, u: CGFloat, actT: CGFloat, wave: CGFloat) {
-        let left = size.width * 0.10, right = size.width * 0.90, w = right - left, baseY = size.height * 0.78
-        var cornea = Path()
-        cornea.move(to: CGPoint(x: left, y: size.height * 0.88))
-        cornea.addLine(to: CGPoint(x: left, y: baseY))
-        cornea.addQuadCurve(to: CGPoint(x: right, y: baseY), control: CGPoint(x: c.x, y: baseY - u * 0.08))
-        cornea.addLine(to: CGPoint(x: right, y: size.height * 0.88))
-        cornea.closeSubpath()
-        ctx.fill(cornea, with: .color(EyeStyle.Game.Theater.skinWarm.opacity(0.52)))
-
-        let mucinA = min(max(actT / 0.25, 0.35), 1)
-        let aqueousA = min(max((actT - 0.18) / 0.25, 0.25), 1)
-        let lipidA = min(max((actT - 0.36) / 0.25, 0.25), 1)
-        drawWaveBand(ctx, left: left, right: right, topY: baseY - u * 0.06, thickness: u * 0.09, phase: wave, color: EyeStyle.Game.Theater.mucinViolet.opacity(0.75 * mucinA))
-        drawWaveBand(ctx, left: left, right: right, topY: baseY - u * 0.19, thickness: u * 0.15, phase: wave * 1.4 + 0.3, color: EyeStyle.Game.Theater.tearCyan.opacity(0.78 * aqueousA))
-        drawWaveBand(ctx, left: left, right: right, topY: baseY - u * 0.31, thickness: u * 0.065, phase: wave * 1.1 + 0.6, color: EyeStyle.Game.Theater.lipidGold.opacity(0.92 * lipidA))
-
-        for i in 0..<5 {
-            let cycle = (wave + CGFloat(i) * 0.21).truncatingRemainder(dividingBy: 1)
-            let mx = left + w * (0.16 + CGFloat(i) * 0.17)
-            let my = (baseY - u * 0.14) - sin(cycle * .pi) * u * 0.12
-            let mr = u * 0.022
-            ctx.fill(Path(ellipseIn: CGRect(x: mx - mr, y: my - mr, width: mr * 2, height: mr * 2)),
-                     with: .color(EyeStyle.Game.Theater.tearHighlight.opacity(0.9)))
-        }
-        let legendY = size.height * 0.29
-        let items: [(Color, CGFloat, CGFloat)] = [
-            (EyeStyle.Game.Theater.lipidGold, 0.24, 0.32),
-            (EyeStyle.Game.Theater.tearCyan, 0.50, 0.20),
-            (EyeStyle.Game.Theater.mucinViolet, 0.76, 0.08),
-        ]
-        for (col, rx, drop) in items {
-            let lx = size.width * rx, lr = u * 0.026
-            ctx.fill(Path(ellipseIn: CGRect(x: lx - lr, y: legendY - lr, width: lr * 2, height: lr * 2)), with: .color(col))
-            var line = Path()
-            line.move(to: CGPoint(x: lx, y: legendY + u * 0.03))
-            line.addLine(to: CGPoint(x: lx, y: baseY - u * drop))
-            ctx.stroke(line, with: .color(col.opacity(0.55)), style: StrokeStyle(lineWidth: 2, dash: [6, 6]))
-        }
-    }
-
-    private static func drawScreenVsTalk(_ ctx: GraphicsContext, size: CGSize, c: CGPoint, u: CGFloat, actT: CGFloat, wave: CGFloat) {
-        let leftC = CGPoint(x: size.width * 0.27, y: size.height * 0.50)
-        let rightC = CGPoint(x: size.width * 0.73, y: size.height * 0.50)
-        var divider = Path()
-        divider.move(to: CGPoint(x: c.x, y: size.height * 0.24))
-        divider.addLine(to: CGPoint(x: c.x, y: size.height * 0.86))
-        ctx.stroke(divider, with: .color(EyeStyle.Game.Theater.steam.opacity(0.18)), lineWidth: 2)
-
-        let leftBlink: CGFloat = (wave >= 0.42 && wave <= 0.56) ? sin(((wave - 0.42) / 0.14) * .pi) : 0
-        drawDetailedEye(ctx, center: CGPoint(x: leftC.x, y: leftC.y - u * 0.04), radius: u * 0.18, lidClose: leftBlink, gazeX: 0, dryRatio: 0)
-        let barW = u * 0.12, barMaxH = u * 0.26, barBottom = size.height * 0.85
-        let leftFill = min(0.35 + actT * 0.58, 0.92)
-        ctx.fill(RoundedRectangle(cornerRadius: 6).path(in: CGRect(x: leftC.x - barW * 0.5, y: barBottom - barMaxH, width: barW, height: barMaxH)),
-                 with: .color(EyeStyle.Game.Theater.tearCyan.opacity(0.22)))
-        ctx.fill(RoundedRectangle(cornerRadius: 6).path(in: CGRect(x: leftC.x - barW * 0.5, y: barBottom - barMaxH * leftFill, width: barW, height: barMaxH * leftFill)),
-                 with: .color(EyeStyle.Game.Theater.leafSage))
-
-        drawDetailedEye(ctx, center: CGPoint(x: rightC.x, y: rightC.y - u * 0.04), radius: u * 0.18, lidClose: 0, gazeX: 0, dryRatio: min(max(actT * 0.85, 0.2), 0.9))
-        let rightFill = max(0.72 - actT * 0.44, 0.26)
-        ctx.fill(RoundedRectangle(cornerRadius: 6).path(in: CGRect(x: rightC.x - barW * 0.5, y: barBottom - barMaxH, width: barW, height: barMaxH)),
-                 with: .color(EyeStyle.Game.Theater.dryCoral.opacity(0.22)))
-        ctx.fill(RoundedRectangle(cornerRadius: 6).path(in: CGRect(x: rightC.x - barW * 0.5, y: barBottom - barMaxH * rightFill, width: barW, height: barMaxH * rightFill)),
-                 with: .color(EyeStyle.Game.Theater.dryCoral))
-        for i in 0..<3 {
-            let st = (wave + CGFloat(i) * 0.33).truncatingRemainder(dividingBy: 1)
-            let sx = rightC.x + CGFloat(i - 1) * u * 0.08
-            let sy = rightC.y - u * 0.18 - st * u * 0.18
-            let sr = u * 0.018
-            ctx.stroke(Path(ellipseIn: CGRect(x: sx - sr, y: sy - sr, width: sr * 2, height: sr * 2)),
-                       with: .color(EyeStyle.Game.Theater.dryCoral.opacity((1 - st) * 0.65)), lineWidth: 2)
-        }
-    }
-
-    private static func drawTearBreakup(_ ctx: GraphicsContext, c: CGPoint, u: CGFloat, actT: CGFloat) {
-        let filmR = u * 0.34
-        ctx.fill(Path(ellipseIn: CGRect(x: c.x - filmR, y: c.y - filmR, width: filmR * 2, height: filmR * 2)),
-                 with: .radialGradient(Gradient(colors: [EyeStyle.Game.Theater.tearCyan.opacity(0.78), EyeStyle.Game.Theater.tearDeep.opacity(0.62), EyeStyle.Game.Theater.tearDeep.opacity(0.25)]),
-                                       center: c, startRadius: 0, endRadius: filmR))
-        ctx.stroke(Path(ellipseIn: CGRect(x: c.x - filmR, y: c.y - filmR, width: filmR * 2, height: filmR * 2)),
-                   with: .color(EyeStyle.Game.Theater.tearHighlight.opacity(0.7)), lineWidth: 3)
-
-        let drySeverity: CGFloat = actT < 0.62 ? (actT / 0.62) : actT < 0.88 ? max(0, 1 - (actT - 0.62) / 0.26) : 0
-        if drySeverity > 0.05 {
-            let spots: [(CGPoint, CGFloat)] = [
-                (CGPoint(x: c.x - filmR * 0.34, y: c.y - filmR * 0.12), 0.22),
-                (CGPoint(x: c.x + filmR * 0.28, y: c.y + filmR * 0.18), 0.26),
-                (CGPoint(x: c.x + filmR * 0.06, y: c.y - filmR * 0.32), 0.17),
-            ]
-            for (pt, sc) in spots {
-                let r = filmR * sc * drySeverity
-                ctx.fill(Path(ellipseIn: CGRect(x: pt.x - r, y: pt.y - r, width: r * 2, height: r * 2)),
-                         with: .color(EyeStyle.Game.Theater.dryCoral.opacity(0.72 * drySeverity)))
-                let r2 = r * 1.15
-                ctx.stroke(Path(ellipseIn: CGRect(x: pt.x - r2, y: pt.y - r2, width: r2 * 2, height: r2 * 2)),
-                           with: .color(EyeStyle.Game.Theater.warmLamp.opacity(0.55 * drySeverity)), lineWidth: 2)
-            }
-        }
-        if actT >= 0.60 && actT <= 0.92 {
-            let barY = c.y - filmR + ((actT - 0.60) / 0.32) * filmR * 2
-            var wiper = Path()
-            wiper.move(to: CGPoint(x: c.x - filmR * 1.1, y: barY))
-            wiper.addLine(to: CGPoint(x: c.x + filmR * 1.1, y: barY))
-            ctx.stroke(wiper, with: .color(EyeStyle.Game.Theater.tearHighlight), style: StrokeStyle(lineWidth: 7, lineCap: .round))
-        } else if actT >= 0.90 {
-            drawSparkle(ctx, center: CGPoint(x: c.x - filmR * 0.25, y: c.y - filmR * 0.22), radius: u * 0.055, color: EyeStyle.Game.Theater.tearHighlight)
-            drawSparkle(ctx, center: CGPoint(x: c.x + filmR * 0.30, y: c.y + filmR * 0.10), radius: u * 0.045, color: EyeStyle.Game.Theater.lipidGold)
-        }
-    }
-
-    private static func drawRule202020(_ ctx: GraphicsContext, size: CGSize, u: CGFloat, actT: CGFloat, wave: CGFloat) {
-        let winW = size.width * 0.76, winH = size.height * 0.52
-        let winRect = CGRect(x: (size.width - winW) * 0.5, y: size.height * 0.26, width: winW, height: winH)
-        ctx.fill(RoundedRectangle(cornerRadius: 16).path(in: winRect),
-                 with: .linearGradient(Gradient(colors: [EyeStyle.Game.Theater.skyDay, EyeStyle.Game.Theater.leafSage.opacity(0.5)]),
-                                       startPoint: CGPoint(x: winRect.midX, y: winRect.minY),
-                                       endPoint: CGPoint(x: winRect.midX, y: winRect.maxY)))
-        var mountain = Path()
-        mountain.move(to: CGPoint(x: winRect.minX, y: winRect.maxY))
-        mountain.addLine(to: CGPoint(x: winRect.minX, y: winRect.minY + winH * 0.66))
-        mountain.addQuadCurve(to: CGPoint(x: winRect.minX + winW * 0.56, y: winRect.minY + winH * 0.62),
-                              control: CGPoint(x: winRect.minX + winW * 0.28, y: winRect.minY + winH * 0.30))
-        mountain.addQuadCurve(to: CGPoint(x: winRect.maxX, y: winRect.minY + winH * 0.64),
-                              control: CGPoint(x: winRect.minX + winW * 0.80, y: winRect.minY + winH * 0.36))
-        mountain.addLine(to: CGPoint(x: winRect.maxX, y: winRect.maxY))
-        mountain.closeSubpath()
-        ctx.drawLayer { layerCtx in
-            layerCtx.clip(to: RoundedRectangle(cornerRadius: 16).path(in: winRect))
-            layerCtx.fill(mountain, with: .color(EyeStyle.Game.Theater.leafSage.opacity(0.78)))
-        }
-
-        let sunC = CGPoint(x: winRect.minX + winW * 0.80, y: winRect.minY + winH * 0.28)
-        let haloR = u * 0.11, sunR = u * 0.055
-        ctx.fill(Path(ellipseIn: CGRect(x: sunC.x - haloR, y: sunC.y - haloR, width: haloR * 2, height: haloR * 2)),
-                 with: .color(EyeStyle.Game.Theater.warmLamp.opacity(0.25)))
-        ctx.fill(Path(ellipseIn: CGRect(x: sunC.x - sunR, y: sunC.y - sunR, width: sunR * 2, height: sunR * 2)),
-                 with: .color(EyeStyle.Game.Theater.warmLamp))
-
-        var gaze = Path()
-        gaze.move(to: CGPoint(x: winRect.minX + winW * 0.18, y: winRect.minY + winH * 0.56))
-        gaze.addLine(to: CGPoint(x: winRect.minX + winW * (0.25 + actT * 0.52), y: winRect.minY + winH * (0.56 - actT * 0.24)))
-        ctx.stroke(gaze, with: .color(EyeStyle.Game.Theater.tearHighlight.opacity(0.7)),
-                   style: StrokeStyle(lineWidth: 3, lineCap: .round, dash: [10, 8]))
-        for i in 0..<3 {
-            let rt = (wave + CGFloat(i) * 0.33).truncatingRemainder(dividingBy: 1)
-            let rr = u * (0.04 + rt * 0.15)
-            ctx.stroke(Path(ellipseIn: CGRect(x: sunC.x - rr, y: sunC.y - rr, width: rr * 2, height: rr * 2)),
-                       with: .color(EyeStyle.Game.Theater.tearHighlight.opacity((1 - rt) * 0.55)), lineWidth: 2.2)
-        }
-        ctx.stroke(RoundedRectangle(cornerRadius: 16).path(in: winRect),
-                   with: .color(EyeStyle.Game.Theater.warmLamp.opacity(0.65)), lineWidth: 3.5)
-
-        let relax = min(max(actT, 0), 1)
-        var spring = Path()
-        let sx = winRect.minX + winW * 0.15, sw = winW * (0.35 + relax * 0.35), sy = size.height * 0.85
-        spring.move(to: CGPoint(x: sx, y: sy))
-        for i in 1...8 {
-            let x = sx + sw * (CGFloat(i) / 8)
-            let y = sy + (i % 2 == 0 ? -1 : 1) * u * (0.045 - relax * 0.025)
-            spring.addLine(to: CGPoint(x: x, y: y))
-        }
-        ctx.stroke(spring, with: .color(relax > 0.45 ? EyeStyle.Game.Theater.leafSage : EyeStyle.Game.Theater.dryCoral),
-                   style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
-    }
-
-    private static func drawWarmCompress(_ ctx: GraphicsContext, size: CGSize, u: CGFloat, actT: CGFloat, wave: CGFloat) {
-        let melt = min(max((actT - 0.22) / 0.60, 0), 1)
-        let baseY = size.height * 0.84, glandTop = size.height * 0.56
-        for i in 0..<6 {
-            let gx = size.width * (0.20 + CGFloat(i) * 0.12)
-            ctx.fill(RoundedRectangle(cornerRadius: 12).path(in: CGRect(x: gx - u * 0.032, y: glandTop, width: u * 0.064, height: baseY - glandTop)),
-                     with: .color(EyeStyle.Game.Theater.skinWarm.opacity(0.35)))
-            let beadY = glandTop + (baseY - glandTop) * (0.55 - melt * 0.55) - melt * u * 0.10 * (wave + CGFloat(i) * 0.17).truncatingRemainder(dividingBy: 1)
-            let br = u * (0.024 + melt * 0.008)
-            ctx.fill(Path(ellipseIn: CGRect(x: gx - br, y: beadY - br, width: br * 2, height: br * 2)),
-                     with: .color(melt > 0.35 ? EyeStyle.Game.Theater.lipidGold : EyeStyle.Game.Theater.steam.opacity(0.85)))
-        }
-        let towelRect = CGRect(x: size.width * 0.22, y: size.height * 0.29, width: size.width * 0.56, height: u * 0.17)
-        ctx.fill(RoundedRectangle(cornerRadius: 24).path(in: towelRect),
-                 with: .linearGradient(Gradient(colors: [EyeStyle.Game.Theater.dryCoral.opacity(0.72), EyeStyle.Game.Theater.warmLamp.opacity(0.88), EyeStyle.Game.Theater.dryCoral.opacity(0.72)]),
-                                       startPoint: CGPoint(x: towelRect.minX, y: towelRect.midY),
-                                       endPoint: CGPoint(x: towelRect.maxX, y: towelRect.midY)))
-        for i in 0..<4 {
-            let sx = size.width * (0.30 + CGFloat(i) * 0.13)
-            let drift = sin((wave + CGFloat(i) * 0.25) * 2 * .pi) * u * 0.028
-            var steam = Path()
-            steam.move(to: CGPoint(x: sx, y: glandTop - u * 0.02))
-            steam.addQuadCurve(to: CGPoint(x: sx - drift * 0.7, y: towelRect.maxY),
-                               control: CGPoint(x: sx + drift, y: glandTop - u * 0.09))
-            ctx.stroke(steam, with: .color(EyeStyle.Game.Theater.warmLamp.opacity(0.48 + melt * 0.35)),
-                       style: StrokeStyle(lineWidth: 3, lineCap: .round))
-        }
-    }
-
-    private static func drawAcWind(_ ctx: GraphicsContext, size: CGSize, c: CGPoint, u: CGFloat, actT: CGFloat, wave: CGFloat) {
-        let fixed = actT > 0.45
-        drawDetailedEye(ctx, center: CGPoint(x: c.x, y: c.y + u * 0.04), radius: u * 0.24, lidClose: 0, gazeX: 0, dryRatio: fixed ? 0 : 0.7)
-        for i in 0..<3 {
-            let y0 = size.height * (0.42 + CGFloat(i) * 0.10)
-            let endY = fixed ? size.height * (0.24 + CGFloat(i) * 0.05) : y0
-            var wind = Path()
-            wind.move(to: CGPoint(x: size.width * 0.06, y: y0))
-            wind.addQuadCurve(to: CGPoint(x: size.width * 0.34, y: endY),
-                              control: CGPoint(x: size.width * 0.22, y: (y0 + endY) * 0.5 - u * 0.04))
-            ctx.stroke(wind, with: .color(EyeStyle.Game.Theater.coldWind.opacity(0.75)),
-                       style: StrokeStyle(lineWidth: 3.5, lineCap: .round, dash: [12, 8], dashPhase: -wave * 40))
-        }
-        if fixed {
-            let humC = CGPoint(x: size.width * 0.80, y: size.height * 0.74)
-            ctx.fill(RoundedRectangle(cornerRadius: 14).path(in: CGRect(x: humC.x - u * 0.09, y: humC.y - u * 0.08, width: u * 0.18, height: u * 0.18)),
-                     with: .color(EyeStyle.Game.Theater.tearDeep))
-            for i in 0..<5 {
-                let mt = (wave + CGFloat(i) * 0.2).truncatingRemainder(dividingBy: 1)
-                let mp = CGPoint(x: humC.x - mt * u * 0.22 + sin(mt * 5) * u * 0.03, y: humC.y - u * 0.12 - mt * u * 0.32)
-                let mr = u * (0.022 + mt * 0.02)
-                ctx.fill(Path(ellipseIn: CGRect(x: mp.x - mr, y: mp.y - mr, width: mr * 2, height: mr * 2)),
-                         with: .color(EyeStyle.Game.Theater.tearHighlight.opacity((1 - mt) * 0.75)))
-            }
-        }
-    }
-
-    private static func drawScreenAngle(_ ctx: GraphicsContext, size: CGSize, u: CGFloat, actT: CGFloat) {
-        let lowered = min(max((actT - 0.25) / 0.45, 0), 1)
-        let eyePos = CGPoint(x: size.width * 0.28, y: size.height * 0.48)
-        let screenPos = CGPoint(x: size.width * 0.76, y: size.height * (0.44 + lowered * 0.22))
-        var horiz = Path()
-        horiz.move(to: eyePos); horiz.addLine(to: CGPoint(x: size.width * 0.82, y: eyePos.y))
-        ctx.stroke(horiz, with: .color(EyeStyle.Game.Theater.steam.opacity(0.28)), style: StrokeStyle(lineWidth: 2, dash: [8, 8]))
-        var sight = Path()
-        sight.move(to: eyePos); sight.addLine(to: screenPos)
-        ctx.stroke(sight, with: .color(lowered > 0.5 ? EyeStyle.Game.Theater.leafSage : EyeStyle.Game.Theater.dryCoral),
-                   style: StrokeStyle(lineWidth: 4, lineCap: .round))
-        drawDetailedEye(ctx, center: eyePos, radius: u * 0.19, lidClose: lowered * 0.34, gazeX: 0.5, dryRatio: (1 - lowered) * 0.65)
-        ctx.fill(RoundedRectangle(cornerRadius: 8).path(in: CGRect(x: screenPos.x - u * 0.04, y: screenPos.y - u * 0.14, width: u * 0.08, height: u * 0.28)),
-                 with: .color(EyeStyle.Game.Theater.tearCyan.opacity(0.85)))
-    }
-
-    private static func drawNightLight(_ ctx: GraphicsContext, size: CGSize, u: CGFloat, actT: CGFloat) {
-        let lampOn = min(max((actT - 0.35) / 0.35, 0), 1)
-        let lampGlowC = CGPoint(x: size.width * 0.24, y: size.height * 0.45)
-        if lampOn > 0.05 {
-            let r = u * 0.72
-            ctx.fill(Path(ellipseIn: CGRect(x: lampGlowC.x - r, y: lampGlowC.y - r, width: r * 2, height: r * 2)),
-                     with: .radialGradient(Gradient(colors: [EyeStyle.Game.Theater.warmLamp.opacity(0.42 * lampOn), .clear]),
-                                           center: lampGlowC, startRadius: 0, endRadius: r))
-        }
-        let lampC = CGPoint(x: size.width * 0.24, y: size.height * 0.48)
-        var shade = Path()
-        shade.move(to: CGPoint(x: lampC.x - u * 0.10, y: lampC.y + u * 0.06))
-        shade.addLine(to: CGPoint(x: lampC.x - u * 0.06, y: lampC.y - u * 0.07))
-        shade.addLine(to: CGPoint(x: lampC.x + u * 0.06, y: lampC.y - u * 0.07))
-        shade.addLine(to: CGPoint(x: lampC.x + u * 0.10, y: lampC.y + u * 0.06))
-        shade.closeSubpath()
-        ctx.fill(shade, with: .color(lampOn > 0.2 ? EyeStyle.Game.Theater.warmLamp : EyeStyle.Game.Theater.steam.opacity(0.35)))
-        var stand = Path()
-        stand.move(to: CGPoint(x: lampC.x, y: lampC.y + u * 0.06)); stand.addLine(to: CGPoint(x: lampC.x, y: size.height * 0.80))
-        ctx.stroke(stand, with: .color(EyeStyle.Game.Theater.steam.opacity(0.55)), lineWidth: 5)
-        drawDetailedEye(ctx, center: CGPoint(x: size.width * 0.62, y: size.height * 0.54), radius: u * 0.24, lidClose: 0, gazeX: 0, dryRatio: (1 - lampOn) * 0.75)
-    }
-
-    private static func drawCompleteBlink(_ ctx: GraphicsContext, c: CGPoint, u: CGFloat, actT: CGFloat, wave: CGFloat) {
-        let isComplete = actT >= 0.46
-        let lid: CGFloat
-        if !isComplete {
-            lid = 0.5 * ((sin(wave * 4 * .pi) + 1) * 0.5)
-        } else {
-            let cyc = (actT - 0.46) / 0.54
-            lid = (cyc >= 0.2 && cyc <= 0.7) ? sin(((cyc - 0.2) / 0.5) * .pi) : 0
-        }
-        drawDetailedEye(ctx, center: c, radius: u * 0.32, lidClose: lid, gazeX: 0, dryRatio: isComplete ? 0 : 0.55)
-        if isComplete && lid > 0.65 {
-            for i in -2...2 {
-                let r = u * 0.025
-                let px = c.x + CGFloat(i) * u * 0.10, py = c.y + u * 0.04
-                ctx.fill(Path(ellipseIn: CGRect(x: px - r, y: py - r, width: r * 2, height: r * 2)),
-                         with: .color(EyeStyle.Game.Theater.lipidGold))
-            }
-        }
-    }
-
-    private static func drawContactLens(_ ctx: GraphicsContext, c: CGPoint, u: CGFloat, actT: CGFloat, wave: CGFloat) {
-        let removed = min(max((actT - 0.38) / 0.32, 0), 1)
-        drawDetailedEye(ctx, center: c, radius: u * 0.28, lidClose: 0, gazeX: 0, dryRatio: (1 - removed) * 0.5)
-        if removed < 0.95 {
-            let lensC = CGPoint(x: c.x + removed * u * 0.38, y: c.y - removed * u * 0.28)
-            let r = u * 0.16
-            ctx.stroke(Path(ellipseIn: CGRect(x: lensC.x - r, y: lensC.y - r, width: r * 2, height: r * 2)),
-                       with: .color(EyeStyle.Game.Theater.tearHighlight.opacity((1 - removed) * 0.55)), lineWidth: 3.5)
-        }
-        let count = removed > 0.3 ? 7 : 2
-        for i in 0..<count {
-            let a = CGFloat(i) * (2 * .pi / CGFloat(count)) + wave * 2 * .pi
-            let dist = u * (0.44 - removed * 0.14)
-            let bx = c.x + cos(a) * dist, by = c.y + sin(a) * dist * 0.72, br = u * 0.026
-            ctx.stroke(Path(ellipseIn: CGRect(x: bx - br, y: by - br, width: br * 2, height: br * 2)),
-                       with: .color(EyeStyle.Game.Theater.tearHighlight.opacity(0.72)), lineWidth: 2.2)
-        }
-    }
-
-    private static func drawHydrationNutrition(_ ctx: GraphicsContext, size: CGSize, c: CGPoint, u: CGFloat, actT: CGFloat, wave: CGFloat) {
-        let cupC = CGPoint(x: size.width * 0.30, y: size.height * 0.58)
-        let cupW = u * 0.26, cupH = u * 0.32, fillH = cupH * (0.30 + actT * 0.58)
-        ctx.fill(RoundedRectangle(cornerRadius: 10).path(in: CGRect(x: cupC.x - cupW * 0.45, y: cupC.y + cupH * 0.46 - fillH, width: cupW * 0.90, height: fillH)),
-                 with: .color(EyeStyle.Game.Theater.tearCyan.opacity(0.78)))
-        ctx.stroke(RoundedRectangle(cornerRadius: 14).path(in: CGRect(x: cupC.x - cupW * 0.5, y: cupC.y - cupH * 0.5, width: cupW, height: cupH)),
-                   with: .color(EyeStyle.Game.Theater.tearHighlight.opacity(0.85)), lineWidth: 3.5)
-        let rightC = CGPoint(x: size.width * 0.68, y: size.height * 0.56)
-        drawDetailedEye(ctx, center: rightC, radius: u * 0.22, lidClose: 0, gazeX: 0, dryRatio: 0)
-        drawSparkle(ctx, center: CGPoint(x: rightC.x + u * 0.22, y: rightC.y - u * 0.22), radius: u * 0.055, color: EyeStyle.Game.Theater.lipidGold)
-        for i in 0..<4 {
-            let ft = (wave + CGFloat(i) * 0.25).truncatingRemainder(dividingBy: 1)
-            let px = cupC.x + cupW * 0.5 + ft * (rightC.x - cupC.x - cupW * 0.7)
-            let py = c.y - sin(ft * .pi) * u * 0.16
-            let pr = u * 0.024
-            ctx.fill(Path(ellipseIn: CGRect(x: px - pr, y: py - pr, width: pr * 2, height: pr * 2)),
-                     with: .color(i % 2 == 0 ? EyeStyle.Game.Theater.tearCyan : EyeStyle.Game.Theater.lipidGold))
-        }
-    }
-
-    private static func drawDetailedEye(_ ctx: GraphicsContext, center: CGPoint, radius: CGFloat, lidClose: CGFloat, gazeX: CGFloat, dryRatio: CGFloat) {
-        let open = min(max(1 - lidClose, 0), 1)
-        let w = radius * 1.82
-        let h = radius * 1.12 * max(open, 0.14)
-        if open < 0.22 {
-            var closed = Path()
-            closed.move(to: CGPoint(x: center.x - w * 0.48, y: center.y))
-            closed.addQuadCurve(to: CGPoint(x: center.x + w * 0.48, y: center.y),
-                                control: CGPoint(x: center.x, y: center.y + radius * 0.38))
-            ctx.stroke(closed, with: .color(EyeStyle.Game.Theater.warmLamp), style: StrokeStyle(lineWidth: radius * 0.11, lineCap: .round))
-            return
-        }
-        var contour = Path()
-        contour.move(to: CGPoint(x: center.x - w * 0.5, y: center.y))
-        contour.addQuadCurve(to: CGPoint(x: center.x + w * 0.5, y: center.y), control: CGPoint(x: center.x, y: center.y - h))
-        contour.addQuadCurve(to: CGPoint(x: center.x - w * 0.5, y: center.y), control: CGPoint(x: center.x, y: center.y + h))
-        contour.closeSubpath()
-        ctx.fill(contour, with: .color(EyeStyle.Game.Theater.steam))
-        let rim = dryRatio > 0.4 ? EyeStyle.Game.Theater.dryCoral : EyeStyle.Game.Theater.tearCyan
-        ctx.stroke(contour, with: .color(rim.opacity(0.78)), style: StrokeStyle(lineWidth: radius * 0.085, lineJoin: .round))
-
-        let irisC = CGPoint(x: center.x + gazeX * radius * 0.22, y: center.y)
-        let irisR = radius * 0.39 * max(open, 0.55)
-        ctx.fill(Path(ellipseIn: CGRect(x: irisC.x - irisR, y: irisC.y - irisR, width: irisR * 2, height: irisR * 2)),
-                 with: .radialGradient(Gradient(colors: [EyeStyle.Game.Theater.tearCyan, EyeStyle.Game.Theater.tearDeep, EyeStyle.Game.Theater.skyNight]),
-                                       center: irisC, startRadius: 0, endRadius: irisR))
-        for i in 0..<12 {
-            let a = CGFloat(i) * (2 * .pi / 12)
-            var ray = Path()
-            ray.move(to: CGPoint(x: irisC.x + cos(a) * irisR * 0.48, y: irisC.y + sin(a) * irisR * 0.48))
-            ray.addLine(to: CGPoint(x: irisC.x + cos(a) * irisR * 0.90, y: irisC.y + sin(a) * irisR * 0.90))
-            ctx.stroke(ray, with: .color(EyeStyle.Game.Theater.tearHighlight.opacity(0.22)), lineWidth: 1.6)
-        }
-        let pr = irisR * 0.48
-        ctx.fill(Path(ellipseIn: CGRect(x: irisC.x - pr, y: irisC.y - pr, width: pr * 2, height: pr * 2)),
-                 with: .color(EyeStyle.Game.Firefly.bodyDark))
-        let hr1 = irisR * 0.24
-        ctx.fill(Path(ellipseIn: CGRect(x: irisC.x - irisR * 0.28 - hr1, y: irisC.y - irisR * 0.26 - hr1, width: hr1 * 2, height: hr1 * 2)),
-                 with: .color(EyeStyle.Game.Theater.tearHighlight))
-        let hr2 = irisR * 0.10
-        ctx.fill(Path(ellipseIn: CGRect(x: irisC.x + irisR * 0.22 - hr2, y: irisC.y + irisR * 0.20 - hr2, width: hr2 * 2, height: hr2 * 2)),
-                 with: .color(EyeStyle.Game.Theater.tearHighlight.opacity(0.65)))
-    }
-
-    private static func drawSmilingDrop(_ ctx: GraphicsContext, center: CGPoint, radius: CGFloat) {
-        var drop = Path()
-        drop.move(to: CGPoint(x: center.x, y: center.y - radius * 1.25))
-        drop.addCurve(to: CGPoint(x: center.x + radius * 0.90, y: center.y + radius * 0.55),
-                      control1: CGPoint(x: center.x + radius * 0.45, y: center.y - radius * 0.45),
-                      control2: CGPoint(x: center.x + radius * 0.95, y: center.y + radius * 0.15))
-        drop.addCurve(to: CGPoint(x: center.x - radius * 0.90, y: center.y + radius * 0.55),
-                      control1: CGPoint(x: center.x + radius * 0.85, y: center.y + radius * 1.05),
-                      control2: CGPoint(x: center.x - radius * 0.85, y: center.y + radius * 1.05))
-        drop.addCurve(to: CGPoint(x: center.x, y: center.y - radius * 1.25),
-                      control1: CGPoint(x: center.x - radius * 0.95, y: center.y + radius * 0.15),
-                      control2: CGPoint(x: center.x - radius * 0.45, y: center.y - radius * 0.45))
-        drop.closeSubpath()
-        ctx.fill(drop, with: .linearGradient(Gradient(colors: [EyeStyle.Game.Theater.tearHighlight, EyeStyle.Game.Theater.tearCyan, EyeStyle.Game.Theater.tearDeep]),
-                                             startPoint: CGPoint(x: center.x, y: center.y - radius * 1.2),
-                                             endPoint: CGPoint(x: center.x, y: center.y + radius)))
-        let er = radius * 0.11
-        ctx.fill(Path(ellipseIn: CGRect(x: center.x - radius * 0.25 - er, y: center.y + radius * 0.26 - er, width: er * 2, height: er * 2)),
-                 with: .color(EyeStyle.Game.Firefly.bodyDark))
-        ctx.fill(Path(ellipseIn: CGRect(x: center.x + radius * 0.25 - er, y: center.y + radius * 0.26 - er, width: er * 2, height: er * 2)),
-                 with: .color(EyeStyle.Game.Firefly.bodyDark))
-        var mouth = Path()
-        mouth.move(to: CGPoint(x: center.x - radius * 0.18, y: center.y + radius * 0.46))
-        mouth.addQuadCurve(to: CGPoint(x: center.x + radius * 0.18, y: center.y + radius * 0.46),
-                           control: CGPoint(x: center.x, y: center.y + radius * 0.64))
-        ctx.stroke(mouth, with: .color(EyeStyle.Game.Firefly.bodyDark), style: StrokeStyle(lineWidth: radius * 0.08, lineCap: .round))
-    }
-
-    private static func drawWaveBand(_ ctx: GraphicsContext, left: CGFloat, right: CGFloat, topY: CGFloat, thickness: CGFloat, phase: CGFloat, color: Color) {
-        let steps = 16, w = right - left, amp = thickness * 0.20
-        var p = Path()
-        p.move(to: CGPoint(x: left, y: topY + thickness))
-        for i in 0...steps {
-            let f = CGFloat(i) / CGFloat(steps)
-            let x = left + w * f
-            let y = topY + sin((f * 2.5 + phase) * 2 * .pi) * amp
-            p.addLine(to: CGPoint(x: x, y: y))
-        }
-        p.addLine(to: CGPoint(x: right, y: topY + thickness))
-        p.closeSubpath()
-        ctx.fill(p, with: .color(color))
-    }
-
-    private static func drawSparkle(_ ctx: GraphicsContext, center: CGPoint, radius: CGFloat, color: Color) {
-        let inner = radius * 0.28
-        var p = Path()
-        p.move(to: CGPoint(x: center.x, y: center.y - radius))
-        p.addQuadCurve(to: CGPoint(x: center.x + radius, y: center.y), control: CGPoint(x: center.x + inner * 0.3, y: center.y - inner * 0.3))
-        p.addQuadCurve(to: CGPoint(x: center.x, y: center.y + radius), control: CGPoint(x: center.x + inner * 0.3, y: center.y + inner * 0.3))
-        p.addQuadCurve(to: CGPoint(x: center.x - radius, y: center.y), control: CGPoint(x: center.x - inner * 0.3, y: center.y + inner * 0.3))
-        p.addQuadCurve(to: CGPoint(x: center.x, y: center.y - radius), control: CGPoint(x: center.x - inner * 0.3, y: center.y - inner * 0.3))
-        p.closeSubpath()
-        ctx.fill(p, with: .color(color))
-    }
-}
-
-/// 老视自测：矢车菊蓝信封舞台 + 下方四方向复古墨绿邮筒作答台。
-private struct PostOfficeAnswerPad: View {
+/// 看 E 浇水挑战主舞台（干眼与老视共用）：E 字四周紧贴环绕四方向箭头，不保留底部四向按钮行。
+private struct SproutWateringAnswerPadView: View {
     @ObservedObject var runtime: EyeRuntime
+    let stageBadge: String
+    let stageHeadline: String
+    @State private var mode: SproutBackdropMode = .clean
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         let visible = runtime.bool("trialVisible")
-        VStack(spacing: 12) {
-            PostOfficeEnvelopeView(runtime: runtime)
-                .stageHeight(max(196, CGFloat(runtime.number("optotypePx")) / UIScreen.main.scale + 104))
-            HStack(spacing: 8) {
-                postbox("向上", 3)
-                postbox("向下", 1)
-                postbox("向左", 2)
-                postbox("向右", 0)
+        let edge = max(0, CGFloat(runtime.number("optotypePx")) / UIScreen.main.scale)
+        let direction = Int(runtime.number("direction"))
+        let correctCount = Int(runtime.number("correctCount"))
+        let wrongCount = Int(runtime.number("wrongCount"))
+        let lastCorrect = runtime.state["lastAnswerCorrect"] as? Bool
+        let growthStage = correctCount >= 12 ? 4 : correctCount >= 8 ? 3 : correctCount >= 4 ? 2 : correctCount >= 1 ? 1 : 0
+        let wilted = (lastCorrect == false) && wrongCount > correctCount
+        let isClean = mode == .clean
+        let optotypeColor = isClean ? EyeStyle.Game.Sprout.optotypeInk : EyeStyle.Game.Sprout.cloudWhite
+        let headlineColor = isClean ? EyeStyle.Game.Sprout.arrowDark : EyeStyle.Game.Sprout.cloudWhite
+        let statusText: String = lastCorrect == true
+            ? "浇水成功！已浇 \(correctCount) 滴，小芽正在长大"
+            : lastCorrect == false
+                ? "水滴蒸发了，看清 E 开口方向再给小芽浇水"
+                : "答对浇水让小芽长大 · 可手持或放立桌上"
+        let centerBox = max(82, edge + 20)
+
+        VStack(spacing: 10) {
+            ZStack {
+                TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: reduceMotion)) { timeline in
+                    let wave: CGFloat = reduceMotion ? 0.25 : CGFloat(timeline.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 3.4) / 3.4)
+                    Canvas { ctx, size in
+                        SproutSceneRenderer.drawBackdrop(ctx, size: size, mode: mode, wave: wave)
+                        let sc = min(max(min(size.width, size.height) / 310, 0.8), 1.35)
+                        let sproutCenter = CGPoint(x: size.width * (isClean ? 0.50 : 0.44), y: size.height * 0.87)
+                        if isClean {
+                            SproutSceneRenderer.drawLakeIslandSprout(ctx, center: sproutCenter, scale: sc, growthStage: growthStage, wilted: wilted, wave: wave)
+                            SproutSceneRenderer.drawWaterDrop(ctx, center: CGPoint(x: sproutCenter.x, y: sproutCenter.y - 50 + sin(wave * 2 * .pi) * 3), radius: 8.5)
+                        } else {
+                            SproutSceneRenderer.drawPottedSprout(ctx, center: sproutCenter, scale: sc, growthStage: growthStage, wilted: wilted, wave: wave)
+                            SproutSceneRenderer.drawDropletMascot(ctx, center: CGPoint(x: size.width * 0.74, y: size.height * 0.84 + sin(wave * 2 * .pi) * 3), radius: min(size.width, size.height) * 0.082)
+                        }
+                    }
+                }
+
+                VStack(spacing: 6) {
+                    HStack {
+                        HStack(spacing: 6) {
+                            Text(stageBadge)
+                                .font(EyeStyle.chip)
+                                .foregroundStyle(EyeStyle.Game.Sprout.cloudWhite)
+                                .padding(.horizontal, 10).padding(.vertical, 4)
+                                .background(EyeStyle.Game.Sprout.badgeStable, in: EyeStyle.chipShape)
+                            Text("浇水 \(correctCount) 滴")
+                                .font(EyeStyle.caption)
+                                .foregroundStyle(EyeStyle.Game.Sprout.dropLight)
+                                .padding(.horizontal, 9).padding(.vertical, 4)
+                                .background(EyeStyle.Game.Sprout.cardSoilBase.opacity(0.72), in: EyeStyle.chipShape)
+                        }
+                        Spacer()
+                        Button {
+                            mode = isClean ? .scenic : .clean
+                        } label: {
+                            Text(isClean ? "切湖景背景" : "切清爽背景")
+                                .font(EyeStyle.caption)
+                                .foregroundStyle(EyeStyle.Game.Sprout.cloudWhite)
+                                .padding(.horizontal, 10).padding(.vertical, 4)
+                                .background(EyeStyle.Game.Sprout.cardSoilBase.opacity(0.72), in: EyeStyle.chipShape)
+                                .overlay { EyeStyle.chipShape.strokeBorder(EyeStyle.Game.Sprout.cloudWhite.opacity(0.35), lineWidth: 1) }
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    if !stageHeadline.isEmpty {
+                        Text(stageHeadline).font(EyeStyle.subtitle).foregroundStyle(headlineColor).multilineTextAlignment(.center)
+                    }
+
+                    // 中央 E 字周围紧贴环绕上/下/左/右四向大箭头
+                    VStack(spacing: 4) {
+                        arrowButton("向上", 3, visible: visible)
+                        HStack(spacing: 8) {
+                            arrowButton("向左", 2, visible: visible)
+                            ZStack {
+                                if !isClean {
+                                    Circle().fill(EyeStyle.Game.Sprout.arrowDark.opacity(visible ? 0.22 : 0.10))
+                                }
+                                if visible && edge > 0 {
+                                    Canvas { ctx, sz in
+                                        Cartoon.tumblingE(ctx, color: optotypeColor, center: CGPoint(x: sz.width * 0.5, y: sz.height * 0.5), edge: edge, direction: direction)
+                                    }
+                                    .frame(width: centerBox, height: centerBox)
+                                } else {
+                                    Text("方向?").font(EyeStyle.caption).foregroundStyle(headlineColor.opacity(0.65))
+                                }
+                            }
+                            .frame(width: centerBox, height: centerBox)
+                            arrowButton("向右", 0, visible: visible)
+                        }
+                        arrowButton("向下", 1, visible: visible)
+                    }
+
+                    Spacer(minLength: 70)
+
+                    Text(statusText)
+                        .font(EyeStyle.caption)
+                        .foregroundStyle(lastCorrect == false ? EyeStyle.Game.Sprout.daisyCenter : EyeStyle.Game.Sprout.cloudWhite)
+                        .padding(.horizontal, 12).padding(.vertical, 4)
+                        .background(EyeStyle.Game.Sprout.cardSoilBase.opacity(0.78), in: EyeStyle.chipShape)
+                }
+                .padding(.horizontal, 12).padding(.vertical, 10)
             }
+            .stageHeight(max(316, edge + 236))
+            .clipShape(RoundedRectangle(cornerRadius: EyeStyle.radiusHero, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: EyeStyle.radiusHero, style: .continuous)
+                    .strokeBorder(EyeStyle.glassEdgeTop.opacity(0.45), lineWidth: 1)
+            }
+            .onChange(of: runtime.number("trialId")) { id in runtime.schedulePresented(Int32(id)) }
+            .onAppear { runtime.schedulePresented(Int32(runtime.number("trialId"))) }
+
+            // 不保留底部四方向键，仅保留次要「看不清 · 跳过」胶囊
             Button { runtime.answer(-1) } label: {
                 Text("看不清 · 跳过")
                     .font(EyeStyle.bodySecondary.weight(.semibold))
@@ -1558,71 +1073,403 @@ private struct PostOfficeAnswerPad: View {
         }
     }
 
-    private func postbox(_ label: String, _ direction: Int) -> some View {
-        let visible = runtime.bool("trialVisible")
+    private func arrowButton(_ label: String, _ direction: Int, visible: Bool) -> some View {
         let matched = visible && (runtime.state["gestureDirection"] as? NSNumber)?.intValue == direction
         let holding = matched && !runtime.bool("gestureNeedsRelease")
+        let progress = holding ? max(0.12, min(1, runtime.number("gestureProgress"))) : 0
         return Button { runtime.answer(direction) } label: {
             ZStack {
-                Canvas { ctx, size in
-                    let w = size.width, h = size.height
-                    ctx.fill(RoundedRectangle(cornerRadius: 16).path(in: CGRect(x: 0, y: 0, width: w, height: h * 0.42)),
-                             with: .color(EyeStyle.Game.PostOffice.boxTop))
-                    ctx.fill(RoundedRectangle(cornerRadius: 10).path(in: CGRect(x: 0, y: h * 0.24, width: w, height: h * 0.76)),
-                             with: .color(EyeStyle.Game.PostOffice.boxBody))
-                    ctx.fill(RoundedRectangle(cornerRadius: 4).path(in: CGRect(x: w * 0.18, y: h * 0.13, width: w * 0.64, height: h * 0.085)),
-                             with: .color(EyeStyle.Game.PostOffice.boxSlot))
-                    ctx.fill(RoundedRectangle(cornerRadius: 6).path(in: CGRect(x: w * 0.10, y: h * 0.34, width: w * 0.80, height: h * 0.56)),
-                             with: .color(EyeStyle.Game.PostOffice.boxSlot.opacity(0.45)))
-                    ctx.stroke(RoundedRectangle(cornerRadius: 12).path(in: CGRect(x: 1.5, y: 1.5, width: w - 3, height: h - 3)),
-                               with: .color(holding ? EyeStyle.primary : EyeStyle.Game.PostOffice.boxSlot), lineWidth: holding ? 2.5 : 1.5)
+                Circle()
+                    .fill(holding ? EyeStyle.primary : EyeStyle.Game.Sprout.arrowSurface.opacity(0.94))
+                    .overlay {
+                        Circle().strokeBorder(holding ? EyeStyle.primary : EyeStyle.Game.Sprout.arrowDark.opacity(0.22), lineWidth: holding ? 2.5 : 1.5)
+                    }
+                if holding {
+                    Circle().trim(from: 0, to: CGFloat(progress))
+                        .stroke(EyeStyle.Game.Sprout.cloudWhite, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                        .padding(3)
                 }
                 ArrowGlyph()
-                    .stroke(holding ? EyeStyle.moodGold : Color.white,
-                            style: StrokeStyle(lineWidth: 26 * 0.14, lineCap: .round, lineJoin: .round))
+                    .stroke(holding ? EyeStyle.Game.Sprout.cloudWhite : EyeStyle.Game.Sprout.arrowDark,
+                            style: StrokeStyle(lineWidth: 26 * 0.16, lineCap: .round, lineJoin: .round))
                     .frame(width: 26, height: 26)
                     .rotationEffect(.degrees(Double(direction) * 90))
-                    .padding(.top, 18)
             }
-            .frame(maxWidth: .infinity).frame(height: 74)
-            .opacity(visible ? 1 : 0.4)
+            .frame(width: 52, height: 52)
+            .opacity(visible ? 1 : 0.42)
         }
-        .buttonStyle(PressScale(scale: 0.93))
+        .buttonStyle(PressScale(scale: 0.90))
         .disabled(!visible)
         .accessibilityLabel(label)
     }
 }
 
-private struct PostOfficeEnvelopeView: View {
+/// 第二关「慢慢靠近」移近法互动舞台（对齐安卓 SproutPushUpStage 与参考图 4）。
+private struct SproutPushUpStageView: View {
     @ObservedObject var runtime: EyeRuntime
+    @State private var mode: SproutBackdropMode = .scenic
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         let visible = runtime.bool("trialVisible")
-        Canvas { ctx, size in
-            let w = size.width, h = size.height
-            ctx.fill(Path(CGRect(origin: .zero, size: size)),
-                     with: .linearGradient(Gradient(colors: [EyeStyle.Game.PostOffice.skyTop, EyeStyle.Game.PostOffice.skyMid, EyeStyle.Game.PostOffice.skyBottom]),
-                                           startPoint: .zero, endPoint: CGPoint(x: 0, y: h)))
-            let envW = min(w * 0.72, h * 1.48), envH = min(h * 0.70, envW * 0.68)
-            let envL = (w - envW) * 0.5, envT = (h - envH) * 0.5
-            let alpha: Double = visible ? 1 : 0.52
-            ctx.fill(RoundedRectangle(cornerRadius: 8).path(in: CGRect(x: envL, y: envT, width: envW, height: envH)),
-                     with: .linearGradient(Gradient(colors: [EyeStyle.Game.PostOffice.envelopeBase.opacity(alpha), EyeStyle.Game.PostOffice.envelopeDeep.opacity(alpha)]),
-                                           startPoint: CGPoint(x: envL, y: envT), endPoint: CGPoint(x: envL + envW, y: envT + envH)))
-            ctx.stroke(RoundedRectangle(cornerRadius: 4).path(in: CGRect(x: envL + 7, y: envT + 7, width: envW - 14, height: envH - 14)),
-                       with: .color(EyeStyle.Game.PostOffice.envelopeFiligree.opacity(0.52 * alpha)), lineWidth: 1.4)
-            let edge = max(0, CGFloat(runtime.number("optotypePx")) / UIScreen.main.scale)
-            guard visible, edge > 0 else { return }
-            Cartoon.tumblingE(ctx, color: EyeStyle.Game.PostOffice.optotypePinkWhite,
-                              center: CGPoint(x: w * 0.5, y: h * 0.5), edge: edge,
-                              direction: Int(runtime.number("direction")))
+        let edge = max(0, CGFloat(runtime.number("optotypePx")) / UIScreen.main.scale)
+        let currentCm = runtime.number("distanceCm")
+        let rawStart = runtime.number("pushStartCm")
+        let startCm = rawStart > 25 ? rawStart : 67
+        let progress = currentCm > 0 ? min(max((startCm - currentCm) / max(startCm - 10, 10), 0.05), 1) : 0.05
+        let speed = (runtime.state["pushSpeedCmPerSec"] as? NSNumber)?.doubleValue
+        let speedText: String = {
+            guard let s = speed, s > 0.15 else { return "速度提示：缓慢平稳靠近（建议约 1–2 cm/s）" }
+            if s > 3.2 { return String(format: "速度偏快：约 %.1f cm/s，请慢一点", s) }
+            return String(format: "速度正常：约 %.1f cm/s", s)
+        }()
+        let isClean = mode == .clean
+        let textColor = isClean ? EyeStyle.Game.Sprout.arrowDark : EyeStyle.Game.Sprout.cloudWhite
+        let boxSize = max(116, edge + 36)
+
+        VStack(spacing: 10) {
+            ZStack {
+                TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: reduceMotion)) { timeline in
+                    let wave: CGFloat = reduceMotion ? 0.25 : CGFloat(timeline.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 3.4) / 3.4)
+                    Canvas { ctx, size in
+                        SproutSceneRenderer.drawBackdrop(ctx, size: size, mode: mode, wave: wave)
+                        SproutSceneRenderer.drawLakeIslandSprout(ctx, center: CGPoint(x: size.width * 0.50, y: size.height * 0.67), scale: min(max(min(size.width, size.height) / 315, 0.75), 1.18), growthStage: 2, wilted: false, wave: wave)
+                    }
+                }
+                VStack(spacing: 8) {
+                    HStack {
+                        Text("起始 \(Int(startCm)) cm").font(EyeStyle.caption).foregroundStyle(textColor)
+                        Spacer()
+                        Text(currentCm > 0 ? "当前 \(Int(currentCm)) cm" : "测距中…").font(EyeStyle.chip).foregroundStyle(textColor)
+                        Spacer()
+                        Button { mode = isClean ? .scenic : .clean } label: {
+                            Text(isClean ? "切湖景" : "切清爽")
+                                .font(EyeStyle.caption).foregroundStyle(EyeStyle.Game.Sprout.cloudWhite)
+                                .padding(.horizontal, 9).padding(.vertical, 3)
+                                .background(EyeStyle.Game.Sprout.cardSoilBase.opacity(0.72), in: EyeStyle.chipShape)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(EyeStyle.Game.Sprout.cardSoilBase.opacity(0.35))
+                            Capsule().fill(EyeStyle.Game.Sprout.leafBright).frame(width: geo.size.width * CGFloat(progress))
+                        }
+                    }
+                    .frame(height: 6)
+
+                    Text("慢慢靠近 · \(runtime.string("pushEye")) 第 \(min(Int(runtime.number("pushDone")) + 1, 3))/3 次")
+                        .font(EyeStyle.subtitle).foregroundStyle(textColor)
+
+                    ZStack {
+                        Canvas { ctx, sz in
+                            let c = isClean ? EyeStyle.Game.Sprout.arrowDark.opacity(0.45) : EyeStyle.Game.Sprout.cloudWhite.opacity(0.75)
+                            let len: CGFloat = 18
+                            var brackets = Path()
+                            brackets.move(to: CGPoint(x: 0, y: len)); brackets.addLine(to: .zero); brackets.addLine(to: CGPoint(x: len, y: 0))
+                            brackets.move(to: CGPoint(x: sz.width - len, y: 0)); brackets.addLine(to: CGPoint(x: sz.width, y: 0)); brackets.addLine(to: CGPoint(x: sz.width, y: len))
+                            brackets.move(to: CGPoint(x: 0, y: sz.height - len)); brackets.addLine(to: CGPoint(x: 0, y: sz.height)); brackets.addLine(to: CGPoint(x: len, y: sz.height))
+                            brackets.move(to: CGPoint(x: sz.width - len, y: sz.height)); brackets.addLine(to: CGPoint(x: sz.width, y: sz.height)); brackets.addLine(to: CGPoint(x: sz.width, y: sz.height - len))
+                            ctx.stroke(brackets, with: .color(c), style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                            if visible && edge > 0 {
+                                Cartoon.tumblingE(ctx, color: isClean ? EyeStyle.Game.Sprout.optotypeInk : EyeStyle.Game.Sprout.cloudWhite,
+                                                  center: CGPoint(x: sz.width * 0.5, y: sz.height * 0.5), edge: edge, direction: 0)
+                            }
+                        }
+                    }
+                    .frame(width: boxSize, height: boxSize)
+
+                    Text("像给小芽送水一样，慢慢把手机靠近脸")
+                        .font(EyeStyle.caption).foregroundStyle(textColor.opacity(0.92))
+
+                    Spacer(minLength: 48)
+
+                    Text("努力后仍看不清，就停下").font(EyeStyle.caption).foregroundStyle(EyeStyle.Game.Sprout.cloudWhite)
+                    Button { runtime.act("blur") } label: {
+                        Text("持续模糊，点这里")
+                            .font(EyeStyle.subtitle)
+                            .foregroundStyle(EyeStyle.Game.Sprout.cardSoilBase)
+                            .frame(maxWidth: .infinity, minHeight: 50)
+                            .background(EyeStyle.Game.Sprout.cardCream, in: EyeStyle.chipShape)
+                    }
+                    .buttonStyle(.plain)
+
+                    Text(speedText)
+                        .font(EyeStyle.caption)
+                        .foregroundStyle((speed ?? 0) > 3.2 ? EyeStyle.Game.Sprout.daisyCenter : EyeStyle.Game.Sprout.leafBright)
+                        .padding(.horizontal, 12).padding(.vertical, 4)
+                        .background(EyeStyle.Game.Sprout.cardSoilBase.opacity(0.78), in: EyeStyle.chipShape)
+                }
+                .padding(.horizontal, 16).padding(.vertical, 12)
+            }
+            .stageHeight(max(324, edge + 220))
+            .clipShape(RoundedRectangle(cornerRadius: EyeStyle.radiusHero, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: EyeStyle.radiusHero, style: .continuous)
+                    .strokeBorder(EyeStyle.glassEdgeTop.opacity(0.45), lineWidth: 1)
+            }
+            .onChange(of: runtime.number("trialId")) { id in runtime.schedulePresented(Int32(id)) }
+            .onAppear { runtime.schedulePresented(Int32(runtime.number("trialId"))) }
+
+            if runtime.bool("pushStillClearAvailable") {
+                Button("仍看得清") { runtime.act("pushStillClear") }.buttonStyle(EyeButtonStyle(role: .secondary))
+            }
+        }
+    }
+}
+
+/// 干眼/老视结果页顶部小芽开花/缺水成长卡（对齐安卓 SproutBloomResultCard 与参考图 5）。
+struct SproutBloomResultCardView: View {
+    let testTitle: String
+    let report: ReportModel
+
+    var body: some View {
+        let wilted = !report.valid || report.level == "HIGH"
+        let bloomed = report.valid && (report.level == "LOW" || report.level == "UNCERTAIN")
+        let growthStage = bloomed ? 4 : wilted ? 1 : 3
+        let growthMessage = bloomed
+            ? "小芽喝饱水，开出了健康小雏菊！"
+            : wilted
+                ? "小芽有点缺水萎蔫，记得多眨眼与及时护眼休息"
+                : "小芽正在积蓄水分，平时注意定时远眺与润眼"
+        let shortName = testTitle.hasSuffix("完成") ? String(testTitle.dropLast(2)) : testTitle
+
+        ZStack {
+            Canvas { ctx, size in
+                SproutSceneRenderer.drawBackdrop(ctx, size: size, mode: .scenic, wave: 0.3)
+            }
+            VStack(spacing: 8) {
+                Text(testTitle).font(EyeStyle.title).foregroundStyle(EyeStyle.Game.Sprout.cloudWhite)
+                Canvas { ctx, size in
+                    SproutSceneRenderer.drawPottedSprout(ctx, center: CGPoint(x: size.width * 0.5, y: size.height * 0.96), scale: 1.05, growthStage: growthStage, wilted: wilted, wave: 0.25, showPot: false)
+                }
+                .frame(width: 140, height: 96)
+                VStack(spacing: 0) {
+                    VStack(spacing: 4) {
+                        Text("\(report.badge) · \(report.title)")
+                            .font(EyeStyle.subtitle).foregroundStyle(EyeStyle.Game.Sprout.cardSoilBase)
+                            .multilineTextAlignment(.center)
+                        Text(growthMessage)
+                            .font(EyeStyle.bodySecondary).foregroundStyle(EyeStyle.Game.Sprout.soilDark)
+                            .multilineTextAlignment(.center)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, 14).padding(.vertical, 12)
+                    .background(EyeStyle.Game.Sprout.cardCream, in: RoundedRectangle(cornerRadius: EyeStyle.radiusMedium, style: .continuous))
+                    .padding(.horizontal, 10).padding(.top, 10)
+                    Text("我完成了\(shortName)，你也来试试？")
+                        .font(EyeStyle.caption)
+                        .foregroundStyle(EyeStyle.Game.Sprout.cloudWhite.opacity(0.90))
+                        .padding(.vertical, 10)
+                }
+                .background(EyeStyle.Game.Sprout.cardSoilBase, in: RoundedRectangle(cornerRadius: EyeStyle.radiusLarge, style: .continuous))
+            }
+            .padding(.horizontal, 18).padding(.vertical, 16)
         }
         .clipShape(RoundedRectangle(cornerRadius: EyeStyle.radiusHero, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: EyeStyle.radiusHero, style: .continuous)
-                .strokeBorder(EyeStyle.glassEdgeTop.opacity(0.4), lineWidth: 1)
+                .strokeBorder(EyeStyle.glassEdgeTop.opacity(0.45), lineWidth: 1)
         }
-        .onChange(of: runtime.number("trialId")) { id in runtime.schedulePresented(Int32(id)) }
-        .onAppear { runtime.schedulePresented(Int32(runtime.number("trialId"))) }
+    }
+}
+
+/// 小芽浇水挑战共用矢量绘制引擎（清爽晴空 / 湖光山色草地 + 成长小芽 + 小雏菊 + 水滴精灵）。
+private enum SproutSceneRenderer {
+    static func drawBackdrop(_ ctx: GraphicsContext, size: CGSize, mode: SproutBackdropMode, wave: CGFloat) {
+        let w = size.width, h = size.height
+        if mode == .clean {
+            ctx.fill(Path(CGRect(origin: .zero, size: size)),
+                     with: .linearGradient(Gradient(stops: [
+                        .init(color: EyeStyle.Game.Sprout.skyCleanTop, location: 0),
+                        .init(color: EyeStyle.Game.Sprout.skyCleanMid, location: 0.62),
+                        .init(color: EyeStyle.Game.Sprout.lakeTop, location: 1),
+                     ]), startPoint: .zero, endPoint: CGPoint(x: 0, y: h)))
+            let horizon = h * 0.68
+            var hill = Path()
+            hill.move(to: CGPoint(x: 0, y: horizon))
+            hill.addQuadCurve(to: CGPoint(x: w * 0.36, y: horizon), control: CGPoint(x: w * 0.18, y: horizon - h * 0.08))
+            hill.addQuadCurve(to: CGPoint(x: w * 0.84, y: horizon - h * 0.09), control: CGPoint(x: w * 0.65, y: horizon - h * 0.04))
+            hill.addLine(to: CGPoint(x: w, y: horizon - h * 0.02))
+            hill.addLine(to: CGPoint(x: w, y: horizon))
+            hill.closeSubpath()
+            ctx.fill(hill, with: .color(EyeStyle.Game.Sprout.mountainFar.opacity(0.45)))
+            ctx.fill(Path(CGRect(x: 0, y: horizon, width: w, height: h - horizon)),
+                     with: .linearGradient(Gradient(colors: [EyeStyle.Game.Sprout.lakeTop.opacity(0.72), EyeStyle.Game.Sprout.lakeDeep.opacity(0.88)]),
+                                           startPoint: CGPoint(x: 0, y: horizon), endPoint: CGPoint(x: 0, y: h)))
+            for i in 0..<3 {
+                let ry = horizon + (h - horizon) * (0.28 + CGFloat(i) * 0.24)
+                let rx = w * (0.5 + sin((wave + CGFloat(i) * 0.3) * 2 * .pi) * 0.03)
+                var line = Path()
+                line.move(to: CGPoint(x: rx - w * (0.26 - CGFloat(i) * 0.05), y: ry))
+                line.addLine(to: CGPoint(x: rx + w * (0.26 - CGFloat(i) * 0.05), y: ry))
+                ctx.stroke(line, with: .color(EyeStyle.Game.Sprout.lakeRipple.opacity(0.48 - Double(i) * 0.1)), style: StrokeStyle(lineWidth: 2, lineCap: .round))
+            }
+            return
+        }
+
+        ctx.fill(Path(CGRect(origin: .zero, size: size)),
+                 with: .linearGradient(Gradient(stops: [
+                    .init(color: EyeStyle.Game.Sprout.skySceneTop, location: 0),
+                    .init(color: EyeStyle.Game.Sprout.skySceneMid, location: 0.48),
+                    .init(color: EyeStyle.Game.Sprout.lakeTop, location: 1),
+                 ]), startPoint: .zero, endPoint: CGPoint(x: 0, y: h)))
+        drawCloud(ctx, center: CGPoint(x: w * 0.14, y: h * 0.25), r: min(w, h) * 0.08)
+        drawCloud(ctx, center: CGPoint(x: w * 0.87, y: h * 0.27), r: min(w, h) * 0.07)
+        let horizon = h * 0.58
+        var farM = Path()
+        farM.move(to: CGPoint(x: 0, y: horizon)); farM.addLine(to: CGPoint(x: 0, y: horizon - h * 0.10))
+        farM.addQuadCurve(to: CGPoint(x: w * 0.46, y: horizon - h * 0.06), control: CGPoint(x: w * 0.22, y: horizon - h * 0.24))
+        farM.addQuadCurve(to: CGPoint(x: w, y: horizon - h * 0.08), control: CGPoint(x: w * 0.74, y: horizon - h * 0.26))
+        farM.addLine(to: CGPoint(x: w, y: horizon)); farM.closeSubpath()
+        ctx.fill(farM, with: .color(EyeStyle.Game.Sprout.mountainFar.opacity(0.78)))
+        var nearM = Path()
+        nearM.move(to: CGPoint(x: 0, y: horizon))
+        nearM.addQuadCurve(to: CGPoint(x: w * 0.34, y: horizon), control: CGPoint(x: w * 0.16, y: horizon - h * 0.14))
+        nearM.addLine(to: CGPoint(x: w * 0.66, y: horizon))
+        nearM.addQuadCurve(to: CGPoint(x: w, y: horizon - h * 0.03), control: CGPoint(x: w * 0.85, y: horizon - h * 0.16))
+        nearM.addLine(to: CGPoint(x: w, y: horizon)); nearM.closeSubpath()
+        ctx.fill(nearM, with: .color(EyeStyle.Game.Sprout.mountainNear.opacity(0.85)))
+
+        let grassTop = h * 0.74
+        ctx.fill(Path(CGRect(x: 0, y: horizon, width: w, height: grassTop - horizon)),
+                 with: .linearGradient(Gradient(colors: [EyeStyle.Game.Sprout.lakeTop, EyeStyle.Game.Sprout.lakeDeep]),
+                                       startPoint: CGPoint(x: 0, y: horizon), endPoint: CGPoint(x: 0, y: grassTop)))
+        var meadow = Path()
+        meadow.move(to: CGPoint(x: 0, y: h)); meadow.addLine(to: CGPoint(x: 0, y: grassTop))
+        meadow.addQuadCurve(to: CGPoint(x: w, y: grassTop), control: CGPoint(x: w * 0.5, y: grassTop - h * 0.07))
+        meadow.addLine(to: CGPoint(x: w, y: h)); meadow.closeSubpath()
+        ctx.fill(meadow, with: .linearGradient(Gradient(colors: [EyeStyle.Game.Sprout.grassLight, EyeStyle.Game.Sprout.grassDeep]),
+                                               startPoint: CGPoint(x: 0, y: grassTop - h * 0.05), endPoint: CGPoint(x: 0, y: h)))
+    }
+
+    private static func drawCloud(_ ctx: GraphicsContext, center: CGPoint, r: CGFloat) {
+        let c = EyeStyle.Game.Sprout.cloudWhite.opacity(0.55)
+        for (dx, dy, scale): (CGFloat, CGFloat, CGFloat) in [(-0.65, 0.12, 0.72), (0, 0, 1.0), (0.70, 0.14, 0.68)] {
+            let rr = r * scale
+            ctx.fill(Path(ellipseIn: CGRect(x: center.x + dx * r - rr, y: center.y + dy * r - rr, width: rr * 2, height: rr * 2)), with: .color(c))
+        }
+    }
+
+    static func drawLakeIslandSprout(_ ctx: GraphicsContext, center: CGPoint, scale s: CGFloat, growthStage: Int, wilted: Bool, wave: CGFloat) {
+        for i in 0..<2 {
+            let rw = (44 + CGFloat(i) * 20 + sin(wave * 2 * .pi) * 3) * s
+            let rh = (12 + CGFloat(i) * 5) * s
+            ctx.stroke(Path(ellipseIn: CGRect(x: center.x - rw * 0.5, y: center.y - rh * 0.5 + 4 * s, width: rw, height: rh)),
+                       with: .color(EyeStyle.Game.Sprout.lakeRipple.opacity(0.52 - Double(i) * 0.2)), lineWidth: 2)
+        }
+        ctx.fill(Path(ellipseIn: CGRect(x: center.x - 20 * s, y: center.y - 6 * s, width: 40 * s, height: 14 * s)), with: .color(EyeStyle.Game.Sprout.soilDark))
+        drawPlant(ctx, base: CGPoint(x: center.x, y: center.y - 2 * s), s: s, growthStage: growthStage, wilted: wilted, wave: wave)
+    }
+
+    static func drawPottedSprout(_ ctx: GraphicsContext, center: CGPoint, scale s: CGFloat, growthStage: Int, wilted: Bool, wave: CGFloat, showPot: Bool = true) {
+        if showPot {
+            let potW = 46 * s, potH = 34 * s, potTop = center.y - potH
+            var body = Path()
+            body.move(to: CGPoint(x: center.x - potW * 0.44, y: potTop + 6 * s))
+            body.addLine(to: CGPoint(x: center.x + potW * 0.44, y: potTop + 6 * s))
+            body.addLine(to: CGPoint(x: center.x + potW * 0.34, y: center.y))
+            body.addLine(to: CGPoint(x: center.x - potW * 0.34, y: center.y))
+            body.closeSubpath()
+            ctx.fill(body, with: .color(EyeStyle.Game.Sprout.potBody))
+            ctx.fill(RoundedRectangle(cornerRadius: 4 * s).path(in: CGRect(x: center.x - potW * 0.52, y: potTop, width: potW * 1.04, height: 10 * s)),
+                     with: .color(EyeStyle.Game.Sprout.potRim))
+            ctx.fill(Path(ellipseIn: CGRect(x: center.x - potW * 0.42, y: potTop - 3 * s, width: potW * 0.84, height: 8 * s)),
+                     with: .color(EyeStyle.Game.Sprout.soilDark))
+            drawPlant(ctx, base: CGPoint(x: center.x, y: potTop), s: s, growthStage: growthStage, wilted: wilted, wave: wave)
+        } else {
+            ctx.fill(Path(ellipseIn: CGRect(x: center.x - 24 * s, y: center.y - 8 * s, width: 48 * s, height: 14 * s)),
+                     with: .color(EyeStyle.Game.Sprout.soilDark))
+            drawPlant(ctx, base: CGPoint(x: center.x, y: center.y - 4 * s), s: s, growthStage: growthStage, wilted: wilted, wave: wave)
+        }
+    }
+
+    private static func drawPlant(_ ctx: GraphicsContext, base: CGPoint, s: CGFloat, growthStage: Int, wilted: Bool, wave: CGFloat) {
+        let sway = sin(wave * 2 * .pi) * 2.5 * s
+        let stemH = (24 + CGFloat(growthStage) * 7.5) * s
+        let bend = wilted ? 10 * s : sway
+        let top = CGPoint(x: base.x + bend, y: base.y - stemH * (wilted ? 0.78 : 1.0))
+        let leafPrimary = wilted ? EyeStyle.Game.Sprout.leafWilt : EyeStyle.Game.Sprout.leafBright
+        let leafSecondary = wilted ? EyeStyle.Game.Sprout.leafWilt.opacity(0.82) : EyeStyle.Game.Sprout.leafMid
+
+        var stem = Path()
+        stem.move(to: base)
+        stem.addQuadCurve(to: top, control: CGPoint(x: base.x + bend * 0.35, y: base.y - stemH * 0.5))
+        ctx.stroke(stem, with: .color(leafSecondary), style: StrokeStyle(lineWidth: 4.2 * s, lineCap: .round))
+
+        let leafLen = (16 + CGFloat(growthStage) * 2.2) * s
+        let droop = wilted ? 9 * s : -8 * s
+        drawLeaf(ctx, anchor: CGPoint(x: top.x, y: top.y + 4 * s), dx: -leafLen, dy: droop, width: 9 * s, color: leafPrimary)
+        drawLeaf(ctx, anchor: CGPoint(x: top.x, y: top.y + 4 * s), dx: leafLen, dy: droop, width: 9 * s, color: leafSecondary)
+
+        if growthStage >= 2 {
+            let mid = CGPoint(x: base.x + bend * 0.45, y: base.y - stemH * 0.46)
+            drawLeaf(ctx, anchor: mid, dx: -leafLen * 0.85, dy: droop * 0.6, width: 7.5 * s, color: leafSecondary)
+            drawLeaf(ctx, anchor: mid, dx: leafLen * 0.85, dy: droop * 0.6, width: 7.5 * s, color: leafPrimary)
+        }
+        if growthStage == 3 && !wilted {
+            let r1 = 6.5 * s, r2 = 3.5 * s
+            ctx.fill(Path(ellipseIn: CGRect(x: top.x - r1, y: top.y - 4 * s - r1, width: r1 * 2, height: r1 * 2)), with: .color(EyeStyle.Game.Sprout.daisyCenter))
+            ctx.fill(Path(ellipseIn: CGRect(x: top.x - r2, y: top.y - 7 * s - r2, width: r2 * 2, height: r2 * 2)), with: .color(EyeStyle.Game.Sprout.daisyPetal))
+        } else if growthStage >= 4 && !wilted {
+            let fc = CGPoint(x: top.x, y: top.y - 8 * s)
+            let pd = 11.5 * s, pr = 5.8 * s
+            for i in 0..<10 {
+                let a = CGFloat(i) * (2 * .pi / 10)
+                let px = fc.x + cos(a) * pd, py = fc.y + sin(a) * pd
+                ctx.fill(Path(ellipseIn: CGRect(x: px - pr, y: py - pr, width: pr * 2, height: pr * 2)), with: .color(EyeStyle.Game.Sprout.daisyPetal))
+            }
+            let cr = 8.2 * s
+            ctx.fill(Path(ellipseIn: CGRect(x: fc.x - cr, y: fc.y - cr, width: cr * 2, height: cr * 2)), with: .color(EyeStyle.Game.Sprout.daisyCenter))
+        }
+    }
+
+    private static func drawLeaf(_ ctx: GraphicsContext, anchor: CGPoint, dx: CGFloat, dy: CGFloat, width: CGFloat, color: Color) {
+        let tip = CGPoint(x: anchor.x + dx, y: anchor.y + dy)
+        var p = Path()
+        p.move(to: anchor)
+        p.addQuadCurve(to: tip, control: CGPoint(x: anchor.x + dx * 0.5, y: anchor.y + dy - width))
+        p.addQuadCurve(to: anchor, control: CGPoint(x: anchor.x + dx * 0.5, y: anchor.y + width * 0.6))
+        p.closeSubpath()
+        ctx.fill(p, with: .color(color))
+    }
+
+    static func drawDropletMascot(_ ctx: GraphicsContext, center: CGPoint, radius: CGFloat) {
+        drawWaterDrop(ctx, center: center, radius: radius)
+        ctx.fill(Path(ellipseIn: CGRect(x: center.x - radius * 0.54, y: center.y - radius * 0.08, width: radius * 1.08, height: radius * 0.78)),
+                 with: .color(EyeStyle.Game.Sprout.cloudWhite.opacity(0.92)))
+        let er = radius * 0.11
+        ctx.fill(Path(ellipseIn: CGRect(x: center.x - radius * 0.22 - er, y: center.y + radius * 0.24 - er, width: er * 2, height: er * 2)),
+                 with: .color(EyeStyle.Game.Sprout.arrowDark))
+        ctx.fill(Path(ellipseIn: CGRect(x: center.x + radius * 0.22 - er, y: center.y + radius * 0.24 - er, width: er * 2, height: er * 2)),
+                 with: .color(EyeStyle.Game.Sprout.arrowDark))
+        var smile = Path()
+        smile.move(to: CGPoint(x: center.x - radius * 0.16, y: center.y + radius * 0.42))
+        smile.addQuadCurve(to: CGPoint(x: center.x + radius * 0.16, y: center.y + radius * 0.42),
+                           control: CGPoint(x: center.x, y: center.y + radius * 0.58))
+        ctx.stroke(smile, with: .color(EyeStyle.Game.Sprout.arrowDark), style: StrokeStyle(lineWidth: radius * 0.08, lineCap: .round))
+    }
+
+    static func drawWaterDrop(_ ctx: GraphicsContext, center: CGPoint, radius: CGFloat) {
+        var drop = Path()
+        drop.move(to: CGPoint(x: center.x, y: center.y - radius * 1.25))
+        drop.addCurve(to: CGPoint(x: center.x + radius * 0.90, y: center.y + radius * 0.56),
+                      control1: CGPoint(x: center.x + radius * 0.48, y: center.y - radius * 0.42),
+                      control2: CGPoint(x: center.x + radius * 0.95, y: center.y + radius * 0.18))
+        drop.addCurve(to: CGPoint(x: center.x - radius * 0.90, y: center.y + radius * 0.56),
+                      control1: CGPoint(x: center.x + radius * 0.85, y: center.y + radius * 1.05),
+                      control2: CGPoint(x: center.x - radius * 0.85, y: center.y + radius * 1.05))
+        drop.addCurve(to: CGPoint(x: center.x, y: center.y - radius * 1.25),
+                      control1: CGPoint(x: center.x - radius * 0.95, y: center.y + radius * 0.18),
+                      control2: CGPoint(x: center.x - radius * 0.48, y: center.y - radius * 0.42))
+        drop.closeSubpath()
+        ctx.fill(drop, with: .linearGradient(Gradient(colors: [EyeStyle.Game.Sprout.dropLight, EyeStyle.Game.Sprout.dropBlue, EyeStyle.Game.Sprout.dropDeep]),
+                                             startPoint: CGPoint(x: center.x, y: center.y - radius * 1.2),
+                                             endPoint: CGPoint(x: center.x, y: center.y + radius)))
+        let hr = radius * 0.18
+        ctx.fill(Path(ellipseIn: CGRect(x: center.x - radius * 0.28 - hr, y: center.y + radius * 0.24 - hr, width: hr * 2, height: hr * 2)),
+                 with: .color(EyeStyle.Game.Sprout.cloudWhite.opacity(0.78)))
     }
 }
 

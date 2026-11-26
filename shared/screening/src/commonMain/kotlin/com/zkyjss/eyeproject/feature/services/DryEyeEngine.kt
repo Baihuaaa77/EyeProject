@@ -234,7 +234,8 @@ class DryEyeEngine(platform: ScreeningPlatform, private val scope: CoroutineScop
         staircase = DryEyeStaircase()
         gateLostSinceMs = 0L
         _uiState.update { it.copy(phase = DryEyePhase.Practice, instruction = "练习：2 秒内点选 E 的开口方向", error = null,
-            progressFraction = 0f, remainingSeconds = DryEyeProtocol.PRACTICE_SECONDS) }
+            progressFraction = 0f, remainingSeconds = DryEyeProtocol.PRACTICE_SECONDS,
+            lastAnswerCorrect = null, trialCount = 0, correctCount = 0, wrongCount = 0) }
         val start = platform.nowMs()
         val trials = mutableListOf<DryEyeTrial>()
         var pausedTotal = 0L
@@ -314,7 +315,8 @@ class DryEyeEngine(platform: ScreeningPlatform, private val scope: CoroutineScop
                 instruction = if (theaterMode) DryEyeStoryScript.sceneAt(0).narration else "看 E 选方向，同时像平时一样自然眨眼",
                 progressFraction = 0f, remainingSeconds = naturalSeconds,
                 phase1Blinks = emptyList(), phase2Blinks = emptyList(), phase1BlinkCount = 0, phase2BlinkCount = 0,
-                trialCount = 0, distanceSamples = emptyList(), error = null)
+                trialCount = 0, correctCount = 0, wrongCount = 0, lastAnswerCorrect = null,
+                distanceSamples = emptyList(), error = null)
         }
         var completed = false
         var pausedTotal = 0L
@@ -467,7 +469,15 @@ class DryEyeEngine(platform: ScreeningPlatform, private val scope: CoroutineScop
                 presentDelayMs = presentedAt?.let { (it - requestedAt).coerceAtLeast(0L) }, byGesture = answer?.byGesture == true)
             out += trial
             staircase.record(trial.correct, maxIndex)
-            _uiState.update { it.copy(trialVisible = false, lastAnswerCorrect = trial.correct) }
+            _uiState.update {
+                it.copy(
+                    trialVisible = false,
+                    lastAnswerCorrect = trial.correct,
+                    trialCount = out.size,
+                    correctCount = out.count { t -> t.correct },
+                    wrongCount = out.count { t -> !t.correct },
+                )
+            }
             helpSession.delay(DryEyeProtocol.INTER_TRIAL_MS)
         }
     }

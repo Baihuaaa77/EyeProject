@@ -101,10 +101,12 @@ internal fun ResultReportView(
     aiCard: AiCardState? = null,
     onExplain: (agreeFirst: Boolean) -> Unit = {},
     saveError: String? = null,
+    topBanner: (@Composable () -> Unit)? = null,
     extraData: @Composable ColumnScope.() -> Unit = {},
 ) {
     var dataOpen by rememberSaveable { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        topBanner?.invoke()
         ResultHero(report)
         if (!report.valid) {
             ProblemCard(report.problems)
