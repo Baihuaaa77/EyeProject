@@ -1075,7 +1075,7 @@ internal fun SproutBloomResultCard(
 // 高保真自然风景 + 立体花盆小芽 + 水滴精灵「小露」矢量绘制原语
 // ============================================================================
 
-private fun DrawScope.drawSproutBackdrop(style: SproutBackdropStyle, wave: Float) {
+internal fun DrawScope.drawSproutBackdrop(style: SproutBackdropStyle, wave: Float) {
     val w = size.width
     val h = size.height
     if (style == SproutBackdropStyle.CLEAN) {
@@ -1232,7 +1232,7 @@ private fun DrawScope.drawSoftCloud(center: Offset, r: Float) {
     drawCircle(c, r * 0.68f, Offset(center.x + r * 0.70f, center.y + r * 0.14f))
 }
 
-private fun DrawScope.drawLakeIslandSprout(
+internal fun DrawScope.drawLakeIslandSprout(
     center: Offset,
     scale: Float,
     growthStage: Int,
@@ -1259,7 +1259,7 @@ private fun DrawScope.drawLakeIslandSprout(
     drawSproutPlant(Offset(center.x, center.y - 2f * s), s * bounce, growthStage, wilted, wave)
 }
 
-private fun DrawScope.drawPottedSprout(
+internal fun DrawScope.drawPottedSprout(
     center: Offset,
     scale: Float,
     growthStage: Int,
@@ -1391,7 +1391,7 @@ private fun DrawScope.drawGlossyLeaf(anchor: Offset, dx: Float, dy: Float, width
 }
 
 /** 立体萌萌水滴精灵「小露」（带腮红、迷你小手脚与浇水欢呼倾斜动作）。 */
-private fun DrawScope.drawDropletMascot(center: Offset, radius: Float, cheer: Float = 0f) {
+internal fun DrawScope.drawDropletMascot(center: Offset, radius: Float, cheer: Float = 0f) {
     // 地面柔影
     drawOval(
         EyeGamePalette.Sprout.soilDark.copy(alpha = 0.25f * (1f - cheer * 0.4f)),
@@ -1433,7 +1433,7 @@ private fun DrawScope.drawDropletMascot(center: Offset, radius: Float, cheer: Fl
     }
 }
 
-private fun DrawScope.drawGlowingWaterDrop(center: Offset, radius: Float) {
+internal fun DrawScope.drawGlowingWaterDrop(center: Offset, radius: Float) {
     val drop = Path().apply {
         moveTo(center.x, center.y - radius * 1.25f)
         cubicTo(
@@ -1470,7 +1470,7 @@ private fun DrawScope.drawGlowingWaterDrop(center: Offset, radius: Float) {
     )
 }
 
-private fun DrawScope.drawFourPointStar(center: Offset, radius: Float, color: Color) {
+internal fun DrawScope.drawFourPointStar(center: Offset, radius: Float, color: Color) {
     if (radius <= 0.5f) return
     val inner = radius * 0.28f
     val path = Path().apply {

@@ -313,7 +313,14 @@ private fun EnvironmentContent(kind: ScreeningKind, s: ScreeningState, vm: Scree
             faceDetected = s.faceDetected,
         )
     } else {
-        TestGuide(GuideMotion.FIXATE, "准备测试", "正对屏幕，露出双眼。")
+        FireflySetupCard(
+            title = "眼位自测 · 33cm 月夜萤火虫",
+            subtitle = "跟随月夜森林里的发光萤火虫，头保持不动",
+            distanceCm = s.distanceCm,
+            targetCm = 33f,
+            toleranceCm = StrabismusProtocol.DISTANCE_TOLERANCE_CM,
+            faceDetected = s.faceDetected,
+        )
     }
     if (s.cameraFrames == 0 || !s.faceDetected || s.distanceCm <= 0f) {
         EyeButton("重试相机", EyeButtonRole.SECONDARY, onRetryCamera, Modifier.fillMaxWidth())
@@ -474,7 +481,7 @@ internal fun FarFixationContent(s: ScreeningState, onStart: () -> Unit) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Column(Modifier.fillMaxWidth().height(240.dp + rememberStageExtra()).clip(EyeShapes.medium).background(colors.ink).padding(20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterVertically)) {
-                EyechoGuidePortrait(GuidePose.OPEN, "爱科", Modifier.size(64.dp))
+                FarStarFireflyBadge()
                 if (s.farWaiting) {
                     BaseEyeText("看着 ${StrabismusProtocol.FAR_TARGET_M} 米外的目标", style = typography.title, color = colors.white, textAlign = center)
                     BaseEyeText("看好以后，点下面的按钮开始计时", style = typography.bodySecondary, color = colors.white.copy(alpha = 0.72f),
@@ -662,14 +669,14 @@ internal fun OptotypeSurface(direction: Int, size: androidx.compose.ui.unit.Dp) 
     }
 }
 
-/** 老视开始前的戴镜确认：示意人物 + 按本次戴镜状态的一句话 + 确认按钮，语音同步播报。与苹果端 GlassesCheckView 一致。 */
+/** 老视开始前的戴镜确认：戴着小圆眼镜的小露趣味插画 + 按本次戴镜状态的一句话 + 确认按钮，语音同步播报。与苹果端 GlassesCheckView 一致。 */
 @Composable
 private fun GlassesCheckContent(check: PresbyopiaIntake.GlassesCheck, onConfirm: () -> Unit) {
     val colors = LocalEyeColors.current
     val typography = LocalEyeTypography.current
     TestStageCard {
         Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            EyechoGuidePortrait(GuidePose.OPEN, "爱科", Modifier.size(112.dp))
+            SproutGlassesMascotCard()
             EyeText(check.title, typography.title, colors.textPrimary)
             BaseEyeText(check.prompt, style = typography.body, color = colors.textSecondary, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
             EyeButton(check.button, EyeButtonRole.PRIMARY, onConfirm, Modifier.fillMaxWidth())

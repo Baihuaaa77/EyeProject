@@ -262,7 +262,14 @@ struct EyeTestView: View {
                     faceDetected: runtime.bool("faceDetected")
                 )
             } else {
-                TestGuideView(motion: .fixate, title: "准备测试", cue: "正对屏幕，约 33 厘米")
+                FireflySetupCardView(
+                    title: "眼位自测 · 33cm 月夜萤火虫",
+                    subtitle: "跟随月夜森林里的发光萤火虫，头保持不动",
+                    distanceCm: runtime.number("distanceCm"),
+                    targetCm: 33,
+                    toleranceCm: 5,
+                    faceDetected: runtime.bool("faceDetected")
+                )
             }
             Button("开始测试") { runtime.act("begin") }.buttonStyle(EyeButtonStyle())
             Button("重试相机") { runtime.act("retryCamera") }.buttonStyle(EyeButtonStyle(role: .secondary))
@@ -568,8 +575,7 @@ private struct FarFixationPanel: View {
     let waiting: Bool
     var body: some View {
         VStack(spacing: 10) {
-            EyechoGuideImage(name: "eyecho_guide_open")
-                .frame(width: 64, height: 64).accessibilityLabel("爱科")
+            FarStarFireflyBadgeView()
             if waiting {
                 Text("看着 \(meters) 米外的目标").font(EyeStyle.title).foregroundStyle(.white).multilineTextAlignment(.center)
                 Text("看好以后，点下面的按钮开始计时").font(EyeStyle.bodySecondary).foregroundStyle(.white.opacity(0.72))
@@ -715,7 +721,7 @@ private struct PursuitDot: View {
     }
 }
 
-/// 老视开始前的戴镜确认：示意人物 + 按本次戴镜状态的一句话 + 确认按钮，语音同步播报。与安卓 GlassesCheckContent 一致（文案在共用 PresbyopiaIntake）。
+/// 老视开始前的戴镜确认：戴着小圆眼镜的小露趣味插画 + 按本次戴镜状态的一句话 + 确认按钮，语音同步播报。与安卓 GlassesCheckContent 一致（文案在共用 PresbyopiaIntake）。
 private struct GlassesCheckView: View {
     let title: String
     let prompt: String
@@ -723,8 +729,7 @@ private struct GlassesCheckView: View {
     let confirm: () -> Void
     var body: some View {
         VStack(spacing: 16) {
-            EyechoGuideImage(name: "eyecho_guide_open")
-                .frame(width: 112, height: 112).accessibilityLabel("爱科")
+            SproutGlassesMascotCardView()
             Text(title).font(EyeStyle.title)
             Text(prompt)
                 .font(EyeStyle.body).foregroundStyle(EyeStyle.secondary).multilineTextAlignment(.center)
@@ -845,7 +850,7 @@ private struct DarkControlsHeight: PreferenceKey {
 
 // MARK: - 三项自测趣味小游戏场景（干眼与老视：高保真小芽浇水挑战 + 浇水/蒸发动画；斜视：月夜森林萤火虫）
 
-private enum SproutBackdropMode { case scenic, clean }
+enum SproutBackdropMode { case scenic, clean }
 
 /// 准备与 40 cm 校准卡（高度还原甲方 PPT 图 1 & 图 2）。
 private struct SproutSetupCardView: View {
@@ -1366,7 +1371,7 @@ struct SproutBloomResultCardView: View {
 }
 
 /// 小芽浇水挑战共用高保真矢量绘制引擎（含 1.15s 抛物线浇水喷泉 + 水花星光 + 1.0s 水滴蒸发白雾）。
-private enum SproutSceneRenderer {
+enum SproutSceneRenderer {
     static func drawWateringStage(
         _ ctx: GraphicsContext, size: CGSize, mode: SproutBackdropMode, wave: CGFloat,
         growthStage: Int, wilted: Bool, waterPhase wt: CGFloat, evapPhase et: CGFloat
@@ -1734,7 +1739,7 @@ private enum SproutSceneRenderer {
                  with: .color(EyeStyle.Game.Sprout.cloudWhite.opacity(0.85)))
     }
 
-    private static func drawFourPointStar(_ ctx: GraphicsContext, center: CGPoint, radius: CGFloat, color: Color) {
+    static func drawFourPointStar(_ ctx: GraphicsContext, center: CGPoint, radius: CGFloat, color: Color) {
         guard radius > 0.5 else { return }
         let inner = radius * 0.28
         var p = Path()
@@ -1748,7 +1753,7 @@ private enum SproutSceneRenderer {
     }
 }
 
-private enum MoonlitFireflyRenderer {
+enum MoonlitFireflyRenderer {
     static func backdrop(_ ctx: GraphicsContext, size: CGSize, phase: CGFloat) {
         let w = size.width, h = size.height
         ctx.fill(Path(CGRect(origin: .zero, size: size)),
@@ -1800,7 +1805,7 @@ private enum MoonlitFireflyRenderer {
         ctx.fill(creek, with: .color(EyeStyle.Game.Firefly.creek.opacity(0.65)))
     }
 
-    static func firefly(_ ctx: GraphicsContext, center: CGPoint, radius: CGFloat, wingPhase: CGFloat, glowIntensity: Double) {
+    static func firefly(_ ctx: GraphicsContext, center: CGPoint, radius: CGFloat, wingPhase: CGFloat, glowIntensity: Double, tiltDeg: Double = -18) {
         let glowAlpha = min(1, max(0.25, glowIntensity))
         let glowR = radius * (2.6 + 0.25 * CGFloat(sin(Double(wingPhase) * 2 * .pi)))
         ctx.fill(Path(ellipseIn: CGRect(x: center.x - glowR, y: center.y - glowR, width: glowR * 2, height: glowR * 2)),
@@ -1810,7 +1815,7 @@ private enum MoonlitFireflyRenderer {
                     .init(color: EyeStyle.Game.Firefly.glowOuter.opacity(0.22 * glowAlpha), location: 0.70),
                     .init(color: .clear, location: 1),
                  ]), center: center, startRadius: 0, endRadius: glowR))
-        Cartoon.rotated(ctx, -18, around: center) { layer in
+        Cartoon.rotated(ctx, tiltDeg, around: center) { layer in
             let flap = sin(Double(wingPhase) * 2 * .pi) * 14
             for side: CGFloat in [-1, 1] {
                 Cartoon.rotated(layer, Double(side) * (34 + flap * 0.6), around: CGPoint(x: center.x, y: center.y - radius * 0.35)) { wl in
@@ -1829,6 +1834,17 @@ private enum MoonlitFireflyRenderer {
                 layer.fill(Path(ellipseIn: CGRect(x: center.x - r, y: center.y - r, width: r * 2, height: r * 2)),
                            with: .color(color.opacity(glowAlpha)))
             }
+        }
+    }
+
+    static func trail(_ ctx: GraphicsContext, points: [CGPoint], radius: CGFloat) {
+        guard points.count >= 2 else { return }
+        let total = CGFloat(points.count)
+        for (idx, pt) in points.enumerated() {
+            let ratio = CGFloat(idx + 1) / total
+            let r = radius * (0.14 + ratio * 0.22)
+            ctx.fill(Path(ellipseIn: CGRect(x: pt.x - r, y: pt.y - r, width: r * 2, height: r * 2)),
+                     with: .color(EyeStyle.Game.Firefly.glowMid.opacity(Double(ratio) * 0.34)))
         }
     }
 }
