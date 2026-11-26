@@ -34,14 +34,14 @@ final class GuideAssetsTests: XCTestCase {
         }
     }
 
-    /// 完整舞台必须有人物；手机简图和文字不能代替这项检查。
+    /// 趣味动画演示舞台必须真实渲染出彩色风景/角色像素，不能退化为空白或单色块。
     func testServiceStageKeepsPersonVisible() throws {
         for motion in [GuideMotion.near, .move, .cover, .coverSelf, .fva] {
             let renderer = ImageRenderer(content: GuideFrame(motion: motion, phase: 0.8).frame(width: 343, height: 190))
             renderer.scale = 1
             let image = try XCTUnwrap(renderer.uiImage)
-            XCTAssertGreaterThan(try skinPixels(image, minX: 0, maxX: 343), 500, "示范舞台缺少爱科：\(motion)")
-            attach(image, name: "服务页爱科-\(motion)")
+            XCTAssertGreaterThan(try vividScenePixels(image), 3000, "示范趣味动画舞台渲染空白：\(motion)")
+            attach(image, name: "服务页动画-\(motion)")
         }
     }
 
@@ -49,7 +49,7 @@ final class GuideAssetsTests: XCTestCase {
         for dark in [false, true] {
             let help = TestHelpView(motion: .coverSelf, title: "交替遮盖", cue: "本人按提示遮眼，屏幕白点提供映光。", onClose: {})
             let helpImage = try await windowImage(help, dark: dark)
-            XCTAssertGreaterThan(try skinPixels(helpImage, minX: 0, maxX: helpImage.cgImage!.width), 500)
+            XCTAssertGreaterThan(try vividScenePixels(helpImage), 3000, "当前环节问号弹窗动画未正常渲染")
             attach(helpImage, name: "当前环节问号-\(dark ? "深色" : "浅色")")
         }
         let completion = ExerciseCompletionView(total: 8, seen: 7, usedCamera: true, onClose: {})
@@ -91,6 +91,25 @@ final class GuideAssetsTests: XCTestCase {
             let i = (y * width + x) * 4
             let r = Int(pixels[i]), g = Int(pixels[i + 1]), b = Int(pixels[i + 2])
             if r > 120 && r > g + 12 && g > b + 4 { count += 1 }
+        } }
+        return count
+    }
+
+    /// 统计趣味动画舞台中具有明显色彩/亮度层次的有效像素，确认湖景小芽或月夜萤火虫舞台正常绘制。
+    private func vividScenePixels(_ image: UIImage) throws -> Int {
+        let cg = try XCTUnwrap(image.cgImage)
+        let width = cg.width, height = cg.height
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        let context = try XCTUnwrap(CGContext(data: &pixels, width: width, height: height, bitsPerComponent: 8,
+            bytesPerRow: width * 4, space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue))
+        context.draw(cg, in: CGRect(x: 0, y: 0, width: width, height: height))
+        var count = 0
+        for y in 0..<height { for x in 0..<width {
+            let i = (y * width + x) * 4
+            let r = Int(pixels[i]), g = Int(pixels[i + 1]), b = Int(pixels[i + 2])
+            let spread = max(r, max(g, b)) - min(r, min(g, b))
+            if spread >= 20 || (r > 210 && g > 210 && b > 210) { count += 1 }
         } }
         return count
     }

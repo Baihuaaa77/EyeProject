@@ -185,7 +185,7 @@ private enum GuidePose {
     }
 }
 
-private enum GuideEyeSide { case left, right }
+fileprivate enum GuideEyeSide { case left, right }
 
 /// 游戏版全套方法演示趣味动画舞台（小芽浇水 + 月夜萤火虫），与安卓 EyechoGuideStage 保持一致。
 private struct GuideStage: View {
@@ -239,13 +239,13 @@ struct GuideFrame: View {
 
 private func guideStageBadge(_ motion: GuideMotion, _ phase: Double, _ pose: GuidePose) -> String {
     switch motion {
-    case .rest: "闭眼休息"
-    case .blink: pose == .blink ? "自然眨眼 · 润湿泪膜" : "放松注视 · 自然眨眼"
-    case .open: pose == .blink ? "不舒服就眨眼" : "保持睁眼 · 稳住水膜"
-    case .lighting: "固定支架 · 正对双眼"
-    case .cover, .coverSelf: pose.label
-    case .near: "\(pose.label) · 看 E 浇水"
-    case .move: phase < 0.68 ? "\(pose.label) · 67→25 cm" : "持续模糊 · 点击确认"
+    case .rest: return "闭眼休息"
+    case .blink: return pose == .blink ? "自然眨眼 · 润湿泪膜" : "放松注视 · 自然眨眼"
+    case .open: return pose == .blink ? "不舒服就眨眼" : "保持睁眼 · 稳住水膜"
+    case .lighting: return "固定支架 · 正对双眼"
+    case .cover, .coverSelf: return pose.label
+    case .near: return "\(pose.label) · 看 E 浇水"
+    case .move: return phase < 0.68 ? "\(pose.label) · 67→25 cm" : "持续模糊 · 点击确认"
     default:
         let label = guideDiagramLabel(motion, phase)
         return label.isEmpty ? pose.label : label
@@ -447,7 +447,7 @@ struct FarStarFireflyBadgeView: View {
 
 // MARK: - 16 种趣味情景演示画布渲染器
 
-private enum GuideAnimationRenderer {
+fileprivate enum GuideAnimationRenderer {
     static func draw(_ ctx: GraphicsContext, size: CGSize, motion: GuideMotion, p: CGFloat, pose: GuidePose) {
         switch motion {
         case .acuity, .fva, .near, .curve, .flip:
@@ -806,7 +806,8 @@ private enum GuideAnimationRenderer {
         let rightEyeC = CGPoint(x: center.x - gap, y: center.y)
         let leftEyeC = CGPoint(x: center.x + gap, y: center.y)
 
-        for (ec, which): (CGPoint, GuideEyeSide) in [(rightEyeC, .right), (leftEyeC, .left)] {
+        let eyePairs: [(CGPoint, GuideEyeSide)] = [(rightEyeC, .right), (leftEyeC, .left)]
+        for (ec, which) in eyePairs {
             if tearShield {
                 let sr = eyeRadius * 1.32
                 ctx.stroke(Path(ellipseIn: CGRect(x: ec.x - sr, y: ec.y - sr, width: sr * 2, height: sr * 2)),
@@ -826,7 +827,7 @@ private enum GuideAnimationRenderer {
                            lineWidth: eyeRadius * 0.13)
                 let dx = lookTarget.x - ec.x, dy = lookTarget.y - ec.y
                 let ang = atan2(dy, dx)
-                let dist = hypot(dx, dy)
+                let dist = sqrt(dx * dx + dy * dy)
                 let shift = min(eyeRadius * 0.34, dist * 0.08)
                 let pc = CGPoint(x: ec.x + cos(ang) * shift, y: ec.y + sin(ang) * shift)
                 let pr = eyeRadius * 0.48
