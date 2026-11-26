@@ -502,9 +502,22 @@ class ServiceVisualTest {
                             correctCount = 5,
                             wrongCount = 1,
                             lastAnswerCorrect = true,
+                            previewWaterPhase = 0.52f,
                             onAnswer = { answers.add(it) },
                         )
-                        2 -> SproutPushUpStage(
+                        2 -> SproutWateringAnswerPad(
+                            direction = 2,
+                            size = 56.dp,
+                            visible = true,
+                            stageBadge = "40cm 保持稳定",
+                            stageHeadline = "第一关 | 40cm 看清 E 字",
+                            correctCount = 2,
+                            wrongCount = 3,
+                            lastAnswerCorrect = false,
+                            previewEvapPhase = 0.38f,
+                            onAnswer = {},
+                        )
+                        3 -> SproutPushUpStage(
                             size = 64.dp,
                             visible = true,
                             startCm = 67f,
@@ -554,21 +567,28 @@ class ServiceVisualTest {
         compose.onNodeWithContentDescription("向右").performClick()
         compose.onNodeWithText("看不清 · 跳过").performClick()
         assertEquals(listOf(3, 1, 2, 0, -1), answers)
-        capture("ppt-2-clean-watering")
+        compose.onNodeWithText("浇水 +1").assertExists()
+        capture("ppt-2-scenic-watering-anim")
 
-        // 切换为湖景草地背景并截图验收
-        compose.onNodeWithText("切湖景背景").performClick()
+        // 切换为清爽背景并截图验收
+        compose.onNodeWithText("切清爽背景").performClick()
         compose.mainClock.advanceTimeBy(300)
-        compose.onNodeWithText("切清爽背景").assertExists()
-        capture("ppt-3-scenic-watering")
+        compose.onNodeWithText("切湖景背景").assertExists()
+        capture("ppt-3-clean-watering-anim")
 
+        // 蒸发动画状态截图
         page = 2
+        compose.mainClock.advanceTimeBy(300)
+        compose.onNodeWithText("水滴蒸发啦").assertExists()
+        capture("ppt-3b-evap-anim")
+
+        page = 3
         compose.mainClock.advanceTimeBy(300)
         compose.onNodeWithText("持续模糊，点这里").assertExists()
         compose.onNodeWithText("速度正常：约 1.9 cm/s").assertExists()
         capture("ppt-4-pushup")
 
-        page = 3
+        page = 4
         compose.mainClock.advanceTimeBy(300)
         compose.onNodeWithText("干眼自测完成").assertExists()
         compose.onNodeWithText("我完成了干眼自测，你也来试试？").assertExists()
