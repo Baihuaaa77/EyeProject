@@ -832,7 +832,7 @@ final class StrabismusLabVideoRecorder {
             let yawS = f.yawDeg.map { String(format: "%+.1f", $0.floatValue) } ?? "-"
             let pitS = f.pitchDeg.map { String(format: "%+.1f", $0.floatValue) } ?? "-"
             let rolS = f.rollDeg.map { String(format: "%+.1f", $0.floatValue) } ?? "-"
-            let line1 = "StrabismusLab v0.9.3  ·  \(f.stage.title)  ·  #\(f.index)  ·  t=\(String(format: "%.2fs", f.elapsedSec))  ·  距离 \(String(format: "%.1f", f.distanceCm)) cm  ·  头姿 Y/P/R \(yawS)/\(pitS)/\(rolS)°  ·  \(String(format: "%.0f", f.fps)) fps"
+            let line1 = "StrabismusLab v0.9.5  ·  \(f.stage.title)  ·  #\(f.index)  ·  t=\(String(format: "%.2fs", f.elapsedSec))  ·  距离 \(String(format: "%.1f", f.distanceCm)) cm  ·  头姿 Y/P/R \(yawS)/\(pitS)/\(rolS)°  ·  \(String(format: "%.0f", f.fps)) fps"
             drawText(line1, at: CGPoint(x: 30, y: 634), color: colInk, size: 14, bold: true, mono: true)
 
             let line2 = f.rejectionReason.map { "本帧拒判：\($0)" }

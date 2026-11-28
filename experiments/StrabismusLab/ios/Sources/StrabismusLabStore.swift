@@ -10,7 +10,7 @@ enum LabDestination {
 }
 
 enum LabExportFormat: String, CaseIterable, Identifiable {
-    case annotatedVideo, originalVideo, summaryJson, framesJsonl, framesCsv
+    case annotatedVideo, originalVideo, summaryJson, framesJsonl, displayEventsJsonl, framesCsv
     var id: String { rawValue }
     var label: String {
         switch self {
@@ -18,6 +18,7 @@ enum LabExportFormat: String, CaseIterable, Identifiable {
         case .originalVideo: return "原始高清录制视频 (MP4)"
         case .summaryJson: return "完整科研报告 (JSON)"
         case .framesJsonl: return "逐帧明细日志 (JSONL)"
+        case .displayEventsJsonl: return "显示事件时间线 (JSONL)"
         case .framesCsv: return "逐帧科研表格 (CSV)"
         }
     }
@@ -27,6 +28,7 @@ enum LabExportFormat: String, CaseIterable, Identifiable {
         case .originalVideo: return "original.mp4"
         case .summaryJson: return "session_summary.json"
         case .framesJsonl: return "frames.jsonl"
+        case .displayEventsJsonl: return "display_events.jsonl"
         case .framesCsv: return "frames.csv"
         }
     }
@@ -51,7 +53,7 @@ final class StrabismusLabStore: ObservableObject {
         codingScheme: .mSequence,
         searchRadiusFraction: 0.80,
         chipDurationMs: 250,
-        stimulusDiameterMm: 34.0,
+        stimulusDiameterMm: 22.0,
         nearDurationSec: 16,
         farDurationSec: 12,
         pursuitDurationSec: 18,
@@ -106,12 +108,20 @@ final class StrabismusLabStore: ObservableObject {
     private var lastWarningSpokenMs: Int64 = 0
 
     init() {
-        let model = UIDevice.current.model
+        let model = Self.hardwareModelIdentifier()
         let ver = UIDevice.current.systemVersion
         self.engine = StrabismusLabEngine(platformName: "iOS \(ver)", deviceModel: model)
-        self.camera.onFrame = { [weak self] frame, intrinsics, nowMs, pixelBuffer in
+        let shortVer = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.9.5"
+        let buildNum = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "0"
+        self.engine.configureAuditContext(
+            appVersion: "\(shortVer) (\(buildNum))",
+            gitCommit: "ios-bundle",
+            clockDomain: "ProcessInfo.systemUptime",
+            displayClockDomain: "ProcessInfo.systemUptime"
+        )
+        self.camera.onFrame = { [weak self] frame, intrinsics, nowMs, captureMeta, pixelBuffer in
             Task { @MainActor in
-                self?.handleCameraFrame(frame, intrinsics: intrinsics, nowMs: nowMs, pixelBuffer: pixelBuffer)
+                self?.handleCameraFrame(frame, intrinsics: intrinsics, nowMs: nowMs, captureMeta: captureMeta, pixelBuffer: pixelBuffer)
             }
         }
         self.camera.onError = { [weak self] msg in
@@ -186,16 +196,20 @@ final class StrabismusLabStore: ObservableObject {
         lastCoverStepIndex = -1
         switch nextLive.stage {
         case .nearFixation:
+            camera.setExposureLocked(true)
             feedback.speak("开始看近采集，请注视顶部白点中央，保持不动。")
         case .farFixation:
+            camera.setExposureLocked(true)
             feedback.speak("开始看远采集，请持续注视六米外远处目标。")
         case .coverTest:
+            camera.setExposureLocked(true)
             feedback.speak("开始动态遮盖。\(nextLive.coverInstruction)")
             lastCoverStepIndex = nextLive.coverStepIndex
         case .pursuit:
+            camera.setExposureLocked(false)
             feedback.speak("开始平滑追踪，头部不动，双眼跟随橙色圆点。")
         default:
-            break
+            camera.setExposureLocked(false)
         }
     }
 
@@ -234,9 +248,13 @@ final class StrabismusLabStore: ObservableObject {
     func cancelCapture() {
         feedback.tap()
         feedback.deactivateSession()
+        camera.setExposureLocked(false)
         restoreBrightness()
         videoRecorder.cancelSession()
-        engine.resetToIdle()
+        if let cancelled = engine.cancelAndBuildReport(nowMs: uptimeMs(), reason: "USER_CANCELLED") {
+            ensureSaved(cancelled)
+            refreshHistory()
+        }
         live = engine.live.value as! LabLiveState
         destination = .console
     }
@@ -244,6 +262,7 @@ final class StrabismusLabStore: ObservableObject {
     func backToConsole() {
         feedback.tap()
         feedback.stopSpeech()
+        camera.setExposureLocked(false)
         restoreBrightness()
         engine.resetToIdle()
         live = engine.live.value as! LabLiveState
@@ -307,10 +326,11 @@ final class StrabismusLabStore: ObservableObject {
         _ frame: FaceLandmarkFrame,
         intrinsics: LabCameraIntrinsics,
         nowMs: Int64,
+        captureMeta: LabFrameCaptureMeta,
         pixelBuffer: CVPixelBuffer
     ) {
         let prevIndex = engine.lastLoggedFrameIndex
-        let completed = engine.onFrameWithIntrinsics(frame: frame, intrinsics: intrinsics, nowMs: nowMs)
+        let completed = engine.onFrameWithAudit(frame: frame, intrinsics: intrinsics, nowMs: nowMs, captureMeta: captureMeta)
         let newIndex = engine.lastLoggedFrameIndex
         if recordVideo && destination == .capture && newIndex > prevIndex {
             let face = frame.faces.first
@@ -353,6 +373,8 @@ final class StrabismusLabStore: ObservableObject {
             lastCoverHolding = false
             lastCoverStepIndex = -1
             if state.stageWaitingConfirm {
+                // 切入新阶段准备页时先解锁 AE/AWB，让测光适应新姿态，点击开始后再锁定
+                camera.setExposureLocked(false)
                 feedback.play(.phase)
                 feedback.speak("第 \(state.stageIndex) 阶段，\(state.stage.title)。\(state.stageBriefingBody)")
             }
@@ -399,6 +421,7 @@ final class StrabismusLabStore: ObservableObject {
     }
 
     private func finishWithReport(_ report: LabSessionReport) {
+        camera.setExposureLocked(false)
         restoreBrightness()
         feedback.play(.complete)
         feedback.speak("采集完成，正在生成科研报告和四联诊断视频。", interrupt: true)
@@ -453,6 +476,7 @@ final class StrabismusLabStore: ObservableObject {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         try? report.toJson(pretty: true).write(to: dir.appendingPathComponent("session_summary.json"), atomically: true, encoding: .utf8)
         try? report.toFramesJsonl().write(to: dir.appendingPathComponent("frames.jsonl"), atomically: true, encoding: .utf8)
+        try? report.toDisplayEventsJsonl().write(to: dir.appendingPathComponent("display_events.jsonl"), atomically: true, encoding: .utf8)
         try? report.toFramesCsv().write(to: dir.appendingPathComponent("frames.csv"), atomically: true, encoding: .utf8)
         return dir
     }
@@ -481,5 +505,17 @@ final class StrabismusLabStore: ObservableObject {
     private func uptimeMs() -> Int64 { Int64(ProcessInfo.processInfo.systemUptime * 1000) }
     private func sanitize(_ id: String) -> String {
         id.replacingOccurrences(of: "[^a-zA-Z0-9._-]", with: "_", options: .regularExpression)
+    }
+
+    /// 读取真实硬件机型标识（如 iPhone16,2），便于多机型物理几何参数与误差分层溯源。
+    private static func hardwareModelIdentifier() -> String {
+        var sysInfo = utsname()
+        uname(&sysInfo)
+        let mirror = Mirror(reflecting: sysInfo.machine)
+        let id = mirror.children.reduce(into: "") { acc, elem in
+            guard let val = elem.value as? Int8, val != 0 else { return }
+            acc.append(Character(UnicodeScalar(UInt8(val))))
+        }
+        return id.isEmpty ? UIDevice.current.model : id
     }
 }

@@ -43,8 +43,8 @@ final class LabGrayFrame: NSObject, GrayImage {
 /// 独立 4K 前置相机采集管线：MediaPipe 478 关键点 + KMP ScreenPointOptics（0.80R）+ 完整相机内参矩阵提取。
 final class StrabismusLabCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
     let captureSession = AVCaptureSession()
-    /// 回调参数：关键点帧、完整相机内参 (fx,fy,cx,cy)、单调时钟 ms、原始视频帧缓冲（供无阻塞视频录制）。
-    var onFrame: ((FaceLandmarkFrame, LabCameraIntrinsics, Int64, CVPixelBuffer) -> Void)?
+    /// 回调参数：关键点帧、完整相机内参 (fx,fy,cx,cy)、单调时钟 ms、单帧硬件审计元数据、原始视频帧缓冲（供无阻塞视频录制）。
+    var onFrame: ((FaceLandmarkFrame, LabCameraIntrinsics, Int64, LabFrameCaptureMeta, CVPixelBuffer) -> Void)?
     var onError: ((String) -> Void)?
 
     private let queue = DispatchQueue(label: "com.zkyjss.strabismuslab.camera", autoreleaseFrequency: .workItem)
@@ -58,9 +58,42 @@ final class StrabismusLabCamera: NSObject, AVCaptureVideoDataOutputSampleBufferD
     private var lastAnalyzedMs: Int64 = 0
     private var smoothedFps: Float = 30
     private var lastFrameNanos: UInt64 = 0
+    private var activePresetTag: String = "UNKNOWN"
+    private var exposureLockedFlag: Bool = false
+    private var droppedSinceLastAnalyzed: Int32 = 0
 
     func setSearchRadius(_ radius: Float) {
         queue.async { self.searchRadius = min(0.95, max(0.55, radius)) }
+    }
+
+    /// 主动光学采集阶段锁定前摄曝光与白平衡，防止白点明灭触发 AE 自动压暗环境反光产生虚假负相关；
+    /// 退出采集或切入下一阶段准备页时恢复连续自动测光。
+    func setExposureLocked(_ locked: Bool) {
+        queue.async {
+            self.exposureLockedFlag = locked
+            guard let dev = self.device else { return }
+            do {
+                try dev.lockForConfiguration()
+                defer { dev.unlockForConfiguration() }
+                if locked {
+                    if dev.isExposureModeSupported(.locked) {
+                        dev.exposureMode = .locked
+                    }
+                    if dev.isWhiteBalanceModeSupported(.locked) {
+                        dev.whiteBalanceMode = .locked
+                    }
+                } else {
+                    if dev.isExposureModeSupported(.continuousAutoExposure) {
+                        dev.exposureMode = .continuousAutoExposure
+                    }
+                    if dev.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) {
+                        dev.whiteBalanceMode = .continuousAutoWhiteBalance
+                    }
+                }
+            } catch {
+                // 个别机型锁配置瞬时失败不中断采集流程
+            }
+        }
     }
 
     func start(searchRadius: Float) {
@@ -88,6 +121,16 @@ final class StrabismusLabCamera: NSObject, AVCaptureVideoDataOutputSampleBufferD
     func stop() {
         queue.async {
             self.active = false
+            if let dev = self.device {
+                try? dev.lockForConfiguration()
+                if dev.isExposureModeSupported(.continuousAutoExposure) {
+                    dev.exposureMode = .continuousAutoExposure
+                }
+                if dev.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) {
+                    dev.whiteBalanceMode = .continuousAutoWhiteBalance
+                }
+                dev.unlockForConfiguration()
+            }
             if self.captureSession.isRunning {
                 self.captureSession.stopRunning()
             }
@@ -113,10 +156,13 @@ final class StrabismusLabCamera: NSObject, AVCaptureVideoDataOutputSampleBufferD
 
         if captureSession.canSetSessionPreset(.hd4K3840x2160) {
             captureSession.sessionPreset = .hd4K3840x2160
+            activePresetTag = "AVCAPTURE_4K_3840x2160"
         } else if captureSession.canSetSessionPreset(.hd1920x1080) {
             captureSession.sessionPreset = .hd1920x1080
+            activePresetTag = "AVCAPTURE_1080P_FALLBACK"
         } else {
             captureSession.sessionPreset = .hd1280x720
+            activePresetTag = "AVCAPTURE_720P_FALLBACK"
         }
 
         if let conn = output.connection(with: .video) {
@@ -168,11 +214,12 @@ final class StrabismusLabCamera: NSObject, AVCaptureVideoDataOutputSampleBufferD
         return out
     }
 
-    private func resolveIntrinsics(_ sampleBuffer: CMSampleBuffer, width: Int32, height: Int32) -> LabCameraIntrinsics {
+    private func resolveIntrinsics(_ sampleBuffer: CMSampleBuffer, width: Int32, height: Int32) -> (LabCameraIntrinsics, String) {
         var fx = 0.0
         var fy = 0.0
         var cx = Double(width) * 0.5
         var cy = Double(height) * 0.5
+        var source = "UNAVAILABLE"
         if let data = CMGetAttachment(sampleBuffer, key: kCMSampleBufferAttachmentKey_CameraIntrinsicMatrix, attachmentModeOut: nil) as? Data,
            data.count >= MemoryLayout<simd_float3x3>.size {
             let mat = data.withUnsafeBytes { $0.load(as: simd_float3x3.self) }
@@ -183,6 +230,7 @@ final class StrabismusLabCamera: NSObject, AVCaptureVideoDataOutputSampleBufferD
             if mFx > 10 && mFy > 10 {
                 fx = mFx
                 fy = mFy
+                source = "AVCAPTURE_INTRINSIC_MATRIX"
                 // 若主点与当前竖屏图像尺寸相符则采用实测主点，否则居中兜底
                 if mCx > 10 && mCx < Double(width) && mCy > 10 && mCy < Double(height) {
                     cx = mCx
@@ -195,14 +243,20 @@ final class StrabismusLabCamera: NSObject, AVCaptureVideoDataOutputSampleBufferD
             let f = Double(max(width, height)) / (2.0 * tan(fovRad / 2.0))
             fx = f
             fy = f
+            source = "AVCAPTURE_FOV_FALLBACK"
         }
-        return LabCameraIntrinsics(fx: fx, fy: fy, cx: cx, cy: cy, lightOffsetXMm: 0.0, lightOffsetYMm: 22.0)
+        return (LabCameraIntrinsics(fx: fx, fy: fy, cx: cx, cy: cy, lightOffsetXMm: 0.0, lightOffsetYMm: 22.0), source)
     }
 
     private func process(_ sampleBuffer: CMSampleBuffer) {
         guard active, let detector = detector, let buffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         let nowMs = Int64(ProcessInfo.processInfo.systemUptime * 1000)
-        if nowMs - lastAnalyzedMs < 28 { return }
+        if nowMs - lastAnalyzedMs < 28 {
+            droppedSinceLastAnalyzed += 1
+            return
+        }
+        let dropped = droppedSinceLastAnalyzed
+        droppedSinceLastAnalyzed = 0
         lastAnalyzedMs = nowMs
 
         let startNanos = DispatchTime.now().uptimeNanoseconds
@@ -248,7 +302,24 @@ final class StrabismusLabCamera: NSObject, AVCaptureVideoDataOutputSampleBufferD
             let gray = LabGrayFrame(buffer)
             defer { gray.release() }
 
-            let intrinsics = resolveIntrinsics(sampleBuffer, width: gray.width, height: gray.height)
+            let (intrinsics, intrinsicsSource) = resolveIntrinsics(sampleBuffer, width: gray.width, height: gray.height)
+            let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+            let ptsSec = CMTimeGetSeconds(pts)
+            let sourceTsMs: Int64 = ptsSec.isFinite && ptsSec > 0 ? Int64(ptsSec * 1000.0) : nowMs
+            let measuredExposureSec: KotlinDouble? = device.flatMap { dev in
+                let sec = CMTimeGetSeconds(dev.exposureDuration)
+                return (sec.isFinite && sec > 0.0001 && sec < 0.25) ? KotlinDouble(value: sec) : nil
+            }
+            let captureMeta = LabFrameCaptureMeta(
+                exposureSec: measuredExposureSec,
+                exposureSource: measuredExposureSec != nil ? "AVCAPTURE_DEVICE" : "FPS_APPROX",
+                sourceTimestampMs: KotlinLong(value: sourceTsMs),
+                intrinsicsSource: intrinsicsSource,
+                mirrored: false,
+                cropNote: "\(activePresetTag)_\(gray.width)x\(gray.height)",
+                exposureLocked: exposureLockedFlag,
+                droppedSincePrev: dropped
+            )
             let face: FaceMetrics? = points.isEmpty ? nil : ScreenPointOptics.shared.face(
                 points: ktPoints,
                 matrix: ktTransform,
@@ -265,9 +336,9 @@ final class StrabismusLabCamera: NSObject, AVCaptureVideoDataOutputSampleBufferD
                 fps: smoothedFps,
                 imageBrightness: KotlinFloat(value: 0),
                 analysisElapsedRealtimeMs: KotlinLong(value: nowMs),
-                sourceElapsedRealtimeMs: KotlinLong(value: nowMs)
+                sourceElapsedRealtimeMs: KotlinLong(value: sourceTsMs)
             )
-            onFrame?(frame, intrinsics, nowMs, buffer)
+            onFrame?(frame, intrinsics, nowMs, captureMeta, buffer)
         } catch {
             DispatchQueue.main.async { self.onError?("帧分析异常：\(error.localizedDescription)") }
         }

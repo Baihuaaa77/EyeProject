@@ -3,13 +3,23 @@ plugins {
     id("eyeproject.android.application.compose")
 }
 
+val labGitCommit: String = providers.exec {
+    commandLine("git", "rev-parse", "--short", "HEAD")
+    workingDir = rootProject.projectDir
+    isIgnoreExitValue = true
+}.standardOutput.asText.map { it.trim().ifBlank { "unknown" } }.orElse("unknown").get()
+
 android {
     namespace = "com.zkyjss.strabismuslab"
+    buildFeatures {
+        buildConfig = true
+    }
     defaultConfig {
         applicationId = "com.zkyjss.strabismuslab"
-        versionCode = 1
-        versionName = "0.8.0-lab"
+        versionCode = 2
+        versionName = "0.9.5-lab"
         ndk.abiFilters += "arm64-v8a"
+        buildConfigField("String", "LAB_GIT_COMMIT", "\"$labGitCommit\"")
     }
 }
 

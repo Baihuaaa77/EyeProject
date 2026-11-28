@@ -52,7 +52,7 @@ struct LabConsoleView: View {
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("StrabismusLab").font(LabFont.title).foregroundColor(LabPalette.inkPrimary)
-                            Text("3D CODED CORNEAL LAB · v0.9.3").font(LabFont.microMono).foregroundColor(LabPalette.accent)
+                            Text("3D CODED CORNEAL LAB · v0.9.5").font(LabFont.microMono).foregroundColor(LabPalette.accent)
                         }
                         Spacer()
                         Button(action: store.openHistory) {
@@ -181,7 +181,9 @@ struct LabConsoleView: View {
                             HStack(spacing: 8) {
                                 ForEach(schemes, id: \.name) { s in
                                     pillButton(s.label, active: store.config.codingScheme == s) {
-                                        store.updateConfig { copyConfig($0, codingScheme: s) }
+                                        // 曼彻斯特双相每码元含前后两个半周期：默认推荐 500ms（半周期 250ms），仍可手动切回 250ms 做消融对照
+                                        let nextChip: Int64 = (s == .manchester && store.config.chipDurationMs < 500) ? 500 : store.config.chipDurationMs
+                                        store.updateConfig { copyConfig($0, codingScheme: s, chipDurationMs: nextChip) }
                                     }
                                 }
                             }
@@ -296,11 +298,13 @@ struct LabCaptureStageView: View {
                             Circle()
                                 .fill(Color(white: lum))
                                 .frame(width: dotPt, height: dotPt)
+                                .transaction { $0.animation = nil }
                             if lum > 0.5 && store.live.stage != .farFixation {
                                 Circle().fill(LabPalette.accent.opacity(0.45)).frame(width: 2.5, height: 2.5)
                             }
                         }
                         .padding(.top, 4)
+                        .animation(nil, value: lum)
                         Spacer()
                     }
                 }
@@ -323,7 +327,7 @@ struct LabCaptureStageView: View {
                 VStack(spacing: 14) {
                     if store.analyzing {
                         ProgressView().tint(LabPalette.accent)
-                        Text("正在执行 v0.9.3 3D 光学反演与遮盖拐点回溯…").font(LabFont.body).foregroundColor(LabPalette.inkSecondary)
+                        Text("正在执行 v0.9.5 3D 光学反演与遮盖拐点回溯…").font(LabFont.body).foregroundColor(LabPalette.inkSecondary)
                     } else if store.live.stageWaitingConfirm {
                         stageBriefingCard
                             .padding(.horizontal, 20)

@@ -65,17 +65,19 @@ jobs:
           test "$(/usr/libexec/PlistBuddy -c 'Print :DTPlatformName' "$app/Info.plist")" = iphoneos
           test ! -e "$app/_CodeSignature"
           test ! -e "$app/embedded.mobileprovision"
+          ver="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Info.plist")"
+          ipa_name="StrabismusLab-v${ver}-unsigned.ipa"
           mkdir -p build/unsigned/Payload
           cp -R "$app" build/unsigned/Payload/
           cd build/unsigned
-          zip -qry StrabismusLab-v0.9.3-unsigned.ipa Payload
-          shasum -a 256 StrabismusLab-v0.9.3-unsigned.ipa > SHA256.txt
-          ls -lh StrabismusLab-v0.9.3-unsigned.ipa SHA256.txt
+          zip -qry "$ipa_name" Payload
+          shasum -a 256 "$ipa_name" > SHA256.txt
+          ls -lh "$ipa_name" SHA256.txt
       - uses: actions/upload-artifact@v4
         with:
           name: strabismus-lab-unsigned-ipa
           path: |
-            experiments/StrabismusLab/ios/build/unsigned/StrabismusLab-v0.9.3-unsigned.ipa
+            experiments/StrabismusLab/ios/build/unsigned/*.ipa
             experiments/StrabismusLab/ios/build/unsigned/SHA256.txt
           if-no-files-found: error
           retention-days: 14

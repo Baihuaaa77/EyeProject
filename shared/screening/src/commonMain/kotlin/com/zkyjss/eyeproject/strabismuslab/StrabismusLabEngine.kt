@@ -97,6 +97,32 @@ class StrabismusLabEngine(
     private var lastIntrinsics: LabCameraIntrinsics? = null
     private val fpsSamples = mutableListOf<Double>()
 
+    // 科研冻结与离线复算审计上下文
+    private var auditAppVersion = ""
+    private var auditGitCommit = ""
+    private var auditClockDomain = "unknown"
+    private var auditDisplayClockDomain = "unknown"
+    private var lastIntrinsicsSource = "UNKNOWN"
+    private var lastMirrored = false
+    private var lastCropNote = ""
+    private var lastExposureSource = "FPS_APPROX"
+    private var droppedFramesTotal = 0
+    private val exposureSamplesSec = mutableListOf<Double>()
+    private val exposureLockedStages = mutableSetOf<String>()
+
+    /** 配置本机安装包版本、Git 提交与时钟口径，供归档报告完整溯源。 */
+    fun configureAuditContext(
+        appVersion: String,
+        gitCommit: String = "",
+        clockDomain: String = "unknown",
+        displayClockDomain: String = clockDomain,
+    ) {
+        auditAppVersion = appVersion
+        auditGitCommit = gitCommit
+        auditClockDomain = clockDomain
+        auditDisplayClockDomain = displayClockDomain
+    }
+
     private data class CoverActionSpec(
         val label: String,
         val covered: VisionEye?,
@@ -172,6 +198,13 @@ class StrabismusLabEngine(
         frameCounter = 0
         validFrameCounter = 0
         lastIntrinsics = null
+        lastIntrinsicsSource = "UNKNOWN"
+        lastMirrored = false
+        lastCropNote = ""
+        lastExposureSource = "FPS_APPROX"
+        droppedFramesTotal = 0
+        exposureSamplesSec.clear()
+        exposureLockedStages.clear()
         fpsSamples.clear()
         stageDisplayEvents.clear()
         stageLeftObs.clear()
@@ -242,11 +275,14 @@ class StrabismusLabEngine(
 
     fun stopAndBuildReport(nowMs: Long): LabSessionReport {
         val current = _live.value.stage
-        if (current != LabStage.IDLE && current != LabStage.COMPLETED) {
+        val stoppedEarly = current != LabStage.IDLE && current != LabStage.COMPLETED
+        if (stoppedEarly) {
             val startSec = stageStartTimesSec[current] ?: (stageStartMs / 1000.0)
             stageDurationsSec[current] = max(0.5, nowMs / 1000.0 - startSec)
         }
-        val report = buildReport(nowMs)
+        val status = if (stoppedEarly) LabSessionStatus.STOPPED_EARLY else LabSessionStatus.COMPLETED
+        val reason = if (stoppedEarly) "USER_STOPPED_AT_${current.name}" else null
+        val report = buildReport(nowMs, status = status, terminationReason = reason)
         _live.value = _live.value.copy(
             stage = LabStage.COMPLETED,
             remainingSec = 0,
@@ -254,6 +290,29 @@ class StrabismusLabEngine(
             prompt = "采集完成，正在呈现分析工作台",
             warning = null,
         )
+        return report
+    }
+
+    /**
+     * 取消/中断当前采集并生成可追溯的 CANCELLED 归档报告（保留已采帧、丢帧与显示事件时间线）。
+     * 若尚未开始有效会话则返回 null。
+     */
+    fun cancelAndBuildReport(nowMs: Long, reason: String = "USER_CANCELLED"): LabSessionReport? {
+        val current = _live.value.stage
+        if (sessionId.isBlank() || current == LabStage.IDLE) {
+            resetToIdle()
+            return null
+        }
+        if (current != LabStage.COMPLETED) {
+            val startSec = stageStartTimesSec[current] ?: (stageStartMs / 1000.0)
+            stageDurationsSec[current] = max(0.0, nowMs / 1000.0 - startSec)
+        }
+        val report = buildReport(
+            endMs = nowMs,
+            status = LabSessionStatus.CANCELLED,
+            terminationReason = "${reason}_AT_${current.name}",
+        )
+        resetToIdle()
         return report
     }
 
@@ -306,16 +365,32 @@ class StrabismusLabEngine(
             lightOffsetXMm = config.lightOffsetXMm,
             lightOffsetYMm = config.lightOffsetYMm,
         )
-        return onFrameWithIntrinsics(frame, intrinsics, nowMs)
+        return onFrameWithAudit(frame, intrinsics, nowMs, captureMeta = null)
     }
 
-    /** 完整内参入口：传入 (fx, fy, cx, cy) 与光源相对前摄物理偏置，供 3D 球面光学反演使用。 */
-    fun onFrameWithIntrinsics(frame: FaceLandmarkFrame, intrinsics: LabCameraIntrinsics, nowMs: Long): LabSessionReport? {
+    /** 完整内参入口（向后兼容签名）：转发至含硬件审计元数据的 [onFrameWithAudit]。 */
+    fun onFrameWithIntrinsics(frame: FaceLandmarkFrame, intrinsics: LabCameraIntrinsics, nowMs: Long): LabSessionReport? =
+        onFrameWithAudit(frame, intrinsics, nowMs, captureMeta = null)
+
+    /** 完整内参 + 单帧硬件采集审计元数据入口（实测曝光、源时间戳、内参来源、镜像与丢帧计数）。 */
+    fun onFrameWithAudit(
+        frame: FaceLandmarkFrame,
+        intrinsics: LabCameraIntrinsics,
+        nowMs: Long,
+        captureMeta: LabFrameCaptureMeta? = null,
+    ): LabSessionReport? {
         val mergedIntrinsics = intrinsics.copy(
             lightOffsetXMm = config.lightOffsetXMm,
             lightOffsetYMm = config.lightOffsetYMm,
         )
         if (mergedIntrinsics.isValid) lastIntrinsics = mergedIntrinsics
+        if (captureMeta != null) {
+            if (captureMeta.intrinsicsSource.isNotBlank() && captureMeta.intrinsicsSource != "UNKNOWN") {
+                lastIntrinsicsSource = captureMeta.intrinsicsSource
+            }
+            lastMirrored = captureMeta.mirrored
+            if (captureMeta.cropNote.isNotBlank()) lastCropNote = captureMeta.cropNote
+        }
         val focalLengthPx = if (mergedIntrinsics.isValid) {
             ((mergedIntrinsics.fx + mergedIntrinsics.fy) * 0.5).toFloat()
         } else 0f
@@ -351,10 +426,10 @@ class StrabismusLabEngine(
         val distOk = distCm in (targetDist - 6f)..(targetDist + 6f)
 
         val leftCands = leftOpt?.reflexCandidates.orEmpty().map {
-            LabCandidateSummary(it.point.x, it.point.y, it.contrast, it.snr, it.diameterPx, it.quality)
+            LabCandidateSummary(it.point.x, it.point.y, it.contrast, it.snr, it.diameterPx, it.quality, it.brightness, it.shapeScore)
         }
         val rightCands = rightOpt?.reflexCandidates.orEmpty().map {
-            LabCandidateSummary(it.point.x, it.point.y, it.contrast, it.snr, it.diameterPx, it.quality)
+            LabCandidateSummary(it.point.x, it.point.y, it.contrast, it.snr, it.diameterPx, it.quality, it.brightness, it.shapeScore)
         }
 
         if (stage == LabStage.IDLE || stage == LabStage.COMPLETED) {
@@ -398,6 +473,21 @@ class StrabismusLabEngine(
             return null
         }
 
+        if (captureMeta != null) {
+            droppedFramesTotal += max(0, captureMeta.droppedSincePrev)
+            if (captureMeta.exposureLocked) exposureLockedStages += stage.name
+        }
+        val measuredExposure = captureMeta?.exposureSec?.takeIf { it.isFinite() && it in 0.0001..0.25 }
+        val approxExposure = 1.0 / max(20.0, frame.fps.toDouble().takeIf { it.isFinite() && it > 10.0 } ?: 30.0) * 0.6
+        val effectiveExposureSec = measuredExposure ?: approxExposure
+        val frameExposureSource = if (measuredExposure != null) {
+            captureMeta?.exposureSource?.takeIf { it.isNotBlank() } ?: "MEASURED"
+        } else {
+            "FPS_APPROX"
+        }
+        lastExposureSource = frameExposureSource
+        exposureSamplesSec += effectiveExposureSec
+
         val elapsedStageSec = max(0.0, (nowMs - stageStartMs) / 1000.0)
         val stageScheme = activeCodingScheme(stage)
         val (stimIntensity, stimCode) = if (stage.usesOpticalStimulus) {
@@ -430,7 +520,6 @@ class StrabismusLabEngine(
         // 记录光学观测帧供结束时跑 CornealCodeV8 双向解调
         if (stage.usesOpticalStimulus) {
             val hostSec = nowMs / 1000.0
-            val exposureSec = 1.0 / max(20.0, frame.fps.toDouble().takeIf { it.isFinite() && it > 10.0 } ?: 30.0) * 0.6
             if (leftEye != null && leftCenter != null && leftOpt != null) {
                 val visible = leftOpt.irisDiameterPx >= 12f && (leftOpt.irisVisibilityContrast ?: 0f) >= 8f && (leftEar ?: 1f) >= 0.14f
                 stageLeftObs.getOrPut(stage) { mutableListOf() } += GlintObservationFrame(
@@ -440,7 +529,7 @@ class StrabismusLabEngine(
                     irisCenterY = leftCenter.y.toDouble(),
                     irisRadiusPx = leftOpt.irisDiameterPx * 0.5,
                     distanceCm = distCm.toDouble().takeIf { it > 10.0 } ?: 33.0,
-                    exposureSec = exposureSec,
+                    exposureSec = effectiveExposureSec,
                     visible = visible,
                     candidates = leftOpt.reflexCandidates,
                 )
@@ -454,7 +543,7 @@ class StrabismusLabEngine(
                     irisCenterY = rightCenter.y.toDouble(),
                     irisRadiusPx = rightOpt.irisDiameterPx * 0.5,
                     distanceCm = distCm.toDouble().takeIf { it > 10.0 } ?: 33.0,
-                    exposureSec = exposureSec,
+                    exposureSec = effectiveExposureSec,
                     visible = visible,
                     candidates = rightOpt.reflexCandidates,
                 )
@@ -581,6 +670,11 @@ class StrabismusLabEngine(
             coveredEye = coverDetector.coveredEye?.name,
             leftCandidateCount = leftCands.size,
             rightCandidateCount = rightCands.size,
+            leftCandidates = leftCands,
+            rightCandidates = rightCands,
+            sourceTimestampMs = captureMeta?.sourceTimestampMs ?: frame.sourceElapsedRealtimeMs,
+            exposureSec = effectiveExposureSec,
+            exposureSource = frameExposureSource,
         )
 
         val stageTotalSec = when (stage) {
@@ -715,12 +809,25 @@ class StrabismusLabEngine(
         return false
     }
 
-    private fun buildReport(endMs: Long): LabSessionReport {
+    private fun buildReport(
+        endMs: Long,
+        status: LabSessionStatus = LabSessionStatus.COMPLETED,
+        terminationReason: String? = null,
+    ): LabSessionReport {
         val medFps = median(fpsSamples) ?: 30.0
         val fpsInt = medFps.toInt().coerceIn(15, 60)
         val chipSec = config.chipDurationMs / 1000.0
 
-        fun analyzeEye(stage: LabStage, eye: String, obs: List<GlintObservationFrame>, lagPriorSec: Double?): CornealCodeV8Result? {
+        // 双端屏幕绘制将白点逻辑直径限制在 <=140 pt/dp（约 22.2 mm），光学预算使用有效显示直径避免高估预期斑径 50%
+        val effectiveStimulusMm = min(config.stimulusDiameterMm, 140.0 / 6.3)
+
+        fun analyzeEye(
+            stage: LabStage,
+            eye: String,
+            obs: List<GlintObservationFrame>,
+            lagPriorSec: Double?,
+            anchorPrior: Point2f? = null,
+        ): CornealCodeV8Result? {
             if (obs.isEmpty()) return null
             val startSec = stageStartTimesSec[stage] ?: obs.first().hostTimeSec
             val durSec = stageDurationsSec[stage] ?: max(2.0, obs.last().hostTimeSec - startSec)
@@ -733,36 +840,49 @@ class StrabismusLabEngine(
                 durationSec = durSec,
                 chipSec = chipSec,
                 scheme = activeCodingScheme(stage),
-                stimulusDiameterMm = config.stimulusDiameterMm,
+                stimulusDiameterMm = effectiveStimulusMm,
                 searchRadiusFraction = config.searchRadiusFraction,
                 fps = fpsInt,
                 lagPriorSec = lagPriorSec,
+                anchorPrior = anchorPrior,
             )
         }
 
         fun highConfLag(res: CornealCodeV8Result?): Double? {
             if (res == null || !res.codeVerified) return null
-            if ((res.trainCorrelation ?: 0.0) < 0.55 || (res.heldOutCorrelation ?: 0.0) < 0.45) return null
+            if ((res.trainCorrelation ?: 0.0) < 0.45 || (res.heldOutCorrelation ?: 0.0) < 0.40) return null
             return res.lagMs?.div(1000.0)?.takeIf { it in -0.05..0.22 }
         }
 
+        fun verifiedAnchor(res: CornealCodeV8Result?): Point2f? {
+            if (res == null || !res.codeVerified) return null
+            val rx = res.referenceRelX ?: return null
+            val ry = res.referenceRelY ?: return null
+            return Point2f(rx.toFloat(), ry.toFloat())
+        }
+
         /** 同阶段双眼共享硬件延迟先验：单眼被强环境反光拉偏延迟时，以高置信眼（或前阶段）硬件延迟重跑校正。 */
-        fun analyzeStagePair(stage: LabStage, priorLagSec: Double?): Pair<CornealCodeV8Result?, CornealCodeV8Result?> {
+        fun analyzeStagePair(
+            stage: LabStage,
+            priorLagSec: Double?,
+            leftAnchorPrior: Point2f? = null,
+            rightAnchorPrior: Point2f? = null,
+        ): Pair<CornealCodeV8Result?, CornealCodeV8Result?> {
             val lObs = stageLeftObs[stage].orEmpty()
             val rObs = stageRightObs[stage].orEmpty()
             if (lObs.isEmpty() && rObs.isEmpty()) return null to null
-            var lRes = analyzeEye(stage, "LEFT", lObs, priorLagSec)
-            var rRes = analyzeEye(stage, "RIGHT", rObs, priorLagSec)
+            var lRes = analyzeEye(stage, "LEFT", lObs, priorLagSec, leftAnchorPrior)
+            var rRes = analyzeEye(stage, "RIGHT", rObs, priorLagSec, rightAnchorPrior)
             val stageLag = highConfLag(lRes) ?: highConfLag(rRes) ?: priorLagSec
             if (stageLag != null) {
                 if (lRes != null && !lRes.codeVerified) {
-                    val retried = analyzeEye(stage, "LEFT", lObs, stageLag)
+                    val retried = analyzeEye(stage, "LEFT", lObs, stageLag, leftAnchorPrior)
                     if (retried != null && (retried.codeVerified || (retried.heldOutCorrelation ?: -1.0) > (lRes.heldOutCorrelation ?: -1.0))) {
                         lRes = retried
                     }
                 }
                 if (rRes != null && !rRes.codeVerified) {
-                    val retried = analyzeEye(stage, "RIGHT", rObs, stageLag)
+                    val retried = analyzeEye(stage, "RIGHT", rObs, stageLag, rightAnchorPrior)
                     if (retried != null && (retried.codeVerified || (retried.heldOutCorrelation ?: -1.0) > (rRes.heldOutCorrelation ?: -1.0))) {
                         rRes = retried
                     }
@@ -774,7 +894,13 @@ class StrabismusLabEngine(
         val (nearL, nearR) = analyzeStagePair(LabStage.NEAR_FIXATION, priorLagSec = null)
         val hardwareLagPrior = listOfNotNull(highConfLag(nearL), highConfLag(nearR)).takeIf { it.isNotEmpty() }?.average()
         val (farL, farR) = analyzeStagePair(LabStage.FAR_FIXATION, priorLagSec = hardwareLagPrior)
-        val (coverL, coverR) = analyzeStagePair(LabStage.COVER_TEST, priorLagSec = hardwareLagPrior)
+        // 遮盖阶段与看近同距（33 cm）且强制常亮无光码，复用看近已验证光码锚点作为空间先验，防止跳到天花板灯
+        val (coverL, coverR) = analyzeStagePair(
+            stage = LabStage.COVER_TEST,
+            priorLagSec = hardwareLagPrior,
+            leftAnchorPrior = verifiedAnchor(nearL),
+            rightAnchorPrior = verifiedAnchor(nearR),
+        )
 
         val leftEstimateByFrame = buildMap<Int, LabGlintFrameEstimate> {
             listOfNotNull(nearL, farL, coverL).forEach { r -> r.frames.forEach { put(it.frameIndex, it) } }
@@ -1049,24 +1175,66 @@ class StrabismusLabEngine(
             }
         }
 
+        val allDisplayEvents = stageDisplayEvents.entries
+            .flatMap { (st, list) ->
+                list.map { ev ->
+                    LabDisplayEventRecord(
+                        stage = st,
+                        hostTimeSec = ev.hostTimeSec,
+                        callbackHostTimeSec = ev.callbackHostTimeSec,
+                        intensity = ev.intensity,
+                        code = ev.code,
+                        chip = ev.chip,
+                        elapsedSec = ev.elapsedSec,
+                        screenBrightness = ev.screenBrightness,
+                    )
+                }
+            }
+            .sortedBy { it.hostTimeSec }
+
+        val auditMeta = LabCaptureAuditMeta(
+            appVersion = auditAppVersion,
+            gitCommit = auditGitCommit,
+            clockDomain = auditClockDomain,
+            displayClockDomain = auditDisplayClockDomain,
+            intrinsicsSource = lastIntrinsicsSource,
+            mirrored = lastMirrored,
+            cropNote = lastCropNote,
+            exposureSource = lastExposureSource,
+            medianExposureMs = median(exposureSamplesSec)?.let { it * 1000.0 },
+            exposureLockedStages = exposureLockedStages.sorted(),
+            droppedFramesCount = droppedFramesTotal,
+            lightOffsetCalibrationSource = if (config.lightOffsetXMm == 0.0 && config.lightOffsetYMm == 22.0) {
+                "CONFIG_DEFAULT"
+            } else {
+                "CUSTOM_MEASURED"
+            },
+            stageStartTimesSec = stageStartTimesSec.mapKeys { it.key.name },
+            stageDurationsSec = stageDurationsSec.mapKeys { it.key.name },
+        )
+
         return LabSessionReport(
             sessionId = sessionId,
             createdAtMs = sessionStartMs,
+            sessionStatus = status,
+            terminationReason = terminationReason,
             platform = platformName,
             deviceModel = deviceModel,
             sourceWidth = lastSourceW,
             sourceHeight = lastSourceH,
             cameraIntrinsics = intrinsics,
+            auditMeta = auditMeta,
             medianFps = medFps,
             durationSec = max(0.0, (endMs - sessionStartMs) / 1000.0),
             config = config,
             riskGrade = riskGrade,
             confidenceScore = confidenceScore,
-            headline = when (riskGrade) {
-                LabRiskGrade.HIGH_RISK -> "检测到持续且显著的眼位偏斜（$triggerDesc）"
-                LabRiskGrade.SUSPECT -> "存在可疑眼位或遮盖再注视信号（${coverSummary.classification ?: triggerDesc}）"
-                LabRiskGrade.NORMAL -> "本次科研采集未见显著眼位偏斜（看近 3D HDE ${fmt1(nearH)}Δ）"
-                LabRiskGrade.INCONCLUSIVE -> if (nearUncertain) "测得眼位接近门槛但抖动较大（$triggerDesc），建议复测" else "有效光码或双眼帧不足，请在 Debug 页核查拒判原因"
+            headline = when {
+                status == LabSessionStatus.CANCELLED -> "会话中途取消（${terminationReason ?: "USER_CANCELLED"}），已留存完整审计数据"
+                riskGrade == LabRiskGrade.HIGH_RISK -> "检测到持续且显著的眼位偏斜（$triggerDesc）"
+                riskGrade == LabRiskGrade.SUSPECT -> "存在可疑眼位或遮盖再注视信号（${coverSummary.classification ?: triggerDesc}）"
+                riskGrade == LabRiskGrade.NORMAL -> "本次科研采集未见显著眼位偏斜（看近 3D HDE ${fmt1(nearH)}Δ）"
+                else -> if (nearUncertain) "测得眼位接近门槛但抖动较大（$triggerDesc），建议复测" else "有效光码或双眼帧不足，请在 Debug 页核查拒判原因"
             },
             summaryNotes = notes,
             nearMetrics = nearMetrics,
@@ -1088,6 +1256,7 @@ class StrabismusLabEngine(
             totalFrames = frameCounter,
             validFrames = validFrameCounter,
             frames = enrichedFrames,
+            displayEvents = allDisplayEvents,
         )
     }
 

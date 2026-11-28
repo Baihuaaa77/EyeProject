@@ -11,6 +11,8 @@ import com.zkyjss.eyeproject.core.model.HeadPoseEstimate
 import com.zkyjss.eyeproject.core.model.OpticalEyeMeasurement
 import com.zkyjss.eyeproject.core.model.Point2f
 import com.zkyjss.eyeproject.core.model.ReflexCandidate
+import com.zkyjss.eyeproject.feature.services.CoverDetector
+import com.zkyjss.eyeproject.feature.services.VisionEye
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
@@ -657,5 +659,504 @@ class StrabismusLabAlgorithmTest {
         assertTrue(abs(nm.hdeVergence3dPrism ?: 0.0) > 12.0, "应能复现对称 κ 角引起的聚散分量偏置，实际=${nm.hdeVergence3dPrism}")
         assertTrue(abs(nm.hde3dPrism ?: 99.0) < 3.0, "主 3D HDE 必须抵消双目对称 κ 角，实际=${nm.hde3dPrism}")
         assertEquals(LabRiskGrade.NORMAL, report.riskGrade, "双目对称正 κ 角健康眼应判 NORMAL，实际=${report.riskGrade}, headline=${report.headline}")
+    }
+
+    @Test
+    fun manchester250msAtRealisticIphoneLagDecodesWithoutTransitionCollapse() {
+        // 复现 Run #2 真机故障：250ms 曼彻斯特双相（半码元 125ms）在 83.3ms 真实硬件延迟 + 更亮恒定窗面反光下，
+        // 旧版固定 33ms 种子延迟导致正负抵消且 96% 帧被吞成 TRANSITION；v0.9.4 延迟网格搜索 + 短脉宽时间线应稳过。
+        val chipSec = 0.25
+        val durationSec = 16.0
+        val startSec = 200.0
+        val trueLagSec = 2.5 / 30.0 // 83.3ms，贴近真机 iPhone 实测延迟
+        val scheme = LabCodingScheme.MANCHESTER
+
+        val events = mutableListOf<LabDisplayEvent>()
+        var t = 0.0
+        while (t < durationSec) {
+            val code = StimulusCodeV8.codeValue(t, chipSec, scheme)
+            val intensity = StimulusCodeV8.intensity(t, chipSec, scheme)
+            events += LabDisplayEvent(
+                hostTimeSec = startSec + t,
+                callbackHostTimeSec = startSec + t,
+                intensity = intensity,
+                code = code,
+                chip = (t / chipSec).toInt(),
+                elapsedSec = t,
+            )
+            t += 1.0 / 60.0
+        }
+
+        val obsFrames = mutableListOf<GlintObservationFrame>()
+        val totalFrames = (durationSec * 30).toInt()
+        for (i in 0 until totalFrames) {
+            val host = startSec + i / 30.0
+            val codeAtCam = StimulusCodeV8.codeValue((host - startSec - trueLagSec).coerceAtLeast(0.0), chipSec, scheme)
+            val lightOn = codeAtCam > 0.0
+            val cands = mutableListOf<ReflexCandidate>()
+            // 恒定更亮且稍大的环境窗面反光（右偏）
+            cands += ReflexCandidate(
+                point = Point2f(122f, 102f),
+                contrast = 135f,
+                brightness = 240f,
+                quality = 0.85f,
+                snr = 20f,
+                diameterPx = 5.6f,
+                shapeScore = 0.80f,
+            )
+            if (lightOn) {
+                cands += ReflexCandidate(
+                    point = Point2f(96f, 92f),
+                    contrast = 78f,
+                    brightness = 205f,
+                    quality = 0.78f,
+                    snr = 14f,
+                    diameterPx = 3.5f,
+                    shapeScore = 0.90f,
+                )
+            }
+            obsFrames += GlintObservationFrame(
+                frameIndex = i + 1,
+                hostTimeSec = host,
+                irisCenterX = 100.0,
+                irisCenterY = 100.0,
+                irisRadiusPx = 50.0,
+                distanceCm = 33.0,
+                exposureSec = 0.015,
+                visible = true,
+                candidates = cands,
+            )
+        }
+
+        val result = CornealCodeV8Analyzer.analyze(
+            eye = "LEFT",
+            frames = obsFrames,
+            displayEvents = events,
+            startHostTimeSec = startSec,
+            durationSec = durationSec,
+            chipSec = chipSec,
+            scheme = scheme,
+            stimulusDiameterMm = 22.0,
+            searchRadiusFraction = 0.80f,
+            fps = 30,
+        )
+
+        assertTrue(result.codeVerified, "250ms 曼彻斯特应通过 63 错位码验证: train=${result.trainCorrelation}, held=${result.heldOutCorrelation}, wrong=${result.maxWrongCodeCorrelation}")
+        assertTrue((result.heldOutCorrelation ?: 0.0) > 0.65, "heldOut=${result.heldOutCorrelation}")
+        assertTrue(abs((result.lagMs ?: -999.0) - trueLagSec * 1000.0) <= 35.0, "lagMs=${result.lagMs}")
+        assertTrue(abs((result.referenceRelX ?: 1.0) - (-4.0 / 50.0)) < 0.10, "refX=${result.referenceRelX}")
+        assertTrue(abs((result.referenceRelY ?: 1.0) - (-8.0 / 50.0)) < 0.10, "refY=${result.referenceRelY}")
+        val audit = assertNotNull(result.emissionAudit)
+        assertTrue(audit.stableOnFrames >= 80, "稳定 ON 帧不应被吞成 TRANSITION，实际=${audit.stableOnFrames}, trans=${audit.transitionFrames}")
+        assertTrue(audit.stableOffFrames >= 80, "稳定 OFF 帧不应被吞成 TRANSITION，实际=${audit.stableOffFrames}")
+        assertEquals(0, audit.finalOffMeasurements)
+    }
+
+    @Test
+    fun partialFingerOcclusionSuppressesFalseHighVisibilityAndKeepsCoverDetected() {
+        // 复现 Run #1 #1117 / 71.3s 半遮盖故障：手指覆盖左眼外侧并切入虹膜一半（亮肤色 145），
+        // 另一侧残留暗虹膜阴影（灰度 14）；旧版 visibilityContrast 算出虚假高值 ~95 误判为已移开遮盖。
+        val testEye = EyeLandmarks(
+            label = "LEFT",
+            earPoints = listOf(
+                Point2f(20f, 40f), Point2f(40f, 26f), Point2f(80f, 26f),
+                Point2f(100f, 40f), Point2f(80f, 54f), Point2f(40f, 54f),
+            ),
+            irisPoints = listOf(Point2f(60f, 40f)),
+            irisDiameterPx = 28f,
+        )
+        val openImage = object : GrayImage {
+            override val width = 120
+            override val height = 80
+            override fun grayRegion(left: Int, top: Int, width: Int, height: Int) = IntArray(width * height) { i ->
+                val x = left + i % width
+                val y = top + i / width
+                val d = sqrt(((x - 60) * (x - 60) + (y - 40) * (y - 40)).toDouble())
+                when {
+                    d <= 14.0 -> 24
+                    else -> 115
+                }
+            }
+        }
+        val partialFingerImage = object : GrayImage {
+            override val width = 120
+            override val height = 80
+            override fun grayRegion(left: Int, top: Int, width: Int, height: Int) = IntArray(width * height) { i ->
+                val x = left + i % width
+                when {
+                    // 右半边被亮肤色手指覆盖（切入虹膜中心 x >= 60）
+                    x >= 60 -> 148
+                    // 左半边被指缝阴影与残余虹膜占据
+                    x >= 46 -> 14
+                    else -> 48
+                }
+            }
+        }
+
+        val openOpt = assertNotNull(EyeOpticalAlgorithm.measureScreenPoint(openImage, testEye, 0.80f))
+        val partialOpt = assertNotNull(EyeOpticalAlgorithm.measureScreenPoint(partialFingerImage, testEye, 0.80f))
+        assertTrue((openOpt.irisVisibilityContrast ?: 0f) > 50f, "正常睁眼可见性应高: ${openOpt.irisVisibilityContrast}")
+        assertTrue((partialOpt.irisVisibilityContrast ?: 99f) < 5f, "手指半遮盖可见性应归零: ${partialOpt.irisVisibilityContrast}")
+
+        // 喂入 CoverDetector 验证不会把半遮盖误判为「移开遮盖」
+        val detector = CoverDetector()
+        fun makeFace(lVis: Float, rVis: Float) = FaceMetrics(
+            faceBox = BoundingBox(0f, 0f, 300f, 300f),
+            leftEye = testEye,
+            rightEye = testEye.copy(label = "RIGHT"),
+            leftOptical = openOpt.copy(irisVisibilityContrast = lVis),
+            rightOptical = openOpt.copy(irisVisibilityContrast = rVis),
+            headPose = HeadPoseEstimate(0f, 0f, 0f),
+        )
+        repeat(6) { detector.observe(it * 100L, makeFace(openOpt.irisVisibilityContrast!!, openOpt.irisVisibilityContrast!!), true, learn = true) }
+        detector.resetCandidate()
+        var obs: CoverDetector.Observation? = null
+        repeat(6) {
+            obs = detector.observe(1_000L + it * 100L, makeFace(partialOpt.irisVisibilityContrast!!, openOpt.irisVisibilityContrast!!), true, learn = false)
+        }
+        assertEquals(VisionEye.LEFT, obs?.covered, "半遮盖左眼应稳定识别为遮盖 LEFT，绝不能误判成未遮盖")
+    }
+
+    @Test
+    fun steadyModePrefersCompactScreenGlintOverOversizedCeilingLampAndReusesVerifiedAnchorInCover() {
+        // 复现 Run #3 常亮右眼误锁 6.5px 天花板大灯，以及 Run #1 遮盖阶段常亮跳点问题
+        val chipSec = 0.25
+        val durationSec = 6.0
+        val startSec = 300.0
+        val events = (0 until 180).map { i ->
+            val t = i / 30.0
+            LabDisplayEvent(startSec + t, startSec + t, 1.0, 1.0, (t / chipSec).toInt(), t)
+        }
+        // 在 STEADY 模式下，天花板大灯（直径 6.5px）比真实白点（直径 3.5px）对比度更高，但非对称斑径惩罚应锁定真实白点
+        val steadyFrames = (0 until 180).map { i ->
+            GlintObservationFrame(
+                frameIndex = i + 1,
+                hostTimeSec = startSec + i / 30.0,
+                irisCenterX = 100.0,
+                irisCenterY = 100.0,
+                irisRadiusPx = 54.0,
+                distanceCm = 33.0,
+                exposureSec = 0.015,
+                visible = true,
+                candidates = listOf(
+                    ReflexCandidate(Point2f(92f, 91f), contrast = 115f, brightness = 245f, quality = 0.72f, snr = 18f, diameterPx = 6.5f, shapeScore = 0.55f),
+                    ReflexCandidate(Point2f(102f, 90f), contrast = 88f, brightness = 225f, quality = 0.75f, snr = 15f, diameterPx = 3.5f, shapeScore = 0.88f),
+                ),
+            )
+        }
+        val steadyRes = CornealCodeV8Analyzer.analyze(
+            eye = "RIGHT",
+            frames = steadyFrames,
+            displayEvents = events,
+            startHostTimeSec = startSec,
+            durationSec = durationSec,
+            chipSec = chipSec,
+            scheme = LabCodingScheme.STEADY,
+            stimulusDiameterMm = 22.0,
+            fps = 30,
+        )
+        assertTrue(abs((steadyRes.referenceRelX ?: -1.0) - (2.0 / 54.0)) < 0.08, "常亮模式应锁定 3.5px 真实白点而非 6.5px 天花板灯: refX=${steadyRes.referenceRelX}")
+
+        // 在遮盖常亮阶段，即便干扰点尺寸相近且更亮，传入看近已验证光码锚点 anchorPrior 后应牢牢锁定真实白点
+        val coverFrames = (0 until 180).map { i ->
+            GlintObservationFrame(
+                frameIndex = i + 1,
+                hostTimeSec = startSec + i / 30.0,
+                irisCenterX = 100.0,
+                irisCenterY = 100.0,
+                irisRadiusPx = 54.0,
+                distanceCm = 33.0,
+                exposureSec = 0.015,
+                visible = true,
+                candidates = listOf(
+                    ReflexCandidate(Point2f(78f, 91f), contrast = 150f, brightness = 250f, quality = 0.90f, snr = 22f, diameterPx = 3.6f, shapeScore = 0.90f),
+                    ReflexCandidate(Point2f(102f, 90f), contrast = 85f, brightness = 220f, quality = 0.76f, snr = 15f, diameterPx = 3.5f, shapeScore = 0.88f),
+                ),
+            )
+        }
+        val coverRes = CornealCodeV8Analyzer.analyze(
+            eye = "RIGHT",
+            frames = coverFrames,
+            displayEvents = events,
+            startHostTimeSec = startSec,
+            durationSec = durationSec,
+            chipSec = chipSec,
+            scheme = LabCodingScheme.STEADY,
+            stimulusDiameterMm = 22.0,
+            fps = 30,
+            anchorPrior = Point2f((2.0 / 54.0).toFloat(), (-10.0 / 54.0).toFloat()),
+        )
+        assertTrue(abs((coverRes.referenceRelX ?: -1.0) - (2.0 / 54.0)) < 0.08, "复用看近锚点后遮盖阶段应抵抗更亮干扰点: refX=${coverRes.referenceRelX}")
+    }
+
+    /**
+     * 冻结前验收 1：成功例归档 JSON 离线重放与在线报告完全一致，
+     * 且可在不重采的前提下对同一数据包执行 0.80R vs 0.60R、光码 vs 常亮、线性 vs 3D 球面配对消融。
+     */
+    @Test
+    fun archivedSessionSupportsExactOfflineReplayAndControlledAblation() {
+        val intrinsics = LabCameraIntrinsics(
+            fx = 2600.0,
+            fy = 2600.0,
+            cx = 1080.0,
+            cy = 1920.0,
+            lightOffsetXMm = 1.5,
+            lightOffsetYMm = 21.0,
+        )
+        val cfg = LabProtocolConfig(
+            subjectId = "REPLAY-OK",
+            codingScheme = LabCodingScheme.M_SEQUENCE,
+            searchRadiusFraction = 0.80f,
+            chipDurationMs = 250L,
+            nearDurationSec = 10,
+            includeNear = true,
+            includeFar = false,
+            includeCover = false,
+            includePursuit = false,
+            lightOffsetXMm = 1.5,
+            lightOffsetYMm = 21.0,
+        )
+        val engine = StrabismusLabEngine(platformName = "TestOS", deviceModel = "RefPhone-1")
+        engine.configureAuditContext(
+            appVersion = "0.9.5-lab (2)",
+            gitCommit = "test123",
+            clockDomain = "monotonic_ms",
+            displayClockDomain = "monotonic_ms",
+        )
+        val t0 = 100_000L
+        engine.startSession(cfg, t0)
+        engine.confirmStageReady(t0)
+
+        val chipSec = cfg.chipDurationMs / 1000.0
+        val lagMs = 33L
+        val leftIris = Point2f(820f, 1500f)
+        val rightIris = Point2f(1340f, 1500f)
+        val irisD = 92f // radius = 46px; 0.60R = 27.6px, 0.80R = 36.8px
+        val leftEar = listOf(
+            Point2f(750f, 1500f), Point2f(790f, 1465f), Point2f(850f, 1465f),
+            Point2f(890f, 1500f), Point2f(850f, 1535f), Point2f(790f, 1535f),
+        )
+        val rightEar = listOf(
+            Point2f(1270f, 1500f), Point2f(1310f, 1465f), Point2f(1370f, 1465f),
+            Point2f(1410f, 1500f), Point2f(1370f, 1535f), Point2f(1310f, 1535f),
+        )
+
+        var report: LabSessionReport? = null
+        val totalTicks = cfg.nearDurationSec * 30 + 2
+        for (i in 0..totalTicks) {
+            val nowMs = t0 + (i * 1000L) / 30L
+            engine.recordDisplayTick(nowMs, screenBrightness = 1.0)
+            val camElapsedSec = ((nowMs - t0 - lagMs).coerceAtLeast(0L)) / 1000.0
+            val lightOn = StimulusCodeV8.codeValue(camElapsedSec, chipSec, LabCodingScheme.M_SEQUENCE) > 0.0
+
+            // 左眼大偏心编码映光（偏鼻侧 32px = 0.695R，落在 0.60R 外、0.80R 内）+ 恒定更亮干扰反光
+            val lCands = buildList {
+                add(ReflexCandidate(Point2f(leftIris.x - 10f, leftIris.y + 12f), contrast = 150f, brightness = 248f, quality = 0.90f, snr = 22f, diameterPx = 3.2f, shapeScore = 0.90f))
+                if (lightOn) {
+                    add(ReflexCandidate(Point2f(leftIris.x + 32f, leftIris.y - 4f), contrast = 92f, brightness = 220f, quality = 0.80f, snr = 16f, diameterPx = 2.8f, shapeScore = 0.88f))
+                }
+            }
+            // 右眼近中心编码映光 + 恒定更亮干扰反光
+            val rCands = buildList {
+                add(ReflexCandidate(Point2f(rightIris.x + 14f, rightIris.y + 12f), contrast = 148f, brightness = 248f, quality = 0.90f, snr = 22f, diameterPx = 3.2f, shapeScore = 0.90f))
+                if (lightOn) {
+                    add(ReflexCandidate(Point2f(rightIris.x - 2f, rightIris.y - 4f), contrast = 90f, brightness = 218f, quality = 0.80f, snr = 16f, diameterPx = 2.8f, shapeScore = 0.88f))
+                }
+            }
+            val face = FaceMetrics(
+                faceBox = BoundingBox(600f, 1100f, 1560f, 2100f),
+                leftEye = EyeLandmarks("LEFT", leftEar, listOf(leftIris), irisD),
+                rightEye = EyeLandmarks("RIGHT", rightEar, listOf(rightIris), irisD),
+                headPose = HeadPoseEstimate(0f, 0f, 0f),
+                leftOptical = OpticalEyeMeasurement(
+                    pupilCenter = leftIris,
+                    cornealReflex = lCands.firstOrNull()?.point,
+                    irisDiameterPx = irisD,
+                    pupilContrast = 30f,
+                    reflexContrast = 92f,
+                    rejectionReason = null,
+                    irisVisibilityContrast = 68f,
+                    reflexCandidates = lCands,
+                    reflexConfidence = 0.8f,
+                ),
+                rightOptical = OpticalEyeMeasurement(
+                    pupilCenter = rightIris,
+                    cornealReflex = rCands.firstOrNull()?.point,
+                    irisDiameterPx = irisD,
+                    pupilContrast = 30f,
+                    reflexContrast = 90f,
+                    rejectionReason = null,
+                    irisVisibilityContrast = 68f,
+                    reflexCandidates = rCands,
+                    reflexConfidence = 0.8f,
+                ),
+            )
+            val frame = FaceLandmarkFrame(
+                faces = listOf(face),
+                sourceWidth = 2160,
+                sourceHeight = 3840,
+                timestampMillis = 1_700_000_000_000L + i * 33L,
+                detectionLatencyMillis = 12L,
+                fps = 30f,
+                analysisElapsedRealtimeMs = nowMs,
+                sourceElapsedRealtimeMs = nowMs - 8L,
+            )
+            val meta = LabFrameCaptureMeta(
+                exposureSec = 0.012,
+                exposureSource = "CAMERA2_CAPTURE_RESULT",
+                sourceTimestampMs = nowMs - 8L,
+                intrinsicsSource = "CALIBRATED_CHESSBOARD",
+                mirrored = false,
+                cropNote = "4K_16_9_FULL",
+                exposureLocked = true,
+                droppedSincePrev = if (i % 50 == 0 && i > 0) 1 else 0,
+            )
+            report = engine.onFrameWithAudit(frame, intrinsics, nowMs, meta)
+            if (report != null) break
+        }
+        val online = assertNotNull(report)
+        assertEquals(LabSessionStatus.COMPLETED, online.sessionStatus)
+        assertEquals(2, online.schemaVersion)
+        assertEquals("0.9.5-lab (2)", online.auditMeta.appVersion)
+        assertEquals("test123", online.auditMeta.gitCommit)
+        assertEquals("CALIBRATED_CHESSBOARD", online.auditMeta.intrinsicsSource)
+        assertEquals("CAMERA2_CAPTURE_RESULT", online.auditMeta.exposureSource)
+        assertEquals("CUSTOM_MEASURED", online.auditMeta.lightOffsetCalibrationSource)
+        assertTrue(online.auditMeta.droppedFramesCount > 0)
+        assertTrue(online.displayEvents.isNotEmpty())
+        assertTrue(online.toDisplayEventsJsonl().contains("\"stage\":\"NEAR_FIXATION\""))
+        assertTrue(online.frames.any { it.leftCandidates.size >= 2 && it.exposureSource == "CAMERA2_CAPTURE_RESULT" })
+
+        // 1) JSON 序列化往返后，纯离线重放结果应与在线报告严格一致
+        val restored = LabSessionReport.fromJson(online.toJson(pretty = false))
+        val replayed = StrabismusLabReplay.replaySession(restored)
+        val onlineNear = assertNotNull(online.nearMetrics)
+        val replayNear = assertNotNull(replayed.near?.metrics)
+        assertTrue(onlineNear.leftCodeVerified && onlineNear.rightCodeVerified)
+        assertEquals(onlineNear.leftCodeVerified, replayNear.leftCodeVerified)
+        assertEquals(onlineNear.rightCodeVerified, replayNear.rightCodeVerified)
+        assertEquals(onlineNear.hde3dPrism!!, replayNear.hde3dPrism!!, 1e-6)
+        assertEquals(onlineNear.hdePrism!!, replayNear.hdePrism!!, 1e-6)
+
+        // 2) 配对消融：离线将搜索半径从 0.80R 收窄至 0.60R，左眼 0.695R 编码真映光应被裁掉导致左眼光码不再通过
+        val replay060 = StrabismusLabReplay.replaySession(restored, LabReplayOptions(searchRadiusOverride = 0.60f))
+        assertFalse(replay060.near?.leftCode?.codeVerified == true, "0.60R 应裁掉位于 0.695R 的大偏角真映光")
+        assertTrue(replay060.near?.rightCode?.codeVerified == true, "右眼近中心映光在 0.60R 下仍应通过")
+
+        // 3) 配对消融：离线强制改为 STEADY 常亮对照，恒定更亮干扰反光应把锚点拖偏，与光码真值显著分离
+        val replaySteady = StrabismusLabReplay.replaySession(restored, LabReplayOptions(codingSchemeOverride = LabCodingScheme.STEADY))
+        assertNotNull(replaySteady.near?.metrics?.hde3dPrism)
+        assertTrue(
+            abs(replaySteady.near!!.metrics!!.hde3dPrism!! - replayNear.hde3dPrism!!) > 20.0,
+            "常亮对照应被更亮干扰反光拖偏: steady=${replaySteady.near!!.metrics!!.hde3dPrism}, coded=${replayNear.hde3dPrism}",
+        )
+    }
+
+    /**
+     * 冻结前验收 2 & 3：镜片/干扰拒判例可离线追溯候选与相关性，中途取消会话亦可落盘留痕（含丢帧与显示事件）。
+     */
+    @Test
+    fun cancelledAndRejectedSessionsRemainAuditableAndReplayable() {
+        val intrinsics = LabCameraIntrinsics(fx = 2400.0, fy = 2400.0, cx = 960.0, cy = 1280.0)
+        val cfg = LabProtocolConfig(
+            subjectId = "CANCEL-TEST",
+            codingScheme = LabCodingScheme.M_SEQUENCE,
+            nearDurationSec = 16,
+            includeNear = true,
+            includeFar = false,
+            includeCover = false,
+            includePursuit = false,
+        )
+        val engine = StrabismusLabEngine(platformName = "iOS 18.2", deviceModel = "iPhone16,2")
+        engine.configureAuditContext(appVersion = "0.9.5 (6)", gitCommit = "ios-bundle", clockDomain = "ProcessInfo.systemUptime")
+        val t0 = 50_000L
+        engine.startSession(cfg, t0)
+        engine.confirmStageReady(t0)
+
+        // 模拟 4 秒采集期间仅存在静态镜片/背景反光（无编码响应），并夹杂丢帧，随后用户中途取消
+        val leftIris = Point2f(700f, 1200f)
+        val rightIris = Point2f(1220f, 1200f)
+        val irisD = 88f
+        val lEar = listOf(
+            Point2f(640f, 1200f), Point2f(675f, 1170f), Point2f(725f, 1170f),
+            Point2f(760f, 1200f), Point2f(725f, 1230f), Point2f(675f, 1230f),
+        )
+        val rEar = listOf(
+            Point2f(1160f, 1200f), Point2f(1195f, 1170f), Point2f(1245f, 1170f),
+            Point2f(1280f, 1200f), Point2f(1245f, 1230f), Point2f(1195f, 1230f),
+        )
+        for (i in 0 until 120) {
+            val nowMs = t0 + i * 33L
+            engine.recordDisplayTick(nowMs, 1.0)
+            val lCand = ReflexCandidate(Point2f(708f, 1192f), 110f, 230f, 0.82f, 16f, 3.0f, 0.85f)
+            val rCand = ReflexCandidate(Point2f(1212f, 1192f), 110f, 230f, 0.82f, 16f, 3.0f, 0.85f)
+            val face = FaceMetrics(
+                faceBox = BoundingBox(500f, 900f, 1400f, 1700f),
+                leftEye = EyeLandmarks("LEFT", lEar, listOf(leftIris), irisD),
+                rightEye = EyeLandmarks("RIGHT", rEar, listOf(rightIris), irisD),
+                headPose = HeadPoseEstimate(0f, 0f, 0f),
+                leftOptical = OpticalEyeMeasurement(
+                    pupilCenter = leftIris,
+                    cornealReflex = lCand.point,
+                    irisDiameterPx = irisD,
+                    pupilContrast = 30f,
+                    reflexContrast = 110f,
+                    rejectionReason = null,
+                    irisVisibilityContrast = 60f,
+                    reflexCandidates = listOf(lCand),
+                    reflexConfidence = 0.82f,
+                ),
+                rightOptical = OpticalEyeMeasurement(
+                    pupilCenter = rightIris,
+                    cornealReflex = rCand.point,
+                    irisDiameterPx = irisD,
+                    pupilContrast = 30f,
+                    reflexContrast = 110f,
+                    rejectionReason = null,
+                    irisVisibilityContrast = 60f,
+                    reflexCandidates = listOf(rCand),
+                    reflexConfidence = 0.82f,
+                ),
+            )
+            val frame = FaceLandmarkFrame(
+                faces = listOf(face),
+                sourceWidth = 1920,
+                sourceHeight = 2560,
+                timestampMillis = 1_700_000_000_000L + i * 33L,
+                detectionLatencyMillis = 10L,
+                fps = 30f,
+                analysisElapsedRealtimeMs = nowMs,
+                sourceElapsedRealtimeMs = nowMs - 4L,
+            )
+            engine.onFrameWithAudit(
+                frame = frame,
+                intrinsics = intrinsics,
+                nowMs = nowMs,
+                captureMeta = LabFrameCaptureMeta(
+                    exposureSec = 0.016,
+                    exposureSource = "AVCAPTURE_DEVICE",
+                    sourceTimestampMs = nowMs - 4L,
+                    intrinsicsSource = "AVCAPTURE_INTRINSIC_MATRIX",
+                    cropNote = "AVCAPTURE_1080P_FALLBACK_1920x2560",
+                    exposureLocked = true,
+                    droppedSincePrev = if (i % 20 == 0) 2 else 0,
+                ),
+            )
+        }
+        val cancelled = assertNotNull(engine.cancelAndBuildReport(t0 + 4_000L, "USER_CANCELLED"))
+        assertEquals(LabSessionStatus.CANCELLED, cancelled.sessionStatus)
+        assertEquals("USER_CANCELLED_AT_NEAR_FIXATION", cancelled.terminationReason)
+        assertEquals(12, cancelled.auditMeta.droppedFramesCount)
+        assertEquals("AVCAPTURE_1080P_FALLBACK_1920x2560", cancelled.auditMeta.cropNote)
+        assertEquals("AVCAPTURE_INTRINSIC_MATRIX", cancelled.auditMeta.intrinsicsSource)
+        assertFalse(cancelled.nearMetrics?.leftCodeVerified == true)
+        assertFalse(cancelled.nearMetrics?.rightCodeVerified == true)
+        assertTrue(cancelled.displayEvents.isNotEmpty())
+
+        // 归档后仍可离线重放确认拒判与候选完整保留
+        val replayed = StrabismusLabReplay.replaySession(LabSessionReport.fromJson(cancelled.toJson()))
+        assertFalse(replayed.near?.leftCode?.codeVerified == true)
+        assertEquals(120, replayed.near?.frames?.size)
+        assertTrue(replayed.near!!.frames.all { it.leftCandidates.size == 1 && it.exposureSource == "AVCAPTURE_DEVICE" })
     }
 }

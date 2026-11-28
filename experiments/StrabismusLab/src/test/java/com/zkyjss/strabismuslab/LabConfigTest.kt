@@ -14,5 +14,6 @@ class LabConfigTest {
         assertEquals(LabCodingScheme.M_SEQUENCE, cfg.codingScheme)
         assertEquals(4, cfg.activeStages.size)
         assertTrue(LabExportFormat.entries.any { it == LabExportFormat.BUNDLE_ZIP })
+        assertTrue(LabExportFormat.entries.any { it == LabExportFormat.DISPLAY_EVENTS_JSONL })
     }
 }

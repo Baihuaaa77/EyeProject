@@ -9,6 +9,7 @@ import com.zkyjss.eyeproject.core.camera.CameraIntrinsicsProvider
 import com.zkyjss.eyeproject.core.model.FaceLandmarkFrame
 import com.zkyjss.eyeproject.strabismuslab.LabCameraIntrinsics
 import com.zkyjss.eyeproject.strabismuslab.LabCodingScheme
+import com.zkyjss.eyeproject.strabismuslab.LabFrameCaptureMeta
 import com.zkyjss.eyeproject.strabismuslab.LabLiveState
 import com.zkyjss.eyeproject.strabismuslab.LabProtocolConfig
 import com.zkyjss.eyeproject.strabismuslab.LabSessionReport
@@ -22,6 +23,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.concurrent.atomic.AtomicInteger
 
 enum class LabDestination {
     CONSOLE,
@@ -41,31 +43,63 @@ data class LabAppUiState(
     val statusBanner: String? = null,
 )
 
+private data class QueuedCameraFrame(
+    val frame: FaceLandmarkFrame,
+    val exposureSec: Double?,
+    val exposureLocked: Boolean,
+)
+
 class LabViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = LabRepository(application)
     private val intrinsics = CameraIntrinsicsProvider(application)
     private val engine = StrabismusLabEngine(
         platformName = "Android ${Build.VERSION.RELEASE}",
         deviceModel = "${Build.MANUFACTURER} ${Build.MODEL}",
-    )
+    ).apply {
+        configureAuditContext(
+            appVersion = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
+            gitCommit = BuildConfig.LAB_GIT_COMMIT,
+            clockDomain = "android.os.SystemClock.elapsedRealtime",
+            displayClockDomain = "android.os.SystemClock.elapsedRealtime",
+        )
+    }
 
     val live: StateFlow<LabLiveState> = engine.live
 
     private val _ui = MutableStateFlow(LabAppUiState())
     val ui: StateFlow<LabAppUiState> = _ui.asStateFlow()
 
-    private val frameChannel = Channel<FaceLandmarkFrame>(capacity = Channel.CONFLATED)
+    private val frameChannel = Channel<QueuedCameraFrame>(capacity = Channel.CONFLATED)
+    private val enqueuedFrames = AtomicInteger(0)
+    private val consumedFrames = AtomicInteger(0)
     private var cachedFocalW = 0
     private var cachedFocalH = 0
     private var cachedIntrinsics = LabCameraIntrinsics()
+    private var cachedIntrinsicsSource = "UNKNOWN"
 
     init {
         refreshHistory()
         viewModelScope.launch(Dispatchers.Default) {
-            for (frame in frameChannel) {
+            for (item in frameChannel) {
+                val frame = item.frame
+                val totalArrived = enqueuedFrames.get()
+                val totalConsumed = consumedFrames.incrementAndGet()
+                val droppedSincePrev = (totalArrived - totalConsumed).coerceAtLeast(0).also { dropped ->
+                    if (dropped > 0) consumedFrames.addAndGet(dropped)
+                }
                 val camIntrinsics = resolveIntrinsics(frame.sourceWidth, frame.sourceHeight)
                 val nowMs = frame.analysisElapsedRealtimeMs?.takeIf { it > 0L } ?: SystemClock.elapsedRealtime()
-                val completed = engine.onFrameWithIntrinsics(frame, camIntrinsics, nowMs)
+                val captureMeta = LabFrameCaptureMeta(
+                    exposureSec = item.exposureSec,
+                    exposureSource = if (item.exposureSec != null) "CAMERA2_CAPTURE_RESULT" else "FPS_APPROX",
+                    sourceTimestampMs = frame.sourceElapsedRealtimeMs,
+                    intrinsicsSource = cachedIntrinsicsSource,
+                    mirrored = false,
+                    cropNote = "CameraX_RGBA_8888_${frame.sourceWidth}x${frame.sourceHeight}",
+                    exposureLocked = item.exposureLocked,
+                    droppedSincePrev = droppedSincePrev,
+                )
+                val completed = engine.onFrameWithAudit(frame, camIntrinsics, nowMs, captureMeta)
                 if (completed != null) {
                     handleCompleted(completed)
                 }
@@ -73,8 +107,9 @@ class LabViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun onCameraFrame(frame: FaceLandmarkFrame) {
-        frameChannel.trySend(frame)
+    fun onCameraFrame(frame: FaceLandmarkFrame, exposureSec: Double? = null, exposureLocked: Boolean = false) {
+        enqueuedFrames.incrementAndGet()
+        frameChannel.trySend(QueuedCameraFrame(frame, exposureSec, exposureLocked))
     }
 
     fun onCameraError(message: String) {
@@ -141,8 +176,16 @@ class LabViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun cancelCapture() {
-        engine.resetToIdle()
+        val nowMs = SystemClock.elapsedRealtime()
+        val cancelled = engine.cancelAndBuildReport(nowMs, "USER_CANCELLED")
         _ui.update { it.copy(destination = LabDestination.CONSOLE, analyzing = false) }
+        if (cancelled != null) {
+            viewModelScope.launch(Dispatchers.IO) {
+                repository.save(cancelled)
+                val entries = repository.listAll()
+                _ui.update { it.copy(history = entries) }
+            }
+        }
     }
 
     fun openHistory() {
@@ -196,6 +239,7 @@ class LabViewModel(application: Application) : AndroidViewModel(application) {
             cachedFocalH = height
             val g = intrinsics.geometry(width, height)
             cachedIntrinsics = if (g != null) {
+                cachedIntrinsicsSource = if (g.cameraId == "host") "HOST_CAMERA_HFOV_APPROX" else "CAMERA2_LENS_APPROX"
                 LabCameraIntrinsics(
                     fx = g.focalLengthPx.toDouble(),
                     fy = g.focalLengthPx.toDouble(),
@@ -205,6 +249,7 @@ class LabViewModel(application: Application) : AndroidViewModel(application) {
                     lightOffsetYMm = _ui.value.config.lightOffsetYMm,
                 )
             } else {
+                cachedIntrinsicsSource = "UNAVAILABLE"
                 LabCameraIntrinsics()
             }
         }

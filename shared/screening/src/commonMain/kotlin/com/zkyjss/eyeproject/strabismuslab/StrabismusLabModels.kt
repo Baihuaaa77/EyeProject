@@ -1,5 +1,7 @@
 package com.zkyjss.eyeproject.strabismuslab
 
+import com.zkyjss.eyeproject.core.model.Point2f
+import com.zkyjss.eyeproject.core.model.ReflexCandidate
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -53,7 +55,8 @@ data class LabProtocolConfig(
     /** 默认放宽至 0.80f 虹膜半径，覆盖大角度斜视映光。 */
     val searchRadiusFraction: Float = 0.80f,
     val chipDurationMs: Long = 250L,
-    val stimulusDiameterMm: Double = 34.0,
+    /** 与双端 140pt/dp 绘制上限严格对齐的真实白点物理直径（mm，约 22.0mm）。 */
+    val stimulusDiameterMm: Double = 22.0,
     val nearDurationSec: Int = 16,
     val farDurationSec: Int = 12,
     val pursuitDurationSec: Int = 18,
@@ -75,6 +78,14 @@ data class LabProtocolConfig(
 }
 
 @Serializable
+enum class LabSessionStatus(val label: String) {
+    COMPLETED("正常完成"),
+    STOPPED_EARLY("提前结束"),
+    CANCELLED("中途取消"),
+    ERROR("异常中断");
+}
+
+@Serializable
 data class LabCandidateSummary(
     val x: Float,
     val y: Float,
@@ -82,6 +93,76 @@ data class LabCandidateSummary(
     val snr: Float,
     val diameterPx: Float,
     val quality: Float,
+    val brightness: Float = 0f,
+    val shapeScore: Float = 0f,
+) {
+    fun toReflexCandidate(): ReflexCandidate = ReflexCandidate(
+        point = Point2f(x, y),
+        contrast = contrast,
+        brightness = brightness,
+        quality = quality,
+        snr = snr,
+        diameterPx = diameterPx,
+        shapeScore = shapeScore,
+    )
+}
+
+@Serializable
+data class LabDisplayEventRecord(
+    val stage: LabStage,
+    val hostTimeSec: Double,
+    val callbackHostTimeSec: Double,
+    val intensity: Double,
+    val code: Double,
+    val chip: Int,
+    val elapsedSec: Double,
+    val screenBrightness: Double = 1.0,
+) {
+    fun toDisplayEvent(): LabDisplayEvent = LabDisplayEvent(
+        hostTimeSec = hostTimeSec,
+        callbackHostTimeSec = callbackHostTimeSec,
+        intensity = intensity,
+        code = code,
+        chip = chip,
+        elapsedSec = elapsedSec,
+        screenBrightness = screenBrightness,
+    )
+}
+
+/** 单帧硬件采集上下文，由双端相机管线注入，用于精确审计曝光、时钟与丢帧。 */
+@Serializable
+data class LabFrameCaptureMeta(
+    /** 实测相机帧曝光时长（秒）；无法获取时为 null，引擎将回退 FPS 近似并在 exposureSource 明确标记。 */
+    val exposureSec: Double? = null,
+    val exposureSource: String = "FPS_APPROX",
+    /** 相机源单调时间戳（ms，与分析回调 nowMs 分开记录）。 */
+    val sourceTimestampMs: Long? = null,
+    val intrinsicsSource: String = "UNKNOWN",
+    val mirrored: Boolean = false,
+    val cropNote: String = "",
+    val exposureLocked: Boolean = false,
+    /** 上一已分析帧到本帧之间因背压/节流丢弃的相机帧数。 */
+    val droppedSincePrev: Int = 0,
+)
+
+/** 会话级冻结可追溯与复算审计元信息。 */
+@Serializable
+data class LabCaptureAuditMeta(
+    val protocolVersion: String = "v0.9.5-reproducible",
+    val appVersion: String = "",
+    val gitCommit: String = "",
+    val clockDomain: String = "unknown",
+    val displayClockDomain: String = "unknown",
+    val intrinsicsSource: String = "UNKNOWN",
+    val mirrored: Boolean = false,
+    val cropNote: String = "",
+    val exposureSource: String = "FPS_APPROX",
+    val medianExposureMs: Double? = null,
+    val exposureLockedStages: List<String> = emptyList(),
+    val droppedFramesCount: Int = 0,
+    val lightOffsetCalibrationSource: String = "CONFIG_DEFAULT",
+    val stageStartTimesSec: Map<String, Double> = emptyMap(),
+    val stageDurationsSec: Map<String, Double> = emptyMap(),
 )
 
 @Serializable
@@ -142,6 +223,14 @@ data class LabFrameLog(
     val coveredEye: String? = null,
     val leftCandidateCount: Int = 0,
     val rightCandidateCount: Int = 0,
+    /** 完整候选映光列表（支持归档后纯离线重跑 0.60R/0.80R 与光码/常亮配对消融）。 */
+    val leftCandidates: List<LabCandidateSummary> = emptyList(),
+    val rightCandidates: List<LabCandidateSummary> = emptyList(),
+    /** 相机源单调时间戳（ms）。 */
+    val sourceTimestampMs: Long? = null,
+    /** 本帧曝光时长（秒）及来源标记。 */
+    val exposureSec: Double? = null,
+    val exposureSource: String = "FPS_APPROX",
 )
 
 @Serializable
@@ -228,12 +317,16 @@ data class LabGlintScatterPoint(
 data class LabSessionReport(
     val sessionId: String,
     val createdAtMs: Long,
-    val algorithmVersion: String = "strabismus-lab-v0.9.3-optics3d",
+    val schemaVersion: Int = 2,
+    val algorithmVersion: String = "strabismus-lab-v0.9.5-reproducible",
+    val sessionStatus: LabSessionStatus = LabSessionStatus.COMPLETED,
+    val terminationReason: String? = null,
     val platform: String = "Android",
     val deviceModel: String = "",
     val sourceWidth: Int = 0,
     val sourceHeight: Int = 0,
     val cameraIntrinsics: LabCameraIntrinsics? = null,
+    val auditMeta: LabCaptureAuditMeta = LabCaptureAuditMeta(),
     val medianFps: Double = 0.0,
     val durationSec: Double = 0.0,
     val config: LabProtocolConfig,
@@ -260,6 +353,7 @@ data class LabSessionReport(
     val totalFrames: Int = 0,
     val validFrames: Int = 0,
     val frames: List<LabFrameLog> = emptyList(),
+    val displayEvents: List<LabDisplayEventRecord> = emptyList(),
 ) {
     fun toJson(pretty: Boolean = true): String {
         val codec = Json { prettyPrint = pretty; encodeDefaults = true; ignoreUnknownKeys = true }
@@ -276,13 +370,24 @@ data class LabSessionReport(
         }
     }
 
+    fun toDisplayEventsJsonl(): String {
+        val compact = Json { prettyPrint = false; encodeDefaults = true }
+        return buildString {
+            displayEvents.forEach { ev ->
+                append(compact.encodeToString(ev))
+                append('\n')
+            }
+        }
+    }
+
     fun toFramesCsv(): String = buildString {
         appendLine(
             "index,timestamp_ms,elapsed_s,stage,valid,rejection,distance_cm,fps,yaw_deg,pitch_deg,roll_deg," +
                 "stim_intensity,stim_code,target_x,target_y," +
                 "l_iris_px,l_ear,l_vis_contrast,l_glint_x,l_glint_y,l_rel_x,l_rel_y,l_conf,l_source,l_phase," +
                 "r_iris_px,r_ear,r_vis_contrast,r_glint_x,r_glint_y,r_rel_x,r_rel_y,r_conf,r_source,r_phase," +
-                "hde_prism,vde_prism,hde_3d_prism,vde_3d_prism,hde_verg_3d_prism,roll_corr_deg,covered_eye,l_cands,r_cands",
+                "hde_prism,vde_prism,hde_3d_prism,vde_3d_prism,hde_verg_3d_prism,roll_corr_deg,covered_eye,l_cands,r_cands," +
+                "source_ts_ms,exposure_ms,exposure_source",
         )
         for (f in frames) {
             append(f.index).append(',')
@@ -297,7 +402,7 @@ data class LabSessionReport(
             append(f.pitchDeg?.let { fmt1(it.toDouble()) } ?: "").append(',')
             append(f.rollDeg?.let { fmt1(it.toDouble()) } ?: "").append(',')
             append(fmt3(f.stimulusIntensity)).append(',')
-            append(fmt2(f.stimulusCode)).append(',')
+            append(f.stimulusCode.let { fmt2(it) }).append(',')
             append(f.targetNormX?.let { fmt3(it.toDouble()) } ?: "").append(',')
             append(f.targetNormY?.let { fmt3(it.toDouble()) } ?: "").append(',')
             append(f.leftIrisDiameterPx?.let { fmt2(it.toDouble()) } ?: "").append(',')
@@ -328,7 +433,10 @@ data class LabSessionReport(
             append(f.rollCorrectionDeg?.let { fmt2(it) } ?: "").append(',')
             append(f.coveredEye ?: "").append(',')
             append(f.leftCandidateCount).append(',')
-            append(f.rightCandidateCount).append('\n')
+            append(f.rightCandidateCount).append(',')
+            append(f.sourceTimestampMs?.toString() ?: "").append(',')
+            append(f.exposureSec?.let { fmt3(it * 1000.0) } ?: "").append(',')
+            append(f.exposureSource).append('\n')
         }
     }
 

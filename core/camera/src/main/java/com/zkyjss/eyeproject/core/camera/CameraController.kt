@@ -1,8 +1,18 @@
 package com.zkyjss.eyeproject.core.camera
 
 import android.content.Context
+import android.hardware.camera2.CameraCaptureSession
+import android.hardware.camera2.CaptureRequest
+import android.hardware.camera2.CaptureResult
+import android.hardware.camera2.TotalCaptureResult
 import android.os.Build
 import android.util.Size
+import androidx.annotation.OptIn
+import androidx.camera.camera2.interop.Camera2CameraControl
+import androidx.camera.camera2.interop.Camera2Interop
+import androidx.camera.camera2.interop.CaptureRequestOptions
+import androidx.camera.camera2.interop.ExperimentalCamera2Interop
+import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
@@ -40,6 +50,14 @@ class CameraController @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
     private var cameraProvider: ProcessCameraProvider? = null
+    private var boundCamera: Camera? = null
+    @Volatile
+    private var exposureLocked: Boolean = false
+    @Volatile
+    var latestExposureSec: Double? = null
+        private set
+    val isExposureLocked: Boolean
+        get() = exposureLocked
     private var analyzer: FaceLandmarkerAnalyzer? = null
     private var analysisExecutor: ExecutorService? = null
     private val frameObservers = CopyOnWriteArrayList<(FaceLandmarkFrame) -> Unit>()
@@ -117,7 +135,7 @@ class CameraController @Inject constructor(
                     ).also { openingAnalyzer = it }
                     val emulator = Build.HARDWARE == "ranchu" || Build.HARDWARE == "goldfish"
                     val analysisResolution = if (emulator) Size(640, 480) else if (opticalPrecision) Size(3840, 2160) else Size(1280, 720)
-                    val analysis = ImageAnalysis.Builder()
+                    val analysisBuilder = ImageAnalysis.Builder()
                         .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
                         .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST) // 只保留最新帧，旧的没处理完直接丢弃
                         .setResolutionSelector(ResolutionSelector.Builder()
@@ -125,20 +143,24 @@ class CameraController @Inject constructor(
                             .setResolutionStrategy(ResolutionStrategy(analysisResolution,
                                 if (opticalPrecision) ResolutionStrategy.FALLBACK_RULE_CLOSEST_LOWER_THEN_HIGHER else ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER))
                             .build())
+                    attachExposureObserver(analysisBuilder)
+                    val analysis = analysisBuilder
                         .build()
                         .also { it.setAnalyzer(executor, eyeAnalyzer) }
 
                     provider.unbindAll()
-                    provider.bindToLifecycle(
+                    val camera = provider.bindToLifecycle(
                         lifecycleOwner,
                         CameraSelector.DEFAULT_FRONT_CAMERA,
                         *buildUseCases(previewView, analysis)
                     )
 
+                    boundCamera = camera
                     analyzer = eyeAnalyzer
                     analysisExecutor = executor
                     cameraProvider = provider
                     isRunning = true
+                    if (exposureLocked) applyExposureLock(camera, true)
                 } catch (throwable: Throwable) {
                     openingAnalyzer?.close()
                     openingExecutor?.shutdown()
@@ -153,6 +175,54 @@ class CameraController @Inject constructor(
             ContextCompat.getMainExecutor(context)
         )
         return myGeneration
+    }
+
+    /**
+     * 主动光码采集阶段锁定/恢复自动曝光（AE）与自动白平衡（AWB），防止屏幕白点亮灭触发自动测光反相调制环境光。
+     */
+    fun setExposureLocked(locked: Boolean) {
+        exposureLocked = locked
+        boundCamera?.let { applyExposureLock(it, locked) }
+    }
+
+    @OptIn(ExperimentalCamera2Interop::class)
+    private fun attachExposureObserver(builder: ImageAnalysis.Builder) {
+        runCatching {
+            Camera2Interop.Extender(builder).setSessionCaptureCallback(
+                object : CameraCaptureSession.CaptureCallback() {
+                    override fun onCaptureCompleted(
+                        session: CameraCaptureSession,
+                        request: CaptureRequest,
+                        result: TotalCaptureResult,
+                    ) {
+                        val ns = result.get(CaptureResult.SENSOR_EXPOSURE_TIME)
+                        if (ns != null && ns > 0L) {
+                            latestExposureSec = ns / 1_000_000_000.0
+                        }
+                    }
+                },
+            )
+        }
+    }
+
+    @OptIn(ExperimentalCamera2Interop::class)
+    private fun applyExposureLock(camera: Camera, locked: Boolean) {
+        runCatching {
+            val ctrl = Camera2CameraControl.from(camera.cameraControl)
+            if (locked) {
+                val opts = CaptureRequestOptions.Builder()
+                    .setCaptureRequestOption(CaptureRequest.CONTROL_AE_LOCK, true)
+                    .setCaptureRequestOption(CaptureRequest.CONTROL_AWB_LOCK, true)
+                    .build()
+                ctrl.addCaptureRequestOptions(opts)
+            } else {
+                val opts = CaptureRequestOptions.Builder()
+                    .setCaptureRequestOption(CaptureRequest.CONTROL_AE_LOCK, false)
+                    .setCaptureRequestOption(CaptureRequest.CONTROL_AWB_LOCK, false)
+                    .build()
+                ctrl.setCaptureRequestOptions(opts)
+            }
+        }
     }
 
     /** 仅启动该相机绑定的调用方可以停止它；后续调用方接管后旧句柄无效。 */
@@ -186,6 +256,10 @@ class CameraController @Inject constructor(
         }.toTypedArray()
 
     private fun releaseCamera() {
+        boundCamera?.let { if (exposureLocked) applyExposureLock(it, false) }
+        boundCamera = null
+        exposureLocked = false
+        latestExposureSec = null
         cameraProvider?.unbindAll()
         cameraProvider = null
         analyzer?.close()

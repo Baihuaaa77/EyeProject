@@ -292,12 +292,30 @@ internal class EmissionTimelineV8(events: List<LabDisplayEvent>) {
         fps: Int,
         lagSec: Double?,
         chipSec: Double,
+        scheme: LabCodingScheme = LabCodingScheme.M_SEQUENCE,
     ): LabEmissionPhase {
         if (sorted.isEmpty()) return LabEmissionPhase.UNKNOWN
         val frame = 1.0 / max(1, fps)
-        val margin = max(0.0, exposureSec) * 0.5 + frame * 0.5 + 1.0 / 60.0
-        val lowLag = lagSec?.let { it - frame * 0.5 } ?: 0.0
-        val highLag = lagSec?.let { it + frame * 0.5 } ?: 0.15
+        // 曼彻斯特双相每码元含前后两个半脉宽（0.5*chipSec），稀疏短脉冲占空 0.35*chipSec；
+        // 已拟合/传入准确硬件延迟时，按有效半脉宽收紧容差窗，防止 125ms 半码元 96% 被吞成 TRANSITION。
+        val pulseSec = when (scheme) {
+            LabCodingScheme.MANCHESTER -> chipSec * 0.5
+            LabCodingScheme.SPARSE_PULSE -> chipSec * 0.35
+            else -> chipSec
+        }
+        val margin: Double
+        val lowLag: Double
+        val highLag: Double
+        if (lagSec != null) {
+            val lagTol = min(frame * 0.35, pulseSec * 0.14)
+            margin = min(max(0.0, exposureSec) * 0.5 + frame * 0.25 + 0.004, pulseSec * 0.24)
+            lowLag = lagSec - lagTol
+            highLag = lagSec + lagTol
+        } else {
+            margin = max(0.0, exposureSec) * 0.5 + frame * 0.5 + 1.0 / 60.0
+            lowLag = 0.0
+            highLag = 0.15
+        }
         val from = timeSec - highLag - margin
         val to = timeSec - lowLag + margin
         val first = indexAtOrBefore(from)
@@ -317,6 +335,16 @@ internal class EmissionTimelineV8(events: List<LabDisplayEvent>) {
 }
 
 object CornealCodeV8Analyzer {
+    /**
+     * 非对称斑径评分：对略小于预期的紧凑映光温和容忍，对显著大于预期斑径的天花板灯/窗面反光施加陡峭惩罚。
+     */
+    internal fun asymmetricSizeScore(diameterPx: Double, expectedDiameterPx: Double): Double {
+        val ratio = max(0.5, diameterPx) / max(1.0, expectedDiameterPx)
+        val logR = ln(ratio)
+        val variance = if (ratio > 1.0) 0.22 else 0.80
+        return exp(-(logR * logR) / variance)
+    }
+
     fun analyze(
         eye: String,
         frames: List<GlintObservationFrame>,
@@ -330,6 +358,7 @@ object CornealCodeV8Analyzer {
         fps: Int = 30,
         cornealRadiusMm: Double = 7.8,
         lagPriorSec: Double? = null,
+        anchorPrior: Point2f? = null,
     ): CornealCodeV8Result {
         val sorted = frames.sortedBy { it.hostTimeSec }
         if (sorted.isEmpty()) {
@@ -356,8 +385,9 @@ object CornealCodeV8Analyzer {
             scheme = scheme,
             stimulusDiameterMm = stimulusDiameterMm,
             cornealRadiusMm = cornealRadiusMm,
-            seedLagSec = lagPriorSec ?: (1.0 / 30.0),
-        )
+            lagPriorSec = lagPriorSec,
+            anchorPrior = anchorPrior,
+        ) ?: anchorPrior
 
         fun runBidirectional(phasesByFrame: Map<Int, LabEmissionPhase>): List<LabGlintFrameEstimate> {
             val forward = runDirectional(
@@ -391,11 +421,11 @@ object CornealCodeV8Analyzer {
             lagPriorSec = lagPriorSec,
         )
 
-        // 2) 建立曝光-延迟时间线；前半段相关 >= 0.6 且延迟在 0..150ms 才启用拟合延迟，否则回退硬件共享先验或保守范围。
+        // 2) 建立曝光-延迟时间线：通过 63 错位码留出验证或前半段相关 >= 0.6 时启用实测延迟，否则回退硬件共享先验或保守范围。
         val timeline = EmissionTimelineV8(sortedEvents)
         val lagForTimeline = validation.lagSec?.takeIf {
-            (validation.trainR ?: 0.0) >= 0.6 && it in 0.0..0.15
-        } ?: lagPriorSec?.takeIf { it in 0.0..0.15 }
+            (validation.verified || (validation.trainR ?: 0.0) >= 0.6) && it in 0.0..0.18
+        } ?: lagPriorSec?.takeIf { it in 0.0..0.18 }
         val phaseMap = sorted.associate { row ->
             row.frameIndex to timeline.phaseAt(
                 timeSec = row.hostTimeSec,
@@ -403,6 +433,7 @@ object CornealCodeV8Analyzer {
                 fps = fps,
                 lagSec = lagForTimeline,
                 chipSec = chipSec,
+                scheme = scheme,
             )
         }
 
@@ -506,6 +537,11 @@ object CornealCodeV8Analyzer {
     /**
      * 对齐 CornealCodeLab v0.8：前半段稀疏采样，正负码元按样本数分别归一，
      * 以亮暗均值差抵消恒定窗面/镜片反光；后半段不参与选点。
+     *
+     * v0.9.4 增强：
+     * - 编码模式下在 0..167ms 硬件延迟网格上搜索最大亮暗差分聚类能量，彻底消除 250ms 曼彻斯特双相（125ms 半码元）因固定 33ms 延迟错位导致的正负抵消；
+     * - 引入非对称大斑惩罚（asymmetricSizeScore），在常亮与编码模式下抑制超大天花板灯/窗面反光；
+     * - 支持跨阶段锚点先验（如遮盖阶段复用看近已验证光码锚点）。
      */
     private fun estimateReferenceAnchor(
         sorted: List<GlintObservationFrame>,
@@ -515,75 +551,114 @@ object CornealCodeV8Analyzer {
         scheme: LabCodingScheme,
         stimulusDiameterMm: Double,
         cornealRadiusMm: Double,
-        seedLagSec: Double = 1.0 / 30.0,
+        lagPriorSec: Double? = null,
+        anchorPrior: Point2f? = null,
     ): Point2f? {
         val trainEnd = min(8.0, durationSec * 0.5).coerceAtLeast(2.0)
+        // 曼彻斯特/稀疏短脉冲半码元仅 87–125ms，训练期逐帧采样以保留足够亮暗样本；m-序列隔帧采样保持轻量。
+        val stride = if (scheme == LabCodingScheme.MANCHESTER || scheme == LabCodingScheme.SPARSE_PULSE) 1 else 2
         val seedRows = sorted.filterIndexed { idx, row ->
-            idx % 2 == 0 && row.visible && row.irisRadiusPx >= 6.0 &&
+            idx % stride == 0 && row.visible && row.irisRadiusPx >= 6.0 &&
                 (row.hostTimeSec - startSec) in 0.25..trainEnd
         }
         if (seedRows.isEmpty()) return null
 
-        var positiveCount = 0
-        var negativeCount = 0
-        if (scheme.usesTemporalCode) {
-            for (row in seedRows) {
-                val c = events.lastOrNull { it.hostTimeSec <= row.hostTimeSec - seedLagSec }?.code ?: 0.0
-                if (c > 0.0) positiveCount++ else if (c < 0.0) negativeCount++
+        fun lookupCodeAt(timeSec: Double): Double {
+            var low = 0
+            var high = events.size
+            while (low < high) {
+                val mid = (low + high) ushr 1
+                if (events[mid].hostTimeSec <= timeSec) low = mid + 1 else high = mid
             }
-            if (positiveCount == 0 || negativeCount == 0) return null
+            return if (low > 0) events[low - 1].code else 0.0
         }
 
-        val seeds = mutableListOf<Seed>()
-        for (row in seedRows) {
-            val expected = OpticalBudgetEstimate.expectedDiameterPx(
-                distanceCm = row.distanceCm,
-                irisPixels = row.irisRadiusPx * 2.0,
-                sourceMm = stimulusDiameterMm,
-                radiusMm = cornealRadiusMm,
-            ) ?: 3.0
-            val code = events.lastOrNull { it.hostTimeSec <= row.hostTimeSec - seedLagSec }?.code ?: 0.0
-            for (cand in row.candidates) {
-                val snr = if (cand.snr > 0f) cand.snr.toDouble() else (cand.contrast / 3.0)
-                val shape = if (cand.shapeScore > 0f) cand.shapeScore.toDouble() else cand.quality.toDouble().coerceIn(0.2, 1.0)
-                if (snr < 4.5 || shape < 0.35) continue
-                val relX = (cand.point.x - row.irisCenterX) / row.irisRadiusPx
-                val relY = (cand.point.y - row.irisCenterY) / row.irisRadiusPx
-                val diam = if (cand.diameterPx > 0f) cand.diameterPx.toDouble() else expected
-                val sizeScore = exp(-ln(max(0.5, diam) / max(1.0, expected)).pow(2) / 0.8)
-                val prior = exp(-0.5 * (relX * relX / 0.64 + ((relY + 0.25) / 0.55).pow(2)))
-                var weight = min(1.0, snr / 15.0) * shape * shape * sizeScore * prior
-                if (scheme.usesTemporalCode) {
-                    val halfTotal = (positiveCount + negativeCount) * 0.5
-                    val balanced = if (code > 0.0) halfTotal / positiveCount else -halfTotal / negativeCount
-                    weight *= balanced * min(2.0, cand.contrast / 60.0)
+        fun evaluateAtLag(seedLagSec: Double): Pair<Double, Point2f>? {
+            var positiveCount = 0
+            var negativeCount = 0
+            if (scheme.usesTemporalCode) {
+                for (row in seedRows) {
+                    val c = lookupCodeAt(row.hostTimeSec - seedLagSec)
+                    if (c > 0.0) positiveCount++ else if (c < 0.0) negativeCount++
                 }
-                if (abs(weight) > 0.12) seeds += Seed(relX, relY, weight)
+                if (positiveCount == 0 || negativeCount == 0) return null
             }
-        }
-        if (seeds.size < 6) return null
 
-        var bestSum = 0.0
-        var bestSeed: Seed? = null
-        for (seed in seeds) {
-            var sum = 0.0
-            for (other in seeds) {
-                val d = hypot(seed.relX - other.relX, seed.relY - other.relY)
-                sum += other.weight * exp(-0.5 * (d / 0.075).pow(2))
+            val seeds = mutableListOf<Seed>()
+            for (row in seedRows) {
+                val expected = OpticalBudgetEstimate.expectedDiameterPx(
+                    distanceCm = row.distanceCm,
+                    irisPixels = row.irisRadiusPx * 2.0,
+                    sourceMm = stimulusDiameterMm,
+                    radiusMm = cornealRadiusMm,
+                ) ?: 3.0
+                val code = if (scheme.usesTemporalCode) lookupCodeAt(row.hostTimeSec - seedLagSec) else 1.0
+                for (cand in row.candidates) {
+                    val snr = if (cand.snr > 0f) cand.snr.toDouble() else (cand.contrast / 3.0)
+                    val shape = if (cand.shapeScore > 0f) cand.shapeScore.toDouble() else cand.quality.toDouble().coerceIn(0.2, 1.0)
+                    if (snr < 4.5 || shape < 0.35) continue
+                    val relX = (cand.point.x - row.irisCenterX) / row.irisRadiusPx
+                    val relY = (cand.point.y - row.irisCenterY) / row.irisRadiusPx
+                    val diam = if (cand.diameterPx > 0f) cand.diameterPx.toDouble() else expected
+                    val sizeScore = asymmetricSizeScore(diam, expected)
+                    var prior = exp(-0.5 * (relX * relX / 0.64 + ((relY + 0.25) / 0.55).pow(2)))
+                    if (anchorPrior != null) {
+                        val dPrior = hypot(relX - anchorPrior.x, relY - anchorPrior.y)
+                        prior *= exp(-0.5 * (dPrior / 0.24).pow(2))
+                    }
+                    var weight = min(1.0, snr / 15.0) * shape * shape * sizeScore * prior
+                    if (scheme.usesTemporalCode) {
+                        val halfTotal = (positiveCount + negativeCount) * 0.5
+                        val balanced = if (code > 0.0) halfTotal / positiveCount else -halfTotal / negativeCount
+                        weight *= balanced * min(2.0, cand.contrast / 60.0)
+                    }
+                    if (abs(weight) > 0.12) seeds += Seed(relX, relY, weight)
+                }
             }
-            if (sum > bestSum) {
-                bestSum = sum
-                bestSeed = seed
+            if (seeds.size < 6) return null
+
+            var bestSum = 0.0
+            var bestSeed: Seed? = null
+            for (seed in seeds) {
+                var sum = 0.0
+                for (other in seeds) {
+                    val d = hypot(seed.relX - other.relX, seed.relY - other.relY)
+                    sum += other.weight * exp(-0.5 * (d / 0.075).pow(2))
+                }
+                if (sum > bestSum) {
+                    bestSum = sum
+                    bestSeed = seed
+                }
+            }
+            val ref = bestSeed ?: return null
+            val minEnergy = if (stride == 1) 4.0 else 3.0
+            if (bestSum < minEnergy) return null
+            val cluster = seeds.filter { it.weight > 0.0 && hypot(it.relX - ref.relX, it.relY - ref.relY) < 0.12 }
+            val totalW = cluster.sumOf { it.weight }
+            if (totalW <= 0.0) return null
+            val cx = cluster.sumOf { it.relX * it.weight } / totalW
+            val cy = cluster.sumOf { it.relY * it.weight } / totalW
+            return bestSum to Point2f(cx.toFloat(), cy.toFloat())
+        }
+
+        if (!scheme.usesTemporalCode) {
+            return evaluateAtLag(lagPriorSec ?: (1.0 / 30.0))?.second
+        }
+
+        val candidateLags: List<Double> = if (lagPriorSec != null && lagPriorSec.isFinite()) {
+            listOf(-1, 0, 1).map { step -> (lagPriorSec + step / 30.0).coerceIn(0.0, 0.20) }.distinct()
+        } else {
+            // 覆盖 0..167ms 移动端显示+采集管线延迟网格（6 个点），确保 125ms 半码元不会因错位抵消
+            (0..5).map { it / 30.0 }
+        }
+        var bestOverall: Pair<Double, Point2f>? = null
+        for (lag in candidateLags) {
+            val res = evaluateAtLag(lag) ?: continue
+            if (bestOverall == null || res.first > bestOverall.first) {
+                bestOverall = res
             }
         }
-        val ref = bestSeed ?: return null
-        if (bestSum < 3.0) return null
-        val cluster = seeds.filter { it.weight > 0.0 && hypot(it.relX - ref.relX, it.relY - ref.relY) < 0.12 }
-        val totalW = cluster.sumOf { it.weight }
-        if (totalW <= 0.0) return null
-        val cx = cluster.sumOf { it.relX * it.weight } / totalW
-        val cy = cluster.sumOf { it.relY * it.weight } / totalW
-        return Point2f(cx.toFloat(), cy.toFloat())
+        return bestOverall?.second
     }
 
     private fun runDirectional(
@@ -652,7 +727,10 @@ object CornealCodeV8Analyzer {
                 val py = cand.point.y.toDouble()
                 val snr = if (cand.snr > 0f) cand.snr.toDouble() else (cand.contrast / 3.0)
                 val shape = if (cand.shapeScore > 0f) cand.shapeScore.toDouble() else cand.quality.toDouble().coerceIn(0.25, 1.0)
-                var rank = max(0.05, cand.quality.toDouble()) * (0.25 + 0.75 * shape) * (1.0 - exp(-max(0.0, snr - 1.5) / 5.0))
+                val diam = if (cand.diameterPx > 0f) cand.diameterPx.toDouble() else expected
+                val sizeScore = asymmetricSizeScore(diam, expected)
+                var rank = max(0.05, cand.quality.toDouble()) * (0.25 + 0.75 * shape) *
+                    (0.20 + 0.80 * sizeScore) * (1.0 - exp(-max(0.0, snr - 1.5) / 5.0))
                 if (predX != null && predY != null) {
                     val d = hypot(px - predX, py - predY)
                     rank *= exp(-d * d / (2.0 * gate * gate))
@@ -908,10 +986,10 @@ object CornealCodeV8Analyzer {
         if (train.size < 16 || test.size < 16) return CodeValidation()
 
         val candidateDelays: List<Double> = if (lagPriorSec != null && lagPriorSec.isFinite()) {
-            // 双眼共享同一屏幕-相机硬件延迟管线：在先验 ±33ms 物理容差窗内精调，防止单眼环境反光把延迟拉偏
-            listOf(-1, 0, 1).map { step -> (lagPriorSec + step / 30.0).coerceIn(-0.05, 0.25) }
+            // 双眼共享同一屏幕-相机硬件延迟管线：在先验 ±33ms 物理容差窗内以 16.7ms 半帧步长精调，适配曼彻斯特短脉宽
+            (-2..2).map { step -> (lagPriorSec + step / 60.0).coerceIn(-0.05, 0.25) }
         } else {
-            (-3..9).map { it / 30.0 }
+            (-4..16).map { it / 60.0 }
         }
         var bestR = Double.NEGATIVE_INFINITY
         var bestLag = lagPriorSec ?: 0.0

@@ -139,6 +139,14 @@ class LabActivity : ComponentActivity() {
                     refreshCamera(ui.destination, ui.config.searchRadiusFraction)
                 }
 
+                // 主动光学采集阶段锁定 AE/AWB，防止白点明灭引发自动测光压暗环境反光；切回准备页或退出时自动恢复
+                LaunchedEffect(ui.destination, live.stage, live.stageWaitingConfirm) {
+                    val lockAe = ui.destination == LabDestination.CAPTURE &&
+                        live.stage.usesOpticalStimulus &&
+                        !live.stageWaitingConfirm
+                    camera.setExposureLocked(lockAe)
+                }
+
                 when (ui.destination) {
                     LabDestination.CONSOLE -> ConsoleScreen(
                         ui = ui,
@@ -258,7 +266,13 @@ class LabActivity : ComponentActivity() {
         cameraGeneration = camera.start(
             lifecycleOwner = this,
             previewView = if (wantPreview) previewViewRef else null,
-            onFrame = viewModel::onCameraFrame,
+            onFrame = { frame ->
+                viewModel.onCameraFrame(
+                    frame = frame,
+                    exposureSec = camera.latestExposureSec,
+                    exposureLocked = camera.isExposureLocked,
+                )
+            },
             onError = { err -> runOnUiThread { viewModel.onCameraError(err.message ?: "相机错误") } },
             opticalPrecision = true,
             measureOptics = true,
@@ -308,7 +322,7 @@ private fun ConsoleScreen(
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text("StrabismusLab", style = LabType.title)
-                    Text("ACTIVE CODED CORNEAL LAB · v0.8", style = LabType.microMono, color = LabColors.accent)
+                    Text("3D CODED CORNEAL LAB · v0.9.5", style = LabType.microMono, color = LabColors.accent)
                 }
                 OutlinedButton(
                     onClick = onOpenHistory,
@@ -474,7 +488,8 @@ private fun ConsoleScreen(
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     LabCodingScheme.entries.forEach { scheme ->
                         SelectPill(scheme.label, cfg.codingScheme == scheme) {
-                            onUpdateConfig { it.copy(codingScheme = scheme) }
+                            val nextChip = if (scheme == LabCodingScheme.MANCHESTER && cfg.chipDurationMs < 500L) 500L else cfg.chipDurationMs
+                            onUpdateConfig { it.copy(codingScheme = scheme, chipDurationMs = nextChip) }
                         }
                     }
                 }
@@ -664,7 +679,7 @@ private fun CaptureStageScreen(
         ) {
             if (analyzing) {
                 CircularProgressIndicator(color = LabColors.accent)
-                Text("正在执行 v0.9.3 3D 光学反演与遮盖拐点回溯…", style = LabType.body, color = LabColors.inkSecondary)
+                Text("正在执行 v0.9.5 3D 光学反演与遮盖拐点回溯…", style = LabType.body, color = LabColors.inkSecondary)
             } else if (live.stageWaitingConfirm) {
                 Column(
                     modifier = Modifier

@@ -18,12 +18,13 @@ enum class LabExportFormat(val label: String, val fileName: String, val mime: St
     BUNDLE_ZIP("完整科研数据包 (ZIP)", "bundle.zip", "application/zip"),
     SUMMARY_JSON("完整报告 (JSON)", "session_summary.json", "application/json"),
     FRAMES_JSONL("逐帧日志 (JSONL)", "frames.jsonl", "application/x-ndjson"),
+    DISPLAY_EVENTS_JSONL("显示事件时间线 (JSONL)", "display_events.jsonl", "application/x-ndjson"),
     FRAMES_CSV("逐帧表格 (CSV)", "frames.csv", "text/csv"),
 }
 
 /**
  * 科研会话本机持久化与多格式导出仓库。
- * 每次测试落盘 session_summary.json + frames.jsonl + frames.csv，支持一键打包 ZIP 分享供 Python 离线复算。
+ * 每次测试落盘 session_summary.json + frames.jsonl + display_events.jsonl + frames.csv，支持一键打包 ZIP 分享供离线复算。
  */
 class LabRepository(private val context: Context) {
     private val rootDir: File
@@ -33,6 +34,7 @@ class LabRepository(private val context: Context) {
         val dir = File(rootDir, sanitize(report.sessionId)).apply { mkdirs() }
         File(dir, "session_summary.json").writeText(report.toJson(pretty = true), Charsets.UTF_8)
         File(dir, "frames.jsonl").writeText(report.toFramesJsonl(), Charsets.UTF_8)
+        File(dir, "display_events.jsonl").writeText(report.toDisplayEventsJsonl(), Charsets.UTF_8)
         File(dir, "frames.csv").writeText(report.toFramesCsv(), Charsets.UTF_8)
         return LabSessionEntry(report.sessionId, dir, report)
     }
@@ -61,6 +63,9 @@ class LabRepository(private val context: Context) {
         val jsonlFile = File(dir, "frames.jsonl").apply {
             if (!exists()) writeText(report.toFramesJsonl(), Charsets.UTF_8)
         }
+        val displayEventsFile = File(dir, "display_events.jsonl").apply {
+            if (!exists()) writeText(report.toDisplayEventsJsonl(), Charsets.UTF_8)
+        }
         val csvFile = File(dir, "frames.csv").apply {
             if (!exists()) writeText(report.toFramesCsv(), Charsets.UTF_8)
         }
@@ -68,12 +73,13 @@ class LabRepository(private val context: Context) {
         val target = when (format) {
             LabExportFormat.SUMMARY_JSON -> jsonFile
             LabExportFormat.FRAMES_JSONL -> jsonlFile
+            LabExportFormat.DISPLAY_EVENTS_JSONL -> displayEventsFile
             LabExportFormat.FRAMES_CSV -> csvFile
             LabExportFormat.BUNDLE_ZIP -> {
                 val exportDir = File(context.cacheDir, "exports").apply { mkdirs() }
                 val zipFile = File(exportDir, "${sanitize(report.sessionId)}_strabismus_lab.zip")
                 ZipOutputStream(zipFile.outputStream().buffered()).use { zip ->
-                    listOf(jsonFile, jsonlFile, csvFile).forEach { f ->
+                    listOf(jsonFile, jsonlFile, displayEventsFile, csvFile).forEach { f ->
                         if (f.exists()) {
                             zip.putNextEntry(ZipEntry(f.name))
                             f.inputStream().use { it.copyTo(zip) }
