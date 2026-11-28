@@ -33,6 +33,10 @@ struct LabRootView: View {
             }
         case .history:
             LabHistoryView()
+        case .datasetSetup:
+            LabDatasetSetupView()
+        case .datasetCapture:
+            LabDatasetCaptureView()
         }
     }
 }
@@ -55,14 +59,27 @@ struct LabConsoleView: View {
                             Text("3D CODED CORNEAL LAB · v0.9.5").font(LabFont.microMono).foregroundColor(LabPalette.accent)
                         }
                         Spacer()
-                        Button(action: store.openHistory) {
-                            HStack(spacing: 6) {
-                                Image(systemName: "list.bullet")
-                                Text("记录 \(store.history.count)").font(LabFont.caption)
+                        HStack(spacing: 8) {
+                            Button(action: store.openDatasetSetup) {
+                                HStack(spacing: 5) {
+                                    Image(systemName: "tray.and.arrow.down.fill")
+                                    Text("数据集 \(store.datasetSamples.count)").font(LabFont.caption)
+                                }
+                                .foregroundColor(LabPalette.accent)
+                                .padding(.horizontal, 10).padding(.vertical, 8)
+                                .background(LabPalette.accentSoft)
+                                .clipShape(Capsule())
+                                .overlay(Capsule().stroke(LabPalette.accent, lineWidth: 1))
                             }
-                            .foregroundColor(LabPalette.inkPrimary)
-                            .padding(.horizontal, 12).padding(.vertical, 8)
-                            .overlay(Capsule().stroke(LabPalette.hairlineStrong, lineWidth: 1))
+                            Button(action: store.openHistory) {
+                                HStack(spacing: 5) {
+                                    Image(systemName: "list.bullet")
+                                    Text("记录 \(store.history.count)").font(LabFont.caption)
+                                }
+                                .foregroundColor(LabPalette.inkPrimary)
+                                .padding(.horizontal, 10).padding(.vertical, 8)
+                                .overlay(Capsule().stroke(LabPalette.hairlineStrong, lineWidth: 1))
+                            }
                         }
                     }
 

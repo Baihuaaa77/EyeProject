@@ -16,11 +16,34 @@ import UIKit
 ///    - 右列：模拟手机屏幕编码白点亮灭 / 追踪目标 + 实时 3D 聚散 HDE/VDE、光码相位灯与遮盖状态仪表
 ///    - 底部通栏：时间、阶段、测距、头姿、Roll 旋正与遮盖复位窗高亮横幅
 final class StrabismusLabVideoRecorder {
+    /// 单帧数据集遥测信息（与写入 `original.mp4` 的视频帧序号 1:1 绑定，写入 `video_frames.jsonl`）。
+    struct DatasetFrameTelemetry {
+        let hostTimeMs: Int64
+        let sourceTimestampMs: Int64?
+        let exposureSec: Double?
+        let exposureLocked: Bool
+        let distanceCm: Float
+        let rawDistanceCm: Float?
+        let fps: Float
+        let yawDeg: Float?
+        let pitchDeg: Float?
+        let rollDeg: Float?
+        let leftIrisX: Float?
+        let leftIrisY: Float?
+        let leftIrisDiameterPx: Float?
+        let rightIrisX: Float?
+        let rightIrisY: Float?
+        let rightIrisDiameterPx: Float?
+        let stimulusIntensity: Float
+        let stimulusCode: Double
+    }
+
     struct RecordedFrameStamp {
         let frameIndex: Int32
         let ptsMs: Int64
         let leftCandidates: [(Float, Float)]
         let rightCandidates: [(Float, Float)]
+        let telemetry: DatasetFrameTelemetry?
     }
 
     private let queue = DispatchQueue(label: "com.zkyjss.strabismuslab.video", qos: .utility, autoreleaseFrequency: .workItem)
@@ -29,6 +52,7 @@ final class StrabismusLabVideoRecorder {
 
     private var active = false
     private var sessionId = ""
+    private var highQualityDatasetMode = false
     private var sessionDirectory: URL?
     private var outputURL: URL?
     private var writer: AVAssetWriter?
@@ -49,16 +73,18 @@ final class StrabismusLabVideoRecorder {
         let sessionId: String
         let leftCandidates: [(Float, Float)]
         let rightCandidates: [(Float, Float)]
+        let telemetry: DatasetFrameTelemetry?
     }
     private var pending: PendingFrame?
     private var draining = false
 
-    func startSession(sessionId: String, directory: URL) {
+    func startSession(sessionId: String, directory: URL, highQualityDatasetMode: Bool = false) {
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let url = directory.appendingPathComponent("original.mp4")
         lock.lock()
         self.active = true
         self.sessionId = sessionId
+        self.highQualityDatasetMode = highQualityDatasetMode
         self.pending = nil
         lock.unlock()
 
@@ -76,7 +102,7 @@ final class StrabismusLabVideoRecorder {
         }
     }
 
-    func cancelSession() {
+    func cancelSession(removeDirectoryIfIncomplete: Bool = false) {
         lock.lock()
         active = false
         pending = nil
@@ -87,10 +113,14 @@ final class StrabismusLabVideoRecorder {
             let oldDir = self.sessionDirectory
             self.abortWriterLocked()
             if let u = oldURL { try? FileManager.default.removeItem(at: u) }
-            // 取消未完成会话时顺手清理空目录，避免历史库残留空文件夹
             if let d = oldDir {
-                let contents = (try? FileManager.default.contentsOfDirectory(atPath: d.path)) ?? []
-                if contents.isEmpty { try? FileManager.default.removeItem(at: d) }
+                if removeDirectoryIfIncomplete {
+                    try? FileManager.default.removeItem(at: d)
+                } else {
+                    // 取消未完成会话时顺手清理空目录，避免历史库残留空文件夹
+                    let contents = (try? FileManager.default.contentsOfDirectory(atPath: d.path)) ?? []
+                    if contents.isEmpty { try? FileManager.default.removeItem(at: d) }
+                }
             }
             self.outputURL = nil
             self.sessionDirectory = nil
@@ -103,7 +133,8 @@ final class StrabismusLabVideoRecorder {
         frameIndex: Int32,
         timeMs: Int64,
         leftCandidates: [(Float, Float)],
-        rightCandidates: [(Float, Float)]
+        rightCandidates: [(Float, Float)],
+        telemetry: DatasetFrameTelemetry? = nil
     ) {
         lock.lock()
         guard active, frameIndex > 0 else {
@@ -116,7 +147,8 @@ final class StrabismusLabVideoRecorder {
             timeMs: timeMs,
             sessionId: sessionId,
             leftCandidates: leftCandidates,
-            rightCandidates: rightCandidates
+            rightCandidates: rightCandidates,
+            telemetry: telemetry
         )
         let shouldLaunch = !draining
         draining = true
@@ -184,7 +216,8 @@ final class StrabismusLabVideoRecorder {
                 frameIndex: item.frameIndex,
                 ptsMs: ptsMs,
                 leftCandidates: item.leftCandidates,
-                rightCandidates: item.rightCandidates
+                rightCandidates: item.rightCandidates,
+                telemetry: item.telemetry
             ))
         }
     }
@@ -192,13 +225,15 @@ final class StrabismusLabVideoRecorder {
     private func setupWriter(url: URL, width: Int, height: Int) -> Bool {
         do {
             let w = try AVAssetWriter(outputURL: url, fileType: .mp4)
+            let bitrate = highQualityDatasetMode ? 14_000_000 : 6_500_000
+            let keyFrameInterval = highQualityDatasetMode ? 15 : 30
             let settings: [String: Any] = [
                 AVVideoCodecKey: AVVideoCodecType.h264,
                 AVVideoWidthKey: width,
                 AVVideoHeightKey: height,
                 AVVideoCompressionPropertiesKey: [
-                    AVVideoAverageBitRateKey: 6_500_000,
-                    AVVideoMaxKeyFrameIntervalKey: 30,
+                    AVVideoAverageBitRateKey: bitrate,
+                    AVVideoMaxKeyFrameIntervalKey: keyFrameInterval,
                     AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel,
                 ],
             ]
@@ -229,6 +264,99 @@ final class StrabismusLabVideoRecorder {
         writer = nil
         input = nil
         adaptor = nil
+    }
+
+    /// 快捷数据集模式极速封箱：仅完成高码率 `original.mp4` 封箱并写出精确帧映射表 `video_frames.jsonl`（跳过耗时的四联视频渲染）。
+    func finishRawDataset(
+        directory: URL,
+        completion: @escaping (_ rawURL: URL?, _ frameCount: Int, _ videoWidth: Int, _ videoHeight: Int) -> Void
+    ) {
+        lock.lock()
+        active = false
+        let lastPending = pending
+        pending = nil
+        lock.unlock()
+
+        queue.async { [weak self] in
+            guard let self = self else {
+                DispatchQueue.main.async { completion(nil, 0, 0, 0) }
+                return
+            }
+            if let lastPending = lastPending {
+                self.encodeFrame(lastPending)
+            }
+            guard let rawURL = self.outputURL, let w = self.writer, let inp = self.input else {
+                DispatchQueue.main.async { completion(nil, 0, 0, 0) }
+                return
+            }
+            let capturedStamps = self.stamps
+            let srcW = self.sourceWidth
+            let srcH = self.sourceHeight
+            let vidW = self.videoWidth
+            let vidH = self.videoHeight
+
+            inp.markAsFinished()
+            let sema = DispatchSemaphore(value: 0)
+            w.finishWriting { sema.signal() }
+            sema.wait()
+            let ok = (w.status == .completed)
+            self.writer = nil
+            self.input = nil
+            self.adaptor = nil
+            self.outputURL = nil
+            self.sessionDirectory = nil
+            self.stamps.removeAll()
+
+            guard ok, FileManager.default.fileExists(atPath: rawURL.path) else {
+                DispatchQueue.main.async { completion(nil, 0, 0, 0) }
+                return
+            }
+
+            Self.writeVideoFramesJsonl(
+                stamps: capturedStamps,
+                sourceWidth: srcW,
+                sourceHeight: srcH,
+                videoWidth: vidW,
+                videoHeight: vidH,
+                to: directory.appendingPathComponent("video_frames.jsonl")
+            )
+            DispatchQueue.main.async {
+                completion(rawURL, capturedStamps.count, vidW, vidH)
+            }
+        }
+    }
+
+    private static func writeVideoFramesJsonl(
+        stamps: [RecordedFrameStamp],
+        sourceWidth: Int,
+        sourceHeight: Int,
+        videoWidth: Int,
+        videoHeight: Int,
+        to url: URL
+    ) {
+        func num(_ v: Float?) -> String {
+            guard let v = v, v.isFinite else { return "null" }
+            return String(format: "%.4f", v)
+        }
+        func dnum(_ v: Double?) -> String {
+            guard let v = v, v.isFinite else { return "null" }
+            return String(format: "%.6f", v)
+        }
+        func inum(_ v: Int64?) -> String {
+            guard let v = v else { return "null" }
+            return "\(v)"
+        }
+        var lines: [String] = []
+        lines.reserveCapacity(stamps.count)
+        for (idx, s) in stamps.enumerated() {
+            let t = s.telemetry
+            let line = """
+            {"videoFrameIndex":\(idx),"ptsMs":\(s.ptsMs),"engineFrameIndex":\(s.frameIndex),"hostTimeMs":\(inum(t?.hostTimeMs)),"sourceTimestampMs":\(inum(t?.sourceTimestampMs)),"exposureSec":\(dnum(t?.exposureSec)),"exposureLocked":\((t?.exposureLocked ?? false) ? "true" : "false"),"distanceCm":\(num(t?.distanceCm)),"rawDistanceCm":\(num(t?.rawDistanceCm)),"fps":\(num(t?.fps)),"sourceWidth":\(sourceWidth),"sourceHeight":\(sourceHeight),"videoWidth":\(videoWidth),"videoHeight":\(videoHeight),"yawDeg":\(num(t?.yawDeg)),"pitchDeg":\(num(t?.pitchDeg)),"rollDeg":\(num(t?.rollDeg)),"leftIrisX":\(num(t?.leftIrisX)),"leftIrisY":\(num(t?.leftIrisY)),"leftIrisDiameterPx":\(num(t?.leftIrisDiameterPx)),"rightIrisX":\(num(t?.rightIrisX)),"rightIrisY":\(num(t?.rightIrisY)),"rightIrisDiameterPx":\(num(t?.rightIrisDiameterPx)),"stimulusIntensity":\(num(t?.stimulusIntensity)),"stimulusCode":\(dnum(t?.stimulusCode))}
+            """
+            lines.append(line)
+        }
+        let body = lines.joined(separator: "\n") + (lines.isEmpty ? "" : "\n")
+        try? body.write(to: url, atomically: true, encoding: .utf8)
     }
 
     /// 结束原始视频封箱，随后离线渲染 1280×720 四联科研拼接视频 `annotated.mp4`。
