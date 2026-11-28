@@ -205,10 +205,17 @@ internal object ScreenGlintDetection {
             val delta = sqrt((vx - vy) * (vx - vy) + 4f * vxy * vxy)
             val axisRatio = sqrt(((vx + vy - delta) / max(1e-6f, vx + vy + delta)).coerceAtLeast(0f))
             val expected = expectedDiameterPx ?: maxOf(2f, radius * 0.09f)
-            val sizeQuality = exp(-0.35f * abs(ln(max(0.5f, diameter) / max(1f, expected))))
+            val sizeRatio = max(0.5f, diameter) / max(1f, expected)
+            val logRatio = ln(sizeRatio)
+            // 非对称斑径软核：对大于预期直径的超大环境灯/窗面反光施加更强惩罚
+            val sizeQuality = if (sizeRatio > 1.0f) {
+                exp(-1.4f * logRatio * logRatio)
+            } else {
+                exp(-0.35f * abs(logRatio))
+            }
             val shapeScore = (axisRatio / 0.6f).coerceIn(0f, 1f) * sizeQuality
             // 优先紧凑、局部对比强且信噪比高的峰；中心位置仅给弱先验。
-            val sizeWeight = 1f / (1f + diameter / maxOf(2f, radius * 0.09f))
+            val sizeWeight = (1f / (1f + diameter / maxOf(2f, radius * 0.09f))) * (0.45f + 0.55f * sizeQuality)
             val centerWeight = 1f - 0.3f * hypot(point.x - center.x, point.y - center.y) / searchRadius
             val quality = ((signal / 65f).coerceAtMost(1f) * 0.6f + (snr / 20f).coerceAtMost(1f) * 0.4f) *
                 sizeWeight * centerWeight

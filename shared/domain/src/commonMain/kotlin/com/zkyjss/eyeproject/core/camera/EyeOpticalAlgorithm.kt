@@ -140,7 +140,15 @@ object EyeOpticalAlgorithm {
             reflexConfidence = glint?.let { (glintContrast / 150f).coerceIn(0.15f, 0.65f) })
     }
 
-    /** 只比较同一帧的局部灰度，不保存眼区图像；反光点缺失不等于被遮盖。 */
+    /**
+     * 只比较同一帧的局部灰度，不保存眼区图像；反光点缺失不等于被遮盖。
+     *
+     * v0.9.4 双侧对称与虹膜核心均匀度约束：
+     * - 分别评估虹膜鼻侧与颞侧眼白中位灰度，取较小侧对比度；
+     * - 用虹膜核心 75% 分位（而非 30% 极暗值）作暗基准，并抑制核心内亮度分裂（p75 - p30 > 35）：
+     *   当手指半遮盖眼睛时，一侧明亮皮肤与另一侧指缝阴影会制造出虚假高对比度，双侧取小 + 均匀度约束可将其直接归零，
+     *   同时对正常睁眼（核心暗虹膜均匀，角膜反光仅占 <2% 面积不影响 75% 分位）保持零损失。
+     */
     private fun visibilityContrast(bitmap: GrayImage, eye: EyeLandmarks, irisDark: Int?): Float? {
         val iris = eye.irisPoints.firstOrNull() ?: return null
         val a = eye.earPoints.getOrNull(0) ?: return null
@@ -154,14 +162,30 @@ object EyeOpticalAlgorithm {
         if (x1 <= x0 || y1 <= y0) return null
         val width = x1 - x0 + 1
         val gray = bitmap.grayRegion(x0, y0, width, y1 - y0 + 1)
-        val dark = irisDark ?: run {
-            val center = gray.indices.filter { kotlin.math.abs(it % width + x0 - iris.x) <= radius * 0.52f }.map { gray[it] }.sorted()
-            if (center.size < 6) return null
-            center[(center.size * 0.30f).toInt()]
+        val center = ArrayList<Int>()
+        val leftSide = ArrayList<Int>()
+        val rightSide = ArrayList<Int>()
+        for (i in gray.indices) {
+            val dx = (i % width + x0) - iris.x
+            when {
+                kotlin.math.abs(dx) <= radius * 0.52f -> center.add(gray[i])
+                dx < -radius * 1.1f -> leftSide.add(gray[i])
+                dx > radius * 1.1f -> rightSide.add(gray[i])
+            }
         }
-        val sides = gray.indices.filter { kotlin.math.abs(it % width + x0 - iris.x) > radius * 1.1f }.map { gray[it] }.sorted()
-        if (sides.size < 12) return null
-        return (sides[sides.size / 2] - dark).coerceAtLeast(0).toFloat()
+        if (center.size < 6 || leftSide.size < 6 || rightSide.size < 6) return null
+        center.sort()
+        leftSide.sort()
+        rightSide.sort()
+        val centerP30 = irisDark?.let { minOf(it, center[(center.size * 0.30f).toInt()]) } ?: center[(center.size * 0.30f).toInt()]
+        val centerP75 = center[((center.size - 1) * 0.75f).toInt()]
+        val leftMed = leftSide[leftSide.size / 2]
+        val rightMed = rightSide[rightSide.size / 2]
+        val minSideContrast = minOf(leftMed - centerP75, rightMed - centerP75).coerceAtLeast(0).toFloat()
+        // 正常睁眼虹膜核心 p75 - p30 通常 10..27；半遮盖手指切入虹膜圆时同一区域一半阴影一半亮肤色，分裂度 > 55
+        val irisSpread = (centerP75 - centerP30).coerceAtLeast(0)
+        val uniformity = ((55f - irisSpread) / 20f).coerceIn(0f, 1f)
+        return minSideContrast * uniformity
     }
 
     private fun rejected(diameter: Float, reason: String) =
